@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="SoppJakt icon">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#1A3409" />
+      <stop offset="100%" stop-color="#3A6B1E" />
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="120" fill="url(#bg)" />
+  <ellipse cx="256" cy="208" rx="150" ry="95" fill="#F5F0E8" />
+  <rect x="220" y="220" width="72" height="162" rx="30" fill="#EDE5D8" />
+  <ellipse cx="256" cy="210" rx="115" ry="60" fill="#FFFFFF" />
+  <circle cx="205" cy="210" r="10" fill="#E6A817" />
+  <circle cx="245" cy="185" r="11" fill="#E6A817" />
+  <circle cx="285" cy="205" r="9" fill="#E6A817" />
+</svg>

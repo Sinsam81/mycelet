@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="SoppJakt maskable icon">
+  <rect width="512" height="512" fill="#1A3409" />
+  <circle cx="256" cy="256" r="192" fill="#2D5016" />
+  <ellipse cx="256" cy="228" rx="130" ry="82" fill="#F5F0E8" />
+  <rect x="214" y="242" width="84" height="156" rx="36" fill="#EDE5D8" />
+  <ellipse cx="256" cy="231" rx="102" ry="53" fill="#FFFFFF" />
+  <circle cx="214" cy="230" r="10" fill="#E6A817" />
+  <circle cx="250" cy="207" r="10" fill="#E6A817" />
+  <circle cx="286" cy="225" r="8" fill="#E6A817" />
+</svg>

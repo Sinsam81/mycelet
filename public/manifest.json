@@ -1,0 +1,25 @@
+{
+  "name": "SoppJakt",
+  "short_name": "SoppJakt",
+  "description": "Norsk soppapp med identifikasjon, kart, forum og prediksjon.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#F5F0E8",
+  "theme_color": "#1A3409",
+  "lang": "nb",
+  "icons": [
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-maskable.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}

@@ -1,0 +1,67 @@
+@import 'leaflet/dist/leaflet.css';
+@import 'leaflet.markercluster/dist/MarkerCluster.css';
+@import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --color-forest-900: #1A3409;
+  --color-forest-800: #2D5016;
+  --color-forest-700: #3A6B1E;
+  --color-forest-600: #4A7C2E;
+  --color-forest-100: #E8F5E0;
+  --color-forest-50: #F0F9EC;
+  --color-cream: #F5F0E8;
+  --color-cream-dark: #EDE5D8;
+  --color-gray-900: #2C2C2C;
+  --color-gray-700: #4A4A4A;
+  --color-gray-500: #7A7A7A;
+  --color-gray-300: #C4C4C4;
+  --color-gray-100: #F0F0F0;
+  --color-white: #FFFFFF;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--color-cream);
+  color: var(--color-gray-900);
+}
+
+body {
+  min-height: 100vh;
+}
+
+.cluster-small,
+.cluster-medium,
+.cluster-large {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 9999px;
+  color: #fff;
+  font-weight: 700;
+  border: 2px solid #fff;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+}
+
+.cluster-small {
+  background: #3a6b1e;
+}
+
+.cluster-medium {
+  background: #2d5016;
+}
+
+.cluster-large {
+  background: #1a3409;
+}
