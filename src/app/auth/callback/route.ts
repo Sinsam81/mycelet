@@ -11,7 +11,10 @@ function getSafeNext(rawNext: string | null): string {
 export async function GET(request: NextRequest) {
   const requestUrl = new URL(request.url);
   const code = requestUrl.searchParams.get('code');
-  const next = getSafeNext(requestUrl.searchParams.get('next'));
+  const nextOrRedirect =
+    requestUrl.searchParams.get('next') ??
+    requestUrl.searchParams.get('redirect');
+  const next = getSafeNext(nextOrRedirect);
 
   let response = NextResponse.redirect(new URL(next, requestUrl.origin));
   if (!code) return response;
