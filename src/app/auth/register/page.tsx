@@ -9,7 +9,7 @@ import { useAuth } from '@/lib/hooks/useAuth';
 export default function RegisterPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const redirectPath = useMemo(() => searchParams.get('redirect') ?? '/', [searchParams]);
+  const redirectPath = useMemo(() => searchParams.get('next') ?? searchParams.get('redirect') ?? '/', [searchParams]);
   const { signUp, supabase } = useAuth();
 
   const [email, setEmail] = useState('');

@@ -9,7 +9,11 @@ import { useAuth } from '@/lib/hooks/useAuth';
 export default function LoginPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const redirectPath = useMemo(() => searchParams.get('redirect') ?? '/', [searchParams]);
+  const redirectPath = useMemo(
+  () => searchParams.get('next') ?? searchParams.get('next') ?? searchParams.get('redirect') ?? '/',
+  [searchParams]
+);
+
   const { signIn, signInWithGoogle } = useAuth();
 
   const [email, setEmail] = useState('');
