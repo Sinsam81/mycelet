@@ -38,7 +38,7 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      const callback = `${window.location.origin}/auth/callback?redirect=${encodeURIComponent(redirectPath)}`;
+      const callback = `${window.location.origin}/auth/callback?next=${encodeURIComponent(redirectPath)}`;
       await signInWithGoogle(callback);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Google-innlogging feilet');
@@ -88,7 +88,7 @@ export default function LoginPage() {
 
         <p className="mt-4 text-sm text-gray-700">
           Har du ikke konto?{' '}
-          <Link className="font-semibold text-forest-800" href={`/auth/register?redirect=${encodeURIComponent(redirectPath)}`}>
+          <Link className="font-semibold text-forest-800" href={`/auth/register?next=${encodeURIComponent(redirectPath)}`}>
             Registrer deg
           </Link>
         </p>

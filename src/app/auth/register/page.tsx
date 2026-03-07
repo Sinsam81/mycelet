@@ -42,7 +42,7 @@ export default function RegisterPage() {
         }
       }
 
-      router.push(`/auth/login?redirect=${encodeURIComponent(redirectPath)}`);
+      router.push(`/auth/login?next=${encodeURIComponent(redirectPath)}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Kunne ikke registrere konto');
     } finally {
@@ -111,7 +111,7 @@ export default function RegisterPage() {
 
         <p className="mt-4 text-sm text-gray-700">
           Har du allerede konto?{' '}
-          <Link className="font-semibold text-forest-800" href={`/auth/login?redirect=${encodeURIComponent(redirectPath)}`}>
+          <Link className="font-semibold text-forest-800" href={`/auth/login?next=${encodeURIComponent(redirectPath)}`}>
             Logg inn
           </Link>
         </p>
