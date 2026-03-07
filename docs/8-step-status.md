@@ -57,3 +57,4 @@
 ## Steg 8: Dokumentasjon og operativ klargjøring
 - Status: implementert.
 - Oppdatert README + docs for payment, vegetation, offline og 8-stegsstatus.
+Step 8 started: lør.  7 mar. 2026 20.48.52 CET
