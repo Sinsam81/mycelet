@@ -10,7 +10,7 @@ export default function LoginPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirectPath = useMemo(
-  () => searchParams.get('next') ?? searchParams.get('next') ?? searchParams.get('redirect') ?? '/',
+  () => searchParams.get('next') ?? searchParams.get('redirect') ?? '/',
   [searchParams]
 );
 
