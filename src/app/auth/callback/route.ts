@@ -1,14 +1,19 @@
-import { createServerClient, type CookieOptions } from '@supabase/ssr';
+import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
-import { NextResponse } from 'next/server';
+import { createServerClient, type CookieOptions } from '@supabase/ssr';
 
-export async function GET(request: Request) {
+function getSafeNext(rawNext: string | null): string {
+  if (!rawNext || !rawNext.startsWith('/')) return '/';
+  if (rawNext.startsWith('//')) return '/';
+  return rawNext;
+}
+
+export async function GET(request: NextRequest) {
   const requestUrl = new URL(request.url);
   const code = requestUrl.searchParams.get('code');
-  const next = requestUrl.searchParams.get('redirect') ?? '/';
+  const next = getSafeNext(requestUrl.searchParams.get('next'));
 
   let response = NextResponse.redirect(new URL(next, requestUrl.origin));
-
   if (!code) return response;
 
   const cookieStore = cookies();
@@ -27,8 +32,8 @@ export async function GET(request: Request) {
         remove(name: string, options: CookieOptions) {
           cookieStore.set({ name, value: '', ...options });
           response.cookies.set({ name, value: '', ...options });
-        }
-      }
+        },
+      },
     }
   );
 
