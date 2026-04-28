@@ -78,7 +78,7 @@ export default function SpeciesPage() {
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {(data ?? []).map((species) => (
-            <SpeciesCard key={species.id} species={species} />
+            <SpeciesCard key={species.id} species={species} imageUrl={species.primary_image_url} />
           ))}
         </div>
 

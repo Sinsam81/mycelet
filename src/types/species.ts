@@ -9,6 +9,7 @@ export interface Species {
   season_start: number;
   season_end: number;
   edibility: Edibility;
+  primary_image_url: string | null;
 }
 
 export interface SpeciesPhoto {
