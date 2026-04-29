@@ -45,6 +45,10 @@ export default async function SpeciesDetailPage({ params }: SpeciesDetailPagePro
         <div>
           <h1 className="text-2xl font-semibold text-gray-900">{species.norwegian_name}</h1>
           <p className="italic text-gray-600">{species.latin_name}</p>
+          <div className="mt-1 flex flex-wrap gap-x-3 text-xs text-gray-500">
+            {species.swedish_name ? <span>🇸🇪 {species.swedish_name}</span> : null}
+            {species.english_name ? <span>🇬🇧 {species.english_name}</span> : null}
+          </div>
         </div>
 
         <EdibilityBadge edibility={species.edibility} />
