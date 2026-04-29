@@ -150,7 +150,7 @@ export default async function CalendarPage() {
                         <td key={m} className="px-1 py-1">
                           <div
                             className={`mx-auto h-3 w-3 rounded-sm ${
-                              peak ? 'bg-forest-700' : inSeason ? 'bg-forest-200' : 'bg-gray-100'
+                              peak ? 'bg-forest-700' : inSeason ? 'bg-forest-100' : 'bg-gray-100'
                             }`}
                           />
                         </td>
