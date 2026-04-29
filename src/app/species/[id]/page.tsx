@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { AlertTriangle } from 'lucide-react';
 import { EdibilityBadge } from '@/components/ui/EdibilityBadge';
@@ -71,6 +72,12 @@ export default async function SpeciesDetailPage({ params }: SpeciesDetailPagePro
                   </a>{' '}
                   umiddelbart.
                 </p>
+                <Link
+                  href="/sikkerhet"
+                  className={`pt-1 inline-block text-xs underline ${species.edibility === 'deadly' ? 'text-white/90' : 'text-red-800'}`}
+                >
+                  Mer om sikkerhet og soppkontroll →
+                </Link>
               </div>
             </div>
           </div>
