@@ -15,6 +15,29 @@ interface SpeciesRow {
   primary_image_url: string | null;
 }
 
+interface RecentFindingRow {
+  id: string;
+  found_at: string;
+  location_name: string | null;
+  mushroom_species: {
+    id: number;
+    norwegian_name: string;
+    edibility: Edibility;
+    primary_image_url: string | null;
+  } | null;
+}
+
+function formatTimeAgo(iso: string) {
+  const diff = Date.now() - new Date(iso).getTime();
+  const dayMs = 24 * 60 * 60 * 1000;
+  const days = Math.round(diff / dayMs);
+  if (days === 0) return 'i dag';
+  if (days === 1) return 'i går';
+  if (days < 7) return `for ${days} dager siden`;
+  if (days < 30) return `for ${Math.round(days / 7)} uker siden`;
+  return new Date(iso).toLocaleDateString('nb-NO', { day: '2-digit', month: 'short' });
+}
+
 const MONTH_NAMES = [
   'januar', 'februar', 'mars', 'april', 'mai', 'juni',
   'juli', 'august', 'september', 'oktober', 'november', 'desember'
@@ -29,12 +52,21 @@ export default async function HomePage() {
   const supabase = createClient();
   const month = new Date().getMonth() + 1;
 
-  const { data } = await supabase
-    .from('mushroom_species')
-    .select('id,norwegian_name,latin_name,edibility,season_start,season_end,primary_image_url')
-    .order('norwegian_name', { ascending: true });
+  const [{ data }, { data: recentFindings }] = await Promise.all([
+    supabase
+      .from('mushroom_species')
+      .select('id,norwegian_name,latin_name,edibility,season_start,season_end,primary_image_url')
+      .order('norwegian_name', { ascending: true }),
+    supabase
+      .from('findings')
+      .select('id,found_at,location_name,mushroom_species(id,norwegian_name,edibility,primary_image_url)')
+      .in('visibility', ['public', 'approximate'])
+      .order('found_at', { ascending: false })
+      .limit(4)
+  ]);
 
   const species = (data ?? []) as SpeciesRow[];
+  const findings = (recentFindings ?? []) as unknown as RecentFindingRow[];
   const inSeasonEdible = species
     .filter((s) => (s.edibility === 'edible' || s.edibility === 'conditionally_edible') && isInMonth(month, s.season_start, s.season_end))
     .slice(0, 4);
@@ -104,6 +136,40 @@ export default async function HomePage() {
                     {s.norwegian_name} <span className="italic text-red-700/80">({s.latin_name})</span>
                   </Link>
                   <EdibilityBadge edibility={s.edibility} />
+                </li>
+              ))}
+            </ul>
+          </article>
+        ) : null}
+
+        {findings.length > 0 ? (
+          <article className="rounded-xl bg-white p-4 shadow-sm">
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="font-semibold">Siste funn fra fellesskapet</h2>
+              <Link href="/map" className="text-xs font-medium text-forest-800 hover:underline">
+                Se på kartet →
+              </Link>
+            </div>
+            <ul className="space-y-2">
+              {findings.map((f) => (
+                <li key={f.id}>
+                  <Link
+                    href={f.mushroom_species ? `/species/${f.mushroom_species.id}` : '/map'}
+                    className="flex items-center gap-3 rounded-lg border border-gray-100 p-2 hover:border-forest-700"
+                  >
+                    <div className="h-12 w-12 shrink-0 overflow-hidden rounded bg-gray-100">
+                      {f.mushroom_species?.primary_image_url ? (
+                        <img src={f.mushroom_species.primary_image_url} alt={f.mushroom_species.norwegian_name} className="h-full w-full object-cover" />
+                      ) : null}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-medium">{f.mushroom_species?.norwegian_name ?? 'Ukjent art'}</p>
+                      <p className="truncate text-xs text-gray-600">
+                        {f.location_name ?? 'Ukjent sted'} · {formatTimeAgo(f.found_at)}
+                      </p>
+                    </div>
+                    {f.mushroom_species ? <EdibilityBadge edibility={f.mushroom_species.edibility} /> : null}
+                  </Link>
                 </li>
               ))}
             </ul>
