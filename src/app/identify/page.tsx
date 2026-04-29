@@ -1,7 +1,7 @@
 'use client';
 
 import { Camera, Info, Search } from 'lucide-react';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { PageWrapper } from '@/components/layout/PageWrapper';
 import { Button } from '@/components/ui/Button';
@@ -17,6 +17,19 @@ export default function IdentifyPage() {
 
   const [error, setError] = useState<string | null>(null);
   const [aiDisabled, setAiDisabled] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/identify')
+      .then((r) => r.json())
+      .then((data) => {
+        if (!cancelled && data?.enabled === false) setAiDisabled(true);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const handleFile = async (file: File) => {
     setError(null);
