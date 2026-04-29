@@ -26,7 +26,7 @@ export default async function SpeciesDetailPage({ params }: SpeciesDetailPagePro
       .order('is_primary', { ascending: false }),
     supabase
       .from('look_alikes')
-      .select('look_alike_id,danger_level,mushroom_species!look_alikes_look_alike_id_fkey(norwegian_name,latin_name,edibility)')
+      .select('look_alike_id,danger_level,similarity_description,difference_description,mushroom_species!look_alikes_look_alike_id_fkey(norwegian_name,latin_name,edibility)')
       .eq('species_id', id)
       .limit(6)
   ]);
@@ -81,11 +81,37 @@ export default async function SpeciesDetailPage({ params }: SpeciesDetailPagePro
               const lookAlike = item.mushroom_species;
               if (!lookAlike) return null;
 
+              const dangerLabel: Record<string, string> = {
+                low: 'Lav',
+                medium: 'Middels',
+                high: 'Høy',
+                critical: 'Kritisk'
+              };
+              const dangerStyle: Record<string, string> = {
+                low: 'bg-gray-100 text-gray-800',
+                medium: 'bg-yellow-100 text-yellow-900',
+                high: 'bg-orange-100 text-orange-900',
+                critical: 'bg-red-100 text-red-900'
+              };
+              const danger = item.danger_level ?? 'low';
+
               return (
                 <div key={item.look_alike_id} className="rounded-lg border border-gray-200 p-3">
-                  <p className="font-medium text-gray-900">{lookAlike.norwegian_name}</p>
-                  <p className="text-sm italic text-gray-600">{lookAlike.latin_name}</p>
-                  <p className="mt-1 text-xs text-gray-700">Faregrad: {item.danger_level ?? 'ukjent'}</p>
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <p className="font-medium text-gray-900">{lookAlike.norwegian_name}</p>
+                      <p className="text-sm italic text-gray-600">{lookAlike.latin_name}</p>
+                    </div>
+                    <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${dangerStyle[danger] ?? dangerStyle.low}`}>
+                      {dangerLabel[danger] ?? danger}
+                    </span>
+                  </div>
+                  {item.similarity_description ? (
+                    <p className="mt-2 text-sm text-gray-800"><span className="font-medium">Likhet:</span> {item.similarity_description}</p>
+                  ) : null}
+                  {item.difference_description ? (
+                    <p className="mt-1 text-sm text-gray-800"><span className="font-medium">Hvordan skille:</span> {item.difference_description}</p>
+                  ) : null}
                 </div>
               );
             })}
