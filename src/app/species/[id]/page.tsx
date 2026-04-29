@@ -1,4 +1,5 @@
 import { notFound } from 'next/navigation';
+import { AlertTriangle } from 'lucide-react';
 import { EdibilityBadge } from '@/components/ui/EdibilityBadge';
 import { PageWrapper } from '@/components/layout/PageWrapper';
 import { createClient } from '@/lib/supabase/server';
@@ -46,6 +47,46 @@ export default async function SpeciesDetailPage({ params }: SpeciesDetailPagePro
         </div>
 
         <EdibilityBadge edibility={species.edibility} />
+
+        {species.edibility === 'deadly' || species.edibility === 'toxic' ? (
+          <div
+            className={`rounded-xl p-4 ${
+              species.edibility === 'deadly'
+                ? 'bg-red-900 text-white'
+                : 'border-2 border-red-600 bg-red-50 text-red-900'
+            }`}
+          >
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="h-6 w-6 shrink-0" />
+              <div className="space-y-1.5">
+                <p className="text-base font-bold uppercase tracking-wide">
+                  {species.edibility === 'deadly' ? 'Dødelig giftig — ikke spis' : 'Giftig — ikke spis'}
+                </p>
+                {species.toxin_info ? <p className="text-sm"><span className="font-semibold">Toksin:</span> {species.toxin_info}</p> : null}
+                {species.symptoms ? <p className="text-sm"><span className="font-semibold">Symptomer:</span> {species.symptoms}</p> : null}
+                <p className="pt-1 text-sm font-medium">
+                  Ved svelging — ring Giftinformasjonen{' '}
+                  <a href="tel:+4722591300" className={`underline ${species.edibility === 'deadly' ? 'text-white' : 'text-red-900'}`}>
+                    22 59 13 00
+                  </a>{' '}
+                  umiddelbart.
+                </p>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        {species.edibility === 'conditionally_edible' && species.edibility_notes ? (
+          <div className="rounded-xl border border-amber-300 bg-amber-50 p-4">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="h-5 w-5 shrink-0 text-amber-700" />
+              <div>
+                <p className="font-semibold text-amber-900">Betinget spiselig — krever tilberedning</p>
+                <p className="mt-1 text-sm text-amber-900">{species.edibility_notes}</p>
+              </div>
+            </div>
+          </div>
+        ) : null}
 
         <div className="overflow-hidden rounded-xl bg-white shadow-sm">
           <div className="h-52 bg-gray-100">
