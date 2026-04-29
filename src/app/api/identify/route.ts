@@ -23,12 +23,24 @@ type IdentifyRequest = {
   longitude?: number;
 };
 
+function isAiEnabled() {
+  const apiKey = process.env.PLANTID_API_KEY;
+  return Boolean(apiKey && apiKey !== 'your-api-key-here' && apiKey.length >= 20);
+}
+
+export async function GET() {
+  return NextResponse.json({ enabled: isAiEnabled() });
+}
+
 export async function POST(request: NextRequest) {
   try {
-    const apiKey = process.env.PLANTID_API_KEY;
-    if (!apiKey) {
-      return NextResponse.json({ error: 'PLANTID_API_KEY mangler' }, { status: 500 });
+    if (!isAiEnabled()) {
+      return NextResponse.json(
+        { error: 'AI-identifikasjon er ikke aktivert ennå.', code: 'ai_disabled' },
+        { status: 503 }
+      );
     }
+    const apiKey = process.env.PLANTID_API_KEY!;
 
     const supabase = createClient();
     const {

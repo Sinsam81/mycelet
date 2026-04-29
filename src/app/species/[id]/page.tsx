@@ -1,4 +1,6 @@
+import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { AlertTriangle } from 'lucide-react';
 import { EdibilityBadge } from '@/components/ui/EdibilityBadge';
 import { PageWrapper } from '@/components/layout/PageWrapper';
 import { createClient } from '@/lib/supabase/server';
@@ -26,7 +28,7 @@ export default async function SpeciesDetailPage({ params }: SpeciesDetailPagePro
       .order('is_primary', { ascending: false }),
     supabase
       .from('look_alikes')
-      .select('look_alike_id,danger_level,mushroom_species!look_alikes_look_alike_id_fkey(norwegian_name,latin_name,edibility)')
+      .select('look_alike_id,danger_level,similarity_description,difference_description,mushroom_species!look_alikes_look_alike_id_fkey(norwegian_name,latin_name,edibility)')
       .eq('species_id', id)
       .limit(6)
   ]);
@@ -43,9 +45,59 @@ export default async function SpeciesDetailPage({ params }: SpeciesDetailPagePro
         <div>
           <h1 className="text-2xl font-semibold text-gray-900">{species.norwegian_name}</h1>
           <p className="italic text-gray-600">{species.latin_name}</p>
+          <div className="mt-1 flex flex-wrap gap-x-3 text-xs text-gray-500">
+            {species.swedish_name ? <span>🇸🇪 {species.swedish_name}</span> : null}
+            {species.english_name ? <span>🇬🇧 {species.english_name}</span> : null}
+          </div>
         </div>
 
         <EdibilityBadge edibility={species.edibility} />
+
+        {species.edibility === 'deadly' || species.edibility === 'toxic' ? (
+          <div
+            className={`rounded-xl p-4 ${
+              species.edibility === 'deadly'
+                ? 'bg-red-900 text-white'
+                : 'border-2 border-red-600 bg-red-50 text-red-900'
+            }`}
+          >
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="h-6 w-6 shrink-0" />
+              <div className="space-y-1.5">
+                <p className="text-base font-bold uppercase tracking-wide">
+                  {species.edibility === 'deadly' ? 'Dødelig giftig — ikke spis' : 'Giftig — ikke spis'}
+                </p>
+                {species.toxin_info ? <p className="text-sm"><span className="font-semibold">Toksin:</span> {species.toxin_info}</p> : null}
+                {species.symptoms ? <p className="text-sm"><span className="font-semibold">Symptomer:</span> {species.symptoms}</p> : null}
+                <p className="pt-1 text-sm font-medium">
+                  Ved svelging — ring Giftinformasjonen{' '}
+                  <a href="tel:+4722591300" className={`underline ${species.edibility === 'deadly' ? 'text-white' : 'text-red-900'}`}>
+                    22 59 13 00
+                  </a>{' '}
+                  umiddelbart.
+                </p>
+                <Link
+                  href="/sikkerhet"
+                  className={`pt-1 inline-block text-xs underline ${species.edibility === 'deadly' ? 'text-white/90' : 'text-red-800'}`}
+                >
+                  Mer om sikkerhet og soppkontroll →
+                </Link>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        {species.edibility === 'conditionally_edible' && species.edibility_notes ? (
+          <div className="rounded-xl border border-amber-300 bg-amber-50 p-4">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="h-5 w-5 shrink-0 text-amber-700" />
+              <div>
+                <p className="font-semibold text-amber-900">Betinget spiselig — krever tilberedning</p>
+                <p className="mt-1 text-sm text-amber-900">{species.edibility_notes}</p>
+              </div>
+            </div>
+          </div>
+        ) : null}
 
         <div className="overflow-hidden rounded-xl bg-white shadow-sm">
           <div className="h-52 bg-gray-100">
@@ -81,11 +133,37 @@ export default async function SpeciesDetailPage({ params }: SpeciesDetailPagePro
               const lookAlike = item.mushroom_species;
               if (!lookAlike) return null;
 
+              const dangerLabel: Record<string, string> = {
+                low: 'Lav',
+                medium: 'Middels',
+                high: 'Høy',
+                critical: 'Kritisk'
+              };
+              const dangerStyle: Record<string, string> = {
+                low: 'bg-gray-100 text-gray-800',
+                medium: 'bg-yellow-100 text-yellow-900',
+                high: 'bg-orange-100 text-orange-900',
+                critical: 'bg-red-100 text-red-900'
+              };
+              const danger = item.danger_level ?? 'low';
+
               return (
                 <div key={item.look_alike_id} className="rounded-lg border border-gray-200 p-3">
-                  <p className="font-medium text-gray-900">{lookAlike.norwegian_name}</p>
-                  <p className="text-sm italic text-gray-600">{lookAlike.latin_name}</p>
-                  <p className="mt-1 text-xs text-gray-700">Faregrad: {item.danger_level ?? 'ukjent'}</p>
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <p className="font-medium text-gray-900">{lookAlike.norwegian_name}</p>
+                      <p className="text-sm italic text-gray-600">{lookAlike.latin_name}</p>
+                    </div>
+                    <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${dangerStyle[danger] ?? dangerStyle.low}`}>
+                      {dangerLabel[danger] ?? danger}
+                    </span>
+                  </div>
+                  {item.similarity_description ? (
+                    <p className="mt-2 text-sm text-gray-800"><span className="font-medium">Likhet:</span> {item.similarity_description}</p>
+                  ) : null}
+                  {item.difference_description ? (
+                    <p className="mt-1 text-sm text-gray-800"><span className="font-medium">Hvordan skille:</span> {item.difference_description}</p>
+                  ) : null}
                 </div>
               );
             })}

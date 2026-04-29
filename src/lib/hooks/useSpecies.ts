@@ -36,7 +36,7 @@ export function useSpecies(filters: SpeciesFilters) {
       } else {
         const { data: rawData, error } = await supabase
           .from('mushroom_species')
-          .select('id,norwegian_name,latin_name,description,habitat,season_start,season_end,edibility')
+          .select('id,norwegian_name,latin_name,description,habitat,season_start,season_end,edibility,primary_image_url')
           .order('norwegian_name', { ascending: true })
           .limit(200);
 
