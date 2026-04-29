@@ -26,8 +26,11 @@ type IdentifyRequest = {
 export async function POST(request: NextRequest) {
   try {
     const apiKey = process.env.PLANTID_API_KEY;
-    if (!apiKey) {
-      return NextResponse.json({ error: 'PLANTID_API_KEY mangler' }, { status: 500 });
+    if (!apiKey || apiKey === 'your-api-key-here' || apiKey.length < 20) {
+      return NextResponse.json(
+        { error: 'AI-identifikasjon er ikke aktivert ennå.', code: 'ai_disabled' },
+        { status: 503 }
+      );
     }
 
     const supabase = createClient();
