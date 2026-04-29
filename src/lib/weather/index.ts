@@ -73,14 +73,167 @@ async function fetchFrost(_opts: WeatherFetchOptions): Promise<WeatherSummary | 
 
 // --- SMHI Open Data (Sweden) -------------------------------------------
 
-async function fetchSmhi(_opts: WeatherFetchOptions): Promise<WeatherSummary | null> {
-  // TODO: implement against https://opendata-download-metobs.smhi.se/api
-  // SMHI doesn't require a key. Pattern:
-  // 1. GET /version/latest/parameter/1.json -> air temp stations
-  // 2. Find nearest station to (lat, lon) by simple distance
-  // 3. GET /version/latest/parameter/<id>/station/<id>/period/latest-months/data.json
-  //    for params: 1 (air temp), 5 (precip), 6 (humidity)
+const SMHI_BASE = 'https://opendata-download-metobs.smhi.se/api/version/latest';
+
+// SMHI parameter IDs we care about for mushroom prediction.
+const SMHI_PARAM = {
+  airTemp: 1,        // momentary, hourly
+  precip24h: 5,      // 24h sum (07-07)
+  humidity: 6,       // momentary, hourly
+  minTempDay: 19,    // daily min
+  maxTempDay: 20     // daily max
+} as const;
+
+interface SmhiStation {
+  key?: string | number;
+  id?: number;
+  name?: string;
+  active?: boolean;
+  latitude?: number;
+  longitude?: number;
+}
+
+interface SmhiDataPoint {
+  date?: number;
+  value?: string | number | null;
+  quality?: string;
+}
+
+async function smhiFetchStations(parameterId: number): Promise<SmhiStation[] | null> {
+  const res = await fetch(`${SMHI_BASE}/parameter/${parameterId}.json`, {
+    next: { revalidate: 86400 }
+  });
+  if (!res.ok) return null;
+  const data = await res.json();
+  return Array.isArray(data?.station) ? data.station : null;
+}
+
+async function smhiFetchData(
+  parameterId: number,
+  stationKey: string | number,
+  period: 'latest-hour' | 'latest-day' | 'latest-months'
+): Promise<SmhiDataPoint[] | null> {
+  const res = await fetch(
+    `${SMHI_BASE}/parameter/${parameterId}/station/${stationKey}/period/${period}/data.json`,
+    { next: { revalidate: 900 } }
+  );
+  if (!res.ok) return null;
+  const data = await res.json();
+  return Array.isArray(data?.value) ? data.value : null;
+}
+
+function approxDistanceSq(stationLat: number, stationLon: number, lat: number, lon: number) {
+  // Equirectangular approximation. Good enough for ranking; Sweden is narrow.
+  const dLat = stationLat - lat;
+  const dLon = (stationLon - lon) * Math.cos((lat * Math.PI) / 180);
+  return dLat * dLat + dLon * dLon;
+}
+
+function nearestActive(stations: SmhiStation[] | null, lat: number, lon: number): SmhiStation | null {
+  if (!stations) return null;
+  const candidates = stations.filter(
+    (s) =>
+      s.active === true &&
+      typeof s.latitude === 'number' &&
+      typeof s.longitude === 'number' &&
+      (s.key !== undefined || s.id !== undefined)
+  );
+  if (candidates.length === 0) return null;
+  return candidates.reduce((best, s) =>
+    approxDistanceSq(s.latitude!, s.longitude!, lat, lon) <
+    approxDistanceSq(best.latitude!, best.longitude!, lat, lon)
+      ? s
+      : best
+  );
+}
+
+function stationKey(s: SmhiStation): string | number {
+  return (s.key ?? s.id) as string | number;
+}
+
+function latestNumeric(points: SmhiDataPoint[] | null): number | null {
+  if (!points) return null;
+  for (let i = points.length - 1; i >= 0; i--) {
+    const v = Number(points[i]?.value);
+    if (Number.isFinite(v)) return v;
+  }
   return null;
+}
+
+function sumWithinDays(points: SmhiDataPoint[] | null, days: number, now: number): number {
+  if (!points) return 0;
+  const cutoff = now - days * 24 * 60 * 60 * 1000;
+  return points.reduce((sum, p) => {
+    const date = Number(p?.date);
+    const value = Number(p?.value);
+    if (!Number.isFinite(date) || date < cutoff) return sum;
+    if (!Number.isFinite(value)) return sum;
+    return sum + value;
+  }, 0);
+}
+
+function extremeWithinDays(
+  points: SmhiDataPoint[] | null,
+  days: number,
+  now: number,
+  pick: 'min' | 'max'
+): number | null {
+  if (!points) return null;
+  const cutoff = now - days * 24 * 60 * 60 * 1000;
+  let result: number | null = null;
+  for (const p of points) {
+    const date = Number(p?.date);
+    const value = Number(p?.value);
+    if (!Number.isFinite(date) || date < cutoff) continue;
+    if (!Number.isFinite(value)) continue;
+    if (result === null) result = value;
+    else if (pick === 'min' && value < result) result = value;
+    else if (pick === 'max' && value > result) result = value;
+  }
+  return result;
+}
+
+async function fetchSmhi({ lat, lon }: WeatherFetchOptions): Promise<WeatherSummary | null> {
+  const [tempStations, rainStations, humidStations, minStations, maxStations] = await Promise.all([
+    smhiFetchStations(SMHI_PARAM.airTemp),
+    smhiFetchStations(SMHI_PARAM.precip24h),
+    smhiFetchStations(SMHI_PARAM.humidity),
+    smhiFetchStations(SMHI_PARAM.minTempDay),
+    smhiFetchStations(SMHI_PARAM.maxTempDay)
+  ]);
+
+  // Temp + rain are required; humidity/min/max are best-effort.
+  const tempStn = nearestActive(tempStations, lat, lon);
+  const rainStn = nearestActive(rainStations, lat, lon);
+  if (!tempStn || !rainStn) return null;
+
+  const humidStn = nearestActive(humidStations, lat, lon);
+  const minStn = nearestActive(minStations, lat, lon);
+  const maxStn = nearestActive(maxStations, lat, lon);
+
+  const [tempData, rainData, humidData, minData, maxData] = await Promise.all([
+    smhiFetchData(SMHI_PARAM.airTemp, stationKey(tempStn), 'latest-hour'),
+    smhiFetchData(SMHI_PARAM.precip24h, stationKey(rainStn), 'latest-months'),
+    humidStn ? smhiFetchData(SMHI_PARAM.humidity, stationKey(humidStn), 'latest-hour') : Promise.resolve(null),
+    minStn ? smhiFetchData(SMHI_PARAM.minTempDay, stationKey(minStn), 'latest-months') : Promise.resolve(null),
+    maxStn ? smhiFetchData(SMHI_PARAM.maxTempDay, stationKey(maxStn), 'latest-months') : Promise.resolve(null)
+  ]);
+
+  const temperatureC = latestNumeric(tempData);
+  if (temperatureC === null) return null;
+
+  const now = Date.now();
+
+  return {
+    source: 'smhi',
+    temperatureC,
+    humidityPct: latestNumeric(humidData) ?? 0,
+    rain3dMm: sumWithinDays(rainData, 3, now),
+    rain7dMm: sumWithinDays(rainData, 7, now),
+    rain14dMm: sumWithinDays(rainData, 14, now),
+    minTemp7dC: extremeWithinDays(minData, 7, now, 'min'),
+    maxTemp7dC: extremeWithinDays(maxData, 7, now, 'max')
+  };
 }
 
 // --- OpenWeather (legacy fallback for outside Nordics) -----------------
