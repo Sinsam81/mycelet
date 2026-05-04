@@ -117,6 +117,13 @@ export default function SikkerhetPage() {
             Vi tar ikke ansvar for skade som følge av feilidentifisering. Bruk sunn fornuft, kryss-sjekk mot flere
             kilder, og bring tvilstilfeller til soppkontroll før du spiser.
           </p>
+          <p className="text-sm text-gray-700">
+            Se også:{' '}
+            <Link href="/personvern" className="font-medium text-forest-800 hover:underline">
+              Personvernerklæringen
+            </Link>{' '}
+            for hvordan vi behandler dataene dine.
+          </p>
         </article>
       </section>
     </PageWrapper>
