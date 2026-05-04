@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
+import { CookieNotice } from '@/components/layout/CookieNotice';
 import { Providers } from '@/components/layout/Providers';
 
 export const metadata: Metadata = {
@@ -26,6 +27,7 @@ export default function RootLayout({
     <html lang="nb">
       <body>
         <Providers>{children}</Providers>
+        <CookieNotice />
       </body>
     </html>
   );
