@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { getBillingCapabilities, getUserBillingSubscription } from '@/lib/billing/subscription';
+import { fetchWeatherSummary } from '@/lib/weather';
 import {
   computeAdvancedEnvironmentScore,
   computeAdvancedFactors,
@@ -185,16 +186,8 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    const apiKey = process.env.OPENWEATHER_API_KEY;
-    if (!apiKey) {
-      return NextResponse.json({ error: 'OPENWEATHER_API_KEY mangler og ingen prediction tiles funnet' }, { status: 500 });
-    }
-
-    const [weatherRes, findingsRes] = await Promise.all([
-      fetch(
-        `https://api.openweathermap.org/data/2.5/forecast?lat=${lat}&lon=${lon}&units=metric&lang=no&appid=${apiKey}`,
-        { next: { revalidate: 900 } }
-      ),
+    const [weather, findingsRes] = await Promise.all([
+      fetchWeatherSummary({ lat, lon }),
       supabase.rpc('get_findings_in_bounds', {
         min_lat: minLat,
         min_lng: minLng,
@@ -205,16 +198,16 @@ export async function GET(request: NextRequest) {
       })
     ]);
 
-    if (!weatherRes.ok) {
-      return NextResponse.json({ error: 'Kunne ikke hente værdata' }, { status: 502 });
+    if (!weather) {
+      return NextResponse.json(
+        { error: 'Værdata ikke tilgjengelig for disse koordinatene (mangler API-nøkkel eller stasjonsdata)' },
+        { status: 502 }
+      );
     }
 
-    const weatherData = await weatherRes.json();
-    const forecast = weatherData?.list ?? [];
-
-    const currentTemp = Number(forecast?.[0]?.main?.temp ?? 0);
-    const currentHumidity = Number(forecast?.[0]?.main?.humidity ?? 0);
-    const rain3dMm = forecast.slice(0, 24).reduce((sum: number, item: any) => sum + Number(item?.rain?.['3h'] ?? 0), 0);
+    const currentTemp = weather.temperatureC;
+    const currentHumidity = weather.humidityPct;
+    const rain3dMm = weather.rain3dMm;
 
     const legacyEnvironment = computeEnvironmentScore({
       temperature: currentTemp,
