@@ -73,14 +73,21 @@ export async function GET(request: NextRequest) {
     const premiumPrediction = billing.paid;
     const tileDate = new Date().toISOString().slice(0, 10);
 
-    const tileRes = await supabase.rpc('get_prediction_tiles_in_bounds', {
-      min_lat: minLat,
-      min_lng: minLng,
-      max_lat: maxLat,
-      max_lng: maxLng,
-      p_tile_date: tileDate,
-      p_species_id: speciesId
-    });
+    // Fetch tiles and current weather in parallel. The tile-path uses weather
+    // as informational only (score is precomputed), while the fallback path
+    // requires it for score computation. Hoisting the fetch up here means the
+    // fallback path doesn't need to fetch weather a second time.
+    const [tileRes, weather] = await Promise.all([
+      supabase.rpc('get_prediction_tiles_in_bounds', {
+        min_lat: minLat,
+        min_lng: minLng,
+        max_lat: maxLat,
+        max_lng: maxLng,
+        p_tile_date: tileDate,
+        p_species_id: speciesId
+      }),
+      fetchWeatherSummary({ lat, lon })
+    ]);
 
     if (tileRes.error) {
       return NextResponse.json({ error: tileRes.error.message }, { status: 500 });
@@ -172,11 +179,13 @@ export async function GET(request: NextRequest) {
           soil: modelFactors.soil,
           weatherTrend: modelFactors.weatherTrend
         },
-        weather: {
-          temperature: 0,
-          humidity: 0,
-          rain3dMm: 0
-        },
+        weather: weather
+          ? {
+              temperature: Math.round(weather.temperatureC),
+              humidity: Math.round(weather.humidityPct),
+              rain3dMm: Math.round(weather.rain3dMm * 10) / 10
+            }
+          : { temperature: 0, humidity: 0, rain3dMm: 0 },
         counts: {
           findingsInArea: tiles.length,
           recent30d: 0,
@@ -186,24 +195,22 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    const [weather, findingsRes] = await Promise.all([
-      fetchWeatherSummary({ lat, lon }),
-      supabase.rpc('get_findings_in_bounds', {
-        min_lat: minLat,
-        min_lng: minLng,
-        max_lat: maxLat,
-        max_lng: maxLng,
-        species_filter: speciesId,
-        month_filter: null
-      })
-    ]);
-
+    // Fallback path requires weather to compute scores (tile-path can do without).
     if (!weather) {
       return NextResponse.json(
         { error: 'Værdata ikke tilgjengelig for disse koordinatene (mangler API-nøkkel eller stasjonsdata)' },
         { status: 502 }
       );
     }
+
+    const findingsRes = await supabase.rpc('get_findings_in_bounds', {
+      min_lat: minLat,
+      min_lng: minLng,
+      max_lat: maxLat,
+      max_lng: maxLng,
+      species_filter: speciesId,
+      month_filter: null
+    });
 
     const currentTemp = weather.temperatureC;
     const currentHumidity = weather.humidityPct;
