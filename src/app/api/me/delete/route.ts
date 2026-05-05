@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { logAdminAction } from '@/lib/audit/log';
+import { checkRateLimit } from '@/lib/rate-limit';
+import { getClientKey, rateLimitResponse } from '@/lib/rate-limit/route';
 
 /**
  * GDPR Article 17 — right to erasure ("right to be forgotten").
@@ -38,6 +41,14 @@ export async function POST(request: NextRequest) {
 
   if (!user) {
     return NextResponse.json({ error: 'Ikke autentisert' }, { status: 401 });
+  }
+
+  // Rate limit defends against repeated triggers (no honest user clicks
+  // delete five times in a minute). Defense in depth on top of the literal
+  // confirm token.
+  const rateLimit = checkRateLimit(`me-delete:${getClientKey(request, user.id)}`, 5, 60);
+  if (!rateLimit.allowed) {
+    return rateLimitResponse(rateLimit);
   }
 
   const body = await request.json().catch(() => ({}));
@@ -85,6 +96,29 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
+
+  // Audit log the self-deletion. Done after the auth.users row is gone —
+  // the user's UUID is captured from the pre-delete `user` variable; the
+  // log table has no FK on actor/target so the entry persists even though
+  // auth.users(id) no longer exists. logAdminAction is failure-safe; if
+  // the audit insert fails (no service role, no migration 008) the user-
+  // facing deletion is unaffected.
+  await logAdminAction({
+    actorId: user.id,
+    action: 'account.self_delete',
+    targetUserId: user.id,
+    metadata: {
+      deletedCounts: {
+        findings: findingsCount.count ?? 0,
+        forumPosts: postsCount.count ?? 0,
+        comments: commentsCount.count ?? 0,
+        postLikes: likesCount.count ?? 0,
+        savedPosts: savedCount.count ?? 0,
+        reportsFiled: reportsCount.count ?? 0
+      }
+    },
+    request
+  });
 
   // Best-effort sign-out so the cookie session is invalidated. The auth row
   // is already gone, so this just clears local cookies; if it errors we
