@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { FREE_DAILY_AI_LIMIT } from '@/lib/billing/plans';
 import { getBillingCapabilities, getUserBillingSubscription } from '@/lib/billing/subscription';
+import { checkRateLimit } from '@/lib/rate-limit';
+import { getClientKey, rateLimitResponse } from '@/lib/rate-limit/route';
 
 const PLANTID_API_URL = 'https://mushroom.kindwise.com/api/v1/identification';
 
@@ -50,6 +52,13 @@ export async function POST(request: NextRequest) {
 
     if (authError || !user) {
       return NextResponse.json({ error: 'Ikke autentisert' }, { status: 401 });
+    }
+
+    // Short-term burst protection on top of the daily billing-tier limit
+    // below. Stops compromised-account abuse and runaway client loops.
+    const rateLimit = checkRateLimit(`identify:${getClientKey(request, user.id)}`, 20, 60);
+    if (!rateLimit.allowed) {
+      return rateLimitResponse(rateLimit);
     }
 
     const subscription = await getUserBillingSubscription(supabase, user.id);
