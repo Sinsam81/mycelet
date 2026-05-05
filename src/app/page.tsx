@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { AlertTriangle, Calendar, Camera, Map, MessageSquare, Shield } from 'lucide-react';
+import { AlertTriangle, Calendar, Camera, Lock, Map, MessageSquare, Shield } from 'lucide-react';
 import { PageWrapper } from '@/components/layout/PageWrapper';
 import { EdibilityBadge } from '@/components/ui/EdibilityBadge';
 import { createClient } from '@/lib/supabase/server';
@@ -205,12 +205,20 @@ export default async function HomePage() {
           </Link>
         </div>
 
-        <Link
-          href="/sikkerhet"
-          className="block rounded-lg border border-gray-200 bg-white p-3 text-sm font-medium text-gray-800 hover:bg-gray-50"
-        >
-          <span className="inline-flex items-center gap-2"><Shield className="h-4 w-4 text-forest-800" /> Sikkerhet og soppkontroll</span>
-        </Link>
+        <div className="grid grid-cols-2 gap-3">
+          <Link
+            href="/sikkerhet"
+            className="block rounded-lg border border-gray-200 bg-white p-3 text-sm font-medium text-gray-800 hover:bg-gray-50"
+          >
+            <span className="inline-flex items-center gap-2"><Shield className="h-4 w-4 text-forest-800" /> Sikkerhet og soppkontroll</span>
+          </Link>
+          <Link
+            href="/personvern"
+            className="block rounded-lg border border-gray-200 bg-white p-3 text-sm font-medium text-gray-800 hover:bg-gray-50"
+          >
+            <span className="inline-flex items-center gap-2"><Lock className="h-4 w-4 text-forest-800" /> Personvern</span>
+          </Link>
+        </div>
       </section>
     </PageWrapper>
   );
