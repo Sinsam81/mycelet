@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { logAdminAction } from '@/lib/audit/log';
 
 type VerifiedRole = 'trusted_forager' | 'expert' | 'community_verifier' | 'moderator';
 
@@ -116,6 +117,18 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
+  await logAdminAction({
+    actorId: access.userId,
+    action: 'verified_forager.upsert',
+    targetUserId: body.userId,
+    metadata: {
+      role: body.role,
+      badgeLabel: body.badgeLabel?.trim() || null,
+      note: body.note?.trim() || null
+    },
+    request
+  });
+
   return NextResponse.json({ ok: true });
 }
 
@@ -135,6 +148,13 @@ export async function DELETE(request: NextRequest) {
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
+
+  await logAdminAction({
+    actorId: access.userId,
+    action: 'verified_forager.delete',
+    targetUserId: userId,
+    request
+  });
 
   return NextResponse.json({ ok: true });
 }
