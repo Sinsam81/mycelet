@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { Crown, Leaf, MapPin } from 'lucide-react';
 import { PageWrapper } from '@/components/layout/PageWrapper';
 import { EdibilityBadge } from '@/components/ui/EdibilityBadge';
+import { AccountDataActions } from '@/components/profile/AccountDataActions';
 import { LogoutButton } from '@/components/profile/LogoutButton';
 import { createClient } from '@/lib/supabase/server';
 import { getBillingCapabilities, getUserBillingSubscription } from '@/lib/billing/subscription';
@@ -187,9 +188,12 @@ export default async function ProfilePage() {
           >
             Mine rapporteringer
           </Link>
-          <div className="pt-1">
-            <LogoutButton />
-          </div>
+        </article>
+
+        <AccountDataActions />
+
+        <article className="pt-1">
+          <LogoutButton />
         </article>
       </section>
     </PageWrapper>
