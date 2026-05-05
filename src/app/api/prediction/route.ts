@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { getBillingCapabilities, getUserBillingSubscription } from '@/lib/billing/subscription';
 import { fetchWeatherSummary } from '@/lib/weather';
+import { checkRateLimit } from '@/lib/rate-limit';
+import { getClientKey, rateLimitResponse } from '@/lib/rate-limit/route';
 import {
   computeAdvancedEnvironmentScore,
   computeAdvancedFactors,
@@ -69,6 +71,16 @@ export async function GET(request: NextRequest) {
     const {
       data: { user }
     } = await supabase.auth.getUser();
+
+    // Rate limit BEFORE the external weather + RPC calls. /api/prediction
+    // is reachable while logged out (returns generic data) — IP-based
+    // bucket for anonymous traffic, user-id bucket once authenticated.
+    // 60/min is generous for a user panning a map; stops abuse loops.
+    const rateLimit = checkRateLimit(`prediction:${getClientKey(request, user?.id ?? null)}`, 60, 60);
+    if (!rateLimit.allowed) {
+      return rateLimitResponse(rateLimit);
+    }
+
     const subscription = user ? await getUserBillingSubscription(supabase, user.id) : null;
     const billing = getBillingCapabilities(subscription);
     const premiumPrediction = billing.paid;

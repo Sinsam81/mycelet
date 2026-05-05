@@ -4,6 +4,8 @@ import { BILLING_PLANS } from '@/lib/billing/plans';
 import { getBillingCapabilities, getUserBillingSubscription } from '@/lib/billing/subscription';
 import { getStripeServerClient } from '@/lib/stripe/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { checkRateLimit } from '@/lib/rate-limit';
+import { getClientKey, rateLimitResponse } from '@/lib/rate-limit/route';
 
 type CheckoutPlan = 'premium' | 'season_pass';
 
@@ -18,6 +20,14 @@ export async function POST(request: NextRequest) {
 
     if (!user) {
       return NextResponse.json({ error: 'Ikke autentisert' }, { status: 401 });
+    }
+
+    // Each Stripe Checkout session has a real cost (Stripe API call,
+    // potential customer-record creation). 5/min per user is generous for
+    // any honest UI flow and stops compromised-account spam.
+    const rateLimit = checkRateLimit(`billing-checkout:${getClientKey(request, user.id)}`, 5, 60);
+    if (!rateLimit.allowed) {
+      return rateLimitResponse(rateLimit);
     }
 
     const body = (await request.json()) as { plan?: CheckoutPlan };
