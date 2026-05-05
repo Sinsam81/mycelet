@@ -11,6 +11,7 @@ import {
   computeTotalScore,
   scoreToCondition
 } from '@/lib/utils/prediction';
+import { computeSpeciesAdjustment, type SpeciesContext } from '@/lib/utils/species-scoring';
 
 interface FindingRow {
   id: string;
@@ -73,11 +74,12 @@ export async function GET(request: NextRequest) {
     const premiumPrediction = billing.paid;
     const tileDate = new Date().toISOString().slice(0, 10);
 
-    // Fetch tiles and current weather in parallel. The tile-path uses weather
-    // as informational only (score is precomputed), while the fallback path
-    // requires it for score computation. Hoisting the fetch up here means the
-    // fallback path doesn't need to fetch weather a second time.
-    const [tileRes, weather] = await Promise.all([
+    // Fetch tiles, current weather, and (if a species is requested) species
+    // details all in parallel. The tile-path uses weather as informational only
+    // (score is precomputed and species-filtered by the RPC), while the
+    // fallback path needs weather for score computation AND species details
+    // for per-species adjustment.
+    const [tileRes, weather, speciesRes] = await Promise.all([
       supabase.rpc('get_prediction_tiles_in_bounds', {
         min_lat: minLat,
         min_lng: minLng,
@@ -86,8 +88,25 @@ export async function GET(request: NextRequest) {
         p_tile_date: tileDate,
         p_species_id: speciesId
       }),
-      fetchWeatherSummary({ lat, lon })
+      fetchWeatherSummary({ lat, lon }),
+      speciesId
+        ? supabase
+            .from('mushroom_species')
+            .select('id,genus,season_start,season_end,peak_season_start,peak_season_end')
+            .eq('id', speciesId)
+            .maybeSingle()
+        : Promise.resolve(null)
     ]);
+
+    const speciesContext: SpeciesContext | null = speciesRes?.data
+      ? {
+          genus: (speciesRes.data.genus as string | null) ?? null,
+          seasonStart: speciesRes.data.season_start as number,
+          seasonEnd: speciesRes.data.season_end as number,
+          peakSeasonStart: (speciesRes.data.peak_season_start as number | null) ?? null,
+          peakSeasonEnd: (speciesRes.data.peak_season_end as number | null) ?? null
+        }
+      : null;
 
     if (tileRes.error) {
       return NextResponse.json({ error: tileRes.error.message }, { status: 500 });
@@ -248,7 +267,22 @@ export async function GET(request: NextRequest) {
     const advancedEnvironment100 = computeAdvancedEnvironmentScore(advancedFactors);
     const environment = clamp(legacyEnvironment * 0.6 + (advancedEnvironment100 / 2) * 0.4, 0, 50);
 
-    const score = computeTotalScore({ environment, historical, seasonal });
+    const baseScore = computeTotalScore({ environment, historical, seasonal });
+
+    // Per-species adjustment in [0.05, 1.3] when a specific species is
+    // requested. Out-of-season → near zero; in-season + good weather → up
+    // to 1.3x boost in peak. Tile-path doesn't need this — its scores are
+    // already species-aware via the RPC.
+    let speciesFit: number | null = null;
+    if (speciesContext) {
+      speciesFit = computeSpeciesAdjustment(
+        speciesContext,
+        { temperature: currentTemp, humidity: currentHumidity, rain3dMm },
+        new Date().getMonth() + 1
+      );
+    }
+
+    const score = speciesFit !== null ? clamp(baseScore * speciesFit, 0, 100) : baseScore;
     const condition = scoreToCondition(score);
 
     const hotspotsMap = new Map<string, { lat: number; lng: number; count: number }>();
@@ -296,9 +330,11 @@ export async function GET(request: NextRequest) {
       access: premiumPrediction ? 'premium_full' : 'free_limited',
       upsellMessage: premiumPrediction ? undefined : 'Gratis viser forenklet heatmap. Oppgrader for full detalj.',
       score,
+      baseScore,
+      speciesFit,
       condition,
       model: {
-        version: 'v2_computed_proxy',
+        version: speciesFit !== null ? 'v2_computed_proxy_with_species' : 'v2_computed_proxy',
         factors: modelFactors
       },
       components: {
