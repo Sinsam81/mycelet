@@ -1,5 +1,7 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { checkRateLimit } from '@/lib/rate-limit';
+import { getClientKey, rateLimitResponse } from '@/lib/rate-limit/route';
 
 /**
  * GDPR Article 15 — right of access.
@@ -17,7 +19,7 @@ import { createClient } from '@/lib/supabase/server';
  * For "data about you from other users" requests, the user should contact
  * the privacy mailbox; that requires manual review.
  */
-export async function GET() {
+export async function GET(request: NextRequest) {
   const supabase = createClient();
   const {
     data: { user }
@@ -25,6 +27,14 @@ export async function GET() {
 
   if (!user) {
     return NextResponse.json({ error: 'Ikke autentisert' }, { status: 401 });
+  }
+
+  // The export runs 11 queries across most user tables — defending against
+  // a refresh-loop hammering the DB. 10/min is plenty for any honest UI
+  // pattern (downloading once, maybe again to verify).
+  const rateLimit = checkRateLimit(`me-export:${getClientKey(request, user.id)}`, 10, 60);
+  if (!rateLimit.allowed) {
+    return rateLimitResponse(rateLimit);
   }
 
   // All queries scoped to the authenticated user_id. RLS would also enforce
