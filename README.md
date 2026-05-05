@@ -44,4 +44,4 @@ Teknisk grunnmur for SoppJakt (Next.js 14 + TypeScript + Tailwind + Supabase).
 ## Neste sprintforslag
 1. Supabase-auth (`src/lib/supabase/*`, `middleware.ts`, login/register)
 2. Species-modul med søk og detaljsider
-3. API-ruter for `/api/identify` og `/api/weather`
+3. API-ruter for `/api/identify`
