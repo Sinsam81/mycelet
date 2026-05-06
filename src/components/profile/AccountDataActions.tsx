@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import toast from 'react-hot-toast';
 import { AlertCircle, Download, Trash2, X } from 'lucide-react';
 
 /**
@@ -32,7 +33,9 @@ export function AccountDataActions() {
 
   function handleExport() {
     // Trigger browser download via Content-Disposition. Same-origin so no
-    // CORS issues; auth cookies travel automatically.
+    // CORS issues; auth cookies travel automatically. Toast confirms the
+    // download started — the JSON response itself takes over from there.
+    toast.success('Lasting ned data... 🍄', { duration: 3000 });
     window.location.href = '/api/me/export';
   }
 
