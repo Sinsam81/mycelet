@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { logAdminAction } from '@/lib/audit/log';
+import { createRequestLogger } from '@/lib/log/request';
 
 type VerifiedRole = 'trusted_forager' | 'expert' | 'community_verifier' | 'moderator';
 
@@ -81,10 +82,16 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const log = createRequestLogger(request);
+  log.info('admin.verified_forager.upsert.start');
+
   const access = await requireModerator();
   if (!access.ok) {
+    log.warn('admin.verified_forager.upsert.denied', { reason: access.error });
     return NextResponse.json({ error: access.error }, { status: access.status });
   }
+
+  const actorLog = log.child({ userId: access.userId });
 
   const body = (await request.json()) as {
     userId?: string;
@@ -94,11 +101,13 @@ export async function POST(request: NextRequest) {
   };
 
   if (!body.userId || !body.role) {
+    actorLog.warn('admin.verified_forager.upsert.bad_request');
     return NextResponse.json({ error: 'Mangler userId eller role' }, { status: 400 });
   }
 
   const allowedRoles: VerifiedRole[] = ['trusted_forager', 'expert', 'community_verifier', 'moderator'];
   if (!allowedRoles.includes(body.role)) {
+    actorLog.warn('admin.verified_forager.upsert.invalid_role', { role: body.role });
     return NextResponse.json({ error: 'Ugyldig role' }, { status: 400 });
   }
 
@@ -114,6 +123,7 @@ export async function POST(request: NextRequest) {
   );
 
   if (error) {
+    actorLog.error('admin.verified_forager.upsert.db_error', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
@@ -129,23 +139,36 @@ export async function POST(request: NextRequest) {
     request
   });
 
+  actorLog.info('admin.verified_forager.upsert.success', {
+    targetUserId: body.userId,
+    role: body.role
+  });
+
   return NextResponse.json({ ok: true });
 }
 
 export async function DELETE(request: NextRequest) {
+  const log = createRequestLogger(request);
+  log.info('admin.verified_forager.delete.start');
+
   const access = await requireModerator();
   if (!access.ok) {
+    log.warn('admin.verified_forager.delete.denied', { reason: access.error });
     return NextResponse.json({ error: access.error }, { status: access.status });
   }
 
+  const actorLog = log.child({ userId: access.userId });
+
   const userId = request.nextUrl.searchParams.get('userId');
   if (!userId) {
+    actorLog.warn('admin.verified_forager.delete.missing_userId');
     return NextResponse.json({ error: 'Mangler userId' }, { status: 400 });
   }
 
   const admin = createAdminClient();
   const { error } = await admin.from('verified_foragers').delete().eq('user_id', userId);
   if (error) {
+    actorLog.error('admin.verified_forager.delete.db_error', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
@@ -155,6 +178,8 @@ export async function DELETE(request: NextRequest) {
     targetUserId: userId,
     request
   });
+
+  actorLog.info('admin.verified_forager.delete.success', { targetUserId: userId });
 
   return NextResponse.json({ ok: true });
 }

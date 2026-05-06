@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { getClientKey, rateLimitResponse } from '@/lib/rate-limit/route';
+import { createRequestLogger } from '@/lib/log/request';
 
 /**
  * GDPR Article 15 — right of access.
@@ -20,20 +21,27 @@ import { getClientKey, rateLimitResponse } from '@/lib/rate-limit/route';
  * the privacy mailbox; that requires manual review.
  */
 export async function GET(request: NextRequest) {
+  const log = createRequestLogger(request);
+  log.info('account.export.start');
+
   const supabase = createClient();
   const {
     data: { user }
   } = await supabase.auth.getUser();
 
   if (!user) {
+    log.info('account.export.unauthenticated');
     return NextResponse.json({ error: 'Ikke autentisert' }, { status: 401 });
   }
+
+  const userLog = log.child({ userId: user.id });
 
   // The export runs 11 queries across most user tables — defending against
   // a refresh-loop hammering the DB. 10/min is plenty for any honest UI
   // pattern (downloading once, maybe again to verify).
   const rateLimit = checkRateLimit(`me-export:${getClientKey(request, user.id)}`, 10, 60);
   if (!rateLimit.allowed) {
+    userLog.warn('account.export.rate_limited');
     return rateLimitResponse(rateLimit);
   }
 
@@ -95,6 +103,15 @@ export async function GET(request: NextRequest) {
   };
 
   const filename = `soppjakt-data-export-${user.id}-${new Date().toISOString().slice(0, 10)}.json`;
+
+  userLog.info('account.export.success', {
+    counts: {
+      findings: exportData.findings.length,
+      forumPosts: exportData.forumPosts.length,
+      comments: exportData.comments.length,
+      reportsFiled: exportData.reportsFiled.length
+    }
+  });
 
   return new NextResponse(JSON.stringify(exportData, null, 2), {
     status: 200,

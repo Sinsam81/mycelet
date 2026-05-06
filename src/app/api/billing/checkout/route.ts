@@ -6,12 +6,15 @@ import { getStripeServerClient } from '@/lib/stripe/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { getClientKey, rateLimitResponse } from '@/lib/rate-limit/route';
+import { createRequestLogger } from '@/lib/log/request';
 
 type CheckoutPlan = 'premium' | 'season_pass';
 
 export const runtime = 'nodejs';
 
 export async function POST(request: NextRequest) {
+  const log = createRequestLogger(request);
+  log.info('billing.checkout.start');
   try {
     const supabase = createClient();
     const {
@@ -19,14 +22,18 @@ export async function POST(request: NextRequest) {
     } = await supabase.auth.getUser();
 
     if (!user) {
+      log.info('billing.checkout.unauthenticated');
       return NextResponse.json({ error: 'Ikke autentisert' }, { status: 401 });
     }
+
+    const userLog = log.child({ userId: user.id });
 
     // Each Stripe Checkout session has a real cost (Stripe API call,
     // potential customer-record creation). 5/min per user is generous for
     // any honest UI flow and stops compromised-account spam.
     const rateLimit = checkRateLimit(`billing-checkout:${getClientKey(request, user.id)}`, 5, 60);
     if (!rateLimit.allowed) {
+      userLog.warn('billing.checkout.rate_limited');
       return rateLimitResponse(rateLimit);
     }
 
@@ -112,11 +119,19 @@ export async function POST(request: NextRequest) {
     );
 
     if (upsertError) {
+      userLog.error('billing.checkout.subscription_upsert_failed', upsertError);
       return NextResponse.json({ error: upsertError.message }, { status: 500 });
     }
 
+    userLog.info('billing.checkout.success', {
+      plan,
+      stripeSessionId: session.id,
+      customerId
+    });
+
     return NextResponse.json({ url: session.url });
   } catch (error) {
+    log.error('billing.checkout.unexpected_failure', error);
     return NextResponse.json(
       {
         error: 'Kunne ikke opprette checkout',

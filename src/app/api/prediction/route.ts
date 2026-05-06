@@ -14,6 +14,7 @@ import {
   scoreToCondition
 } from '@/lib/utils/prediction';
 import { computeSpeciesAdjustment, type SpeciesContext } from '@/lib/utils/species-scoring';
+import { createRequestLogger } from '@/lib/log/request';
 
 interface FindingRow {
   id: string;
@@ -47,6 +48,7 @@ function toFreeFactor(value: number) {
 }
 
 export async function GET(request: NextRequest) {
+  const log = createRequestLogger(request);
   const url = new URL(request.url);
   const lat = Number(url.searchParams.get('lat'));
   const lon = Number(url.searchParams.get('lon'));
@@ -55,8 +57,11 @@ export async function GET(request: NextRequest) {
   const speciesId = speciesIdParam ? Number(speciesIdParam) : null;
 
   if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+    log.warn('prediction.bad_coordinates', { lat, lon });
     return NextResponse.json({ error: 'Ugyldige koordinater' }, { status: 400 });
   }
+
+  log.info('prediction.start', { lat, lon, radiusKm, speciesId });
 
   const latDelta = radiusKm / 111;
   const lonDelta = radiusKm / (111 * Math.cos((lat * Math.PI) / 180));
@@ -78,6 +83,7 @@ export async function GET(request: NextRequest) {
     // 60/min is generous for a user panning a map; stops abuse loops.
     const rateLimit = checkRateLimit(`prediction:${getClientKey(request, user?.id ?? null)}`, 60, 60);
     if (!rateLimit.allowed) {
+      log.warn('prediction.rate_limited', { retryAfterSeconds: rateLimit.retryAfterSeconds });
       return rateLimitResponse(rateLimit);
     }
 
@@ -121,10 +127,16 @@ export async function GET(request: NextRequest) {
       : null;
 
     if (tileRes.error) {
+      log.error('prediction.tile_rpc_failed', tileRes.error);
       return NextResponse.json({ error: tileRes.error.message }, { status: 500 });
     }
 
     const tiles = (tileRes.data ?? []) as PredictionTileRow[];
+    log.debug('prediction.fetched', {
+      tileCount: tiles.length,
+      hasWeather: weather !== null,
+      hasSpecies: speciesContext !== null
+    });
     if (tiles.length > 0) {
       const weightedTotals = tiles.reduce(
         (acc, tile) => {
@@ -190,6 +202,14 @@ export async function GET(request: NextRequest) {
             score: Math.round(spot.score / 5) * 5
           }));
 
+      log.info('prediction.success', {
+        source: 'prediction_tiles',
+        score,
+        condition,
+        tileCount: tiles.length,
+        weatherSource: weather?.source ?? 'unavailable'
+      });
+
       return NextResponse.json({
         source: 'prediction_tiles',
         access: premiumPrediction ? 'premium_full' : 'free_limited',
@@ -228,6 +248,9 @@ export async function GET(request: NextRequest) {
 
     // Fallback path requires weather to compute scores (tile-path can do without).
     if (!weather) {
+      log.warn('prediction.no_weather_for_fallback', {
+        region: lat > 0 ? 'NO/SE/other' : 'unknown'
+      });
       return NextResponse.json(
         { error: 'Værdata ikke tilgjengelig for disse koordinatene (mangler API-nøkkel eller stasjonsdata)' },
         { status: 502 }
@@ -254,6 +277,7 @@ export async function GET(request: NextRequest) {
     });
 
     if (findingsRes.error) {
+      log.error('prediction.findings_rpc_failed', findingsRes.error);
       return NextResponse.json({ error: findingsRes.error.message }, { status: 500 });
     }
 
@@ -337,6 +361,16 @@ export async function GET(request: NextRequest) {
           weatherTrend: toFreeFactor(advancedFactors.weatherTrend)
         };
 
+    log.info('prediction.success', {
+      source: 'computed_fallback',
+      score,
+      baseScore,
+      speciesFit,
+      condition,
+      weatherSource: weather.source,
+      findingsInArea: findings.length
+    });
+
     return NextResponse.json({
       source: 'computed_fallback',
       access: premiumPrediction ? 'premium_full' : 'free_limited',
@@ -372,6 +406,7 @@ export async function GET(request: NextRequest) {
       hotspots
     });
   } catch (error) {
+    log.error('prediction.unexpected_failure', error);
     return NextResponse.json(
       {
         error: 'Prediksjon feilet',
