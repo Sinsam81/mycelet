@@ -14,7 +14,20 @@ export async function updateSession(request: NextRequest) {
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set('x-request-id', reqId);
 
-  let response = NextResponse.next({ request: { headers: requestHeaders } });
+  // NextResponse.next() accepts a ResponseInit-style `headers` field that
+  // DOES propagate to the eventual response sent to the client.
+  // Setting them via `response.headers.set()` afterwards does not — that's
+  // a known Next 14 quirk for App Router. Build the init with both the
+  // request-header rewrite (so handlers see x-request-id) and the response
+  // headers (so the client gets the same id back) up front.
+  function buildInit() {
+    return {
+      request: { headers: requestHeaders },
+      headers: { 'x-request-id': reqId }
+    };
+  }
+
+  let response = NextResponse.next(buildInit());
 
   const log = logger.child({ reqId, route: request.nextUrl.pathname });
 
@@ -28,14 +41,14 @@ export async function updateSession(request: NextRequest) {
         },
         set(name: string, value: string, options: CookieOptions) {
           request.cookies.set({ name, value, ...options });
-          // Cookie callbacks reconstruct response — re-apply headers below
-          // after auth resolves.
-          response = NextResponse.next({ request: { headers: requestHeaders } });
+          // Cookie callbacks reconstruct response — rebuild init with
+          // x-request-id so the new response carries it too.
+          response = NextResponse.next(buildInit());
           response.cookies.set({ name, value, ...options });
         },
         remove(name: string, options: CookieOptions) {
           request.cookies.set({ name, value: '', ...options });
-          response = NextResponse.next({ request: { headers: requestHeaders } });
+          response = NextResponse.next(buildInit());
           response.cookies.set({ name, value: '', ...options });
         }
       }
@@ -52,13 +65,11 @@ export async function updateSession(request: NextRequest) {
     log.info('middleware.auth_redirect', { from: request.nextUrl.pathname });
     const redirectUrl = new URL('/auth/login', request.url);
     redirectUrl.searchParams.set('redirect', request.nextUrl.pathname);
-    const redirect = NextResponse.redirect(redirectUrl);
-    redirect.headers.set('x-request-id', reqId);
+    const redirect = NextResponse.redirect(redirectUrl, {
+      headers: { 'x-request-id': reqId }
+    });
     return redirect;
   }
 
-  // Always echo the request id on the response so the client can quote
-  // it in a support ticket and we can grep Vercel logs for it.
-  response.headers.set('x-request-id', reqId);
   return response;
 }
