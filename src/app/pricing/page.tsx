@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { Suspense, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { Check, Crown, Leaf, Loader2 } from 'lucide-react';
@@ -50,7 +50,9 @@ const planCards = [
   }
 ] as const;
 
-export default function PricingPage() {
+// Next 15+ requires useSearchParams() inside a Suspense boundary; default
+// export at the bottom wraps PricingInner.
+function PricingInner() {
   const searchParams = useSearchParams();
   const [loadingPlan, setLoadingPlan] = useState<'premium' | 'season_pass' | null>(null);
   const [openingPortal, setOpeningPortal] = useState(false);
@@ -221,5 +223,14 @@ export default function PricingPage() {
         </div>
       </section>
     </PageWrapper>
+  );
+}
+
+
+export default function PricingPage() {
+  return (
+    <Suspense fallback={<PageWrapper><p className="text-sm text-gray-700">Laster...</p></PageWrapper>}>
+      <PricingInner />
+    </Suspense>
   );
 }

@@ -19,7 +19,9 @@ export async function GET(request: NextRequest) {
   let response = NextResponse.redirect(new URL(next, requestUrl.origin));
   if (!code) return response;
 
-  const cookieStore = cookies();
+  // Next 15+: cookies() is async. Resolve once and reuse the store inside
+  // each callback to keep the createServerClient signature unchanged.
+  const cookieStore = await cookies();
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,

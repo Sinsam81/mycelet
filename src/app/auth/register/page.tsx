@@ -2,11 +2,14 @@
 
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { FormEvent, useMemo, useState } from 'react';
+import { FormEvent, Suspense, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import { useAuth } from '@/lib/hooks/useAuth';
 
-export default function RegisterPage() {
+// Next 15+ requires useSearchParams() to be inside a Suspense boundary so the
+// page can prerender. We wrap the inner form-rendering component below.
+
+function RegisterForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirectPath = useMemo(() => searchParams.get('next') ?? searchParams.get('redirect') ?? '/', [searchParams]);
@@ -117,5 +120,13 @@ export default function RegisterPage() {
         </p>
       </div>
     </main>
+  );
+}
+
+export default function RegisterPage() {
+  return (
+    <Suspense fallback={<main className="mx-auto min-h-screen w-full max-w-screen-sm p-6"><p className="text-sm text-gray-700">Laster...</p></main>}>
+      <RegisterForm />
+    </Suspense>
   );
 }

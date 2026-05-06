@@ -433,6 +433,11 @@ export function MushroomMap() {
     }
     if (tileHotspots.length === 0) return prediction.data;
 
+    // Unreachable in practice — earlier branches handle !prediction.data —
+    // but TypeScript can't narrow across multiple early-return branches, so
+    // an explicit guard is needed for the spread below.
+    if (!prediction.data) return undefined;
+
     return {
       ...prediction.data,
       hotspots: tileHotspots

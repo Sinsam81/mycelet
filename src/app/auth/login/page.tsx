@@ -2,11 +2,14 @@
 
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { FormEvent, useMemo, useState } from 'react';
+import { FormEvent, Suspense, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import { useAuth } from '@/lib/hooks/useAuth';
 
-export default function LoginPage() {
+// Next 15+ requires useSearchParams() to be inside a Suspense boundary.
+// Inner form rendered by LoginForm; default export wraps it in Suspense.
+
+function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirectPath = useMemo(
@@ -98,5 +101,13 @@ export default function LoginPage() {
         </p>
       </div>
     </main>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<main className="mx-auto min-h-screen w-full max-w-screen-sm p-6"><p className="text-sm text-gray-700">Laster...</p></main>}>
+      <LoginForm />
+    </Suspense>
   );
 }
