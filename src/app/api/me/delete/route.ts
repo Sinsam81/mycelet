@@ -4,6 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { logAdminAction } from '@/lib/audit/log';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { getClientKey, rateLimitResponse } from '@/lib/rate-limit/route';
+import { createRequestLogger } from '@/lib/log/request';
 
 /**
  * GDPR Article 17 — right to erasure ("right to be forgotten").
@@ -34,25 +35,35 @@ import { getClientKey, rateLimitResponse } from '@/lib/rate-limit/route';
  * beyond what auth.audit_log_entries captures by default in Supabase.
  */
 export async function POST(request: NextRequest) {
+  const log = createRequestLogger(request);
+  // warn on entry — destroying user data is high-signal even when expected.
+  // Pages an alerting hook later if we want one.
+  log.warn('account.self_delete.start');
+
   const supabase = createClient();
   const {
     data: { user }
   } = await supabase.auth.getUser();
 
   if (!user) {
+    log.info('account.self_delete.unauthenticated');
     return NextResponse.json({ error: 'Ikke autentisert' }, { status: 401 });
   }
+
+  const userLog = log.child({ userId: user.id });
 
   // Rate limit defends against repeated triggers (no honest user clicks
   // delete five times in a minute). Defense in depth on top of the literal
   // confirm token.
   const rateLimit = checkRateLimit(`me-delete:${getClientKey(request, user.id)}`, 5, 60);
   if (!rateLimit.allowed) {
+    userLog.warn('account.self_delete.rate_limited');
     return rateLimitResponse(rateLimit);
   }
 
   const body = await request.json().catch(() => ({}));
   if (body?.confirm !== 'DELETE-MY-ACCOUNT') {
+    userLog.info('account.self_delete.confirm_missing');
     return NextResponse.json(
       {
         error: 'Bekreftelse mangler eller er feil',
@@ -77,6 +88,7 @@ export async function POST(request: NextRequest) {
   try {
     admin = createAdminClient();
   } catch {
+    userLog.error('account.self_delete.no_service_role_key');
     return NextResponse.json(
       {
         error: 'Server-konfigurasjonsfeil',
@@ -88,6 +100,7 @@ export async function POST(request: NextRequest) {
 
   const { error: deleteError } = await admin.auth.admin.deleteUser(user.id);
   if (deleteError) {
+    userLog.error('account.self_delete.failed', deleteError);
     return NextResponse.json(
       {
         error: 'Kunne ikke slette konto',
@@ -118,6 +131,17 @@ export async function POST(request: NextRequest) {
       }
     },
     request
+  });
+
+  userLog.warn('account.self_delete.success', {
+    deletedCounts: {
+      findings: findingsCount.count ?? 0,
+      forumPosts: postsCount.count ?? 0,
+      comments: commentsCount.count ?? 0,
+      postLikes: likesCount.count ?? 0,
+      savedPosts: savedCount.count ?? 0,
+      reportsFiled: reportsCount.count ?? 0
+    }
   });
 
   // Best-effort sign-out so the cookie session is invalidated. The auth row
