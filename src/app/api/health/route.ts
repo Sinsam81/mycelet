@@ -97,11 +97,24 @@ async function checkAuditLogTable(): Promise<CheckResult> {
   }
 }
 
+// Read Next's version from its package.json once at module load; this
+// resolves through node_modules and works on both Node and Edge runtimes
+// since the file is a static JSON.
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const NEXT_VERSION = (() => {
+  try {
+    // require() works because this route is on the Node runtime (force-dynamic)
+    // and avoids needing to mark the import as a JSON module via esbuild.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const pkg = require('next/package.json') as { version?: string };
+    return pkg.version ?? 'unknown';
+  } catch {
+    return 'unknown';
+  }
+})();
+
 function getNextVersion(): string {
-  // Next exposes its version via process.env at build time, but the cleanest
-  // server-side read is from the package's own files. Hardcode-fallback
-  // since we don't want a build dep just for this.
-  return process.env.NEXT_VERSION ?? 'unknown';
+  return NEXT_VERSION;
 }
 
 export async function GET(request: NextRequest) {
