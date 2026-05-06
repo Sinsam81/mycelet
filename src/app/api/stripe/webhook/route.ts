@@ -3,6 +3,7 @@ import Stripe from 'stripe';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { BillingTier, resolveTierByPriceId } from '@/lib/billing/plans';
 import { getStripeServerClient } from '@/lib/stripe/server';
+import { createRequestLogger } from '@/lib/log/request';
 
 export const runtime = 'nodejs';
 
@@ -78,6 +79,9 @@ async function resolveUserIdFromCustomer(customerId: string) {
 }
 
 export async function POST(request: NextRequest) {
+  const log = createRequestLogger(request);
+  log.info('stripe.webhook.received');
+
   let webhookEventId: string | null = null;
   let webhookEventType = 'unknown';
   let canLogEvents = true;
@@ -87,18 +91,24 @@ export async function POST(request: NextRequest) {
     const admin = createAdminClient();
     const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
     if (!webhookSecret) {
+      log.error('stripe.webhook.no_secret');
       return NextResponse.json({ error: 'STRIPE_WEBHOOK_SECRET mangler' }, { status: 500 });
     }
 
     const signature = request.headers.get('stripe-signature');
     if (!signature) {
+      log.warn('stripe.webhook.missing_signature');
       return NextResponse.json({ error: 'Mangler stripe-signature' }, { status: 400 });
     }
 
     const rawBody = await request.text();
+    // constructEvent throws if the signature doesn't match — caught below
+    // and logged at error level. That's the only place a real attack
+    // would surface.
     const event = stripe.webhooks.constructEvent(rawBody, signature, webhookSecret);
     webhookEventId = event.id;
     webhookEventType = event.type;
+    log.info('stripe.webhook.verified', { eventType: event.type, eventId: event.id });
 
     const { data: existingEvent, error: eventReadError } = await admin
       .from('billing_webhook_events')
@@ -236,8 +246,15 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    log.info('stripe.webhook.processed', { eventType: webhookEventType, eventId: webhookEventId });
     return NextResponse.json({ received: true });
   } catch (error) {
+    // Signature mismatch lands here — most security-relevant failure mode.
+    log.error('stripe.webhook.failed', error, {
+      eventId: webhookEventId,
+      eventType: webhookEventType
+    });
+
     if (webhookEventId && canLogEvents) {
       const admin = createAdminClient();
       const errorMessage = error instanceof Error ? error.message : 'unknown';
