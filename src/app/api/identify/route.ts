@@ -4,6 +4,7 @@ import { FREE_DAILY_AI_LIMIT } from '@/lib/billing/plans';
 import { getBillingCapabilities, getUserBillingSubscription } from '@/lib/billing/subscription';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { getClientKey, rateLimitResponse } from '@/lib/rate-limit/route';
+import { createRequestLogger } from '@/lib/log/request';
 
 const PLANTID_API_URL = 'https://mushroom.kindwise.com/api/v1/identification';
 
@@ -35,8 +36,11 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
+  const log = createRequestLogger(request);
+  log.info('identify.start');
   try {
     if (!isAiEnabled()) {
+      log.warn('identify.ai_disabled');
       return NextResponse.json(
         { error: 'AI-identifikasjon er ikke aktivert ennå.', code: 'ai_disabled' },
         { status: 503 }
@@ -51,13 +55,17 @@ export async function POST(request: NextRequest) {
     } = await supabase.auth.getUser();
 
     if (authError || !user) {
+      log.info('identify.unauthenticated');
       return NextResponse.json({ error: 'Ikke autentisert' }, { status: 401 });
     }
+
+    const userLog = log.child({ userId: user.id });
 
     // Short-term burst protection on top of the daily billing-tier limit
     // below. Stops compromised-account abuse and runaway client loops.
     const rateLimit = checkRateLimit(`identify:${getClientKey(request, user.id)}`, 20, 60);
     if (!rateLimit.allowed) {
+      userLog.warn('identify.rate_limited', { retryAfterSeconds: rateLimit.retryAfterSeconds });
       return rateLimitResponse(rateLimit);
     }
 
@@ -78,6 +86,7 @@ export async function POST(request: NextRequest) {
       }
 
       if ((count ?? 0) >= FREE_DAILY_AI_LIMIT) {
+        userLog.info('identify.daily_quota_reached', { used: count ?? 0, limit: FREE_DAILY_AI_LIMIT });
         return NextResponse.json(
           {
             error: `Gratisbrukere har maks ${FREE_DAILY_AI_LIMIT} identifikasjoner per døgn. Oppgrader til Premium eller Sesongpass for ubegrenset bruk.`
@@ -89,8 +98,14 @@ export async function POST(request: NextRequest) {
 
     const body = (await request.json()) as IdentifyRequest;
     if (!body.image) {
+      userLog.warn('identify.missing_image');
       return NextResponse.json({ error: 'Bilde mangler' }, { status: 400 });
     }
+
+    userLog.debug('identify.calling_plantid', {
+      hasCoordinates: body.latitude != null && body.longitude != null,
+      tier: capabilities.tier
+    });
 
     const plantIdResponse = await fetch(PLANTID_API_URL, {
       method: 'POST',
@@ -113,6 +128,7 @@ export async function POST(request: NextRequest) {
     });
 
     if (!plantIdResponse.ok) {
+      userLog.error('identify.plantid_failed', undefined, { status: plantIdResponse.status });
       return NextResponse.json({ error: 'Identifikasjon feilet. Prøv igjen.' }, { status: 502 });
     }
 
@@ -157,11 +173,18 @@ export async function POST(request: NextRequest) {
       })
     );
 
+    userLog.info('identify.success', {
+      suggestionCount: suggestions.length,
+      topMatch: suggestions[0]?.name,
+      topProbability: suggestions[0]?.probability
+    });
+
     return NextResponse.json({
       suggestions,
       isPlant: plantIdData?.result?.is_plant?.binary ?? false
     });
   } catch (error) {
+    log.error('identify.unexpected_failure', error);
     return NextResponse.json(
       {
         error: 'En feil oppstod. Prøv igjen.',
