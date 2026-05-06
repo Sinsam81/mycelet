@@ -49,7 +49,11 @@ export function useForumPosts(sort: ForumSort = 'newest', category: ForumCategor
       const { data, error } = await query.limit(30);
       if (error) throw error;
 
-      return (data ?? []).map((post) => ({ ...post, images: normalizeImages(post.images) })) as ForumPost[];
+      // Supabase types FK joins as arrays even when the relationship is
+      // 1:1 (here, finding:finding_id and profiles:user_id). The runtime
+      // shape is correct; the cast through `unknown` is the standard way
+      // to bypass the comparability check, per the TS error suggestion.
+      return (data ?? []).map((post) => ({ ...post, images: normalizeImages(post.images) })) as unknown as ForumPost[];
     }
   });
 }
@@ -86,7 +90,8 @@ export function useForumPostsInfinite(sort: ForumSort = 'newest', category: Foru
       const { data, error } = await query.range(from, to);
       if (error) throw error;
 
-      const items = (data ?? []).map((post) => ({ ...post, images: normalizeImages(post.images) })) as ForumPost[];
+      // Same Supabase 1:1-as-array typing quirk; see useForumPosts above.
+      const items = (data ?? []).map((post) => ({ ...post, images: normalizeImages(post.images) })) as unknown as ForumPost[];
 
       return {
         items,
@@ -129,12 +134,13 @@ export function useForumPost(postId: string) {
         isLiked = Boolean(likeRow);
       }
 
+      // Supabase 1:1-as-array typing quirk (see useForumPosts above).
       return {
         ...post,
         images: normalizeImages(post.images),
         isLiked,
         isOwner: user?.id === post.user_id
-      } as ForumPostDetail;
+      } as unknown as ForumPostDetail;
     }
   });
 }

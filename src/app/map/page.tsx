@@ -1,12 +1,7 @@
-import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { PageWrapper } from '@/components/layout/PageWrapper';
 import { createClient } from '@/lib/supabase/server';
-
-const MushroomMap = dynamic(
-  () => import('@/components/map/MushroomMap').then((mod) => mod.MushroomMap),
-  { ssr: false, loading: () => <p className="text-sm text-gray-700">Laster kart...</p> }
-);
+import { MushroomMap } from '@/components/map/MushroomMapLazy';
 
 export default async function MapPage() {
   const supabase = createClient();

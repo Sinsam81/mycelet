@@ -1,6 +1,6 @@
 'use client';
 
-import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from 'react';
+import { ChangeEvent, FormEvent, Suspense, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { PageWrapper } from '@/components/layout/PageWrapper';
 import { Button } from '@/components/ui/Button';
@@ -16,7 +16,9 @@ const categoryOptions: Array<{ label: string; value: Category }> = [
   { label: 'Diskusjon', value: 'discussion' }
 ];
 
-export default function NewForumPostPage() {
+// Next 15+ requires useSearchParams() inside a Suspense boundary; default
+// export at the bottom wraps NewForumPostInner.
+function NewForumPostInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const supabase = useMemo(() => createClient(), []);
@@ -180,5 +182,14 @@ export default function NewForumPostPage() {
         </form>
       </section>
     </PageWrapper>
+  );
+}
+
+
+export default function NewForumPostPage() {
+  return (
+    <Suspense fallback={<PageWrapper><p className="text-sm text-gray-700">Laster...</p></PageWrapper>}>
+      <NewForumPostInner />
+    </Suspense>
   );
 }
