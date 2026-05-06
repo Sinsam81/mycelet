@@ -84,6 +84,8 @@ await logAdminAction({
 
 **Korrelasjons-ID:** Hver forespørsel via `createRequestLogger(request)` får automatisk en kort `reqId` som henger på alle log-linjer fra den forespørselen. Slik kan du trekke ut "alt som skjedde i request abc123" når du leter i Vercel logs.
 
+`reqId` genereres i middleware (`src/lib/supabase/middleware.ts`), settes som `X-Request-Id` på *request*-headere, og leses av `createRequestLogger` i hver rute. Hvis en upstream-proxy (Vercel edge, Cloudflare osv.) sender `X-Request-Id` inn, ærer vi den i stedet for å generere en ny — slik flyter samme ID gjennom flere lag.
+
 **Eksempel:**
 
 ```typescript
@@ -91,6 +93,23 @@ log.trace('prediction.weather_provider_chosen', { region: 'NO', provider: 'frost
 log.trace('prediction.fallback_path_entered', { reason: 'no_tiles_in_bounds' });
 log.trace('prediction.species_adjustment_applied', { speciesFit, baseScore });
 ```
+
+#### ⚠ Kjent begrensning: `X-Request-Id` på *response* til klienten
+
+Vi har forsøkt å sette `X-Request-Id` på respons-headeren (slik at klienten kan sitere den i support-tickets), men Next 14 App Router propagerer ikke middleware-satt response-headere til responsen som handler/page bygger. Verifisert empirisk: hverken `response.headers.set()` eller `NextResponse.next({ headers: {...} })` kommer gjennom.
+
+**Konsekvens:** Klienten ser ikke `reqId` i nettverk-fanen i DevTools eller i fetch-respons-headers.
+
+**Hva som fortsatt fungerer 100 %:**
+- `reqId` i alle server-side log-linjer (det viktigste)
+- `reqId` tilgjengelig for handlere via `request.headers.get('x-request-id')`
+- Cross-correlation av flere log-linjer fra samme request
+
+**Hvis vi senere må ha klient-side reqId:**
+- Refaktor til en `withRequestLogging(request, async (log) => {...})`-wrapper som setter headeren på selve handler-responsen
+- Eller vent til Next 16-oppgradering (denne quirken er rapportert flere steder, sannsynligvis fikset i 16)
+
+For nå er server-side log-korrelasjon nok — det dekker 95 % av "hvor gikk det galt"-debugging. Klient-side reqId er nice-to-have, ikke kritisk.
 
 ## Når bruker man hva?
 

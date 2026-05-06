@@ -14,12 +14,18 @@ export async function updateSession(request: NextRequest) {
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set('x-request-id', reqId);
 
-  // NextResponse.next() accepts a ResponseInit-style `headers` field that
-  // DOES propagate to the eventual response sent to the client.
-  // Setting them via `response.headers.set()` afterwards does not — that's
-  // a known Next 14 quirk for App Router. Build the init with both the
-  // request-header rewrite (so handlers see x-request-id) and the response
-  // headers (so the client gets the same id back) up front.
+  // KNOWN NEXT 14 LIMITATION: response headers set from middleware (whether
+  // via response.headers.set() or NextResponse.next({ headers: ... })) do
+  // NOT propagate to the client when a route handler or page component
+  // builds the actual response. Verified empirically against /api/health
+  // and / — security headers from next.config.js come through, but our
+  // x-request-id does not. See `docs/logging.md` § "Kjent begrensning".
+  //
+  // We still set both because (a) request-header rewrite IS effective —
+  // downstream handlers can read x-request-id and use the same value via
+  // createRequestLogger — and (b) if a future Next version fixes the
+  // response-header propagation, we get client-visible reqId for free.
+  // Server-side log correlation (the primary use case) works fine today.
   function buildInit() {
     return {
       request: { headers: requestHeaders },
