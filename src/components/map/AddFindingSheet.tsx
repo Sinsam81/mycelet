@@ -7,6 +7,16 @@ import { Button } from '@/components/ui/Button';
 type Visibility = 'public' | 'approximate' | 'private';
 type SharingMode = 'public' | 'approximate' | 'zone' | 'private';
 
+/**
+ * 'positive' = the user found something. The traditional flow.
+ * 'negative' = the user looked here and didn't find what they expected.
+ *
+ * Per docs/roadmap.md "Feedback-loop = forretningsmodellen": no-finds are
+ * as valuable to the prediction model as positives. The whole reason this
+ * toggle exists is to turn empty searches into training data.
+ */
+type FindingType = 'positive' | 'negative';
+
 interface AddFindingSheetProps {
   latitude: number | null;
   longitude: number | null;
@@ -23,6 +33,7 @@ interface SpeciesOption {
 export function AddFindingSheet({ latitude, longitude, onClose, onSaved }: AddFindingSheetProps) {
   const supabase = useMemo(() => createClient(), []);
 
+  const [findingType, setFindingType] = useState<FindingType>('positive');
   const [speciesQuery, setSpeciesQuery] = useState('');
   const [speciesOptions, setSpeciesOptions] = useState<SpeciesOption[]>([]);
   const [speciesId, setSpeciesId] = useState<number | null>(null);
@@ -110,7 +121,9 @@ export function AddFindingSheet({ latitude, longitude, onClose, onSaved }: AddFi
       }
 
       const adjusted = applyOffset(latitude, longitude, positionOffsetMeters);
-      const imageUrl = imageFile ? await uploadImage(imageFile) : null;
+      const isNegative = findingType === 'negative';
+      // No image for negative observations — there's nothing to photograph.
+      const imageUrl = !isNegative && imageFile ? await uploadImage(imageFile) : null;
       const visibility: Visibility = sharingMode === 'zone' ? 'approximate' : (sharingMode as Visibility);
       const isZoneFinding = sharingMode === 'zone';
 
@@ -129,7 +142,8 @@ export function AddFindingSheet({ latitude, longitude, onClose, onSaved }: AddFi
         thumbnail_url: imageUrl,
         is_zone_finding: isZoneFinding,
         zone_label: isZoneFinding ? zoneLabel.trim() : null,
-        zone_precision_km: isZoneFinding ? zonePrecisionKm : 5
+        zone_precision_km: isZoneFinding ? zonePrecisionKm : 5,
+        is_negative_observation: isNegative
       });
 
       if (insertError) throw insertError;
@@ -141,14 +155,46 @@ export function AddFindingSheet({ latitude, longitude, onClose, onSaved }: AddFi
     }
   };
 
+  const isNegative = findingType === 'negative';
+
   return (
     <div className="absolute inset-x-0 bottom-0 z-[1100] rounded-t-2xl border border-gray-200 bg-white p-4 shadow-2xl">
       <div className="mb-3 h-1.5 w-12 rounded-full bg-gray-300" />
-      <h3 className="text-lg font-semibold">Legg til funn</h3>
+      <h3 className="text-lg font-semibold">{isNegative ? 'Logg ingen funn' : 'Legg til funn'}</h3>
 
       <form className="mt-3 space-y-3" onSubmit={handleSubmit}>
+        {/* Type-toggle øverst — feedback-loopen trenger negative observasjoner
+            for å trene prediksjons-modellen. Se docs/roadmap.md. */}
+        <div className="flex gap-1 rounded-lg bg-gray-100 p-1">
+          <button
+            type="button"
+            onClick={() => setFindingType('positive')}
+            className={`flex-1 rounded-md px-3 py-2 text-sm font-medium transition ${
+              !isNegative ? 'bg-white text-forest-900 shadow-sm' : 'text-gray-600 hover:text-gray-800'
+            }`}
+          >
+            🍄 Funn
+          </button>
+          <button
+            type="button"
+            onClick={() => setFindingType('negative')}
+            className={`flex-1 rounded-md px-3 py-2 text-sm font-medium transition ${
+              isNegative ? 'bg-white text-forest-900 shadow-sm' : 'text-gray-600 hover:text-gray-800'
+            }`}
+          >
+            🚫 Ingen funn
+          </button>
+        </div>
+
+        {isNegative ? (
+          <p className="rounded-lg bg-forest-50 px-3 py-2 text-xs text-forest-900">
+            Logg at du lette her uten å finne noe — like verdifullt for prediksjonen som å logge funn.
+            Velg evt. art du lette etter.
+          </p>
+        ) : null}
+
         <label className="block text-sm font-medium text-gray-800">
-          Velg art (valgfritt)
+          {isNegative ? 'Hvilken art lette du etter? (valgfritt)' : 'Velg art (valgfritt)'}
           <input
             value={speciesQuery}
             onChange={(event) => searchSpecies(event.target.value)}
@@ -184,26 +230,30 @@ export function AddFindingSheet({ latitude, longitude, onClose, onSaved }: AddFi
             onChange={(event) => setNotes(event.target.value)}
             className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2"
             rows={3}
-            placeholder="Beskriv funnet"
+            placeholder={isNegative ? 'F.eks. "Lette i 1 time, sjekket alle granskogene"' : 'Beskriv funnet'}
           />
         </label>
 
-        <label className="block text-sm font-medium text-gray-800">
-          Bilde (valgfritt)
-          <input
-            type="file"
-            accept="image/*"
-            className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2"
-            onChange={(event) => {
-              const file = event.target.files?.[0] ?? null;
-              setImageFile(file);
-              if (imagePreview) URL.revokeObjectURL(imagePreview);
-              setImagePreview(file ? URL.createObjectURL(file) : null);
-            }}
-          />
-        </label>
+        {!isNegative ? (
+          <>
+            <label className="block text-sm font-medium text-gray-800">
+              Bilde (valgfritt)
+              <input
+                type="file"
+                accept="image/*"
+                className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2"
+                onChange={(event) => {
+                  const file = event.target.files?.[0] ?? null;
+                  setImageFile(file);
+                  if (imagePreview) URL.revokeObjectURL(imagePreview);
+                  setImagePreview(file ? URL.createObjectURL(file) : null);
+                }}
+              />
+            </label>
 
-        {imagePreview ? <img src={imagePreview} alt="Forhåndsvisning" className="h-28 w-full rounded-lg object-cover" /> : null}
+            {imagePreview ? <img src={imagePreview} alt="Forhåndsvisning" className="h-28 w-full rounded-lg object-cover" /> : null}
+          </>
+        ) : null}
 
         <label className="block text-sm font-medium text-gray-800">
           Juster posisjon (meter)
@@ -275,7 +325,7 @@ export function AddFindingSheet({ latitude, longitude, onClose, onSaved }: AddFi
             Avbryt
           </Button>
           <Button type="submit" className="flex-1" loading={loading}>
-            Lagre funn
+            {isNegative ? 'Logg ingen funn' : 'Lagre funn'}
           </Button>
         </div>
       </form>
