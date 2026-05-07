@@ -1,6 +1,6 @@
 # SoppJakt — veikart
 
-> Sist oppdatert: 6. mai 2026
+> Sist oppdatert: 7. mai 2026
 > Eier: Sindre Øverås (`sindre.alstad@gmail.com`)
 
 Dette dokumentet samler alt arbeid som gjenstår før beta-launch (mai-juni 2026) og åpen launch (august 2026), pluss strategiske avgjørelser som ikke er tatt enda.
@@ -93,13 +93,17 @@ For hver art:
 2. **Forsvarbart** — du kan stå inne for hver kalibrering basert på feltkunnskap
 3. **Iterabel** — du justerer parametre når brukerdata kommer inn; ML kommer i v2
 
-**Konkrete starter-regler (fra denne planen):**
+**Konkrete starter-regler (5 arter for v1):**
 
-| Art | Habitat | Vær |
-|-----|---------|-----|
-| Kantarell | gammel barskog/blandingsskog (alder >40 år), moderat fuktighet, ikke for tett kronedekke, sur jord | akkumulert nedbør siste 2 uker >25mm, temp 12-22°C |
-| Steinsopp | granskog eller eikeskog, eldre bestand, kantsoner mot åpninger | varmere temperatur enn kantarell |
-| Traktkantarell | moserik granskog | tåler kjøligere temperaturer; senere sesong |
+| Art (latin) | Slekt-profil | Habitat | Vær / sesong |
+|-------------|--------------|---------|---------------|
+| **Kantarell** (*Cantharellus cibarius*) | `Cantharellus` ✅ | gammel barskog/blandingsskog (alder >40 år), moderat fuktighet, ikke for tett kronedekke, sur jord | akkumulert nedbør siste 2 uker >25mm, temp 12-22°C, juli-september |
+| **Steinsopp** (*Boletus edulis*) | `Boletus` ✅ | granskog eller eikeskog, eldre bestand, kantsoner mot åpninger | varmere enn kantarell (15-22°C), kommer 5-7 dager etter regn, juli-oktober |
+| **Traktkantarell** (*Craterellus tubaeformis*) | `Craterellus` ✅ | moserik granskog | tåler kjøligere temperaturer (8-16°C); senere sesong, august-november |
+| **Piggsopp** (*Hydnum repandum*) | `Hydnum` ✅ | kalkrik granskog/blandingsskog, ikke for sur jord | sen-sesongsart (september-november), kald-tolerant (6-15°C), tåler frostnetter, mindre regn-avhengig enn kantarell |
+| **Svart trompetsopp** (*Craterellus cornucopioides*) | `Craterellus` ⚠ | **fuktig løvskog** (særlig bøk og eik), bunn-vegetasjon med mose | september-oktober, høy fuktighet kritisk, vanskelig å se i løvet — heatmap-funksjonen er spesielt verdifull her |
+
+⚠ **Craterellus deles** av traktkantarell og svart trompetsopp i slekt-profilen vår. Default-profilen passer traktkantarell best (granskog-bias). For svart trompetsopp må vi overstyre på art-nivå (eller utvide habitat-input når NIBIO er på plass — løvskog vs barskog vil differensiere dem automatisk).
 
 ### UX-prinsipper: under-lov, over-leverer
 
@@ -144,13 +148,20 @@ Frontend:
   - Forklaring-overlay per tile (ny komponent)
 ```
 
-### Lanseringsstrategi (anbefaling)
+### Lanseringsstrategi (besluttet 7. mai)
 
-> **v1 = "soppjakt sannsynlighetskart (beta)" for kantarell + steinsopp + traktkantarell**
+> **v1 = "soppjakt sannsynlighetskart (beta)" for fem arter:**
+> kantarell, steinsopp, traktkantarell, piggsopp, svart trompetsopp
 
 Ikke lansere helt uten prediksjon — det er det som gjør SoppJakt unik.
 Ikke lansere med 26 arter — du kan ikke kalibrere det godt.
-Lansere med **3 utvalgte arter med distinkte habitater og mest treningsdata**.
+Lansere med **fem strategisk utvalgte arter med distinkte habitater og god treningsdata-dekning**:
+
+- **2 i barskog** (kantarell, steinsopp)
+- **2 i granskog** (traktkantarell, piggsopp)
+- **1 i løvskog** (svart trompetsopp)
+
+Sesong-spredning fra juli til november — appen er nyttig hele sesongen, ikke bare i én topp-uke.
 
 ### Realistisk timeline (uten geo-utvikler, du + Claude)
 
@@ -161,16 +172,16 @@ Lansere med **3 utvalgte arter med distinkte habitater og mest treningsdata**.
 | 3 | Forklarings-UX ("eldre granskog, sørvendt, 32mm regn siste 14 dager"). |
 | 4-5 | Du laster ned NIBIO SR16 manuelt. Claude lager import-pipeline + spatial join. |
 | 6 | Daglig raster-job på Vercel Cron eller Supabase Edge. |
-| 7 | GBIF-backfill av historiske kantarell-/steinsopp-/traktkantarell-observasjoner for kalibrering. |
-| 8 | Beta-launch med 3 arter. |
+| 7 | GBIF-backfill av historiske observasjoner for alle 5 arter (kantarell, steinsopp, traktkantarell, piggsopp, svart trompetsopp) for kalibrering. Overstyre Craterellus-profilen på art-nivå for å skille traktkantarell fra svart trompetsopp. |
+| 8 | Beta-launch med 5 arter. |
 
 Med geo-utvikler: halvere alt, og kan inkludere Sentinel-2 NDVI i v1.
 
 ### Åpne avgjørelser i Fase 2
 
-- **2 eller 3 arter i v1?** Default = 3 (kantarell + steinsopp + traktkantarell). Sindre må bekrefte.
+- ~~**Antall arter i v1?**~~ ✅ Besluttet 7. mai: **5 arter** (kantarell, steinsopp, traktkantarell, piggsopp, svart trompetsopp).
 - **Mapbox vs MapLibre?** Default = MapLibre (gratis, riktig for beta). Mapbox koster ved skala. Sindre må velge.
-- **Geo-utvikler ja/nei?** Strategisk avgjørelse Sindre tar når det er klart hvor mye tid han selv kan dedikere.
+- **Geo-utvikler ja/nei?** Strategisk avgjørelse Sindre tar når det er klart hvor mye tid han selv kan dedikere. NB: 5 arter (mot opprinnelig forslag på 3) er fortsatt håndterbart uten geo-utvikler — alle 5 har genus-profiler i `species-scoring.ts` allerede.
 
 ---
 
@@ -196,7 +207,7 @@ Med geo-utvikler: halvere alt, og kan inkludere Sentinel-2 NDVI i v1.
 - **Utvide til flere land enn NO+SE?** Anbefaling: nei nå. Arkitekturen er klar (`getRegion`-funksjonen + væradapter-routing), men prediksjonens dybde i Norden er kjernemurveggen mot Picture Mushroom-typen. Utvid når NO+SE leverer treffsikre prediksjoner og du har betalende brukere som validerer modellen.
 - **Beta-launch dato?** Plan: mai-juni 2026 før hovedsesong august-november.
 - **Geo-utvikler for Fase 2?** Sindre vurderer dette; placeholder-data holder ikke for kommersielt produkt.
-- **Antall arter i prediksjonens v1?** Default 3, men kan reduseres til 2 hvis NIBIO-integrasjon tar lengre tid.
+- ~~**Antall arter i prediksjonens v1?**~~ ✅ Besluttet 7. mai: 5 arter. Hvis NIBIO-integrasjon tar lengre tid enn ventet kan vi falle tilbake til 3 (kantarell + steinsopp + traktkantarell), men 5 er målet.
 
 ---
 
