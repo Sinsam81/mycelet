@@ -23,7 +23,7 @@
  *     weather?" call), fall back to generic advice using the same data.
  */
 
-import { resolveGenusPreferences } from '@/lib/utils/species-scoring';
+import { resolveSpeciesPreferences, type SpeciesContext } from '@/lib/utils/species-scoring';
 
 export type ExplanationLevel = 'positive' | 'neutral' | 'negative';
 
@@ -154,7 +154,17 @@ export function buildExplanation(input: ExplanationInput): Explanation[] {
   // ── Temperature ─────────────────────────────────────────────────────
   const temp = input.weather.temperatureC;
   if (input.species?.genus) {
-    const prefs = resolveGenusPreferences(input.species.genus);
+    // Pass through SpeciesContext shape so species-level overrides (e.g.
+    // svart trompetsopp vs traktkantarell) take effect.
+    const speciesCtx: SpeciesContext = {
+      latinName: input.species.latinName,
+      genus: input.species.genus,
+      seasonStart: input.species.seasonStart,
+      seasonEnd: input.species.seasonEnd,
+      peakSeasonStart: input.species.peakSeasonStart,
+      peakSeasonEnd: input.species.peakSeasonEnd
+    };
+    const prefs = resolveSpeciesPreferences(speciesCtx);
     const inOptimum = temp >= prefs.tempCMin && temp <= prefs.tempCMax;
     const inTolerance = temp >= prefs.tempCFloor && temp <= prefs.tempCCeil;
     if (inOptimum) {
@@ -188,7 +198,16 @@ export function buildExplanation(input: ExplanationInput): Explanation[] {
 
   // ── Rain (cumulative window) ────────────────────────────────────────
   const rain = pickRain(input.weather);
-  const optMm = input.species?.genus ? resolveGenusPreferences(input.species.genus).rainOptMm : 6;
+  const optMm = input.species
+    ? resolveSpeciesPreferences({
+        latinName: input.species.latinName,
+        genus: input.species.genus,
+        seasonStart: input.species.seasonStart,
+        seasonEnd: input.species.seasonEnd,
+        peakSeasonStart: input.species.peakSeasonStart,
+        peakSeasonEnd: input.species.peakSeasonEnd
+      }).rainOptMm
+    : 6;
   if (rain.mm >= optMm * 1.5) {
     lines.push({ level: 'positive', category: 'rain', text: `${Math.round(rain.mm)}mm regn siste ${rain.window} — godt fuktet` });
   } else if (rain.mm >= optMm) {

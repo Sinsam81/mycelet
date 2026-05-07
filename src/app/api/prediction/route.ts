@@ -120,6 +120,7 @@ export async function GET(request: NextRequest) {
 
     const speciesContext: SpeciesContext | null = speciesRes?.data
       ? {
+          latinName: (speciesRes.data.latin_name as string | null) ?? null,
           genus: (speciesRes.data.genus as string | null) ?? null,
           seasonStart: speciesRes.data.season_start as number,
           seasonEnd: speciesRes.data.season_end as number,
