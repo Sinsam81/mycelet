@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   GENUS_PREFERENCES,
+  SPECIES_PREFERENCES,
   computeSpeciesAdjustment,
   resolveGenusPreferences,
+  resolveSpeciesPreferences,
   type SpeciesContext
 } from '../species-scoring';
 
@@ -156,5 +158,87 @@ describe('GENUS_PREFERENCES sanity', () => {
       expect(prefs.humidityWeight, `${genus} humidityWeight`).toBeLessThanOrEqual(1);
       expect(prefs.description.length, `${genus} description`).toBeGreaterThan(10);
     }
+  });
+});
+
+describe('resolveSpeciesPreferences — species-level overrides', () => {
+  const TRAKTKANTARELL: SpeciesContext = {
+    latinName: 'Craterellus tubaeformis',
+    genus: 'Craterellus',
+    seasonStart: 8,
+    seasonEnd: 11,
+    peakSeasonStart: 9,
+    peakSeasonEnd: 10
+  };
+
+  const SVART_TROMPETSOPP: SpeciesContext = {
+    latinName: 'Craterellus cornucopioides',
+    genus: 'Craterellus',
+    seasonStart: 9,
+    seasonEnd: 10,
+    peakSeasonStart: 9,
+    peakSeasonEnd: 10
+  };
+
+  it('returns species-level override when latinName matches', () => {
+    const prefs = resolveSpeciesPreferences(SVART_TROMPETSOPP);
+    expect(prefs).toBe(SPECIES_PREFERENCES['Craterellus cornucopioides']);
+    expect(prefs.humidityWeight).toBe(1.0);
+    expect(prefs.description.toLowerCase()).toContain('svart trompetsopp');
+  });
+
+  it('falls back to genus profile when no species override exists', () => {
+    const prefs = resolveSpeciesPreferences(TRAKTKANTARELL);
+    expect(prefs).toBe(GENUS_PREFERENCES.Craterellus);
+  });
+
+  it('falls back to GENERIC_PREFERENCES when neither species nor genus match', () => {
+    const obscure: SpeciesContext = {
+      latinName: 'Foobaria nonexistens',
+      genus: 'Foobaria',
+      seasonStart: 8,
+      seasonEnd: 10,
+      peakSeasonStart: null,
+      peakSeasonEnd: null
+    };
+    const prefs = resolveSpeciesPreferences(obscure);
+    // Generic profile — not the same object as any genus profile
+    expect(prefs).not.toBe(GENUS_PREFERENCES.Craterellus);
+    expect(prefs).not.toBe(GENUS_PREFERENCES.Cantharellus);
+  });
+
+  it('handles missing latinName by falling through to genus', () => {
+    const speciesWithoutLatin: SpeciesContext = {
+      ...TRAKTKANTARELL,
+      latinName: undefined
+    };
+    const prefs = resolveSpeciesPreferences(speciesWithoutLatin);
+    expect(prefs).toBe(GENUS_PREFERENCES.Craterellus);
+  });
+
+  it('svart trompetsopp scores HIGHER than traktkantarell in warm wet løvskog conditions', () => {
+    // 16°C, high humidity, lots of rain — løvskog conditions in september.
+    // Svart trompetsopp's optimum is 12-18°C with humidityWeight=1.0,
+    // traktkantarell's genus default is 8-16°C with humidityWeight=0.85.
+    const løvskogWeather = { temperature: 16, humidity: 92, rain3dMm: 9 };
+    const month = 10;
+
+    const svartScore = computeSpeciesAdjustment(SVART_TROMPETSOPP, løvskogWeather, month);
+    const traktScore = computeSpeciesAdjustment(TRAKTKANTARELL, løvskogWeather, month);
+
+    expect(svartScore).toBeGreaterThan(traktScore);
+  });
+
+  it('traktkantarell scores HIGHER than svart trompetsopp in cool granskog conditions', () => {
+    // 9°C, moderate humidity, light rain. Traktkantarell prefers cooler
+    // (genus default Craterellus is 8-16°C); svart trompetsopp wants
+    // warmer (12°C+).
+    const granskogWeather = { temperature: 9, humidity: 75, rain3dMm: 5 };
+    const month = 10;
+
+    const svartScore = computeSpeciesAdjustment(SVART_TROMPETSOPP, granskogWeather, month);
+    const traktScore = computeSpeciesAdjustment(TRAKTKANTARELL, granskogWeather, month);
+
+    expect(traktScore).toBeGreaterThan(svartScore);
   });
 });

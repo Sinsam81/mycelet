@@ -26,6 +26,14 @@
 import type { WeatherInput } from '@/lib/utils/prediction';
 
 export interface SpeciesContext {
+  /**
+   * Latin binomial — used for species-level overrides via SPECIES_PREFERENCES.
+   * When two species share a genus but have meaningfully different ecology
+   * (e.g. Craterellus tubaeformis vs Craterellus cornucopioides — both in
+   * Craterellus, but one likes granskog and the other løvskog), the
+   * species-level entry wins.
+   */
+  latinName?: string | null;
   genus: string | null;
   seasonStart: number; // 1-12
   seasonEnd: number; // 1-12
@@ -225,6 +233,36 @@ export const GENUS_PREFERENCES: Readonly<Record<string, GenusPreferences>> = {
   }
 };
 
+/**
+ * Species-level overrides keyed by exact Latin binomial. Used when two
+ * species share a genus but have meaningfully different ecology — the
+ * genus profile only gets you so far when the underlying preferences
+ * actually diverge.
+ *
+ * The lookup chain in resolveSpeciesPreferences is:
+ *   exact latinName match  →  genus default  →  GENERIC_PREFERENCES
+ *
+ * Adding a species override here is a one-stop edit; all callers pick
+ * it up automatically.
+ */
+export const SPECIES_PREFERENCES: Readonly<Record<string, GenusPreferences>> = {
+  // Svart trompetsopp — same genus as traktkantarell (Craterellus) but
+  // very different habitat: fuktig løvskog (bøk/eik) instead of moserik
+  // granskog. Stronger humidity dependence; warmer optimum (it fruits
+  // mostly in september-oktober when løvskog is at its dampest).
+  'Craterellus cornucopioides': {
+    tempCMin: 12,
+    tempCMax: 18,
+    tempCFloor: 5,
+    tempCCeil: 24,
+    rainOptMm: 9,
+    rainWeight: 0.9,
+    humidityWeight: 1.0,
+    description:
+      'Svart trompetsopp i fuktig løvskog (bøk/eik). Sterk fukt-avhengighet, warmer optimum enn traktkantarell.'
+  }
+};
+
 function inMonth(month: number, start: number, end: number): boolean {
   if (start <= end) return month >= start && month <= end;
   // Wrap-around year (e.g. start=11, end=2)
@@ -272,10 +310,27 @@ function humidityFit(humidityPct: number): number {
 
 /**
  * Resolve genus preferences with sensible fallback.
+ *
+ * For species-aware lookups (with latinName) prefer resolveSpeciesPreferences
+ * below — it checks species-level overrides first.
  */
 export function resolveGenusPreferences(genus: string | null | undefined): GenusPreferences {
   if (!genus) return GENERIC_PREFERENCES;
   return GENUS_PREFERENCES[genus] ?? GENERIC_PREFERENCES;
+}
+
+/**
+ * Resolve preferences for a specific species. Lookup chain:
+ *   exact latinName match (SPECIES_PREFERENCES) → genus default (GENUS_PREFERENCES) → GENERIC_PREFERENCES
+ *
+ * Use this in callers that know the latin name; falls back transparently
+ * for species that don't need an override.
+ */
+export function resolveSpeciesPreferences(species: SpeciesContext): GenusPreferences {
+  if (species.latinName && SPECIES_PREFERENCES[species.latinName]) {
+    return SPECIES_PREFERENCES[species.latinName];
+  }
+  return resolveGenusPreferences(species.genus);
 }
 
 /**
@@ -295,7 +350,7 @@ export function computeSpeciesAdjustment(species: SpeciesContext, weather: Weath
     return 0.05;
   }
 
-  const prefs = resolveGenusPreferences(species.genus);
+  const prefs = resolveSpeciesPreferences(species);
 
   const tempScore = triangularFit(weather.temperature, prefs.tempCFloor, prefs.tempCMin, prefs.tempCMax, prefs.tempCCeil);
   const rainScore = rainFit(weather.rain3dMm, prefs.rainOptMm);
