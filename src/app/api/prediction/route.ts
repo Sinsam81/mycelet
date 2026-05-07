@@ -110,7 +110,9 @@ export async function GET(request: NextRequest) {
       speciesId
         ? supabase
             .from('mushroom_species')
-            .select('id,genus,season_start,season_end,peak_season_start,peak_season_end')
+            .select(
+              'id,norwegian_name,latin_name,genus,season_start,season_end,peak_season_start,peak_season_end,habitat,mycorrhizal_partners'
+            )
             .eq('id', speciesId)
             .maybeSingle()
         : Promise.resolve(null)
@@ -123,6 +125,23 @@ export async function GET(request: NextRequest) {
           seasonEnd: speciesRes.data.season_end as number,
           peakSeasonStart: (speciesRes.data.peak_season_start as number | null) ?? null,
           peakSeasonEnd: (speciesRes.data.peak_season_end as number | null) ?? null
+        }
+      : null;
+
+    // Richer summary returned to the client (used by PredictionExplanation
+    // to render "hvorfor er dette markert?" lines without a second fetch).
+    const speciesSummary = speciesRes?.data
+      ? {
+          id: speciesRes.data.id as number,
+          norwegianName: (speciesRes.data.norwegian_name as string | null) ?? '',
+          latinName: (speciesRes.data.latin_name as string | null) ?? '',
+          genus: (speciesRes.data.genus as string | null) ?? null,
+          seasonStart: speciesRes.data.season_start as number,
+          seasonEnd: speciesRes.data.season_end as number,
+          peakSeasonStart: (speciesRes.data.peak_season_start as number | null) ?? null,
+          peakSeasonEnd: (speciesRes.data.peak_season_end as number | null) ?? null,
+          habitat: (speciesRes.data.habitat as string[] | null) ?? null,
+          mycorrhizalPartners: (speciesRes.data.mycorrhizal_partners as string[] | null) ?? null
         }
       : null;
 
@@ -234,7 +253,11 @@ export async function GET(request: NextRequest) {
           ? {
               temperature: Math.round(weather.temperatureC),
               humidity: Math.round(weather.humidityPct),
-              rain3dMm: Math.round(weather.rain3dMm * 10) / 10
+              rain3dMm: Math.round(weather.rain3dMm * 10) / 10,
+              rain7dMm: weather.rain7dMm != null ? Math.round(weather.rain7dMm * 10) / 10 : null,
+              rain14dMm: weather.rain14dMm != null ? Math.round(weather.rain14dMm * 10) / 10 : null,
+              minTemp7dC: weather.minTemp7dC,
+              maxTemp7dC: weather.maxTemp7dC
             }
           : { temperature: 0, humidity: 0, rain3dMm: 0 },
         counts: {
@@ -242,7 +265,8 @@ export async function GET(request: NextRequest) {
           recent30d: 0,
           recent365d: 0
         },
-        hotspots
+        hotspots,
+        species: speciesSummary ?? undefined
       });
     }
 
@@ -396,14 +420,19 @@ export async function GET(request: NextRequest) {
       weather: {
         temperature: Math.round(currentTemp),
         humidity: Math.round(currentHumidity),
-        rain3dMm: Math.round(rain3dMm * 10) / 10
+        rain3dMm: Math.round(rain3dMm * 10) / 10,
+        rain7dMm: weather.rain7dMm != null ? Math.round(weather.rain7dMm * 10) / 10 : null,
+        rain14dMm: weather.rain14dMm != null ? Math.round(weather.rain14dMm * 10) / 10 : null,
+        minTemp7dC: weather.minTemp7dC,
+        maxTemp7dC: weather.maxTemp7dC
       },
       counts: {
         findingsInArea: findings.length,
         recent30d,
         recent365d
       },
-      hotspots
+      hotspots,
+      species: speciesSummary ?? undefined
     });
   } catch (error) {
     log.error('prediction.unexpected_failure', error);

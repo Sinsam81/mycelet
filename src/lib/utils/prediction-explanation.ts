@@ -23,7 +23,6 @@
  *     weather?" call), fall back to generic advice using the same data.
  */
 
-import type { WeatherSummary } from '@/lib/weather';
 import { resolveGenusPreferences } from '@/lib/utils/species-scoring';
 
 export type ExplanationLevel = 'positive' | 'neutral' | 'negative';
@@ -48,9 +47,24 @@ export interface SpeciesExplanationContext {
   mycorrhizalPartners: string[] | null;
 }
 
+/**
+ * Local weather shape for the explanation logic. Decoupled from
+ * WeatherSummary so callers can pass values from anywhere — the prediction
+ * route's response, a manual input form, etc. — without forcing an exact
+ * provider-shape match.
+ */
+export interface ExplanationWeather {
+  temperatureC: number;
+  humidityPct: number;
+  rain3dMm: number;
+  rain7dMm?: number | null;
+  rain14dMm?: number | null;
+  minTemp7dC?: number | null;
+  maxTemp7dC?: number | null;
+}
+
 export interface ExplanationInput {
-  /** Snapshot from fetchWeatherSummary — at least temp, humidity, rain3d. */
-  weather: Pick<WeatherSummary, 'temperatureC' | 'humidityPct' | 'rain3dMm' | 'rain7dMm' | 'rain14dMm' | 'minTemp7dC' | 'maxTemp7dC'>;
+  weather: ExplanationWeather;
   /** Optional: when set, explanation is species-specific. */
   species?: SpeciesExplanationContext;
   /** Current month (1-12). Pass `new Date().getMonth() + 1`. */
