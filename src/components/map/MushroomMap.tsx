@@ -15,6 +15,8 @@ import { HotspotPanel } from './HotspotPanel';
 import { MapFilters, MapFilterState } from './MapFilters';
 import { MapFinding } from '@/types/finding';
 import { OfflineArea, cacheMapTilesForArea, readOfflineAreas, removeOfflineAreaById, saveOfflineAreas } from '@/lib/utils/offlineMap';
+import { buildExplanation } from '@/lib/utils/prediction-explanation';
+import { PredictionExplanation } from '@/components/prediction/PredictionExplanation';
 
 type LeafletType = typeof import('leaflet');
 
@@ -449,11 +451,51 @@ export function MushroomMap() {
     void updateHeatLayer(overlayData);
   }, [panelData, prediction.data, updateHeatLayer]);
 
+  // Build prediction-explanation lines when the user has selected a species
+  // (so /api/prediction's response contains a `species` summary). For the
+  // generic no-species view the heatmap is enough; we don't pop a panel up
+  // for "is it mushroom weather?".
+  const explanationLines = useMemo(() => {
+    const data = prediction.data;
+    if (!data?.species) return null;
+    return buildExplanation({
+      weather: {
+        temperatureC: data.weather.temperature,
+        humidityPct: data.weather.humidity,
+        rain3dMm: data.weather.rain3dMm,
+        rain7dMm: data.weather.rain7dMm ?? null,
+        rain14dMm: data.weather.rain14dMm ?? null,
+        minTemp7dC: data.weather.minTemp7dC ?? null,
+        maxTemp7dC: data.weather.maxTemp7dC ?? null
+      },
+      species: data.species,
+      month: new Date().getMonth() + 1
+    });
+  }, [prediction.data]);
+
   return (
     <div className="relative h-[calc(100vh-8.5rem)] overflow-hidden rounded-xl border border-gray-200">
       <div ref={containerRef} className="h-full w-full" />
 
       <MapFilters filters={filters} onChange={setFilters} />
+
+      {explanationLines && explanationLines.length > 0 && prediction.data?.species ? (
+        <aside className="absolute left-3 top-28 z-[1000] w-72 max-h-[calc(100%-9rem)] overflow-y-auto rounded-xl border border-gray-200 bg-white/95 p-3 shadow-lg backdrop-blur">
+          <header className="mb-2">
+            <h3 className="text-sm font-semibold text-gray-900">{prediction.data.species.norwegianName}</h3>
+            <p className="text-xs italic text-gray-600">{prediction.data.species.latinName}</p>
+            <p className="mt-1 text-xs text-gray-700">
+              Sannsynlighet:{' '}
+              <span className="font-semibold text-gray-900">{prediction.data.score}/100</span>{' '}
+              <span className="text-gray-500">({prediction.data.condition})</span>
+            </p>
+          </header>
+          <PredictionExplanation explanations={explanationLines} inline />
+          <p className="mt-3 text-[11px] italic text-gray-500">
+            Områder som matcher habitatet og værvinduet — ikke en garanti for at det er sopp der.
+          </p>
+        </aside>
+      ) : null}
 
       <div className="absolute right-3 top-28 z-[1000] w-72 rounded-xl border border-gray-200 bg-white/95 p-3 shadow-lg backdrop-blur">
         <div className="flex items-center justify-between gap-2">
