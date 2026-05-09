@@ -9,17 +9,25 @@ import { createRequestLogger } from '@/lib/log/request';
 /**
  * GDPR Article 17 — right to erasure ("right to be forgotten").
  *
- * Hard-deletes the user's auth.users row using the service-role admin
- * client. Foreign-key cascades from auth.users -> profiles -> findings /
- * forum_posts / comments / likes / saved_posts / reports take care of
- * everything else automatically. billing_subscriptions also cascades
- * directly from auth.users.
+ * Hard-deletes the user's auth.users row. After migration 011, FK
+ * cascades from profiles to findings/forum_posts/comments use
+ * ON DELETE SET NULL — so deleted users' negative observations and
+ * forum threads survive in anonymized form (per retention policy).
  *
- * Side effect: when a user's forum_posts are cascade-deleted, their
- * comment threads (replies from other users) are also removed because
- * comments cascade from post_id. This is acceptable per GDPR and matches
- * the documented retention policy. If we later want to anonymize public
- * threads instead of deleting, that requires a different schema.
+ * Two-step deletion to honor the policy distinction:
+ *
+ *   STEP 1 (this handler, BEFORE auth deletion): explicitly delete the
+ *     rows that should NOT be anonymized:
+ *       - all positive findings (any visibility)
+ *       - private negative findings (visibility='private')
+ *
+ *   STEP 2 (Supabase auth.admin.deleteUser): cascade to profiles, which
+ *     SET NULLs the user_id on:
+ *       - public/approximate negative findings  → kept as training data
+ *       - all forum_posts                       → "[slettet bruker]" in UI
+ *       - all comments                          → same
+ *     Other tables (post_likes, comment_likes, saved_posts, reports)
+ *     keep ON DELETE CASCADE — personal interaction signals.
  *
  * Confirmation:
  *   - Method must be POST (not DELETE — added friction is intentional)
@@ -29,10 +37,6 @@ import { createRequestLogger } from '@/lib/log/request';
  *
  * Requires SUPABASE_SERVICE_ROLE_KEY to be set in the deployment env;
  * fails with 500 otherwise.
- *
- * NOTE: There is no GDPR audit log table yet. Adding one is a Phase B
- * follow-up — until then, deletion events are not recorded server-side
- * beyond what auth.audit_log_entries captures by default in Supabase.
  */
 export async function POST(request: NextRequest) {
   const log = createRequestLogger(request);
@@ -75,8 +79,33 @@ export async function POST(request: NextRequest) {
 
   // Pre-deletion counts so we can return a receipt of what was wiped.
   // Done via session client so RLS scopes them correctly.
-  const [findingsCount, postsCount, commentsCount, likesCount, savedCount, reportsCount] = await Promise.all([
-    supabase.from('findings').select('id', { count: 'exact', head: true }).eq('user_id', user.id),
+  const [
+    positiveFindingsCount,
+    privateNegativeFindingsCount,
+    anonymizedNegativeFindingsCount,
+    postsCount,
+    commentsCount,
+    likesCount,
+    savedCount,
+    reportsCount
+  ] = await Promise.all([
+    supabase
+      .from('findings')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', user.id)
+      .eq('is_negative_observation', false),
+    supabase
+      .from('findings')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', user.id)
+      .eq('is_negative_observation', true)
+      .eq('visibility', 'private'),
+    supabase
+      .from('findings')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', user.id)
+      .eq('is_negative_observation', true)
+      .neq('visibility', 'private'),
     supabase.from('forum_posts').select('id', { count: 'exact', head: true }).eq('user_id', user.id),
     supabase.from('comments').select('id', { count: 'exact', head: true }).eq('user_id', user.id),
     supabase.from('post_likes').select('post_id', { count: 'exact', head: true }).eq('user_id', user.id),
@@ -98,6 +127,46 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  // STEP 1 — explicitly delete findings that should NOT be anonymized
+  // before auth.users is removed. After migration 011 the FK on
+  // findings.user_id is ON DELETE SET NULL, so the auth-cascade only
+  // anonymizes whatever survives this deletion.
+  const { error: positiveDeleteError } = await admin
+    .from('findings')
+    .delete()
+    .eq('user_id', user.id)
+    .eq('is_negative_observation', false);
+  if (positiveDeleteError) {
+    userLog.error('account.self_delete.positive_findings_delete_failed', positiveDeleteError);
+    return NextResponse.json(
+      {
+        error: 'Kunne ikke fjerne dine personlige funn før kontosletting',
+        details: positiveDeleteError.message
+      },
+      { status: 500 }
+    );
+  }
+
+  const { error: privateDeleteError } = await admin
+    .from('findings')
+    .delete()
+    .eq('user_id', user.id)
+    .eq('is_negative_observation', true)
+    .eq('visibility', 'private');
+  if (privateDeleteError) {
+    userLog.error('account.self_delete.private_findings_delete_failed', privateDeleteError);
+    return NextResponse.json(
+      {
+        error: 'Kunne ikke fjerne private observasjoner før kontosletting',
+        details: privateDeleteError.message
+      },
+      { status: 500 }
+    );
+  }
+
+  // STEP 2 — delete the auth.users row. Cascades to profiles which
+  // SET NULLs user_id on findings (only public/approximate negatives
+  // remain), forum_posts, and comments.
   const { error: deleteError } = await admin.auth.admin.deleteUser(user.id);
   if (deleteError) {
     userLog.error('account.self_delete.failed', deleteError);
@@ -116,33 +185,26 @@ export async function POST(request: NextRequest) {
   // auth.users(id) no longer exists. logAdminAction is failure-safe; if
   // the audit insert fails (no service role, no migration 008) the user-
   // facing deletion is unaffected.
+  const counts = {
+    positiveFindings: positiveFindingsCount.count ?? 0,
+    privateNegativeFindings: privateNegativeFindingsCount.count ?? 0,
+    anonymizedNegativeFindings: anonymizedNegativeFindingsCount.count ?? 0,
+    forumPosts: postsCount.count ?? 0,
+    comments: commentsCount.count ?? 0,
+    postLikes: likesCount.count ?? 0,
+    savedPosts: savedCount.count ?? 0,
+    reportsFiled: reportsCount.count ?? 0
+  };
+
   await logAdminAction({
     actorId: user.id,
     action: 'account.self_delete',
     targetUserId: user.id,
-    metadata: {
-      deletedCounts: {
-        findings: findingsCount.count ?? 0,
-        forumPosts: postsCount.count ?? 0,
-        comments: commentsCount.count ?? 0,
-        postLikes: likesCount.count ?? 0,
-        savedPosts: savedCount.count ?? 0,
-        reportsFiled: reportsCount.count ?? 0
-      }
-    },
+    metadata: { counts },
     request
   });
 
-  userLog.warn('account.self_delete.success', {
-    deletedCounts: {
-      findings: findingsCount.count ?? 0,
-      forumPosts: postsCount.count ?? 0,
-      comments: commentsCount.count ?? 0,
-      postLikes: likesCount.count ?? 0,
-      savedPosts: savedCount.count ?? 0,
-      reportsFiled: reportsCount.count ?? 0
-    }
-  });
+  userLog.warn('account.self_delete.success', { counts });
 
   // Best-effort sign-out so the cookie session is invalidated. The auth row
   // is already gone, so this just clears local cookies; if it errors we
@@ -153,13 +215,6 @@ export async function POST(request: NextRequest) {
     ok: true,
     deletedUserId: user.id,
     deletedAt: new Date().toISOString(),
-    deletedCounts: {
-      findings: findingsCount.count ?? 0,
-      forumPosts: postsCount.count ?? 0,
-      comments: commentsCount.count ?? 0,
-      postLikes: likesCount.count ?? 0,
-      savedPosts: savedCount.count ?? 0,
-      reportsFiled: reportsCount.count ?? 0
-    }
+    counts
   });
 }

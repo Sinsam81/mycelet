@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { logAdminAction } from '@/lib/audit/log';
+import { checkRateLimit } from '@/lib/rate-limit';
+import { getClientKey, rateLimitResponse } from '@/lib/rate-limit/route';
 import { createRequestLogger } from '@/lib/log/request';
 
 type VerifiedRole = 'trusted_forager' | 'expert' | 'community_verifier' | 'moderator';
@@ -40,6 +42,11 @@ export async function GET(request: NextRequest) {
   const access = await requireModerator();
   if (!access.ok) {
     return NextResponse.json({ error: access.error }, { status: access.status });
+  }
+
+  const rateLimit = checkRateLimit(`admin-verified-foragers:get:${getClientKey(request, access.userId)}`, 60, 60);
+  if (!rateLimit.allowed) {
+    return rateLimitResponse(rateLimit);
   }
 
   const q = (request.nextUrl.searchParams.get('q') ?? '').trim();
@@ -92,6 +99,12 @@ export async function POST(request: NextRequest) {
   }
 
   const actorLog = log.child({ userId: access.userId });
+
+  const rateLimit = checkRateLimit(`admin-verified-foragers:post:${getClientKey(request, access.userId)}`, 30, 60);
+  if (!rateLimit.allowed) {
+    actorLog.warn('admin.verified_forager.upsert.rate_limited');
+    return rateLimitResponse(rateLimit);
+  }
 
   const body = (await request.json()) as {
     userId?: string;
@@ -158,6 +171,12 @@ export async function DELETE(request: NextRequest) {
   }
 
   const actorLog = log.child({ userId: access.userId });
+
+  const rateLimit = checkRateLimit(`admin-verified-foragers:delete:${getClientKey(request, access.userId)}`, 30, 60);
+  if (!rateLimit.allowed) {
+    actorLog.warn('admin.verified_forager.delete.rate_limited');
+    return rateLimitResponse(rateLimit);
+  }
 
   const userId = request.nextUrl.searchParams.get('userId');
   if (!userId) {

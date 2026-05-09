@@ -1,13 +1,15 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { BILLING_PLANS } from '@/lib/billing/plans';
 import { getBillingCapabilities, getUserBillingSubscription } from '@/lib/billing/subscription';
+import { checkRateLimit } from '@/lib/rate-limit';
+import { getClientKey, rateLimitResponse } from '@/lib/rate-limit/route';
 import { logger } from '@/lib/log';
 
 // Called frequently from the client to render subscription state — logging
 // every successful call would just be noise. We log only failures.
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const supabase = createClient();
     const {
@@ -16,6 +18,13 @@ export async function GET() {
 
     if (!user) {
       return NextResponse.json({ error: 'Ikke autentisert' }, { status: 401 });
+    }
+
+    // Read endpoint, called from layouts/headers — generous limit so normal
+    // page-rendering loops don't trip it. Catches runaway client polling.
+    const rateLimit = checkRateLimit(`billing-status:${getClientKey(request, user.id)}`, 120, 60);
+    if (!rateLimit.allowed) {
+      return rateLimitResponse(rateLimit);
     }
 
     const subscription = await getUserBillingSubscription(supabase, user.id);

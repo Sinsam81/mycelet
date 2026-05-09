@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { getUserBillingSubscription } from '@/lib/billing/subscription';
 import { getStripeServerClient } from '@/lib/stripe/server';
+import { checkRateLimit } from '@/lib/rate-limit';
+import { getClientKey, rateLimitResponse } from '@/lib/rate-limit/route';
 import { createRequestLogger } from '@/lib/log/request';
 
 export const runtime = 'nodejs';
@@ -21,6 +23,14 @@ export async function POST(request: NextRequest) {
     }
 
     const userLog = log.child({ userId: user.id });
+
+    // Each portal session creates a Stripe API call. 10/min/user is generous
+    // for honest UI flows and stops compromised-account abuse.
+    const rateLimit = checkRateLimit(`billing-portal:${getClientKey(request, user.id)}`, 10, 60);
+    if (!rateLimit.allowed) {
+      userLog.warn('billing.portal.rate_limited');
+      return rateLimitResponse(rateLimit);
+    }
 
     const subscription = await getUserBillingSubscription(supabase, user.id);
     if (!subscription?.stripe_customer_id) {
