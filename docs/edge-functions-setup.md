@@ -70,16 +70,16 @@ Du trenger CRON_SECRET-verdien senere når du setter opp scheduling, så hold de
 `purge-inactive-accounts` sender varsel på e-post når en bruker havner i 90-dagers grace-perioden. Tre trinn for å aktivere:
 
 1. **Lag konto på https://resend.com** (gratis: 3000 e-post/mnd, 100/dag).
-2. **Verifiser domenet `soppjakt.no`** — Resend gir deg DNS-records (SPF, DKIM, return-path). Du legger dem til hos domenetilbyderen din.
+2. **Verifiser domenet `mycelet.no`** — Resend gir deg DNS-records (SPF, DKIM, return-path). Du legger dem til hos domenetilbyderen din.
 3. **Sett to secrets**:
 
 ```bash
 supabase secrets set RESEND_API_KEY=re_...
-supabase secrets set RESEND_FROM_EMAIL=noreply@soppjakt.no
-supabase secrets set APP_URL=https://soppjakt.no
+supabase secrets set RESEND_FROM_EMAIL=noreply@mycelet.no
+supabase secrets set APP_URL=https://mycelet.no
 ```
 
-`APP_URL` brukes i e-postens "Behold konto"-link. Hvis du har annen prod-domene, sett den der i stedet for soppjakt.no.
+`APP_URL` brukes i e-postens "Behold konto"-link. Hvis du har annen prod-domene, sett den der i stedet for mycelet.no.
 
 Hvis Resend-keyene ikke er satt, fortsetter cron-jobben uten å sende e-post — warning-rader skrives fortsatt til DB, og brukere får banner i appen ved innlogging. E-post er bonus for å nå brukere som ikke logger inn.
 
