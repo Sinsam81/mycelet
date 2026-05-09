@@ -2,6 +2,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { corsHeaders } from '../_shared/cors.ts';
 import { requireServiceRole } from '../_shared/auth.ts';
+import { sendEmail, buildInactiveWarningEmail } from '../_shared/email.ts';
 
 /**
  * Cron Edge Function — Daily 03:00 Europe/Oslo
@@ -66,9 +67,12 @@ Deno.serve(async (req: Request) => {
   const scheduledDeletion = new Date(now.getTime() + GRACE_PERIOD_DAYS * 24 * 60 * 60 * 1000);
 
   let issuedWarnings = 0;
+  let emailsSent = 0;
   let clearedWarnings = 0;
   let deletedAccounts = 0;
   const errors: string[] = [];
+
+  const appUrl = Deno.env.get('APP_URL') ?? 'https://soppjakt.no';
 
   // ---- Step 1: issue new warnings ---------------------------------
   // We must read auth.users via the admin API. listUsers paginates
@@ -100,8 +104,38 @@ Deno.serve(async (req: Request) => {
             scheduled_deletion_at: scheduledDeletion.toISOString()
           }))
         );
-        if (insertError) errors.push(`insert warnings: ${insertError.message}`);
-        else issuedWarnings = toWarn.length;
+        if (insertError) {
+          errors.push(`insert warnings: ${insertError.message}`);
+        } else {
+          issuedWarnings = toWarn.length;
+
+          // Send warning emails. Best-effort — failure here doesn't roll
+          // back the warning row (we'd rather have an unwarned-by-email
+          // user with a DB warning than a missed deletion clock).
+          for (const u of toWarn) {
+            if (!u.email) continue;
+            const email = buildInactiveWarningEmail({
+              userEmail: u.email,
+              appUrl,
+              scheduledDeletionAt: scheduledDeletion
+            });
+            const sendResult = await sendEmail({
+              to: u.email,
+              subject: email.subject,
+              html: email.html,
+              text: email.text
+            });
+            if (sendResult.ok) {
+              emailsSent++;
+              await supabase
+                .from('account_deletion_warnings')
+                .update({ warning_email_sent: true })
+                .eq('user_id', u.id);
+            } else {
+              errors.push(`email ${u.id}: ${sendResult.detail}`);
+            }
+          }
+        }
       }
     }
   }
@@ -149,10 +183,23 @@ Deno.serve(async (req: Request) => {
     }
   }
 
-  console.log('[purge-inactive-accounts]', { issuedWarnings, clearedWarnings, deletedAccounts, errors });
+  console.log('[purge-inactive-accounts]', {
+    issuedWarnings,
+    emailsSent,
+    clearedWarnings,
+    deletedAccounts,
+    errors
+  });
 
   return new Response(
-    JSON.stringify({ ok: errors.length === 0, issuedWarnings, clearedWarnings, deletedAccounts, errors }),
+    JSON.stringify({
+      ok: errors.length === 0,
+      issuedWarnings,
+      emailsSent,
+      clearedWarnings,
+      deletedAccounts,
+      errors
+    }),
     {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: errors.length === 0 ? 200 : 207 // multi-status when partial

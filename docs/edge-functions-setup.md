@@ -48,7 +48,7 @@ supabase link --project-ref <DIN-PROSJEKT-REF>
 
 Project ref finner du ved å gå til Supabase Dashboard → Project Settings → General → Reference ID.
 
-### Steg 4 — Sett SERVICE_ROLE_KEY som funksjon-secret
+### Steg 4 — Sett funksjon-secrets
 
 Edge Functions har egne secrets, separat fra .env.local. Sett service-role-keyen:
 
@@ -59,6 +59,24 @@ supabase secrets set SUPABASE_SERVICE_ROLE_KEY=<din-service-role-key>
 Service-role-keyen finner du i Supabase Dashboard → Project Settings → API → service_role secret. **Ikke commit den!**
 
 `SUPABASE_URL` settes automatisk av Supabase når funksjonen kjører — ikke nødvendig manuelt.
+
+#### Resend (e-post-varsel)
+
+`purge-inactive-accounts` sender varsel på e-post når en bruker havner i 90-dagers grace-perioden. Tre trinn for å aktivere:
+
+1. **Lag konto på https://resend.com** (gratis: 3000 e-post/mnd, 100/dag).
+2. **Verifiser domenet `soppjakt.no`** — Resend gir deg DNS-records (SPF, DKIM, return-path). Du legger dem til hos domenetilbyderen din.
+3. **Sett to secrets**:
+
+```bash
+supabase secrets set RESEND_API_KEY=re_...
+supabase secrets set RESEND_FROM_EMAIL=noreply@soppjakt.no
+supabase secrets set APP_URL=https://soppjakt.no
+```
+
+`APP_URL` brukes i e-postens "Behold konto"-link. Hvis du har annen prod-domene, sett den der i stedet for soppjakt.no.
+
+Hvis Resend-keyene ikke er satt, fortsetter cron-jobben uten å sende e-post — warning-rader skrives fortsatt til DB, og brukere får banner i appen ved innlogging. E-post er bonus for å nå brukere som ikke logger inn.
 
 ### Steg 5 — Deploy alle tre funksjonene
 
@@ -163,9 +181,6 @@ Tjenesten ringer URL-en automatisk og logger om den får 200/207/500.
 
 ## Hva som mangler — TODO før beta
 
-1. **E-post-varsel** når en bruker får sin første warning. `purge-inactive-accounts` setter `warning_email_sent = false`. Nytt steg: integrer Resend/Postmark (Sindre velger leverandør), send mail med "Behold konto"-link til `/api/me/extend-retention`, oppdater flagget til true.
-2. **Retention-banner i UI** — når en bruker logger inn og har en pending warning, vis en banner: "Kontoen din er planlagt slettet 15. august. Klikk her for å beholde den." Banner kaller `/api/me/extend-retention` på klikk.
-3. **Moderator-UI for å markere reports `resolved`/`dismissed`** — uten det havner aldri rader i den status-en, og `purge-resolved-reports` blir aldri triggered. Migrasjon 011 la til feltene `status` (fantes fra før) og `resolved_at`; backend-skjema er klart.
-4. **Send Stripe-periode-relevante billing-rader til langtidsarkiv** før de slettes hvis vi senere vil ta full ansvar for bokføringsloven (5 år) selv. Per nå: Stripe Dashboard er authoritative kilde.
+1. **Send Stripe-periode-relevante billing-rader til langtidsarkiv** før de slettes hvis vi senere vil ta full ansvar for bokføringsloven (5 år) selv. Per nå: Stripe Dashboard er authoritative kilde.
 
-Disse er listet med spesifikt eierskap i `docs/retention-policy.md`.
+Resend-e-post, retention-banner i UI og moderator-UI for status-endring er alle implementert (se commit-historikk for PR #47).
