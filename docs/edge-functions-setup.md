@@ -50,15 +50,20 @@ Project ref finner du ved å gå til Supabase Dashboard → Project Settings →
 
 ### Steg 4 — Sett funksjon-secrets
 
-Edge Functions har egne secrets, separat fra .env.local. Sett service-role-keyen:
+Edge Functions har egne secrets, separat fra .env.local.
+
+**`CRON_SECRET`** brukes som bearer-token mellom cron-scheduleren og Edge Function-en. Generer et tilfeldig secret én gang og lagre det på begge sider:
 
 ```bash
-supabase secrets set SUPABASE_SERVICE_ROLE_KEY=<din-service-role-key>
+openssl rand -hex 32 > /tmp/cron-secret.txt
+echo "CRON_SECRET=$(cat /tmp/cron-secret.txt)" >> .env.local
+supabase secrets set CRON_SECRET=$(cat /tmp/cron-secret.txt)
+rm /tmp/cron-secret.txt
 ```
 
-Service-role-keyen finner du i Supabase Dashboard → Project Settings → API → service_role secret. **Ikke commit den!**
+Du trenger CRON_SECRET-verdien senere når du setter opp scheduling, så hold den i .env.local.
 
-`SUPABASE_URL` settes automatisk av Supabase når funksjonen kjører — ikke nødvendig manuelt.
+`SUPABASE_URL` og `SUPABASE_SERVICE_ROLE_KEY` settes automatisk av Supabase når funksjonen kjører — funksjonene bruker dem internt for å snakke med databasen, men auth-sjekken bruker CRON_SECRET.
 
 #### Resend (e-post-varsel)
 
