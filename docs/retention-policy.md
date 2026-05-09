@@ -1,10 +1,15 @@
-# Datalagrings-policy (utkast — venter på Sindres beslutninger)
+# Datalagrings-policy
 
-> **Status:** Utkast for diskusjon. Ingen av tallene under er bindende før Sindre har gått gjennom og bekreftet/justert. Når policyen er låst, må den (a) inn i `/personvern` § 7 (Lagringstid), (b) implementeres som cron-jobber, og (c) deles med beta-testere før de logger sitt første funn.
+> **Status:** Låst 9. mai 2026 av Sindre. Tallene under er normative.
+> Tilhørende endringer som skal følge etter denne låsingen:
+> 1. ✅ `/personvern` § 5 oppdatert med konkrete tall (samme commit).
+> 2. ⏳ Migrasjon 011 — `account_deletion_warnings`-tabell, FK-endring `findings.user_id` → ON DELETE SET NULL, trigger for å anonymisere forum-innlegg.
+> 3. ⏳ Cron-jobber implementeres når Sindre har valgt plattform (Vercel Cron vs Supabase Edge vs pg_cron).
+> 4. ⏳ `/personvern` må til norsk advokat for review (A8 user-homework).
 >
 > **Hvorfor dette er B2 og ikke valgfritt:** GDPR Art. 5(1)(e) krever at personopplysninger ikke lagres lenger enn nødvendig. Uten en eksplisitt policy må vi enten slette alt umiddelbart eller forsvare evigvarig lagring til Datatilsynet. En klar policy + auto-sletting = compliance.
 
-## TL;DR — foreslått ramme
+## TL;DR — låst ramme
 
 | Datatype                                | Foreslått frist                          | Hvorfor det forslaget                                      |
 |-----------------------------------------|------------------------------------------|------------------------------------------------------------|
@@ -21,38 +26,25 @@
 | `prediction_tiles` (genererte)          | **Roller daglig** — overskrives          | Ikke persondata, ingen bevarings-grunn                     |
 | Geolokasjon ved funn                    | **`display_latitude/longitude`** (jittered til ±500 m) brukes til API-respons | Råkoordinater kun synlig for eier — privacy-by-design |
 
-## Tre beslutninger Sindre må ta
+## Tre beslutninger — låst 9. mai 2026
 
-### 1. Inaktive kontoer — hvor lang sjekk-pause? (foreslått: 3 år)
+### 1. Inaktive kontoer: 3 år ✅
 
-> **Trade-off:** Kortere = ryddigere DB + mindre GDPR-eksponering. Lengre = bedre brukeropplevelse for sesongbrukere som logger inn én gang per høst.
->
-> **Innstilling:** Norske sopp-sesonger spenner aug–nov. En bruker som installerer appen i 2026 men neste gang åpner den i 2029 høst → vil sikkert ikke at kontoen er borte. 3 år dekker tre hele sesonger med 100 % margin.
+Brukere som ikke logger inn på 3 år får e-post-varsel. Slettes 90 dager senere hvis ingen respons.
 
-Alternativer å vurdere:
-- 2 år (strengere, mindre data-eksponering)
-- 3 år (foreslått)
-- 5 år (Bokføringsloven-grensen — passer hvis vi vil samkjøre)
+Begrunnelse: Norske sopp-sesonger spenner aug–nov. 3 år dekker tre hele sesonger med margin, samtidig som det begrenser GDPR-eksponering for forlatte kontoer.
 
-**Sindres svar:** _________
+### 2. Forum-innlegg ved konto-sletting: anonymiser ✅
 
-### 2. Forum-innlegg ved konto-sletting — slette eller anonymisere? (foreslått: anonymisere)
+Innholdet beholdes, forfatter erstattes med "[slettet bruker]".
 
-> **Trade-off:** Sletting = full GDPR Art. 17-respekt, men ødelegger eldre tråder (ulesbare svar uten kontekst). Anonymisering = bevarer forum-verdi, men bruker kan ikke kreve full sletting av sine offentlige bidrag.
->
-> **Juridisk:** Art. 17(3)(a) sier "ytringsfrihet og informasjonsfrihet" kan overstyre slette-retten. Forum-bidrag har klart innslag av offentlig diskurs. Anonymisering (erstatte forfatter-id med "[slettet bruker]") er en vanlig kompromiss-løsning og generelt akseptert.
+Begrunnelse: GDPR Art. 17(3)(a) tillater avveining mot ytringsfrihet/informasjonsfrihet. Sletting av hele tråder bryter samtaler for andre brukere. Anonymisering = praksis-konsensus.
 
-**Sindres svar:** _________
+### 3. Negative observasjoner ved konto-sletting: anonymiser og behold ✅
 
-### 3. Negative observasjoner — beholdes ved konto-sletting? (foreslått: anonymiseres + beholdes)
+`user_id` settes til NULL; raden beholdes som treningsdata. Begrenset til observasjoner med visibility = 'public' eller 'approximate' — `private` slettes alltid.
 
-> Negative observasjoner ("jeg lette her, fant ingenting") er en del av prediksjons-modellens treningsdata. Hvis vi sletter alle ved konto-sletting, mister vi en betydelig signal-kilde. Anonymisering (fjerne `user_id`) bevarer treningsdata uten å beholde kobling til person.
->
-> **Juridisk:** Hvis user_id fjernes og posisjon allerede er randomisert til ±500 m (`approximate`-default), så er raden ikke lenger en personopplysning og GDPR gjelder ikke lenger. Da kan vi beholde den.
->
-> **Edge case:** Hvis brukeren hadde `private`-visibility på et funn (display_lat/lon = NULL), så er det åpenbart en personopplysning og må slettes. Bare `public`/`approximate` overlever anonymisering.
-
-**Sindres svar:** _________
+Begrunnelse: Negative observasjoner er prediksjons-modellens viktigste signal-kilde for "hvor det IKKE vokser sopp". Anonymiserte rader uten kobling til person + jittered koordinater (±500 m) er ikke personopplysninger og faller utenfor GDPR.
 
 ## Implementerings-skisse (når policy er låst)
 
@@ -95,10 +87,11 @@ Alle jobber skriver til `admin_audit_log` for revisjonsspor.
 - **Aggregerte statistikker** (antall funn per art per kommune per år): regnes som anonyme aggregater, beholdes uavgrenset.
 - **Email-bouncer / varslings-feilstate**: skal hodelistest og slettes etter 30 dager — gå inn i en separat e-post-policy senere.
 
-## Tidslinje for å låse policyen
+## Tidslinje fremover
 
-1. **Sindre**: Les utkastet, fyll inn de tre `_________`-feltene over. (~30 min)
-2. **Sammen**: Diskuter trade-offer hvis Sindre velger noe annet enn foreslått.
-3. **Claude**: Implementér cron-jobber og kode-endringer. Skriv migrasjon for `account_deletion_warnings`. Oppdater `/personvern`. (~3-4 timer)
-4. **Sindre**: Send oppdatert `/personvern` til norsk advokat for review (A8 user-homework).
-5. **Klart for beta-launch.**
+1. ✅ **Sindre**: Bekreftet alle tre forslag (9. mai 2026).
+2. ✅ **Claude**: Oppdatert `/personvern` § 5 med konkrete tall.
+3. **Sindre**: Velg cron-plattform før implementasjon: **Vercel Cron** (enklest, gratis t.o.m. 1 cron-job, krever Vercel-deploy først), **Supabase Edge Functions** (Deno-basert, gratis, kan kjøre uavhengig av Vercel), eller **pg_cron** (Postgres-extension, kjører i DB-en, krever Supabase Pro-plan).
+4. **Claude**: Implementér migrasjon 011 + cron-handlers + `/api/me/extend-retention`. (~3-4 timer)
+5. **Sindre**: Send oppdatert `/personvern` til norsk advokat for review (A8).
+6. **Klart for beta-launch.**

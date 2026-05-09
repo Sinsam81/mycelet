@@ -121,7 +121,7 @@ export default function PersonvernPage() {
             </li>
             <li>
               <span className="font-medium">Juridisk forpliktelse (Art. 6(1)(c))</span> — for regnskapsplikt på betalingsdata
-              [FYLL INN: hvor mange år, vanligvis 5 år for bokføringsloven].
+              i 5 år, jf. bokføringsloven § 13.
             </li>
             <li>
               <span className="font-medium">Samtykke (Art. 6(1)(a))</span> — kun for valgfri kommunikasjon (f.eks. nyhetsbrev hvis
@@ -171,18 +171,37 @@ export default function PersonvernPage() {
           <h2 className="text-lg font-semibold">5. Hvor lenge vi lagrer data</h2>
           <ul className="list-disc space-y-1 pl-5 text-sm text-gray-700">
             <li>
-              <span className="font-medium">Aktiv konto:</span> så lenge du har konto.
+              <span className="font-medium">Aktiv konto:</span> så lenge du har konto, kan du selv slette enkeltfunn,
+              forum-innlegg og kommentarer.
             </li>
             <li>
-              <span className="font-medium">Etter sletting:</span> data fjernes umiddelbart fra primær-database. Backup-rotasjon
-              kan beholde data i opptil [FYLL INN: 30 dager] før permanent fjerning.
+              <span className="font-medium">Inaktive kontoer:</span> hvis du ikke logger inn på 3 år, sender vi en
+              e-post-advarsel og sletter kontoen automatisk 90 dager senere hvis du ikke svarer.
             </li>
             <li>
-              <span className="font-medium">Inaktive kontoer:</span> [FYLL INN: f.eks. konti som ikke har vært aktive på 24
-              måneder slettes automatisk etter varsling].
+              <span className="font-medium">Etter sletting av konto:</span> dine personlige funn og private data fjernes
+              umiddelbart fra primær-database. Backup-rotasjon kan beholde data i opptil 30 dager før permanent fjerning.
             </li>
             <li>
-              <span className="font-medium">Betalingsdata:</span> beholdes i [FYLL INN: 5 år for å oppfylle bokføringsloven].
+              <span className="font-medium">Forum-innlegg ved konto-sletting:</span> innholdet beholdes så tråder forblir
+              lesbare, men forfatter erstattes med &quot;[slettet bruker]&quot;. Begrunnelse: GDPR Art. 17(3)(a) tillater
+              avveining mot informasjons-/ytringsfrihet.
+            </li>
+            <li>
+              <span className="font-medium">Negative observasjoner ved konto-sletting:</span> beholdes i anonymisert
+              form (uten kobling til deg) som treningsdata for prediksjons-modellen — kun observasjoner med
+              omtrentlig delingsnivå (±500 m); private observasjoner slettes alltid.
+            </li>
+            <li>
+              <span className="font-medium">Betalingsdata (faktura, abonnement):</span> beholdes i 5 år, jf.
+              bokføringsloven § 13.
+            </li>
+            <li>
+              <span className="font-medium">Revisjonslogg (admin_audit_log):</span> beholdes i 7 år for å oppfylle
+              krav om revisjons-spor.
+            </li>
+            <li>
+              <span className="font-medium">Server-logger:</span> 30 dager hos Vercel.
             </li>
           </ul>
         </article>
@@ -221,7 +240,7 @@ export default function PersonvernPage() {
                 <p>
                   Slett kontoen og alle dine data fra Profil-siden, eller kall{' '}
                   <code className="rounded bg-forest-100 px-1 py-0.5 text-xs">POST /api/me/delete</code>. Sletting er
-                  umiddelbar; backup-rotasjon kan beholde data i opptil [FYLL INN: 30 dager].
+                  umiddelbar; backup-rotasjon kan beholde data i opptil 30 dager.
                 </p>
               </div>
             </div>
