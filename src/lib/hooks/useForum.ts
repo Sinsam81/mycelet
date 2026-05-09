@@ -500,7 +500,19 @@ export function useSetReportStatus() {
   return useMutation({
     mutationFn: async (payload: { reportId: string; status: 'reviewed' | 'resolved' | 'dismissed' }) => {
       const supabase = createClient();
-      const { error } = await supabase.from('reports').update({ status: payload.status }).eq('id', payload.reportId);
+
+      // Stamp resolved_at when transitioning into a terminal state — the
+      // purge-resolved-reports cron uses it to delete the row 1 year
+      // later (per docs/retention-policy.md). Reviewed is non-terminal,
+      // so resolved_at stays NULL.
+      const update: { status: string; resolved_at?: string | null } = {
+        status: payload.status
+      };
+      if (payload.status === 'resolved' || payload.status === 'dismissed') {
+        update.resolved_at = new Date().toISOString();
+      }
+
+      const { error } = await supabase.from('reports').update(update).eq('id', payload.reportId);
       if (error) throw error;
     },
     onSuccess: () => {
