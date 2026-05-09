@@ -3,8 +3,8 @@ import { AlertTriangle, BookOpen, Phone, Shield } from 'lucide-react';
 import { PageWrapper } from '@/components/layout/PageWrapper';
 
 export const metadata = {
-  title: 'Sikkerhet og ansvar — SoppJakt',
-  description: 'Slik bruker du SoppJakt trygt. Kontaktinfo til Soppkontrollen og Giftinformasjonen ved behov.'
+  title: 'Sikkerhet og ansvar — Mycelet',
+  description: 'Slik bruker du Mycelet trygt. Kontaktinfo til Soppkontrollen og Giftinformasjonen ved behov.'
 };
 
 export default function SikkerhetPage() {
@@ -13,7 +13,7 @@ export default function SikkerhetPage() {
       <section className="space-y-4">
         <div>
           <h1 className="text-xl font-semibold">Sikkerhet og ansvar</h1>
-          <p className="text-sm text-gray-700">Hvordan du bruker SoppJakt trygt.</p>
+          <p className="text-sm text-gray-700">Hvordan du bruker Mycelet trygt.</p>
         </div>
 
         <article className="rounded-xl border-2 border-red-300 bg-red-50 p-4">
@@ -54,7 +54,7 @@ export default function SikkerhetPage() {
             </li>
             <li>
               <span className="font-medium">AI er hjelpemiddel, ikke fasit.</span> Ingen bildemodell er treffsikker nok
-              til å erstatte trent øye, smak og lukt. Bruk SoppJakt som start for læring, ikke som siste ord.
+              til å erstatte trent øye, smak og lukt. Bruk Mycelet som start for læring, ikke som siste ord.
             </li>
             <li>
               <span className="font-medium">Soppkontrollen er gull verdt.</span> Erfarne mykologer i regionen din
@@ -113,7 +113,7 @@ export default function SikkerhetPage() {
         <article className="space-y-2 rounded-xl bg-white p-4 shadow-sm">
           <h2 className="font-semibold">Vår begrensning</h2>
           <p className="text-sm text-gray-800">
-            SoppJakt er et hjelpemiddel for å lære og dele — ikke en autorisert kilde for matsopp-identifisering.
+            Mycelet er et hjelpemiddel for å lære og dele — ikke en autorisert kilde for matsopp-identifisering.
             Vi tar ikke ansvar for skade som følge av feilidentifisering. Bruk sunn fornuft, kryss-sjekk mot flere
             kilder, og bring tvilstilfeller til soppkontroll før du spiser.
           </p>

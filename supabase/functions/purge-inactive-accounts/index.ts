@@ -72,7 +72,7 @@ Deno.serve(async (req: Request) => {
   let deletedAccounts = 0;
   const errors: string[] = [];
 
-  const appUrl = Deno.env.get('APP_URL') ?? 'https://soppjakt.no';
+  const appUrl = Deno.env.get('APP_URL') ?? 'https://mycelet.no';
 
   // ---- Step 1: issue new warnings ---------------------------------
   // We must read auth.users via the admin API. listUsers paginates

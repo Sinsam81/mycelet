@@ -1,5 +1,5 @@
-const STATIC_CACHE = 'soppjakt-static-v1';
-const TILE_CACHE = 'soppjakt-map-tiles-v1';
+const STATIC_CACHE = 'mycelet-static-v1';
+const TILE_CACHE = 'mycelet-map-tiles-v1';
 const STATIC_ASSETS = ['/', '/map', '/pricing', '/manifest.json', '/icons/icon.svg', '/icons/icon-maskable.svg'];
 
 self.addEventListener('install', (event) => {

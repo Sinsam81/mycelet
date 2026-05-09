@@ -4,12 +4,12 @@ import { CookieNotice } from '@/components/layout/CookieNotice';
 import { Providers } from '@/components/layout/Providers';
 
 export const metadata: Metadata = {
-  title: 'SoppJakt',
+  title: 'Mycelet',
   description: 'Norsk soppapp for trygg identifikasjon og kartlegging av funn.',
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
-    title: 'SoppJakt',
+    title: 'Mycelet',
     statusBarStyle: 'default'
   }
 };

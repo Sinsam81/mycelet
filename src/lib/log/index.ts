@@ -1,5 +1,5 @@
 /**
- * Application logger for SoppJakt.
+ * Application logger for Mycelet.
  *
  * Five levels, ordered by verbosity:
  *

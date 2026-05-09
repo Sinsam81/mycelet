@@ -3,16 +3,16 @@ import { AlertTriangle, Cookie, Database, FileDown, Lock, Mail, Trash2, Users } 
 import { PageWrapper } from '@/components/layout/PageWrapper';
 
 export const metadata = {
-  title: 'Personvern — SoppJakt',
+  title: 'Personvern — Mycelet',
   description:
-    'Hvordan SoppJakt samler inn, bruker og beskytter personopplysningene dine. GDPR-rettighetene dine og hvem du kan kontakte.'
+    'Hvordan Mycelet samler inn, bruker og beskytter personopplysningene dine. GDPR-rettighetene dine og hvem du kan kontakte.'
 };
 
 // === MAL — IKKE PUBLISER FØR ===
 // 1) Tekst i [HAKEPARENTESER] er fylles inn av deg
 // 2) Send hele dokumentet til advokat for gjennomgang
 // 3) DPA-er må signeres med Supabase, Stripe, OpenWeather, Plant.id (se "Hvem vi deler data med")
-// 4) Sett opp privacy@soppjakt.no før lansering
+// 4) Sett opp privacy@mycelet.no før lansering
 
 const LAST_UPDATED = '4. mai 2026';
 
@@ -23,7 +23,7 @@ export default function PersonvernPage() {
         <div>
           <h1 className="text-xl font-semibold">Personvernerklæring</h1>
           <p className="text-sm text-gray-700">
-            Sist oppdatert: {LAST_UPDATED}. Denne erklæringen forklarer hvordan SoppJakt behandler personopplysningene dine.
+            Sist oppdatert: {LAST_UPDATED}. Denne erklæringen forklarer hvordan Mycelet behandler personopplysningene dine.
           </p>
         </div>
 
@@ -53,8 +53,8 @@ export default function PersonvernPage() {
             <li>Adresse: [FYLL INN]</li>
             <li>
               Kontakt for personvern:{' '}
-              <a href="mailto:privacy@soppjakt.no" className="font-medium text-forest-700 underline">
-                privacy@soppjakt.no
+              <a href="mailto:privacy@mycelet.no" className="font-medium text-forest-700 underline">
+                privacy@mycelet.no
               </a>
             </li>
           </ul>
@@ -65,7 +65,7 @@ export default function PersonvernPage() {
           <h2 className="flex items-center gap-2 text-lg font-semibold">
             <Database className="h-5 w-5 text-forest-700" /> 2. Hvilke opplysninger vi samler inn
           </h2>
-          <p className="text-sm text-gray-700">Når du bruker SoppJakt behandler vi:</p>
+          <p className="text-sm text-gray-700">Når du bruker Mycelet behandler vi:</p>
           <dl className="space-y-2 text-sm text-gray-700">
             <div>
               <dt className="font-medium text-gray-900">Konto-opplysninger</dt>
@@ -254,8 +254,8 @@ export default function PersonvernPage() {
               <p className="font-medium">Begrensning og innsigelse (Art. 18, 21)</p>
               <p>
                 Kontakt{' '}
-                <a href="mailto:privacy@soppjakt.no" className="font-medium underline">
-                  privacy@soppjakt.no
+                <a href="mailto:privacy@mycelet.no" className="font-medium underline">
+                  privacy@mycelet.no
                 </a>{' '}
                 hvis du vil begrense hvordan vi behandler dataene dine, eller motsette deg behandlingen.
               </p>
@@ -284,7 +284,7 @@ export default function PersonvernPage() {
           <h2 className="flex items-center gap-2 text-lg font-semibold">
             <Cookie className="h-5 w-5 text-forest-700" /> 8. Informasjonskapsler (cookies)
           </h2>
-          <p className="text-sm text-gray-700">SoppJakt bruker kun strengt nødvendige cookies:</p>
+          <p className="text-sm text-gray-700">Mycelet bruker kun strengt nødvendige cookies:</p>
           <ul className="list-disc space-y-1 pl-5 text-sm text-gray-700">
             <li>
               <span className="font-medium">Innloggings-sesjon (Supabase):</span> husker at du er logget inn slik at du ikke
@@ -339,8 +339,8 @@ export default function PersonvernPage() {
           </h2>
           <p className="text-sm text-forest-900">
             Spørsmål om personvern? Send e-post til{' '}
-            <a href="mailto:privacy@soppjakt.no" className="font-medium underline">
-              privacy@soppjakt.no
+            <a href="mailto:privacy@mycelet.no" className="font-medium underline">
+              privacy@mycelet.no
             </a>
             .
           </p>

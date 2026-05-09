@@ -11,6 +11,15 @@ function getTierLabel(tier: 'free' | 'premium' | 'season_pass') {
   return 'Gratis';
 }
 
+function MushroomMark({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden="true">
+      <path d="M12 3C7.03 3 3 6.58 3 11c0 .55.45 1 1 1h16c.55 0 1-.45 1-1 0-4.42-4.03-8-9-8z" />
+      <path d="M9.5 13v6a2 2 0 002 2h1a2 2 0 002-2v-6h-5z" />
+    </svg>
+  );
+}
+
 export function Header() {
   const { user, loading } = useAuth();
   const billingQuery = useBillingStatus(Boolean(user));
@@ -19,8 +28,9 @@ export function Header() {
   return (
     <header className="sticky top-0 z-40 border-b border-gray-200 bg-forest-900 text-white">
       <div className="mx-auto flex h-14 max-w-screen-md items-center justify-between px-4">
-        <Link href="/" className="text-lg font-semibold tracking-tight">
-          SoppJakt
+        <Link href="/" className="flex items-center gap-2 text-lg font-semibold tracking-tight">
+          <MushroomMark className="h-5 w-5 text-forest-100" />
+          Mycelet
         </Link>
         <div className="flex items-center gap-2">
           {!loading && user ? (

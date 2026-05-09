@@ -7,7 +7,7 @@ import { Cookie, X } from 'lucide-react';
 /**
  * Bottom-pinned informational notice about cookies.
  *
- * SoppJakt only uses strictly-necessary cookies (Supabase auth session,
+ * Mycelet only uses strictly-necessary cookies (Supabase auth session,
  * Stripe checkout). Per ePrivacy + GDPR, strictly-necessary cookies do not
  * require opt-in consent — but users still have a right to be informed.
  * This is a one-time notice, not a consent dialog. If we ever add analytics
@@ -17,7 +17,7 @@ import { Cookie, X } from 'lucide-react';
  * of a "we use cookies" cookie). The localStorage key is namespaced so
  * unrelated entries don't collide.
  */
-const STORAGE_KEY = 'soppjakt:cookie-notice-dismissed-v1';
+const STORAGE_KEY = 'mycelet:cookie-notice-dismissed-v1';
 
 export function CookieNotice() {
   // Default to true so we don't flash the banner before reading localStorage.
@@ -63,7 +63,7 @@ export function CookieNotice() {
             Vi bruker kun nødvendige informasjonskapsler
           </p>
           <p>
-            SoppJakt setter cookies for innlogging og betaling. Vi har ingen analyse-, sporings- eller markedsførings-cookies.{' '}
+            Mycelet setter cookies for innlogging og betaling. Vi har ingen analyse-, sporings- eller markedsførings-cookies.{' '}
             <Link href="/personvern" className="font-medium text-forest-700 underline">
               Les personvernerklæringen
             </Link>
