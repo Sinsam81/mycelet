@@ -14,16 +14,16 @@ const labels: Record<Edibility, string> = {
 };
 
 const classes: Record<Edibility, string> = {
-  edible: 'bg-emerald-100 text-emerald-800 border-emerald-200',
-  conditionally_edible: 'bg-amber-100 text-amber-800 border-amber-200',
-  inedible: 'bg-orange-100 text-orange-800 border-orange-200',
-  toxic: 'bg-red-100 text-red-800 border-red-200',
-  deadly: 'bg-red-900 text-white border-red-950'
+  edible: 'bg-emerald-600 text-white',
+  conditionally_edible: 'bg-amber-500 text-white',
+  inedible: 'bg-orange-500 text-white',
+  toxic: 'bg-red-600 text-white',
+  deadly: 'bg-red-900 text-white'
 };
 
 export function EdibilityBadge({ edibility }: EdibilityBadgeProps) {
   return (
-    <span className={cn('inline-flex rounded-full border px-2 py-1 text-xs font-semibold', classes[edibility])}>
+    <span className={cn('inline-flex rounded-full px-2.5 py-1 text-xs font-semibold shadow-sm', classes[edibility])}>
       {labels[edibility]}
     </span>
   );
