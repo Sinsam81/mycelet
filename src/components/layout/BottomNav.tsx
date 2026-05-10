@@ -2,12 +2,12 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Camera, Calendar, Home, Map, MessageSquare } from 'lucide-react';
+import { Calendar, Home, Library, Map, MessageSquare } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 
 const items = [
   { href: '/', label: 'Hjem', icon: Home },
-  { href: '/identify', label: 'Identifiser', icon: Camera },
+  { href: '/species', label: 'Bibliotek', icon: Library },
   { href: '/map', label: 'Kart', icon: Map },
   { href: '/calendar', label: 'Kalender', icon: Calendar },
   { href: '/forum', label: 'Forum', icon: MessageSquare }
