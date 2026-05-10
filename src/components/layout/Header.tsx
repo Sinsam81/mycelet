@@ -14,8 +14,8 @@ function getTierLabel(tier: 'free' | 'premium' | 'season_pass') {
 function MushroomMark({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden="true">
-      <path d="M12 3C7.03 3 3 6.58 3 11c0 .55.45 1 1 1h16c.55 0 1-.45 1-1 0-4.42-4.03-8-9-8z" />
-      <path d="M9.5 13v6a2 2 0 002 2h1a2 2 0 002-2v-6h-5z" />
+      <path d="M12 3a9 8 0 0 0-9 8h18a9 8 0 0 0-9-8z" />
+      <path d="M9 11v8a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2v-8z" />
     </svg>
   );
 }
