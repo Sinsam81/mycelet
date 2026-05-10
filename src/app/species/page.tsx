@@ -34,10 +34,18 @@ export default function SpeciesPage() {
 
   const { data, isLoading, error } = useSpecies(filters);
 
+  const count = data?.length ?? 0;
+
   return (
-    <PageWrapper>
-      <section className="space-y-4">
-        <h1 className="text-xl font-semibold">Soppdatabase</h1>
+    <PageWrapper wide>
+      <section className="space-y-5">
+        <header className="space-y-1">
+          <p className="text-xs font-medium uppercase tracking-widest text-forest-700">Bibliotek</p>
+          <h1 className="font-serif text-3xl font-bold text-forest-900">Norske og svenske sopper</h1>
+          {!isLoading && count > 0 ? (
+            <p className="text-sm text-gray-700">{count} arter — søk, filtrer, lær.</p>
+          ) : null}
+        </header>
 
         <SpeciesSearch value={query} onChange={setQuery} />
 
@@ -76,13 +84,13 @@ export default function SpeciesPage() {
         {isLoading ? <p className="text-sm text-gray-700">Laster arter...</p> : null}
         {error ? <p className="text-sm text-red-600">Kunne ikke hente arter.</p> : null}
 
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
           {(data ?? []).map((species) => (
             <SpeciesCard key={species.id} species={species} imageUrl={species.primary_image_url} />
           ))}
         </div>
 
-        {!isLoading && (data?.length ?? 0) === 0 ? (
+        {!isLoading && count === 0 ? (
           <p className="text-sm text-gray-700">Ingen arter matcher filtrene dine.</p>
         ) : null}
       </section>
