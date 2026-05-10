@@ -2,17 +2,17 @@
  * Resend e-mail helper for retention-policy notifications.
  *
  * Resend was chosen over Postmark/SendGrid for three reasons:
- *   - 3000 emails/month free tier (well above SoppJakt's beta needs)
+ *   - 3000 emails/month free tier (well above Mycelet's beta needs)
  *   - REST-only API works seamlessly from Deno without npm: imports
  *   - Setup is just an API key + a verified domain, no SDK quirks
  *
  * Setup checklist (Sindre):
  *   1. Sign up at https://resend.com (free)
- *   2. Verify domain soppjakt.no with the DNS records Resend provides
+ *   2. Verify domain mycelet.no with the DNS records Resend provides
  *      (SPF + DKIM + return-path). DNS lives at the registrar.
  *   3. Generate an API key in the Resend dashboard.
  *   4. supabase secrets set RESEND_API_KEY=re_...
- *   5. supabase secrets set RESEND_FROM_EMAIL=noreply@soppjakt.no
+ *   5. supabase secrets set RESEND_FROM_EMAIL=noreply@mycelet.no
  *      (must match your verified domain)
  *
  * If RESEND_API_KEY is unset, sendEmail returns { ok: false } and the
@@ -57,7 +57,7 @@ export async function sendEmail(args: SendEmailArgs): Promise<SendEmailResult> {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        from: `SoppJakt <${fromEmail}>`,
+        from: `Mycelet <${fromEmail}>`,
         to: [args.to],
         subject: args.subject,
         html: args.html,
@@ -103,8 +103,8 @@ export function buildInactiveWarningEmail(args: {
   const html = `<!doctype html>
 <html lang="nb">
   <body style="font-family: -apple-system, system-ui, sans-serif; color: #1f2937; max-width: 560px; margin: 24px auto; padding: 0 16px;">
-    <h1 style="font-size: 18px; font-weight: 600; color: #1A3409;">Vi savner deg på SoppJakt 🍄</h1>
-    <p>Du har ikke logget inn på SoppJakt på over 3 år. For å holde brukerdata under kontroll og oppfylle norsk personvern-lovgivning, sletter vi automatisk inaktive kontoer.</p>
+    <h1 style="font-size: 18px; font-weight: 600; color: #1A3409;">Vi savner deg på Mycelet 🍄</h1>
+    <p>Du har ikke logget inn på Mycelet på over 3 år. For å holde brukerdata under kontroll og oppfylle norsk personvern-lovgivning, sletter vi automatisk inaktive kontoer.</p>
     <p style="background: #fef3c7; padding: 12px; border-radius: 8px; border: 1px solid #fbbf24;">
       <strong>Kontoen din er planlagt slettet ${formattedDate}</strong> (${daysRemaining} dager igjen).
     </p>
@@ -118,11 +118,11 @@ export function buildInactiveWarningEmail(args: {
     <p style="font-size: 12px; color: #6b7280;">
       Hvis du ikke ønsker å beholde kontoen, kan du bare ignorere denne e-posten — vi sletter den automatisk på den planlagte datoen. Du kan også slette den selv umiddelbart fra profil-siden.
     </p>
-    <p style="font-size: 12px; color: #6b7280;">SoppJakt — sopp-prediksjon for Norge og Sverige</p>
+    <p style="font-size: 12px; color: #6b7280;">Mycelet — sopp-prediksjon for Norge og Sverige</p>
   </body>
 </html>`;
 
-  const text = `Vi savner deg på SoppJakt!
+  const text = `Vi savner deg på Mycelet!
 
 Du har ikke logget inn på over 3 år. Kontoen din er planlagt slettet ${formattedDate} (${daysRemaining} dager igjen).
 

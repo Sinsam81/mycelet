@@ -62,7 +62,7 @@ export function AccountDataActions() {
       // the public homepage, not a stale logged-in view.
       window.location.href = '/';
     } catch {
-      setErrorMsg('Nettverksfeil — prøv igjen, eller kontakt support@soppjakt.no');
+      setErrorMsg('Nettverksfeil — prøv igjen, eller kontakt support@mycelet.no');
       setDeleting(false);
     }
   }

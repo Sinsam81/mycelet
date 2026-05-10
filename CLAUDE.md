@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-SoppJakt — a Norwegian (and Swedish) mushroom-foraging app. UI strings, docs, and commit messages are in Norwegian. Code identifiers and CLAUDE-facing notes are in English.
+Mycelet (rebranded from SoppJakt 2026-05-09) — a Norwegian (and Swedish) mushroom-foraging app. UI strings, docs, and commit messages are in Norwegian. Code identifiers and CLAUDE-facing notes are in English.
 
 Stack: Next.js 16 (App Router, Turbopack) + React 19 + TypeScript + Tailwind + Supabase (PostGIS) + Stripe + Leaflet 5. State via Zustand and TanStack Query. Tests via Vitest.
 

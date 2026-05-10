@@ -22,9 +22,9 @@ export interface CacheAreaResult {
   failed: number;
 }
 
-const STORAGE_KEY = 'soppjakt.offline-areas.v1';
+const STORAGE_KEY = 'mycelet.offline-areas.v1';
 const TILE_TEMPLATE = 'https://cache.kartverket.no/v1/wmts/1.0.0/topo/default/webmercator/{z}/{y}/{x}.png';
-const CACHE_NAME = 'soppjakt-map-tiles-v1';
+const CACHE_NAME = 'mycelet-map-tiles-v1';
 const MAX_TILES_PER_SAVE = 550;
 
 function clamp(value: number, min: number, max: number) {

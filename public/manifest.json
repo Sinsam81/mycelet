@@ -1,6 +1,6 @@
 {
-  "name": "SoppJakt",
-  "short_name": "SoppJakt",
+  "name": "Mycelet",
+  "short_name": "Mycelet",
   "description": "Norsk soppapp med identifikasjon, kart, forum og prediksjon.",
   "start_url": "/",
   "scope": "/",

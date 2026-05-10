@@ -47,7 +47,7 @@ Stegene (gjort manuelt + verifisert av Claude før migrasjon):
 1. **Last ned SR16 GeoTIFF** fra NIBIO Kilden → "Skogressurser 16×16 m" → Last ned. Velg Sør- og Østlandet først (ca 4 GB) — dekker det meste av brukermassen.
 2. **Konverter til Postgres med raster2pgsql**:
    ```bash
-   raster2pgsql -s 25833 -t 256x256 -I -C -M sr16.tif sr16.tiles | psql -d soppjakt
+   raster2pgsql -s 25833 -t 256x256 -I -C -M sr16.tif sr16.tiles | psql -d mycelet
    ```
    Bruker UTM Zone 33N (EPSG:25833) som er SR16 sin native projeksjon.
 3. **Migrasjon 011** (lages av Claude når SR16 er importert) lager:

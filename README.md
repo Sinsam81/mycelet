@@ -1,6 +1,6 @@
-# SoppJakt
+# Mycelet
 
-Teknisk grunnmur for SoppJakt (Next.js 14 + TypeScript + Tailwind + Supabase).
+Teknisk grunnmur for Mycelet (Next.js 16 + TypeScript + Tailwind + Supabase).
 
 ## Status
 - Sprint 0: grunnstruktur opprettet

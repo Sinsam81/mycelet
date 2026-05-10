@@ -48,6 +48,14 @@ function isInMonth(month: number, start: number, end: number) {
   return month >= start || month <= end;
 }
 
+function getSeasonHeadline(month: number, edibleCount: number) {
+  if (edibleCount === 0) return 'Få sopp i sesong nå';
+  if (month >= 4 && month <= 5) return 'Vårsoppene er kommet!';
+  if (month >= 6 && month <= 7) return 'Sommer i skogen';
+  if (month >= 8 && month <= 10) return 'Høysesong i skogen';
+  return 'Stille i skogen';
+}
+
 export default async function HomePage() {
   const supabase = createClient();
   const month = new Date().getMonth() + 1;
@@ -75,6 +83,23 @@ export default async function HomePage() {
   return (
     <PageWrapper>
       <section className="space-y-4">
+        <header className="pt-2 text-center">
+          <p className="text-xs font-medium uppercase tracking-widest text-forest-700">
+            {MONTH_NAMES[month - 1]} {new Date().getFullYear()}
+          </p>
+          <h1 className="mt-1 text-3xl font-bold text-forest-900">
+            {getSeasonHeadline(month, inSeasonEdible.length)}
+          </h1>
+          {inSeasonEdible.length > 0 ? (
+            <p className="mt-1 text-sm text-gray-700">
+              {inSeasonEdible.length} matsopp{inSeasonEdible.length === 1 ? '' : 'er'} i sesong
+              {dangerousInSeason.length > 0
+                ? ` · ${dangerousInSeason.length} giftig${dangerousInSeason.length === 1 ? '' : 'e'} å passe på`
+                : ''}
+            </p>
+          ) : null}
+        </header>
+
         <Link
           href="/identify"
           className="block rounded-xl bg-forest-800 p-5 text-white shadow-md transition hover:bg-forest-700"
@@ -82,7 +107,7 @@ export default async function HomePage() {
           <div className="flex items-center gap-3">
             <Camera className="h-5 w-5" />
             <div>
-              <h1 className="text-lg font-semibold">Identifiser sopp</h1>
+              <h2 className="text-lg font-semibold">Identifiser sopp</h2>
               <p className="text-sm text-white/90">Ta bilde eller søk i databasen</p>
             </div>
           </div>
@@ -103,7 +128,15 @@ export default async function HomePage() {
               Ingen av de registrerte matsoppene er i sesong i {MONTH_NAMES[month - 1]}. Se kalenderen for hva som kommer.
             </p>
           ) : (
-            <ul className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <ul
+              className={`grid grid-cols-2 gap-2 ${
+                inSeasonEdible.length === 3
+                  ? 'sm:grid-cols-3'
+                  : inSeasonEdible.length >= 4
+                    ? 'sm:grid-cols-4'
+                    : ''
+              }`}
+            >
               {inSeasonEdible.map((s) => (
                 <li key={s.id}>
                   <Link

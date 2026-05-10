@@ -56,7 +56,7 @@ function LoginForm() {
   return (
     <main className="mx-auto min-h-screen w-full max-w-screen-sm p-6">
       <div className="rounded-xl bg-white p-6 shadow-sm">
-        <h1 className="text-2xl font-semibold text-forest-900">Velkommen til SoppJakt</h1>
+        <h1 className="text-2xl font-semibold text-forest-900">Velkommen til Mycelet</h1>
         <p className="mt-2 text-sm text-gray-700">Logg inn for å lagre funn, poste i forumet og bruke kart fullt ut.</p>
 
         <form className="mt-6 space-y-4" onSubmit={handleSubmit}>

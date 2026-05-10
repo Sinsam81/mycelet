@@ -1,10 +1,10 @@
-# Logging i SoppJakt
+# Logging i Mycelet
 
 Sist oppdatert: 6. mai 2026.
 
 ## De fire typene logging
 
-SoppJakt har fire forskjellige logging-systemer som løser fire forskjellige problemer. Det er kritisk å forstå forskjellen — å bruke feil verktøy gir enten støy, GDPR-brudd, eller manglende sporbarhet når det betyr noe.
+Mycelet har fire forskjellige logging-systemer som løser fire forskjellige problemer. Det er kritisk å forstå forskjellen — å bruke feil verktøy gir enten støy, GDPR-brudd, eller manglende sporbarhet når det betyr noe.
 
 ### 1. Full logging (info / warn / error)
 

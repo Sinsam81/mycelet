@@ -13,12 +13,12 @@ interface SharePostButtonProps {
 
 function buildShareText(title: string, findingName?: string | null, zoneLabel?: string | null) {
   if (findingName && zoneLabel) {
-    return `Fant ${findingName} i ${zoneLabel} via SoppJakt.`;
+    return `Fant ${findingName} i ${zoneLabel} via Mycelet.`;
   }
   if (findingName) {
-    return `Fant ${findingName} via SoppJakt.`;
+    return `Fant ${findingName} via Mycelet.`;
   }
-  return `${title} via SoppJakt.`;
+  return `${title} via Mycelet.`;
 }
 
 export function SharePostButton({ postId, title, findingName, zoneLabel }: SharePostButtonProps) {
@@ -29,7 +29,7 @@ export function SharePostButton({ postId, title, findingName, zoneLabel }: Share
         ? `${window.location.origin}/forum/${postId}`
         : `/forum/${postId}`;
     return {
-      title: `SoppJakt: ${title}`,
+      title: `Mycelet: ${title}`,
       text: buildShareText(title, findingName, zoneLabel),
       url
     };

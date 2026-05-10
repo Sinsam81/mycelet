@@ -64,7 +64,7 @@ const securityHeaders = [
     key: 'X-Content-Type-Options',
     value: 'nosniff'
   },
-  // Prevent other sites from embedding SoppJakt in an <iframe> (clickjacking).
+  // Prevent other sites from embedding Mycelet in an <iframe> (clickjacking).
   // SAMEORIGIN allows our own pages to embed each other if needed later.
   {
     key: 'X-Frame-Options',

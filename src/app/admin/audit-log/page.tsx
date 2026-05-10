@@ -25,7 +25,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
  */
 
 export const metadata = {
-  title: 'Audit-log — SoppJakt admin',
+  title: 'Audit-log — Mycelet admin',
   description: 'Sporbare admin-handlinger og kontosletteinger.'
 };
 

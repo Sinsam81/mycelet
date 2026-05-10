@@ -1,4 +1,4 @@
-# SoppJakt — veikart
+# Mycelet — veikart
 
 > Sist oppdatert: 7. mai 2026
 > Eier: Sindre Øverås (`sindre.alstad@gmail.com`)
@@ -34,7 +34,7 @@ For andre planleggingsdokumenter, se [`docs/commercial-mvp-plan.md`](commercial-
 ### Før beta-launch (mai-juni 2026)
 
 - [ ] **Sett `SUPABASE_SERVICE_ROLE_KEY`** i Vercel produksjonsmiljø ✅ *allerede satt i lokal `.env.local`*
-- [ ] **Sett opp `privacy@soppjakt.no`** mailboks (Google Workspace eller lignende). Adressen er referert i `/personvern` og `/api/me/export`-respons.
+- [ ] **Sett opp `privacy@mycelet.no`** mailboks (Google Workspace eller lignende). Adressen er referert i `/personvern` og `/api/me/export`-respons.
 - [ ] **Send `/personvern` til norsk personvern-advokat** for gjennomgang. Fyll inn alle `[FYLL INN]`-felter først (juridisk navn, org-nummer, retensjonsperioder, Supabase-region).
 - [ ] **Signer DPA-er** i leverandør-dashboards:
   - [ ] Supabase
@@ -60,7 +60,7 @@ For andre planleggingsdokumenter, se [`docs/commercial-mvp-plan.md`](commercial-
 
 ## 🔬 Fase 2 prediksjonsmotoren (planen)
 
-Dette er det strategiske kjernearbeidet — det som gjør SoppJakt unik. Alt under er nytt fra plan-økten 6. mai 2026.
+Dette er det strategiske kjernearbeidet — det som gjør Mycelet unik. Alt under er nytt fra plan-økten 6. mai 2026.
 
 ### Hva vi har bygget grunnmur for
 
@@ -150,10 +150,10 @@ Frontend:
 
 ### Lanseringsstrategi (besluttet 7. mai)
 
-> **v1 = "soppjakt sannsynlighetskart (beta)" for fem arter:**
+> **v1 = "mycelet sannsynlighetskart (beta)" for fem arter:**
 > kantarell, steinsopp, traktkantarell, piggsopp, svart trompetsopp
 
-Ikke lansere helt uten prediksjon — det er det som gjør SoppJakt unik.
+Ikke lansere helt uten prediksjon — det er det som gjør Mycelet unik.
 Ikke lansere med 26 arter — du kan ikke kalibrere det godt.
 Lansere med **fem strategisk utvalgte arter med distinkte habitater og god treningsdata-dekning**:
 
