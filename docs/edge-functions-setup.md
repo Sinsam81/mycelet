@@ -10,7 +10,7 @@ Tre Edge Functions i `supabase/functions/` håndterer GDPR-retention. Dette doku
 | `purge-resolved-reports`          | Daglig 03:30 Europe/Oslo   | Sletter løste rapporter eldre enn 1 år                            |
 | `prune-billing-events`            | Daglig 04:00 Europe/Oslo   | Sletter Stripe webhook-events eldre enn 2 år                      |
 
-Alle tre kjører i Deno-runtime (ikke Node), ligger i Supabase (ikke Vercel), og krever **Service Role Key** for å invokeres.
+Alle tre kjører i Deno-runtime (ikke Node), ligger i Supabase (ikke Vercel), og krever **CRON_SECRET** (en tilfeldig hex-streng vi genererer selv) som bearer-token for å invokeres.
 
 ## Førstegangs-oppsett
 
@@ -91,27 +91,29 @@ supabase functions deploy purge-resolved-reports --no-verify-jwt
 supabase functions deploy prune-billing-events --no-verify-jwt
 ```
 
-`--no-verify-jwt` betyr at funksjonen ikke krever en gyldig user-JWT — vi bruker vår egen bearer-token-sjekk i `_shared/auth.ts` mot service-role-keyen. (Standard Supabase JWT-validering ville krevd at du sender en innlogget brukers token, som ikke gir mening for cron-jobber.)
+`--no-verify-jwt` betyr at funksjonen ikke krever en gyldig user-JWT — vi bruker vår egen bearer-token-sjekk i `_shared/auth.ts` mot CRON_SECRET. (Standard Supabase JWT-validering ville krevd at du sender en innlogget brukers token, som ikke gir mening for cron-jobber.)
 
 ### Steg 6 — Test at de virker
 
-I Terminal:
+I Terminal (fra prosjekt-mappen, der `.env.local` ligger):
 
 ```bash
-curl -X POST 'https://<din-prosjekt-ref>.supabase.co/functions/v1/purge-inactive-accounts' \
-  -H "Authorization: Bearer <din-service-role-key>"
+curl -X POST "https://<din-prosjekt-ref>.supabase.co/functions/v1/purge-inactive-accounts" \
+  -H "Authorization: Bearer $(grep '^CRON_SECRET=' .env.local | cut -d= -f2-)"
 ```
+
+`$(grep ...)` plukker CRON_SECRET-verdien rett ut av `.env.local`, så du slipper å lime den inn manuelt.
 
 Forventet svar:
 
 ```json
-{ "ok": true, "issuedWarnings": 0, "clearedWarnings": 0, "deletedAccounts": 0, "errors": [] }
+{"ok":true,"issuedWarnings":0,"emailsSent":0,"clearedWarnings":0,"deletedAccounts":0,"errors":[]}
 ```
 
-(Tallene er 0 fordi du nettopp har deployet og ingen brukere er 3 år inaktive enda.)
+(Tallene er 0 fordi du nettopp har deployet og ingen brukere er 3 år inaktive enda. `"errors":[]` er en tom liste — ingen feil, akkurat som vi vil ha det.)
 
-Hvis du får 401 — sjekk at bearer-tokenet er service-role-keyen, ikke anon-keyen.
-Hvis du får 500 med "SUPABASE_SERVICE_ROLE_KEY not configured" — secret-en er ikke satt; gå tilbake til steg 4.
+Hvis du får `{"error":"Unauthorized"}` (401) — CRON_SECRET i `.env.local` matcher ikke det som er satt i Supabase. Kjør `supabase secrets set CRON_SECRET=<verdien-fra-.env.local>` på nytt.
+Hvis du får `{"error":"CRON_SECRET not configured"}` (500) — secret-en er ikke satt på Supabase-siden; gå tilbake til steg 4.
 
 ### Steg 7 — Sett opp scheduling
 
@@ -129,7 +131,7 @@ SELECT cron.schedule(
     SELECT net.http_post(
       url := 'https://<din-prosjekt-ref>.supabase.co/functions/v1/purge-inactive-accounts',
       headers := jsonb_build_object(
-        'Authorization', 'Bearer <din-service-role-key>',
+        'Authorization', 'Bearer <CRON_SECRET-verdien-fra-.env.local>',
         'Content-Type', 'application/json'
       )
     );
@@ -143,7 +145,7 @@ SELECT cron.schedule(
     SELECT net.http_post(
       url := 'https://<din-prosjekt-ref>.supabase.co/functions/v1/purge-resolved-reports',
       headers := jsonb_build_object(
-        'Authorization', 'Bearer <din-service-role-key>',
+        'Authorization', 'Bearer <CRON_SECRET-verdien-fra-.env.local>',
         'Content-Type', 'application/json'
       )
     );
@@ -157,7 +159,7 @@ SELECT cron.schedule(
     SELECT net.http_post(
       url := 'https://<din-prosjekt-ref>.supabase.co/functions/v1/prune-billing-events',
       headers := jsonb_build_object(
-        'Authorization', 'Bearer <din-service-role-key>',
+        'Authorization', 'Bearer <CRON_SECRET-verdien-fra-.env.local>',
         'Content-Type', 'application/json'
       )
     );
@@ -173,7 +175,7 @@ SELECT cron.schedule(
 2. New cronjob:
    - URL: `https://<din-prosjekt-ref>.supabase.co/functions/v1/purge-inactive-accounts`
    - Method: POST
-   - Header: `Authorization: Bearer <din-service-role-key>`
+   - Header: `Authorization: Bearer <CRON_SECRET-verdien-fra-.env.local>`
    - Schedule: 03:00 daily (Europe/Oslo)
 3. Repeter for de to andre funksjonene.
 
