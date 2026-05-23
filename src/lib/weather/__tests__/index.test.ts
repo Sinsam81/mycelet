@@ -322,32 +322,32 @@ describe('fetchFrost (via Norway coords with key)', () => {
     };
   }
 
-  // Instant temp/humidity — latest reading (0 days ago) should win.
-  const INSTANT = [
-    frostItem('SN18700:0', 1, [
-      { elementId: 'air_temperature', value: 11 },
-      { elementId: 'relative_humidity', value: 80 }
-    ]),
-    frostItem('SN18700:0', 0, [
-      { elementId: 'air_temperature', value: 13 },
-      { elementId: 'relative_humidity', value: 82 }
-    ])
-  ];
-  // Daily aggregates over the window. 15d-ago point is outside the 14d window.
+  // Daily aggregates over the window — temp/humidity (means), rain, extremes.
+  // 15d-ago point is outside the 14d window. Latest day (1d ago) wins for
+  // "current" temp/humidity.
   const DAILY = [
     frostItem('SN18700:0', 15, [{ elementId: 'sum(precipitation_amount P1D)', value: 5 }]),
-    frostItem('SN18700:0', 10, [{ elementId: 'sum(precipitation_amount P1D)', value: 3 }]),
+    frostItem('SN18700:0', 10, [
+      { elementId: 'mean(air_temperature P1D)', value: 11 },
+      { elementId: 'sum(precipitation_amount P1D)', value: 3 }
+    ]),
     frostItem('SN18700:0', 6, [
+      { elementId: 'mean(air_temperature P1D)', value: 12 },
+      { elementId: 'mean(relative_humidity P1D)', value: 80 },
       { elementId: 'sum(precipitation_amount P1D)', value: 2 },
       { elementId: 'min(air_temperature P1D)', value: 5 },
       { elementId: 'max(air_temperature P1D)', value: 18 }
     ]),
     frostItem('SN18700:0', 2, [
+      { elementId: 'mean(air_temperature P1D)', value: 12 },
+      { elementId: 'mean(relative_humidity P1D)', value: 81 },
       { elementId: 'sum(precipitation_amount P1D)', value: 4 },
       { elementId: 'min(air_temperature P1D)', value: 7 },
       { elementId: 'max(air_temperature P1D)', value: 20 }
     ]),
     frostItem('SN18700:0', 1, [
+      { elementId: 'mean(air_temperature P1D)', value: 13 },
+      { elementId: 'mean(relative_humidity P1D)', value: 82 },
       { elementId: 'sum(precipitation_amount P1D)', value: 6 },
       { elementId: 'min(air_temperature P1D)', value: 9 },
       { elementId: 'max(air_temperature P1D)', value: 22 }
@@ -358,28 +358,30 @@ describe('fetchFrost (via Norway coords with key)', () => {
     return vi.fn(async (url: unknown, _init?: unknown) => {
       const u = String(url);
       if (u.includes('/sources/v0.jsonld')) return frostData([{ id: 'SN18700' }, { id: 'SN90450' }]);
-      if (u.includes('/observations') && u.includes('P1D')) return frostData(DAILY);
-      if (u.includes('/observations')) return frostData(INSTANT);
+      if (u.includes('/observations')) return frostData(DAILY);
       throw new Error(`Unmocked URL: ${u}`);
     });
   }
 
-  it('returns a met_frost summary aggregating Frost observations', async () => {
+  it('returns a met_frost summary from a single daily-aggregate query', async () => {
     const fetchSpy = frostFetch();
     vi.stubGlobal('fetch', fetchSpy);
 
     const result = await fetchWeatherSummary(OSLO);
     expect(result).not.toBeNull();
     expect(result?.source).toBe('met_frost');
-    expect(result?.temperatureC).toBe(13);
-    expect(result?.humidityPct).toBe(82);
+    expect(result?.temperatureC).toBe(13); // latest daily mean temp
+    expect(result?.humidityPct).toBe(82); // latest daily mean humidity
     expect(result?.rain3dMm).toBeCloseTo(10, 1); // 2d=4 + 1d=6
     expect(result?.rain7dMm).toBeCloseTo(12, 1); // + 6d=2
     expect(result?.rain14dMm).toBeCloseTo(15, 1); // + 10d=3 (15d excluded)
     expect(result?.minTemp7dC).toBe(5);
     expect(result?.maxTemp7dC).toBe(22);
-    // First call should be the nearest-station lookup
+    // First call is the nearest-station lookup
     expect(String(fetchSpy.mock.calls[0]?.[0])).toContain('/sources/v0.jsonld');
+    // Exactly one observations call (no separate instant query)
+    const obsCalls = fetchSpy.mock.calls.filter((c) => String(c[0]).includes('/observations'));
+    expect(obsCalls).toHaveLength(1);
   });
 
   it('sends HTTP Basic auth derived from the client id', async () => {
@@ -405,41 +407,36 @@ describe('fetchFrost (via Norway coords with key)', () => {
   });
 
   it('returns null when temperature data is missing', async () => {
+    // Daily query returns rain but no mean temp → no usable summary.
+    const dailyNoTemp = [
+      frostItem('SN18700:0', 1, [{ elementId: 'sum(precipitation_amount P1D)', value: 6 }])
+    ];
     const fetchSpy = vi.fn(async (url: unknown) => {
       const u = String(url);
       if (u.includes('/sources')) return frostData([{ id: 'SN18700' }]);
-      if (u.includes('P1D')) return frostData(DAILY);
-      return frostData([]); // instant: no temp/humidity
+      return frostData(dailyNoTemp);
     });
     vi.stubGlobal('fetch', fetchSpy);
     expect(await fetchWeatherSummary(OSLO)).toBeNull();
   });
 
-  it('falls back to daily mean temperature when no instant reading exists', async () => {
-    // Mirrors a precip-cluster point: instant query yields nothing (Frost 412),
-    // but a temperature station in the wider set reports daily means.
-    const dailyWithMean = [
+  it('defaults humidity to 0 when no humidity is reported', async () => {
+    const dailyNoHumidity = [
       frostItem('SN18700:0', 1, [
-        { elementId: 'mean(air_temperature P1D)', value: 9 },
+        { elementId: 'mean(air_temperature P1D)', value: 14 },
         { elementId: 'sum(precipitation_amount P1D)', value: 3 }
-      ]),
-      frostItem('SN18700:0', 0, [
-        { elementId: 'mean(air_temperature P1D)', value: 10 },
-        { elementId: 'sum(precipitation_amount P1D)', value: 1 }
       ])
     ];
     const fetchSpy = vi.fn(async (url: unknown) => {
       const u = String(url);
       if (u.includes('/sources')) return frostData([{ id: 'SN18700' }]);
-      if (u.includes('P1D')) return frostData(dailyWithMean);
-      return frostData([]); // instant: no data
+      return frostData(dailyNoHumidity);
     });
     vi.stubGlobal('fetch', fetchSpy);
 
     const result = await fetchWeatherSummary(OSLO);
-    expect(result?.source).toBe('met_frost');
-    expect(result?.temperatureC).toBe(10); // latest daily mean
-    expect(result?.humidityPct).toBe(0); // no instant humidity available
+    expect(result?.temperatureC).toBe(14);
+    expect(result?.humidityPct).toBe(0);
   });
 
   it('skips Frost entirely when the key is the placeholder', async () => {

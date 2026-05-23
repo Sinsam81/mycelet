@@ -53,6 +53,26 @@ export interface PredictionWeatherSnapshot {
   maxTemp7dC?: number | null;
 }
 
+/**
+ * Real forest properties at the queried point (NIBIO SR16 for Norway).
+ * Present on the computed_fallback path when forest data is available.
+ */
+export interface PredictionForest {
+  forestType: string;
+  productivity: number | null;
+  volumePerHa: number | null;
+  source: 'sr16' | 'fallback';
+}
+
+/**
+ * Per-species habitat-fit result: a multiplier in [0.2, 1.3] plus the
+ * Norwegian reasons (tree-species match, soil richness) shown in the UI.
+ */
+export interface PredictionHabitat {
+  score: number;
+  reasons: string[];
+}
+
 export interface PredictionResponse {
   source?: 'prediction_tiles' | 'computed_fallback';
   access?: 'free_limited' | 'premium_full';
@@ -90,4 +110,8 @@ export interface PredictionResponse {
   hotspots: PredictionHotspot[];
   /** Present when the request included ?speciesId. */
   species?: PredictionSpeciesSummary;
+  /** Real forest data at the point (computed_fallback path); null when unavailable. */
+  forest?: PredictionForest | null;
+  /** Per-species habitat fit; present when both species + forest data exist. */
+  habitat?: PredictionHabitat;
 }

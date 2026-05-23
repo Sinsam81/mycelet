@@ -60,14 +60,15 @@ export async function fetchWeatherSummary({ lat, lon }: WeatherFetchOptions): Pr
 
 const FROST_BASE = 'https://frost.met.no';
 
-// Frost daily-aggregate element IDs + the instantaneous ones we read for
-// "current" conditions. Daily precip is the strongest mushroom predictor.
-const FROST_INSTANT_ELEMENTS = 'air_temperature,relative_humidity';
-// Daily mean temp is the reliable temperature backbone: many stations near a
-// point are precip-only and report no instant temperature, but daily means are
-// widely available. Instant readings (above) are a best-effort freshness bonus.
+// One daily-aggregate query covers everything we need: mean temp, mean
+// humidity, accumulated rain (the strongest mushroom predictor), and temp
+// extremes. Daily granularity is right for multi-day mushroom conditions, and
+// the response stays small + cacheable — an earlier instant/hourly query ran
+// to several MB across 10 stations and exceeded Next's 2MB fetch-cache limit.
+// Daily means are also widely reported, where instant temp often isn't (the
+// nearest stations to a point are frequently precip-only).
 const FROST_DAILY_ELEMENTS =
-  'mean(air_temperature P1D),sum(precipitation_amount P1D),min(air_temperature P1D),max(air_temperature P1D)';
+  'mean(air_temperature P1D),mean(relative_humidity P1D),sum(precipitation_amount P1D),min(air_temperature P1D),max(air_temperature P1D)';
 
 interface FrostObservation {
   elementId?: string;
@@ -184,50 +185,33 @@ async function fetchFrost({ lat, lon }: WeatherFetchOptions): Promise<WeatherSum
 
   const sources = await frostNearestSources(lat, lon, auth);
   if (sources.length === 0) return null;
-  const sourceList = sources.join(',');
 
   const now = Date.now();
   const dayMs = 24 * 60 * 60 * 1000;
-  const to = new Date(now + dayMs); // pad +1d so today's readings are in range
+  // Single daily-aggregate query over 14 days. +1d pad so today is in range.
+  const daily = await frostGet(
+    '/observations/v0.jsonld',
+    {
+      sources: sources.join(','),
+      elements: FROST_DAILY_ELEMENTS,
+      referencetime: `${isoDate(new Date(now - 14 * dayMs))}/${isoDate(new Date(now + dayMs))}`
+    },
+    auth
+  );
+  if (!daily?.data) return null;
 
-  const [instant, daily] = await Promise.all([
-    // Instant temp + humidity over the last couple of days → "current".
-    frostGet(
-      '/observations/v0.jsonld',
-      {
-        sources: sourceList,
-        elements: FROST_INSTANT_ELEMENTS,
-        referencetime: `${isoDate(new Date(now - 2 * dayMs))}/${isoDate(to)}`
-      },
-      auth
-    ),
-    // Daily aggregates over 14 days → accumulated rain + temp extremes.
-    frostGet(
-      '/observations/v0.jsonld',
-      {
-        sources: sourceList,
-        elements: FROST_DAILY_ELEMENTS,
-        referencetime: `${isoDate(new Date(now - 14 * dayMs))}/${isoDate(to)}`
-      },
-      auth
-    )
-  ]);
+  const series = collectFrostSeries(daily.data);
 
-  const instantSeries = instant?.data ? collectFrostSeries(instant.data) : new Map<string, FrostPoint[]>();
-  const dailySeries = daily?.data ? collectFrostSeries(daily.data) : new Map<string, FrostPoint[]>();
-
-  // Prefer a fresh instant reading; fall back to the latest daily mean temp
-  // (the reliable backbone when the nearest stations are precip-only).
-  const instantTemp = latestValue(nearestSeries(instantSeries.get('air_temperature'), sources));
-  const dailyMeanTemp = latestValue(nearestSeries(dailySeries.get('mean(air_temperature P1D)'), sources));
-  const temperatureC = instantTemp ?? dailyMeanTemp;
+  // Each metric comes from the nearest station that actually reports it —
+  // temp from the nearest temp station, rain from the nearest precip station.
+  const temperatureC = latestValue(nearestSeries(series.get('mean(air_temperature P1D)'), sources));
   // Temperature is mandatory — without it there's no usable summary.
   if (temperatureC === null) return null;
 
-  const humidSeries = nearestSeries(instantSeries.get('relative_humidity'), sources);
-  const precipSeries = nearestSeries(dailySeries.get('sum(precipitation_amount P1D)'), sources);
-  const minSeries = nearestSeries(dailySeries.get('min(air_temperature P1D)'), sources);
-  const maxSeries = nearestSeries(dailySeries.get('max(air_temperature P1D)'), sources);
+  const humidSeries = nearestSeries(series.get('mean(relative_humidity P1D)'), sources);
+  const precipSeries = nearestSeries(series.get('sum(precipitation_amount P1D)'), sources);
+  const minSeries = nearestSeries(series.get('min(air_temperature P1D)'), sources);
+  const maxSeries = nearestSeries(series.get('max(air_temperature P1D)'), sources);
 
   return {
     source: 'met_frost',

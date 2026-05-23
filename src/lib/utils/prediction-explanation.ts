@@ -63,10 +63,27 @@ export interface ExplanationWeather {
   maxTemp7dC?: number | null;
 }
 
+/**
+ * Real forest data at the queried point (NIBIO SR16). When present, it
+ * supersedes the species' generic "preferred habitat" line with what's
+ * actually on the ground — and the server-computed habitat reasons.
+ */
+export interface ExplanationForest {
+  forestType: string;
+  productivity: number | null;
+  volumePerHa: number | null;
+  /** Habitat-fit multiplier [0.2, 1.3] from computeHabitatScore. */
+  habitatScore: number | null;
+  /** Server-built Norwegian reasons (tree-species match, soil richness). */
+  habitatReasons: string[];
+}
+
 export interface ExplanationInput {
   weather: ExplanationWeather;
   /** Optional: when set, explanation is species-specific. */
   species?: SpeciesExplanationContext;
+  /** Optional real forest data at the point (NIBIO). Supersedes generic habitat. */
+  forest?: ExplanationForest | null;
   /** Current month (1-12). Pass `new Date().getMonth() + 1`. */
   month: number;
 }
@@ -93,6 +110,26 @@ function monthName(month: number): string {
 function inMonth(month: number, start: number, end: number): boolean {
   if (start <= end) return month >= start && month <= end;
   return month >= start || month <= end;
+}
+
+const FOREST_TYPE_LABEL: Record<string, string> = {
+  gran: 'granskog',
+  furu: 'furuskog',
+  lauv: 'løvskog',
+  blandet: 'blandingsskog',
+  apent: 'åpent landskap'
+};
+
+function forestLabel(forestType: string): string {
+  return FOREST_TYPE_LABEL[forestType] ?? 'skog';
+}
+
+/** Map the habitat-fit multiplier to a color level for the UI. */
+function habitatLevel(score: number | null): ExplanationLevel {
+  if (score == null) return 'neutral';
+  if (score >= 0.85) return 'positive';
+  if (score <= 0.45) return 'negative';
+  return 'neutral';
 }
 
 function pickRain(weather: ExplanationInput['weather']): { mm: number; window: string } {
@@ -240,8 +277,23 @@ export function buildExplanation(input: ExplanationInput): Explanation[] {
     lines.push({ level: 'negative', category: 'humidity', text: `${Math.round(hum)}% luftfuktighet — tørt` });
   }
 
-  // ── Habitat (when known) ────────────────────────────────────────────
-  if (input.species?.habitat && input.species.habitat.length > 0) {
+  // ── Habitat ──────────────────────────────────────────────────────────
+  // Prefer the REAL forest at the point (NIBIO) over the species' generic
+  // preferred-habitat tags. The server already computed the match reasons;
+  // we tag them by the overall habitat fit so the UI can color-code.
+  if (input.forest) {
+    const f = input.forest;
+    const level = habitatLevel(f.habitatScore);
+    const bonitetPart = f.productivity != null ? `, bonitet ${f.productivity}` : '';
+    lines.push({
+      level: 'neutral',
+      category: 'habitat',
+      text: `Skog her (NIBIO): ${forestLabel(f.forestType)}${bonitetPart}`
+    });
+    for (const reason of f.habitatReasons) {
+      lines.push({ level, category: 'habitat', text: reason });
+    }
+  } else if (input.species?.habitat && input.species.habitat.length > 0) {
     lines.push({
       level: 'neutral',
       category: 'habitat',
