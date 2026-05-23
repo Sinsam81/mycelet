@@ -18,15 +18,22 @@
  * Tree species classes — matches the values used in
  * mushroom_species.mycorrhizal_partners (lower-case Norwegian).
  *
- * 'blandet' covers mixed stands (the SR16 raster has an explicit mixed
- * class). 'apent' covers non-forest cells (åpent landskap, myr, vann)
- * which still get returned so the prediction engine can score them low
- * rather than crashing on null. 'ukjent' is the explicit unknown — used
- * when SR16 returns no class for a cell.
+ * The SR16 WMS treslag raster only distinguishes three forest classes:
+ * 'gran' (1), 'furu' (2) and 'lauv' (3 — all deciduous lumped together).
+ * The granular deciduous types ('bjork', 'eik', 'bok', 'osp', 'or') exist
+ * because species' mycorrhizal_partners name specific trees; habitat
+ * scoring maps the coarse 'lauv' onto them as a deciduous-group match.
+ *
+ * 'blandet' (mixed) is not produced by SR16 treslag but kept for a future
+ * AR5/landcover source. 'apent' covers non-forest cells; note SR16 returns
+ * nodata (-9999) for water/urban/open land, which getForestProperties maps
+ * to null (not 'apent') so callers fall back to the climate signal.
+ * 'ukjent' is the explicit unknown for an unrecognized class code.
  */
 export type ForestType =
   | 'gran'
   | 'furu'
+  | 'lauv'
   | 'bjork'
   | 'eik'
   | 'bok'

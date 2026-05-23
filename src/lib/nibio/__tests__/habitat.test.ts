@@ -14,6 +14,20 @@ const PIGGSOPP_PREFS: SpeciesHabitatPreferences = {
   preferredAgeYearsMin: 50
 };
 
+// Svart trompetsopp — likes deciduous (bøk/eik) forest.
+const TROMPETSOPP_PREFS: SpeciesHabitatPreferences = {
+  preferredPartners: ['bok', 'eik'],
+  habitat: ['lauvskog', 'fuktig'],
+  preferredAgeYearsMin: 40
+};
+
+// A hypothetical conifer-only species — used to check the lauv penalty path.
+const CONIFER_ONLY_PREFS: SpeciesHabitatPreferences = {
+  preferredPartners: ['gran', 'furu'],
+  habitat: ['barskog'],
+  preferredAgeYearsMin: 40
+};
+
 function forest(overrides: Partial<ForestProperties> = {}): ForestProperties {
   return {
     forestType: 'gran',
@@ -64,6 +78,45 @@ describe('computeHabitatScore', () => {
     );
     // Base 0.5 + 0.2 (blandet) + 0.15 (age window) = 0.85
     expect(result.score).toBeCloseTo(0.85, 2);
+  });
+
+  it('matches coarse SR16 lauv to a deciduous-loving species', () => {
+    const result = computeHabitatScore(
+      forest({ forestType: 'lauv', ageYears: null }),
+      TROMPETSOPP_PREFS
+    );
+    // Base 0.5 + 0.3 (lauv deciduous-group match) = 0.8
+    expect(result.score).toBeCloseTo(0.8, 2);
+    expect(result.reasons.some((r) => r.toLowerCase().includes('lauvskog'))).toBe(true);
+  });
+
+  it('adds the age bonus on top of a lauv deciduous match', () => {
+    const result = computeHabitatScore(
+      forest({ forestType: 'lauv', ageYears: 60 }),
+      TROMPETSOPP_PREFS
+    );
+    // Base 0.5 + 0.3 (lauv) + 0.15 (age window) = 0.95
+    expect(result.score).toBeCloseTo(0.95, 2);
+  });
+
+  it('matches a birch-only species (normalized) in lauv forest', () => {
+    const birchOnly: SpeciesHabitatPreferences = {
+      preferredPartners: ['bjork'],
+      habitat: ['lauvskog']
+    };
+    const result = computeHabitatScore(forest({ forestType: 'lauv', ageYears: null }), birchOnly);
+    // Base 0.5 + 0.3 (lauv deciduous-group match) = 0.8
+    expect(result.score).toBeCloseTo(0.8, 2);
+  });
+
+  it('penalizes a conifer-only species in lauv forest', () => {
+    const result = computeHabitatScore(
+      forest({ forestType: 'lauv', ageYears: null }),
+      CONIFER_ONLY_PREFS
+    );
+    // Base 0.5 - 0.15 (lauv is not a favorite) = 0.35
+    expect(result.score).toBeCloseTo(0.35, 2);
+    expect(result.reasons.some((r) => r.toLowerCase().includes('favoritt'))).toBe(true);
   });
 
   it('rewards high productivity for kalkrik-loving species (piggsopp)', () => {

@@ -195,6 +195,63 @@ describe('buildExplanation — habitat + mycorrhizal lines', () => {
   });
 });
 
+describe('buildExplanation — real forest data (NIBIO)', () => {
+  it('surfaces actual forest type + bonitet and supersedes the generic habitat line', () => {
+    const lines = buildExplanation({
+      species: KANTARELL,
+      month: 8,
+      weather: PERFECT_KANTARELL_WEATHER,
+      forest: {
+        forestType: 'furu',
+        productivity: 8,
+        volumePerHa: 65,
+        habitatScore: 0.9,
+        habitatReasons: ['Treslag (furu) matcher artens partnere.']
+      }
+    });
+    const habitatLines = lines.filter((l) => l.category === 'habitat');
+    expect(habitatLines.some((l) => l.text.includes('furuskog'))).toBe(true);
+    expect(habitatLines.some((l) => l.text.includes('bonitet 8'))).toBe(true);
+    expect(habitatLines.some((l) => l.text.includes('matcher artens partnere'))).toBe(true);
+    // Generic "Foretrukket habitat" must NOT appear when real forest is present.
+    expect(habitatLines.some((l) => l.text.includes('Foretrukket habitat'))).toBe(false);
+  });
+
+  it('tags a strong habitat match as positive', () => {
+    const lines = buildExplanation({
+      species: KANTARELL,
+      month: 8,
+      weather: PERFECT_KANTARELL_WEATHER,
+      forest: {
+        forestType: 'furu',
+        productivity: 8,
+        volumePerHa: 65,
+        habitatScore: 0.9,
+        habitatReasons: ['Treslag (furu) matcher artens partnere.']
+      }
+    });
+    const reason = lines.find((l) => l.category === 'habitat' && l.text.includes('matcher'));
+    expect(reason?.level).toBe('positive');
+  });
+
+  it('tags a poor habitat match as negative', () => {
+    const lines = buildExplanation({
+      species: KANTARELL,
+      month: 8,
+      weather: PERFECT_KANTARELL_WEATHER,
+      forest: {
+        forestType: 'apent',
+        productivity: null,
+        volumePerHa: null,
+        habitatScore: 0.3,
+        habitatReasons: ['Åpent landskap — sopp-arten foretrekker skog.']
+      }
+    });
+    const reason = lines.find((l) => l.category === 'habitat' && l.text.includes('Åpent'));
+    expect(reason?.level).toBe('negative');
+  });
+});
+
 describe('buildExplanation — output ordering', () => {
   it('emits season as the first line (highest signal)', () => {
     const lines = buildExplanation({

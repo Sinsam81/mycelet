@@ -15,6 +15,26 @@
 import type { ForestProperties, HabitatScore, SpeciesHabitatPreferences } from './types';
 
 /**
+ * Deciduous tree species (ASCII-normalized — see normalizeTreeName in
+ * src/lib/forest). SR16 collapses all of these into a single coarse 'lauv'
+ * class, so a species that names any of them as a partner counts as a
+ * (partial) match when the cell is 'lauv'.
+ */
+const DECIDUOUS_PARTNERS: string[] = [
+  'bjork',
+  'eik',
+  'bok',
+  'osp',
+  'or',
+  'alm',
+  'ask',
+  'selje',
+  'rogn',
+  'hassel',
+  'lind'
+];
+
+/**
  * Compute the habitat-fit multiplier for a given (forest, species) pair.
  *
  * Returns a neutral score with a single "no data" reason when forest is
@@ -42,6 +62,15 @@ export function computeHabitatScore(
   if (preferences.preferredPartners.includes(forest.forestType)) {
     score += 0.4;
     reasons.push(`Treslag (${forest.forestType}) matcher artens partnere.`);
+  } else if (
+    forest.forestType === 'lauv' &&
+    preferences.preferredPartners.some((partner) => DECIDUOUS_PARTNERS.includes(partner))
+  ) {
+    // SR16 lumps all deciduous into one 'lauv' class — we know it's
+    // deciduous but not the exact tree. Reward species that like any
+    // deciduous partner, a notch below an exact-species match.
+    score += 0.3;
+    reasons.push('Lauvskog matcher artens lauvtre-partnere (eksakt treslag ukjent i SR16).');
   } else if (forest.forestType === 'blandet') {
     score += 0.2;
     reasons.push('Blandingsskog — sannsynlig overlapp med foretrukket treslag.');

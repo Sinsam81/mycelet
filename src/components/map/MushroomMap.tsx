@@ -469,6 +469,15 @@ export function MushroomMap() {
         maxTemp7dC: data.weather.maxTemp7dC ?? null
       },
       species: data.species,
+      forest: data.forest
+        ? {
+            forestType: data.forest.forestType,
+            productivity: data.forest.productivity,
+            volumePerHa: data.forest.volumePerHa,
+            habitatScore: data.habitat?.score ?? null,
+            habitatReasons: data.habitat?.reasons ?? []
+          }
+        : null,
       month: new Date().getMonth() + 1
     });
   }, [prediction.data]);

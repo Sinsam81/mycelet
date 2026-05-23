@@ -242,3 +242,26 @@ describe('resolveSpeciesPreferences — species-level overrides', () => {
     expect(traktScore).toBeGreaterThan(svartScore);
   });
 });
+
+describe('Morchella (morkel) — vårart', () => {
+  const VANLIG_MORKEL: SpeciesContext = {
+    latinName: 'Morchella esculenta',
+    genus: 'Morchella',
+    seasonStart: 4,
+    seasonEnd: 6,
+    peakSeasonStart: 4,
+    peakSeasonEnd: 5
+  };
+  const COOL_SPRING = { temperature: 12, humidity: 75, rain3dMm: 6 };
+
+  it('resolves to the dedicated Morchella genus profile', () => {
+    expect(resolveGenusPreferences('Morchella')).toBe(GENUS_PREFERENCES.Morchella);
+  });
+
+  it('scores in season in May but collapses out of season in August', () => {
+    const may = computeSpeciesAdjustment(VANLIG_MORKEL, COOL_SPRING, 5);
+    const august = computeSpeciesAdjustment(VANLIG_MORKEL, COOL_SPRING, 8);
+    expect(may).toBeGreaterThan(0.5); // in season (peak) + decent spring weather
+    expect(august).toBeCloseTo(0.05, 2); // autumn — morel is done
+  });
+});

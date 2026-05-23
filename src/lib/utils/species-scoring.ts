@@ -230,6 +230,19 @@ export const GENUS_PREFERENCES: Readonly<Record<string, GenusPreferences>> = {
     rainWeight: 0.5,
     humidityWeight: 0.85,
     description: 'Østerssopp på død ved, tåler kjølig, høy fukt-tolerant.'
+  },
+  // Morkel — vårart (NB: ikke klassisk mykorrhiza). Kjølig-tolerant, kommer
+  // etter snøsmelting. Vanlig morkel i fuktig næringsrik løvskog/flommark;
+  // spiss morkel i barskog og brannfelt.
+  Morchella: {
+    tempCMin: 8,
+    tempCMax: 16,
+    tempCFloor: 3,
+    tempCCeil: 22,
+    rainOptMm: 5,
+    rainWeight: 0.6,
+    humidityWeight: 0.6,
+    description: 'Morkel er en vårart (apr-jun), kjølig-tolerant. Løvskog/flommark (vanlig) eller barskog/brannfelt (spiss).'
   }
 };
 

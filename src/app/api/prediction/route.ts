@@ -4,16 +4,10 @@ import { getBillingCapabilities, getUserBillingSubscription } from '@/lib/billin
 import { fetchWeatherSummary } from '@/lib/weather';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { getClientKey, rateLimitResponse } from '@/lib/rate-limit/route';
-import {
-  computeAdvancedEnvironmentScore,
-  computeAdvancedFactors,
-  computeEnvironmentScore,
-  computeHistoricalScore,
-  computeSeasonalScore,
-  computeTotalScore,
-  scoreToCondition
-} from '@/lib/utils/prediction';
-import { computeSpeciesAdjustment, type SpeciesContext } from '@/lib/utils/species-scoring';
+import { computeSeasonalScore, scoreToCondition } from '@/lib/utils/prediction';
+import type { SpeciesContext } from '@/lib/utils/species-scoring';
+import { getForestProperties, buildSpeciesHabitatPreferences } from '@/lib/forest';
+import { computeCellPrediction } from '@/lib/prediction/cell-score';
 import { createRequestLogger } from '@/lib/log/request';
 
 interface FindingRow {
@@ -34,8 +28,13 @@ interface PredictionTileRow {
     vegetation?: number;
     moisture?: number;
     terrain?: number;
+    soil?: number;
+    weatherTrend?: number;
     history?: number;
-    [key: string]: number | undefined;
+    environment?: number;
+    seasonal?: number;
+    forest?: { forestType: string; productivity: number | null; volumePerHa: number | null; source: string } | null;
+    habitat?: { score: number; reasons: string[] } | null;
   } | null;
 }
 
@@ -181,6 +180,11 @@ export async function GET(request: NextRequest) {
       const weightSum = weightedTotals.weightSum || 1;
       const score = Math.round(weightedTotals.scoreSum / weightSum);
       const condition = scoreToCondition(score);
+      // Representative forest/habitat for the explanation: the highest-scoring
+      // tile that actually has forest data (some cells are water/urban → null).
+      const forestTile = tiles
+        .filter((t) => t.components?.forest)
+        .reduce<PredictionTileRow | null>((best, t) => (!best || t.score > best.score ? t : best), null);
       const seasonal = computeSeasonalScore(new Date().getMonth() + 1);
       const vegetation = Math.round(weightedTotals.vegetationSum / weightSum);
       const moisture = Math.round(weightedTotals.moistureSum / weightSum);
@@ -266,6 +270,8 @@ export async function GET(request: NextRequest) {
           recent30d: 0,
           recent365d: 0
         },
+        forest: forestTile?.components?.forest ?? null,
+        habitat: forestTile?.components?.habitat ?? undefined,
         hotspots,
         species: speciesSummary ?? undefined
       });
@@ -282,24 +288,23 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const findingsRes = await supabase.rpc('get_findings_in_bounds', {
-      min_lat: minLat,
-      min_lng: minLng,
-      max_lat: maxLat,
-      max_lng: maxLng,
-      species_filter: speciesId,
-      month_filter: null
-    });
+    const [findingsRes, forest] = await Promise.all([
+      supabase.rpc('get_findings_in_bounds', {
+        min_lat: minLat,
+        min_lng: minLng,
+        max_lat: maxLat,
+        max_lng: maxLng,
+        species_filter: speciesId,
+        month_filter: null
+      }),
+      // Real forest/soil signal: NIBIO SR16 (NO), SLU (SE, stub), null elsewhere.
+      getForestProperties({ lat, lon })
+    ]);
 
     const currentTemp = weather.temperatureC;
     const currentHumidity = weather.humidityPct;
     const rain3dMm = weather.rain3dMm;
-
-    const legacyEnvironment = computeEnvironmentScore({
-      temperature: currentTemp,
-      humidity: currentHumidity,
-      rain3dMm
-    });
+    const month = new Date().getMonth() + 1;
 
     if (findingsRes.error) {
       log.error('prediction.findings_rpc_failed', findingsRes.error);
@@ -313,37 +318,26 @@ export async function GET(request: NextRequest) {
     const recent30d = findings.filter((f) => now - new Date(f.found_at).getTime() <= 30 * dayMs).length;
     const recent365d = findings.filter((f) => now - new Date(f.found_at).getTime() <= 365 * dayMs).length;
 
-    const historical = computeHistoricalScore(recent30d, recent365d);
-    const seasonal = computeSeasonalScore(new Date().getMonth() + 1);
-    const advancedFactors = computeAdvancedFactors({
-      latitude: lat,
-      longitude: lon,
-      month: new Date().getMonth() + 1,
-      weather: {
-        temperature: currentTemp,
-        humidity: currentHumidity,
-        rain3dMm
-      }
+    // Shared scoring — the exact same pipeline the tile generator uses.
+    const cell = computeCellPrediction({
+      lat,
+      lon,
+      month,
+      weather: { temperature: currentTemp, humidity: currentHumidity, rain3dMm },
+      forest,
+      species: speciesContext,
+      speciesHabitat: speciesSummary
+        ? buildSpeciesHabitatPreferences({
+            mycorrhizalPartners: speciesSummary.mycorrhizalPartners,
+            habitat: speciesSummary.habitat
+          })
+        : null,
+      recent30d,
+      recent365d
     });
-    const advancedEnvironment100 = computeAdvancedEnvironmentScore(advancedFactors);
-    const environment = clamp(legacyEnvironment * 0.6 + (advancedEnvironment100 / 2) * 0.4, 0, 50);
 
-    const baseScore = computeTotalScore({ environment, historical, seasonal });
-
-    // Per-species adjustment in [0.05, 1.3] when a specific species is
-    // requested. Out-of-season → near zero; in-season + good weather → up
-    // to 1.3x boost in peak. Tile-path doesn't need this — its scores are
-    // already species-aware via the RPC.
-    let speciesFit: number | null = null;
-    if (speciesContext) {
-      speciesFit = computeSpeciesAdjustment(
-        speciesContext,
-        { temperature: currentTemp, humidity: currentHumidity, rain3dMm },
-        new Date().getMonth() + 1
-      );
-    }
-
-    const score = speciesFit !== null ? clamp(baseScore * speciesFit, 0, 100) : baseScore;
+    const { score, baseScore, speciesFit, habitatFit, habitat: habitatScore, factors: advancedFactors } = cell;
+    const { environment, historical, seasonal } = cell.components;
     const condition = scoreToCondition(score);
 
     const hotspotsMap = new Map<string, { lat: number; lng: number; count: number }>();
@@ -391,6 +385,9 @@ export async function GET(request: NextRequest) {
       score,
       baseScore,
       speciesFit,
+      habitatFit,
+      forestSource: forest?.source ?? 'none',
+      forestType: forest?.forestType ?? null,
       condition,
       weatherSource: weather.source,
       findingsInArea: findings.length
@@ -403,9 +400,14 @@ export async function GET(request: NextRequest) {
       score,
       baseScore,
       speciesFit,
+      habitatFit,
       condition,
       model: {
-        version: speciesFit !== null ? 'v2_computed_proxy_with_species' : 'v2_computed_proxy',
+        version: forest
+          ? 'v3_computed_nibio_habitat'
+          : speciesFit !== null
+            ? 'v2_computed_proxy_with_species'
+            : 'v2_computed_proxy',
         factors: modelFactors
       },
       components: {
@@ -432,6 +434,15 @@ export async function GET(request: NextRequest) {
         recent30d,
         recent365d
       },
+      forest: forest
+        ? {
+            forestType: forest.forestType,
+            productivity: forest.productivity,
+            volumePerHa: forest.volumePerHa,
+            source: forest.source
+          }
+        : null,
+      habitat: habitatScore ? { score: habitatScore.score, reasons: habitatScore.reasons } : undefined,
       hotspots,
       species: speciesSummary ?? undefined
     });

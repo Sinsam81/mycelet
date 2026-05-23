@@ -36,8 +36,8 @@ describe('fetchWeatherSummary — region routing', () => {
   });
 
   it('returns null for Norway coords when MET_FROST_CLIENT_ID is the placeholder', async () => {
-    // Frost adapter is a stub returning null; routing should also fall through
-    // to OpenWeather, which has no key set here.
+    // Placeholder key → Frost is skipped (isRealKey false); routing falls
+    // through to OpenWeather, which has no key set here.
     vi.stubEnv('MET_FROST_CLIENT_ID', 'your-api-key-here');
     vi.stubEnv('OPENWEATHER_API_KEY', '');
     const result = await fetchWeatherSummary(OSLO);
@@ -288,6 +288,165 @@ describe('fetchOpenWeather (via non-Nordic coords with key)', () => {
     const calls = fetchSpy.mock.calls.map((c) => String(c[0]));
     for (const url of calls) {
       expect(url).not.toContain('openweathermap.org');
+    }
+  });
+});
+
+describe('fetchFrost (via Norway coords with key)', () => {
+  beforeEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-08-15T12:00:00Z'));
+    vi.stubEnv('MET_FROST_CLIENT_ID', 'frost-client-id-abcdef123456');
+    vi.stubEnv('OPENWEATHER_API_KEY', '');
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  });
+
+  function frostData(items: unknown[]): Response {
+    return mockJson({ data: items });
+  }
+  // Fixtures are built at describe-eval time (before fake timers engage), so
+  // anchor them to the same fixed clock the tests set via setSystemTime.
+  const NOW = new Date('2026-08-15T12:00:00Z').getTime();
+  function frostItem(sourceId: string, daysAgo: number, observations: unknown[]) {
+    return {
+      sourceId,
+      referenceTime: new Date(NOW - daysAgo * 24 * 60 * 60 * 1000).toISOString(),
+      observations
+    };
+  }
+
+  // Daily aggregates over the window — temp/humidity (means), rain, extremes.
+  // 15d-ago point is outside the 14d window. Latest day (1d ago) wins for
+  // "current" temp/humidity.
+  const DAILY = [
+    frostItem('SN18700:0', 15, [{ elementId: 'sum(precipitation_amount P1D)', value: 5 }]),
+    frostItem('SN18700:0', 10, [
+      { elementId: 'mean(air_temperature P1D)', value: 11 },
+      { elementId: 'sum(precipitation_amount P1D)', value: 3 }
+    ]),
+    frostItem('SN18700:0', 6, [
+      { elementId: 'mean(air_temperature P1D)', value: 12 },
+      { elementId: 'mean(relative_humidity P1D)', value: 80 },
+      { elementId: 'sum(precipitation_amount P1D)', value: 2 },
+      { elementId: 'min(air_temperature P1D)', value: 5 },
+      { elementId: 'max(air_temperature P1D)', value: 18 }
+    ]),
+    frostItem('SN18700:0', 2, [
+      { elementId: 'mean(air_temperature P1D)', value: 12 },
+      { elementId: 'mean(relative_humidity P1D)', value: 81 },
+      { elementId: 'sum(precipitation_amount P1D)', value: 4 },
+      { elementId: 'min(air_temperature P1D)', value: 7 },
+      { elementId: 'max(air_temperature P1D)', value: 20 }
+    ]),
+    frostItem('SN18700:0', 1, [
+      { elementId: 'mean(air_temperature P1D)', value: 13 },
+      { elementId: 'mean(relative_humidity P1D)', value: 82 },
+      { elementId: 'sum(precipitation_amount P1D)', value: 6 },
+      { elementId: 'min(air_temperature P1D)', value: 9 },
+      { elementId: 'max(air_temperature P1D)', value: 22 }
+    ])
+  ];
+
+  function frostFetch() {
+    return vi.fn(async (url: unknown, _init?: unknown) => {
+      const u = String(url);
+      if (u.includes('/sources/v0.jsonld')) return frostData([{ id: 'SN18700' }, { id: 'SN90450' }]);
+      if (u.includes('/observations')) return frostData(DAILY);
+      throw new Error(`Unmocked URL: ${u}`);
+    });
+  }
+
+  it('returns a met_frost summary from a single daily-aggregate query', async () => {
+    const fetchSpy = frostFetch();
+    vi.stubGlobal('fetch', fetchSpy);
+
+    const result = await fetchWeatherSummary(OSLO);
+    expect(result).not.toBeNull();
+    expect(result?.source).toBe('met_frost');
+    expect(result?.temperatureC).toBe(13); // latest daily mean temp
+    expect(result?.humidityPct).toBe(82); // latest daily mean humidity
+    expect(result?.rain3dMm).toBeCloseTo(10, 1); // 2d=4 + 1d=6
+    expect(result?.rain7dMm).toBeCloseTo(12, 1); // + 6d=2
+    expect(result?.rain14dMm).toBeCloseTo(15, 1); // + 10d=3 (15d excluded)
+    expect(result?.minTemp7dC).toBe(5);
+    expect(result?.maxTemp7dC).toBe(22);
+    // First call is the nearest-station lookup
+    expect(String(fetchSpy.mock.calls[0]?.[0])).toContain('/sources/v0.jsonld');
+    // Exactly one observations call (no separate instant query)
+    const obsCalls = fetchSpy.mock.calls.filter((c) => String(c[0]).includes('/observations'));
+    expect(obsCalls).toHaveLength(1);
+  });
+
+  it('sends HTTP Basic auth derived from the client id', async () => {
+    const fetchSpy = frostFetch();
+    vi.stubGlobal('fetch', fetchSpy);
+
+    await fetchWeatherSummary(OSLO);
+
+    const init = fetchSpy.mock.calls[0]?.[1] as RequestInit | undefined;
+    const authHeader = (init?.headers as Record<string, string> | undefined)?.Authorization ?? '';
+    expect(authHeader.startsWith('Basic ')).toBe(true);
+    const decoded = Buffer.from(authHeader.replace('Basic ', ''), 'base64').toString();
+    expect(decoded).toBe('frost-client-id-abcdef123456:');
+  });
+
+  it('returns null when no station is found nearby', async () => {
+    const fetchSpy = vi.fn(async (url: unknown) => {
+      if (String(url).includes('/sources')) return frostData([]);
+      throw new Error('should not reach observations');
+    });
+    vi.stubGlobal('fetch', fetchSpy);
+    expect(await fetchWeatherSummary(OSLO)).toBeNull();
+  });
+
+  it('returns null when temperature data is missing', async () => {
+    // Daily query returns rain but no mean temp → no usable summary.
+    const dailyNoTemp = [
+      frostItem('SN18700:0', 1, [{ elementId: 'sum(precipitation_amount P1D)', value: 6 }])
+    ];
+    const fetchSpy = vi.fn(async (url: unknown) => {
+      const u = String(url);
+      if (u.includes('/sources')) return frostData([{ id: 'SN18700' }]);
+      return frostData(dailyNoTemp);
+    });
+    vi.stubGlobal('fetch', fetchSpy);
+    expect(await fetchWeatherSummary(OSLO)).toBeNull();
+  });
+
+  it('defaults humidity to 0 when no humidity is reported', async () => {
+    const dailyNoHumidity = [
+      frostItem('SN18700:0', 1, [
+        { elementId: 'mean(air_temperature P1D)', value: 14 },
+        { elementId: 'sum(precipitation_amount P1D)', value: 3 }
+      ])
+    ];
+    const fetchSpy = vi.fn(async (url: unknown) => {
+      const u = String(url);
+      if (u.includes('/sources')) return frostData([{ id: 'SN18700' }]);
+      return frostData(dailyNoHumidity);
+    });
+    vi.stubGlobal('fetch', fetchSpy);
+
+    const result = await fetchWeatherSummary(OSLO);
+    expect(result?.temperatureC).toBe(14);
+    expect(result?.humidityPct).toBe(0);
+  });
+
+  it('skips Frost entirely when the key is the placeholder', async () => {
+    vi.stubEnv('MET_FROST_CLIENT_ID', 'your-api-key-here');
+    const fetchSpy = vi.fn().mockResolvedValue(mockJson({ data: [] }));
+    vi.stubGlobal('fetch', fetchSpy);
+
+    expect(await fetchWeatherSummary(OSLO)).toBeNull();
+    for (const url of fetchSpy.mock.calls.map((c) => String(c[0]))) {
+      expect(url).not.toContain('frost.met.no');
     }
   });
 });
