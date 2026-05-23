@@ -103,7 +103,12 @@ export function computeCellPrediction(input: CellPredictionInput): CellPredictio
   const speciesFit = species ? computeSpeciesAdjustment(species, weather, month) : null;
 
   const habitat = forest && speciesHabitat ? computeHabitatScore(forest, speciesHabitat) : null;
-  const habitatFit = habitat?.score ?? 1;
+  // Recenter on 1.0: computeHabitatScore is centered on 0.5 (= neutral / no
+  // signal), but here it's a SCORE MULTIPLIER where 1.0 must be neutral.
+  // Without this, a matching habitat (e.g. 0.8) would *reduce* the score.
+  // 0.5+score maps neutral 0.5→1.0, a good match (0.8-1.3)→1.3-1.8 (boost),
+  // a mismatch (0.2-0.35)→0.7-0.85 (penalty). No forest data → 1.0 (unchanged).
+  const habitatFit = habitat ? 0.5 + habitat.score : 1;
 
   const baseSpeciesScore = speciesFit !== null ? baseScore * speciesFit : baseScore;
   const score = clamp(baseSpeciesScore * habitatFit, 0, 100);

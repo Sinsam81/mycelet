@@ -69,9 +69,26 @@ describe('computeCellPrediction', () => {
     });
     expect(cell.speciesFit).not.toBeNull();
     expect(cell.habitat).not.toBeNull();
-    // gran is a kantarell partner → habitat fit above neutral (0.5)
-    expect(cell.habitatFit).toBeGreaterThan(0.5);
+    // gran matches kantarell → habitat fit must BOOST the score (>1, centered on 1.0)
+    expect(cell.habitatFit).toBeGreaterThan(1);
     expect(cell.score).toBeGreaterThan(30);
+  });
+
+  it('penalizes a habitat mismatch (fit < 1) but rewards a match (fit > 1)', () => {
+    const base = { lat: 60, lon: 10.7, month: 8, weather: GOOD_WEATHER, forest: GRAN_FOREST };
+    const match = computeCellPrediction({
+      ...base,
+      species: KANTARELL,
+      speciesHabitat: KANTARELL_HABITAT // likes gran → match
+    });
+    const mismatch = computeCellPrediction({
+      ...base,
+      species: KANTARELL,
+      speciesHabitat: { preferredPartners: ['eik', 'bok'], habitat: ['lauvskog'] } // deciduous-only in gran forest → mismatch
+    });
+    expect(match.habitatFit).toBeGreaterThan(1);
+    expect(mismatch.habitatFit).toBeLessThan(1);
+    expect(match.score).toBeGreaterThan(mismatch.score);
   });
 
   it('collapses the score out of season', () => {
