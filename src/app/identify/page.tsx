@@ -8,6 +8,8 @@ import { Button } from '@/components/ui/Button';
 import { useGeolocation } from '@/lib/hooks/useGeolocation';
 import { useIdentify } from '@/lib/hooks/useIdentify';
 import { fileToDataUrl, optimizeImageForIdentification } from '@/lib/utils/image';
+import { isNativePlatform } from '@/lib/native/platform';
+import { captureNativePhoto } from '@/lib/native/camera';
 
 export default function IdentifyPage() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -57,6 +59,20 @@ export default function IdentifyPage() {
       } else {
         setError(message);
       }
+    }
+  };
+
+  const handleCapture = async () => {
+    if (!isNativePlatform()) {
+      fileInputRef.current?.click();
+      return;
+    }
+    setError(null);
+    try {
+      const file = await captureNativePhoto();
+      if (file) await handleFile(file);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Kunne ikke hente bilde.');
     }
   };
 
@@ -113,7 +129,7 @@ export default function IdentifyPage() {
           />
 
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            <Button onClick={() => fileInputRef.current?.click()} loading={identify.isPending} icon={<Camera className="h-4 w-4" />}>
+            <Button onClick={handleCapture} loading={identify.isPending} icon={<Camera className="h-4 w-4" />}>
               Ta bilde / velg bilde
             </Button>
             <Button variant="outline" icon={<Search className="h-4 w-4" />} onClick={() => router.push('/species')}>
