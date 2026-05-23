@@ -4,18 +4,10 @@ import { getBillingCapabilities, getUserBillingSubscription } from '@/lib/billin
 import { fetchWeatherSummary } from '@/lib/weather';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { getClientKey, rateLimitResponse } from '@/lib/rate-limit/route';
-import {
-  computeAdvancedEnvironmentScore,
-  computeAdvancedFactors,
-  computeEnvironmentScore,
-  computeHistoricalScore,
-  computeSeasonalScore,
-  computeTotalScore,
-  scoreToCondition
-} from '@/lib/utils/prediction';
-import { computeSpeciesAdjustment, type SpeciesContext } from '@/lib/utils/species-scoring';
-import { getForestProperties, computeHabitatScore, buildSpeciesHabitatPreferences } from '@/lib/forest';
-import type { HabitatScore } from '@/lib/forest';
+import { computeSeasonalScore, scoreToCondition } from '@/lib/utils/prediction';
+import type { SpeciesContext } from '@/lib/utils/species-scoring';
+import { getForestProperties, buildSpeciesHabitatPreferences } from '@/lib/forest';
+import { computeCellPrediction } from '@/lib/prediction/cell-score';
 import { createRequestLogger } from '@/lib/log/request';
 
 interface FindingRow {
@@ -36,8 +28,13 @@ interface PredictionTileRow {
     vegetation?: number;
     moisture?: number;
     terrain?: number;
+    soil?: number;
+    weatherTrend?: number;
     history?: number;
-    [key: string]: number | undefined;
+    environment?: number;
+    seasonal?: number;
+    forest?: { forestType: string; productivity: number | null; volumePerHa: number | null; source: string } | null;
+    habitat?: { score: number; reasons: string[] } | null;
   } | null;
 }
 
@@ -47,18 +44,6 @@ function clamp(value: number, min: number, max: number) {
 
 function toFreeFactor(value: number) {
   return Math.round(value / 5) * 5;
-}
-
-// Map NIBIO bonitet (site index H40, ~6 poor → ~26 rich) to a 0-100 soil-
-// richness score — the real "jordsmonn" signal that replaces pseudo-noise.
-function bonitetToSoilScore(bonitet: number) {
-  return clamp(((bonitet - 6) / (23 - 6)) * 100, 0, 100);
-}
-
-// Map stem volume (m³/ha) to a 0-100 vegetation/maturity score. ~400 m³/ha
-// is a dense mature stand → 100.
-function volumeToVegetationScore(volumePerHa: number) {
-  return clamp((volumePerHa / 400) * 100, 0, 100);
 }
 
 export async function GET(request: NextRequest) {
@@ -195,6 +180,11 @@ export async function GET(request: NextRequest) {
       const weightSum = weightedTotals.weightSum || 1;
       const score = Math.round(weightedTotals.scoreSum / weightSum);
       const condition = scoreToCondition(score);
+      // Representative forest/habitat for the explanation: the highest-scoring
+      // tile that actually has forest data (some cells are water/urban → null).
+      const forestTile = tiles
+        .filter((t) => t.components?.forest)
+        .reduce<PredictionTileRow | null>((best, t) => (!best || t.score > best.score ? t : best), null);
       const seasonal = computeSeasonalScore(new Date().getMonth() + 1);
       const vegetation = Math.round(weightedTotals.vegetationSum / weightSum);
       const moisture = Math.round(weightedTotals.moistureSum / weightSum);
@@ -280,6 +270,8 @@ export async function GET(request: NextRequest) {
           recent30d: 0,
           recent365d: 0
         },
+        forest: forestTile?.components?.forest ?? null,
+        habitat: forestTile?.components?.habitat ?? undefined,
         hotspots,
         species: speciesSummary ?? undefined
       });
@@ -312,12 +304,7 @@ export async function GET(request: NextRequest) {
     const currentTemp = weather.temperatureC;
     const currentHumidity = weather.humidityPct;
     const rain3dMm = weather.rain3dMm;
-
-    const legacyEnvironment = computeEnvironmentScore({
-      temperature: currentTemp,
-      humidity: currentHumidity,
-      rain3dMm
-    });
+    const month = new Date().getMonth() + 1;
 
     if (findingsRes.error) {
       log.error('prediction.findings_rpc_failed', findingsRes.error);
@@ -331,67 +318,26 @@ export async function GET(request: NextRequest) {
     const recent30d = findings.filter((f) => now - new Date(f.found_at).getTime() <= 30 * dayMs).length;
     const recent365d = findings.filter((f) => now - new Date(f.found_at).getTime() <= 365 * dayMs).length;
 
-    const historical = computeHistoricalScore(recent30d, recent365d);
-    const seasonal = computeSeasonalScore(new Date().getMonth() + 1);
-    const advancedFactors = computeAdvancedFactors({
-      latitude: lat,
-      longitude: lon,
-      month: new Date().getMonth() + 1,
-      weather: {
-        temperature: currentTemp,
-        humidity: currentHumidity,
-        rain3dMm
-      }
+    // Shared scoring — the exact same pipeline the tile generator uses.
+    const cell = computeCellPrediction({
+      lat,
+      lon,
+      month,
+      weather: { temperature: currentTemp, humidity: currentHumidity, rain3dMm },
+      forest,
+      species: speciesContext,
+      speciesHabitat: speciesSummary
+        ? buildSpeciesHabitatPreferences({
+            mycorrhizalPartners: speciesSummary.mycorrhizalPartners,
+            habitat: speciesSummary.habitat
+          })
+        : null,
+      recent30d,
+      recent365d
     });
 
-    // Replace the pseudo-noise soil/vegetation proxies with the real NIBIO
-    // signal when we have it — this is the core of the upgrade. Terrain stays
-    // a proxy for now (no elevation/slope source wired yet).
-    if (forest) {
-      if (forest.productivity != null) {
-        advancedFactors.soil = bonitetToSoilScore(forest.productivity);
-      }
-      if (forest.volumePerHa != null) {
-        advancedFactors.vegetation = volumeToVegetationScore(forest.volumePerHa);
-      }
-    }
-
-    const advancedEnvironment100 = computeAdvancedEnvironmentScore(advancedFactors);
-    const environment = clamp(legacyEnvironment * 0.6 + (advancedEnvironment100 / 2) * 0.4, 0, 50);
-
-    const baseScore = computeTotalScore({ environment, historical, seasonal });
-
-    // Per-species adjustment in [0.05, 1.3] when a specific species is
-    // requested. Out-of-season → near zero; in-season + good weather → up
-    // to 1.3x boost in peak. Tile-path doesn't need this — its scores are
-    // already species-aware via the RPC.
-    let speciesFit: number | null = null;
-    if (speciesContext) {
-      speciesFit = computeSpeciesAdjustment(
-        speciesContext,
-        { temperature: currentTemp, humidity: currentHumidity, rain3dMm },
-        new Date().getMonth() + 1
-      );
-    }
-
-    // Per-species habitat fit from real forest data (partner-tree match +
-    // soil richness). Multiplier in [0.2, 1.3]; 1 = no forest signal so the
-    // score is unchanged. Only meaningful when both a species and forest
-    // data are present.
-    let habitatScore: HabitatScore | null = null;
-    if (forest && speciesSummary) {
-      habitatScore = computeHabitatScore(
-        forest,
-        buildSpeciesHabitatPreferences({
-          mycorrhizalPartners: speciesSummary.mycorrhizalPartners,
-          habitat: speciesSummary.habitat
-        })
-      );
-    }
-    const habitatFit = habitatScore?.score ?? 1;
-
-    const baseSpeciesScore = speciesFit !== null ? baseScore * speciesFit : baseScore;
-    const score = clamp(baseSpeciesScore * habitatFit, 0, 100);
+    const { score, baseScore, speciesFit, habitatFit, habitat: habitatScore, factors: advancedFactors } = cell;
+    const { environment, historical, seasonal } = cell.components;
     const condition = scoreToCondition(score);
 
     const hotspotsMap = new Map<string, { lat: number; lng: number; count: number }>();

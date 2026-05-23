@@ -1,0 +1,120 @@
+/**
+ * Shared per-cell prediction scoring.
+ *
+ * Single source of truth for "how good is this coordinate for this species
+ * right now", composed from the primitives in src/lib/utils/prediction.ts
+ * plus the real forest signal (NIBIO) and per-species climate/habitat fit.
+ *
+ * Used by BOTH the live /api/prediction fallback path and the tile generator
+ * (/api/cron/generate-tiles) so the two never drift apart.
+ */
+
+import {
+  computeAdvancedEnvironmentScore,
+  computeAdvancedFactors,
+  computeEnvironmentScore,
+  computeHistoricalScore,
+  computeSeasonalScore,
+  computeTotalScore,
+  type AdvancedPredictionFactors,
+  type WeatherInput
+} from '@/lib/utils/prediction';
+import { computeSpeciesAdjustment, type SpeciesContext } from '@/lib/utils/species-scoring';
+import {
+  computeHabitatScore,
+  type ForestProperties,
+  type HabitatScore,
+  type SpeciesHabitatPreferences
+} from '@/lib/forest';
+
+function clamp(value: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, Math.round(value)));
+}
+
+// Map NIBIO bonitet (site index H40, ~6 poor → ~26 rich) to a 0-100 soil-
+// richness score — the real "jordsmonn" signal that replaces pseudo-noise.
+export function bonitetToSoilScore(bonitet: number) {
+  return clamp(((bonitet - 6) / (23 - 6)) * 100, 0, 100);
+}
+
+// Map stem volume (m³/ha) to a 0-100 vegetation/maturity score. ~400 m³/ha
+// is a dense mature stand → 100.
+export function volumeToVegetationScore(volumePerHa: number) {
+  return clamp((volumePerHa / 400) * 100, 0, 100);
+}
+
+export interface CellPredictionInput {
+  lat: number;
+  lon: number;
+  /** 1-12 */
+  month: number;
+  weather: WeatherInput;
+  /** Real forest props (NIBIO), or null when unavailable. */
+  forest: ForestProperties | null;
+  /** Species climate context, or null for a generic prediction. */
+  species: SpeciesContext | null;
+  /** Species habitat preferences, or null when no species/forest. */
+  speciesHabitat: SpeciesHabitatPreferences | null;
+  /** Historical finding counts in the area (optional; default 0). */
+  recent30d?: number;
+  recent365d?: number;
+}
+
+export interface CellPrediction {
+  score: number;
+  baseScore: number;
+  speciesFit: number | null;
+  habitatFit: number;
+  habitat: HabitatScore | null;
+  components: { environment: number; historical: number; seasonal: number };
+  factors: AdvancedPredictionFactors;
+}
+
+/**
+ * Compute the final 0-100 prediction for one coordinate.
+ *
+ * Pipeline: environment (legacy weather + advanced factors, with real
+ * soil/vegetation when forest is present) + historical + seasonal → baseScore,
+ * then × per-species climate fit × per-species habitat fit.
+ */
+export function computeCellPrediction(input: CellPredictionInput): CellPrediction {
+  const { lat, lon, month, weather, forest, species, speciesHabitat } = input;
+  const recent30d = input.recent30d ?? 0;
+  const recent365d = input.recent365d ?? 0;
+
+  const legacyEnvironment = computeEnvironmentScore(weather);
+  const historical = computeHistoricalScore(recent30d, recent365d);
+  const seasonal = computeSeasonalScore(month);
+
+  const factors = computeAdvancedFactors({ latitude: lat, longitude: lon, month, weather });
+
+  // Real NIBIO signal replaces the pseudo-noise soil/vegetation proxies.
+  // Terrain stays a proxy for now (no elevation/slope source yet).
+  if (forest) {
+    if (forest.productivity != null) factors.soil = bonitetToSoilScore(forest.productivity);
+    if (forest.volumePerHa != null) factors.vegetation = volumeToVegetationScore(forest.volumePerHa);
+  }
+
+  const advancedEnvironment100 = computeAdvancedEnvironmentScore(factors);
+  const environment = clamp(legacyEnvironment * 0.6 + (advancedEnvironment100 / 2) * 0.4, 0, 50);
+
+  const baseScore = computeTotalScore({ environment, historical, seasonal });
+
+  const speciesFit = species ? computeSpeciesAdjustment(species, weather, month) : null;
+
+  const habitat = forest && speciesHabitat ? computeHabitatScore(forest, speciesHabitat) : null;
+  const habitatFit = habitat?.score ?? 1;
+
+  const baseSpeciesScore = speciesFit !== null ? baseScore * speciesFit : baseScore;
+  const score = clamp(baseSpeciesScore * habitatFit, 0, 100);
+
+  return {
+    score,
+    baseScore,
+    speciesFit,
+    habitatFit,
+    habitat,
+    components: { environment, historical, seasonal },
+    factors
+  };
+}
