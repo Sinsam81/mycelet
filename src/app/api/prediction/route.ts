@@ -14,6 +14,8 @@ import {
   scoreToCondition
 } from '@/lib/utils/prediction';
 import { computeSpeciesAdjustment, type SpeciesContext } from '@/lib/utils/species-scoring';
+import { getForestProperties, computeHabitatScore, buildSpeciesHabitatPreferences } from '@/lib/forest';
+import type { HabitatScore } from '@/lib/forest';
 import { createRequestLogger } from '@/lib/log/request';
 
 interface FindingRow {
@@ -45,6 +47,18 @@ function clamp(value: number, min: number, max: number) {
 
 function toFreeFactor(value: number) {
   return Math.round(value / 5) * 5;
+}
+
+// Map NIBIO bonitet (site index H40, ~6 poor → ~26 rich) to a 0-100 soil-
+// richness score — the real "jordsmonn" signal that replaces pseudo-noise.
+function bonitetToSoilScore(bonitet: number) {
+  return clamp(((bonitet - 6) / (23 - 6)) * 100, 0, 100);
+}
+
+// Map stem volume (m³/ha) to a 0-100 vegetation/maturity score. ~400 m³/ha
+// is a dense mature stand → 100.
+function volumeToVegetationScore(volumePerHa: number) {
+  return clamp((volumePerHa / 400) * 100, 0, 100);
 }
 
 export async function GET(request: NextRequest) {
@@ -282,14 +296,18 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const findingsRes = await supabase.rpc('get_findings_in_bounds', {
-      min_lat: minLat,
-      min_lng: minLng,
-      max_lat: maxLat,
-      max_lng: maxLng,
-      species_filter: speciesId,
-      month_filter: null
-    });
+    const [findingsRes, forest] = await Promise.all([
+      supabase.rpc('get_findings_in_bounds', {
+        min_lat: minLat,
+        min_lng: minLng,
+        max_lat: maxLat,
+        max_lng: maxLng,
+        species_filter: speciesId,
+        month_filter: null
+      }),
+      // Real forest/soil signal: NIBIO SR16 (NO), SLU (SE, stub), null elsewhere.
+      getForestProperties({ lat, lon })
+    ]);
 
     const currentTemp = weather.temperatureC;
     const currentHumidity = weather.humidityPct;
@@ -325,6 +343,19 @@ export async function GET(request: NextRequest) {
         rain3dMm
       }
     });
+
+    // Replace the pseudo-noise soil/vegetation proxies with the real NIBIO
+    // signal when we have it — this is the core of the upgrade. Terrain stays
+    // a proxy for now (no elevation/slope source wired yet).
+    if (forest) {
+      if (forest.productivity != null) {
+        advancedFactors.soil = bonitetToSoilScore(forest.productivity);
+      }
+      if (forest.volumePerHa != null) {
+        advancedFactors.vegetation = volumeToVegetationScore(forest.volumePerHa);
+      }
+    }
+
     const advancedEnvironment100 = computeAdvancedEnvironmentScore(advancedFactors);
     const environment = clamp(legacyEnvironment * 0.6 + (advancedEnvironment100 / 2) * 0.4, 0, 50);
 
@@ -343,7 +374,24 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const score = speciesFit !== null ? clamp(baseScore * speciesFit, 0, 100) : baseScore;
+    // Per-species habitat fit from real forest data (partner-tree match +
+    // soil richness). Multiplier in [0.2, 1.3]; 1 = no forest signal so the
+    // score is unchanged. Only meaningful when both a species and forest
+    // data are present.
+    let habitatScore: HabitatScore | null = null;
+    if (forest && speciesSummary) {
+      habitatScore = computeHabitatScore(
+        forest,
+        buildSpeciesHabitatPreferences({
+          mycorrhizalPartners: speciesSummary.mycorrhizalPartners,
+          habitat: speciesSummary.habitat
+        })
+      );
+    }
+    const habitatFit = habitatScore?.score ?? 1;
+
+    const baseSpeciesScore = speciesFit !== null ? baseScore * speciesFit : baseScore;
+    const score = clamp(baseSpeciesScore * habitatFit, 0, 100);
     const condition = scoreToCondition(score);
 
     const hotspotsMap = new Map<string, { lat: number; lng: number; count: number }>();
@@ -391,6 +439,9 @@ export async function GET(request: NextRequest) {
       score,
       baseScore,
       speciesFit,
+      habitatFit,
+      forestSource: forest?.source ?? 'none',
+      forestType: forest?.forestType ?? null,
       condition,
       weatherSource: weather.source,
       findingsInArea: findings.length
@@ -403,9 +454,14 @@ export async function GET(request: NextRequest) {
       score,
       baseScore,
       speciesFit,
+      habitatFit,
       condition,
       model: {
-        version: speciesFit !== null ? 'v2_computed_proxy_with_species' : 'v2_computed_proxy',
+        version: forest
+          ? 'v3_computed_nibio_habitat'
+          : speciesFit !== null
+            ? 'v2_computed_proxy_with_species'
+            : 'v2_computed_proxy',
         factors: modelFactors
       },
       components: {
@@ -432,6 +488,15 @@ export async function GET(request: NextRequest) {
         recent30d,
         recent365d
       },
+      forest: forest
+        ? {
+            forestType: forest.forestType,
+            productivity: forest.productivity,
+            volumePerHa: forest.volumePerHa,
+            source: forest.source
+          }
+        : null,
+      habitat: habitatScore ? { score: habitatScore.score, reasons: habitatScore.reasons } : undefined,
       hotspots,
       species: speciesSummary ?? undefined
     });

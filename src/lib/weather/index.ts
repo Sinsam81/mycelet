@@ -58,17 +58,187 @@ export async function fetchWeatherSummary({ lat, lon }: WeatherFetchOptions): Pr
 
 // --- MET Frost (Norway) -------------------------------------------------
 
-async function fetchFrost(_opts: WeatherFetchOptions): Promise<WeatherSummary | null> {
-  // TODO: implement once MET_FROST_CLIENT_ID is configured.
-  // Steps:
-  // 1. POST /sources/v0.jsonld?types=SensorSystem&geometry=nearest({lon} {lat})&nearestmaxcount=3
-  //    -> get nearest weather station IDs
-  // 2. GET /observations/v0.jsonld
-  //      ?sources=<ids>
-  //      &elements=air_temperature,relative_humidity,sum(precipitation_amount P1D)
-  //      &referencetime=<now-14d>/<now>
-  //    -> aggregate to 3d/7d/14d totals
-  return null;
+const FROST_BASE = 'https://frost.met.no';
+
+// Frost daily-aggregate element IDs + the instantaneous ones we read for
+// "current" conditions. Daily precip is the strongest mushroom predictor.
+const FROST_INSTANT_ELEMENTS = 'air_temperature,relative_humidity';
+// Daily mean temp is the reliable temperature backbone: many stations near a
+// point are precip-only and report no instant temperature, but daily means are
+// widely available. Instant readings (above) are a best-effort freshness bonus.
+const FROST_DAILY_ELEMENTS =
+  'mean(air_temperature P1D),sum(precipitation_amount P1D),min(air_temperature P1D),max(air_temperature P1D)';
+
+interface FrostObservation {
+  elementId?: string;
+  value?: number | string | null;
+}
+interface FrostDataItem {
+  sourceId?: string;
+  referenceTime?: string;
+  observations?: FrostObservation[];
+}
+type FrostPoint = { source: string; time: number; value: number };
+
+function frostAuthHeader(clientId: string): string {
+  // Frost uses HTTP Basic with the client ID as username and empty password.
+  return `Basic ${Buffer.from(`${clientId}:`).toString('base64')}`;
+}
+
+function isoDate(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
+
+async function frostGet(
+  path: string,
+  params: Record<string, string>,
+  auth: string
+): Promise<{ data?: FrostDataItem[] } | null> {
+  const res = await fetch(`${FROST_BASE}${path}?${new URLSearchParams(params).toString()}`, {
+    headers: { Authorization: auth, Accept: 'application/json' },
+    next: { revalidate: 900 }
+  });
+  if (!res.ok) return null;
+  return res.json();
+}
+
+/** Nearest weather stations to the point, ordered by distance (closest first). */
+async function frostNearestSources(lat: number, lon: number, auth: string): Promise<string[]> {
+  const json = await frostGet(
+    '/sources/v0.jsonld',
+    {
+      types: 'SensorSystem',
+      geometry: `nearest(POINT(${lon} ${lat}))`,
+      // Wide enough to catch a temperature-reporting station — the closest
+      // few are often precip-only (no air temperature).
+      nearestmaxcount: '10'
+    },
+    auth
+  );
+  const data = json?.data;
+  if (!Array.isArray(data)) return [];
+  return data
+    .map((d) => String((d as { id?: string }).id ?? ''))
+    .filter((id) => id.length > 0);
+}
+
+/** Flatten Frost data items into per-element time series. */
+function collectFrostSeries(data: FrostDataItem[]): Map<string, FrostPoint[]> {
+  const byElement = new Map<string, FrostPoint[]>();
+  for (const item of data) {
+    // Observation sourceIds carry a sensor suffix ("SN18700:0"); the /sources
+    // list does not ("SN18700"). Normalize to the base id so they match.
+    const source = String(item.sourceId ?? '').split(':')[0];
+    const time = item.referenceTime ? Date.parse(item.referenceTime) : NaN;
+    if (!source || !Number.isFinite(time)) continue;
+    for (const obs of item.observations ?? []) {
+      const value = Number(obs.value);
+      if (!obs.elementId || !Number.isFinite(value)) continue;
+      const arr = byElement.get(obs.elementId) ?? [];
+      arr.push({ source, time, value });
+      byElement.set(obs.elementId, arr);
+    }
+  }
+  return byElement;
+}
+
+/** Pick the series from the nearest source that actually has data for this element. */
+function nearestSeries(series: FrostPoint[] | undefined, sourcesByDistance: string[]): FrostPoint[] {
+  if (!series || series.length === 0) return [];
+  for (const src of sourcesByDistance) {
+    const matched = series.filter((p) => p.source === src);
+    if (matched.length) return matched;
+  }
+  return [];
+}
+
+function latestValue(series: FrostPoint[]): number | null {
+  if (series.length === 0) return null;
+  return series.reduce((latest, p) => (p.time > latest.time ? p : latest)).value;
+}
+
+function frostSumWithinDays(series: FrostPoint[], days: number, now: number): number {
+  const cutoff = now - days * 24 * 60 * 60 * 1000;
+  return series.reduce(
+    (sum, p) => (p.time >= cutoff && p.value >= 0 ? sum + p.value : sum),
+    0
+  );
+}
+
+function frostExtremeWithinDays(
+  series: FrostPoint[],
+  days: number,
+  now: number,
+  pick: 'min' | 'max'
+): number | null {
+  const cutoff = now - days * 24 * 60 * 60 * 1000;
+  const values = series.filter((p) => p.time >= cutoff).map((p) => p.value);
+  if (values.length === 0) return null;
+  return pick === 'min' ? Math.min(...values) : Math.max(...values);
+}
+
+async function fetchFrost({ lat, lon }: WeatherFetchOptions): Promise<WeatherSummary | null> {
+  const clientId = process.env.MET_FROST_CLIENT_ID;
+  if (!isRealKey(clientId)) return null;
+  const auth = frostAuthHeader(clientId as string);
+
+  const sources = await frostNearestSources(lat, lon, auth);
+  if (sources.length === 0) return null;
+  const sourceList = sources.join(',');
+
+  const now = Date.now();
+  const dayMs = 24 * 60 * 60 * 1000;
+  const to = new Date(now + dayMs); // pad +1d so today's readings are in range
+
+  const [instant, daily] = await Promise.all([
+    // Instant temp + humidity over the last couple of days → "current".
+    frostGet(
+      '/observations/v0.jsonld',
+      {
+        sources: sourceList,
+        elements: FROST_INSTANT_ELEMENTS,
+        referencetime: `${isoDate(new Date(now - 2 * dayMs))}/${isoDate(to)}`
+      },
+      auth
+    ),
+    // Daily aggregates over 14 days → accumulated rain + temp extremes.
+    frostGet(
+      '/observations/v0.jsonld',
+      {
+        sources: sourceList,
+        elements: FROST_DAILY_ELEMENTS,
+        referencetime: `${isoDate(new Date(now - 14 * dayMs))}/${isoDate(to)}`
+      },
+      auth
+    )
+  ]);
+
+  const instantSeries = instant?.data ? collectFrostSeries(instant.data) : new Map<string, FrostPoint[]>();
+  const dailySeries = daily?.data ? collectFrostSeries(daily.data) : new Map<string, FrostPoint[]>();
+
+  // Prefer a fresh instant reading; fall back to the latest daily mean temp
+  // (the reliable backbone when the nearest stations are precip-only).
+  const instantTemp = latestValue(nearestSeries(instantSeries.get('air_temperature'), sources));
+  const dailyMeanTemp = latestValue(nearestSeries(dailySeries.get('mean(air_temperature P1D)'), sources));
+  const temperatureC = instantTemp ?? dailyMeanTemp;
+  // Temperature is mandatory — without it there's no usable summary.
+  if (temperatureC === null) return null;
+
+  const humidSeries = nearestSeries(instantSeries.get('relative_humidity'), sources);
+  const precipSeries = nearestSeries(dailySeries.get('sum(precipitation_amount P1D)'), sources);
+  const minSeries = nearestSeries(dailySeries.get('min(air_temperature P1D)'), sources);
+  const maxSeries = nearestSeries(dailySeries.get('max(air_temperature P1D)'), sources);
+
+  return {
+    source: 'met_frost',
+    temperatureC,
+    humidityPct: latestValue(humidSeries) ?? 0,
+    rain3dMm: frostSumWithinDays(precipSeries, 3, now),
+    rain7dMm: frostSumWithinDays(precipSeries, 7, now),
+    rain14dMm: precipSeries.length ? frostSumWithinDays(precipSeries, 14, now) : null,
+    minTemp7dC: frostExtremeWithinDays(minSeries, 7, now, 'min'),
+    maxTemp7dC: frostExtremeWithinDays(maxSeries, 7, now, 'max')
+  };
 }
 
 // --- SMHI Open Data (Sweden) -------------------------------------------
