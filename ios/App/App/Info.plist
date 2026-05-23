@@ -4,6 +4,14 @@
 <dict>
     <key>CAPACITOR_DEBUG</key>
 	<string>$(CAPACITOR_DEBUG)</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Mycelet bruker kameraet til å ta bilde av sopp du vil identifisere.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Mycelet trenger tilgang til bildene dine for å velge et soppbilde til identifisering.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Mycelet kan lagre soppbilder i bildebiblioteket ditt.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Mycelet bruker posisjonen din til å vise funn i nærheten og gi bedre soppvarsel for området ditt.</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
