@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { PredictionResponse } from '@/types/prediction';
+import { NonNativeOnly } from '@/components/native/NonNativeOnly';
 
 interface HotspotPanelProps {
   speciesId: number | null;
@@ -35,9 +36,11 @@ export function HotspotPanel({ speciesId, data, isLoading, error }: HotspotPanel
       {data?.access === 'free_limited' ? (
         <div className="mt-2 rounded border border-amber-300 bg-amber-50 px-2 py-1.5">
           <p className="text-xs text-amber-800">{data.upsellMessage ?? 'Gratis viser forenklet prediksjon.'}</p>
-          <Link href="/pricing" className="text-xs font-medium text-amber-900 underline">
-            Oppgrader for full vegetasjonsanalyse
-          </Link>
+          <NonNativeOnly>
+            <Link href="/pricing" className="text-xs font-medium text-amber-900 underline">
+              Oppgrader for full vegetasjonsanalyse
+            </Link>
+          </NonNativeOnly>
         </div>
       ) : null}
 

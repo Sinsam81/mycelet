@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { Check, Crown, Leaf, Loader2 } from 'lucide-react';
 import { PageWrapper } from '@/components/layout/PageWrapper';
+import { useIsNative } from '@/lib/hooks/useIsNative';
 
 type BillingStatusResponse = {
   subscription: {
@@ -58,6 +59,10 @@ function PricingInner() {
   const [openingPortal, setOpeningPortal] = useState(false);
   const [status, setStatus] = useState<BillingStatusResponse | null>(null);
   const [statusError, setStatusError] = useState<string | null>(null);
+  // On iOS, digital subscriptions must go through Apple IAP, not Stripe (App
+  // Store rule 3.1.1). Until IAP is wired, hide all purchase/manage actions in
+  // the native shell. The web keeps the full Stripe flow.
+  const native = useIsNative();
 
   const checkoutState = searchParams.get('checkout');
   const infoMessage = useMemo(() => {
@@ -145,6 +150,11 @@ function PricingInner() {
 
         {infoMessage ? <p className="rounded-lg bg-forest-50 px-3 py-2 text-sm text-forest-900">{infoMessage}</p> : null}
         {statusError ? <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{statusError}</p> : null}
+        {native ? (
+          <p className="rounded-lg bg-forest-50 px-3 py-2 text-sm text-forest-900">
+            Kjøp i appen er ikke tilgjengelig ennå — abonnement kommer snart.
+          </p>
+        ) : null}
 
         {status ? (
           <article className="rounded-xl border border-gray-200 bg-white p-4">
@@ -157,7 +167,7 @@ function PricingInner() {
             {!status.capabilities.paid ? (
               <p className="mt-1 text-sm text-gray-700">AI-kvote: {status.capabilities.aiDailyLimit} per døgn</p>
             ) : null}
-            {status.capabilities.paid ? (
+            {status.capabilities.paid && !native ? (
               <button
                 type="button"
                 onClick={openPortal}
@@ -204,7 +214,7 @@ function PricingInner() {
                   <p className="mt-4 rounded-lg bg-forest-100 px-3 py-2 text-center text-sm font-medium text-forest-900">Aktiv plan</p>
                 ) : null}
 
-                {!isCurrent && isPaidOption ? (
+                {!isCurrent && isPaidOption && !native ? (
                   <button
                     type="button"
                     onClick={() => {

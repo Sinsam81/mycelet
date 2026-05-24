@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { NonNativeOnly } from '@/components/native/NonNativeOnly';
 import { AlertTriangle, Calendar, Camera, Lock, Map, MessageSquare, Shield } from 'lucide-react';
 import { PageWrapper } from '@/components/layout/PageWrapper';
 import { EdibilityBadge } from '@/components/ui/EdibilityBadge';
@@ -222,12 +223,14 @@ export default async function HomePage() {
           </div>
         </Link>
 
-        <Link
-          href="/pricing"
-          className="block rounded-xl border border-forest-100 bg-forest-50 p-4 text-sm font-medium text-forest-900 hover:bg-forest-100"
-        >
-          Oppgrader til Premium eller Sesongpass for ubegrenset AI-identifikasjon →
-        </Link>
+        <NonNativeOnly>
+          <Link
+            href="/pricing"
+            className="block rounded-xl border border-forest-100 bg-forest-50 p-4 text-sm font-medium text-forest-900 hover:bg-forest-100"
+          >
+            Oppgrader til Premium eller Sesongpass for ubegrenset AI-identifikasjon →
+          </Link>
+        </NonNativeOnly>
 
         <div className="grid grid-cols-2 gap-3">
           <Link href="/calendar" className="rounded-lg border border-gray-200 bg-white p-3 text-sm font-medium">

@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { NonNativeOnly } from '@/components/native/NonNativeOnly';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Download, Navigation, Trash2 } from 'lucide-react';
 import { createRoot, Root } from 'react-dom/client';
@@ -515,9 +516,11 @@ export function MushroomMap() {
         {showOfflineUpsell ? (
           <div className="mt-2 rounded border border-amber-300 bg-amber-50 px-2 py-2">
             <p className="text-xs text-amber-800">Lagring av kartområder offline krever Premium eller Sesongpass.</p>
-            <Link href="/pricing" className="text-xs font-medium text-amber-900 underline">
-              Oppgrader plan
-            </Link>
+            <NonNativeOnly>
+              <Link href="/pricing" className="text-xs font-medium text-amber-900 underline">
+                Oppgrader plan
+              </Link>
+            </NonNativeOnly>
           </div>
         ) : null}
 
