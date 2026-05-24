@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { FormEvent, Suspense, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import { useAuth } from '@/lib/hooks/useAuth';
+import { NonNativeOnly } from '@/components/native/NonNativeOnly';
 
 // Next 15+ requires useSearchParams() to be inside a Suspense boundary.
 // Inner form rendered by LoginForm; default export wraps it in Suspense.
@@ -89,9 +90,11 @@ function LoginForm() {
           </Button>
         </form>
 
-        <Button type="button" variant="outline" className="mt-3 w-full" onClick={handleGoogle} disabled={loading}>
-          Fortsett med Google
-        </Button>
+        <NonNativeOnly>
+          <Button type="button" variant="outline" className="mt-3 w-full" onClick={handleGoogle} disabled={loading}>
+            Fortsett med Google
+          </Button>
+        </NonNativeOnly>
 
         <p className="mt-4 text-sm text-gray-700">
           Har du ikke konto?{' '}
