@@ -9,7 +9,7 @@ interface PageWrapperProps {
 
 export function PageWrapper({ children, wide }: PageWrapperProps) {
   return (
-    <div className="min-h-screen pb-20">
+    <div className="min-h-screen pb-[calc(5rem_+_env(safe-area-inset-bottom))]">
       <Header />
       <main className={`mx-auto w-full px-4 py-4 ${wide ? 'max-w-screen-xl' : 'max-w-screen-md'}`}>
         {children}

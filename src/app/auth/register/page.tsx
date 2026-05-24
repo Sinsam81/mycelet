@@ -54,7 +54,7 @@ function RegisterForm() {
   };
 
   return (
-    <main className="mx-auto min-h-screen w-full max-w-screen-sm p-6">
+    <main className="mx-auto min-h-screen w-full max-w-screen-sm p-6 pt-[calc(1.5rem_+_env(safe-area-inset-top))]">
       <div className="rounded-xl bg-white p-6 shadow-sm">
         <h1 className="text-2xl font-semibold text-forest-900">Opprett konto</h1>
         <p className="mt-2 text-sm text-gray-700">Lag profil for å lagre funn og bli med i forumet.</p>
@@ -125,7 +125,7 @@ function RegisterForm() {
 
 export default function RegisterPage() {
   return (
-    <Suspense fallback={<main className="mx-auto min-h-screen w-full max-w-screen-sm p-6"><p className="text-sm text-gray-700">Laster...</p></main>}>
+    <Suspense fallback={<main className="mx-auto min-h-screen w-full max-w-screen-sm p-6 pt-[calc(1.5rem_+_env(safe-area-inset-top))]"><p className="text-sm text-gray-700">Laster...</p></main>}>
       <RegisterForm />
     </Suspense>
   );

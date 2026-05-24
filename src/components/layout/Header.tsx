@@ -28,7 +28,7 @@ export function Header() {
   const native = useIsNative();
 
   return (
-    <header className="sticky top-0 z-40 border-b border-gray-200 bg-forest-900 text-white">
+    <header className="sticky top-0 z-40 border-b border-gray-200 bg-forest-900 pt-[env(safe-area-inset-top)] text-white">
       <div className="mx-auto flex h-14 max-w-screen-md items-center justify-between px-4">
         <Link href="/" className="flex items-center gap-2 text-lg font-semibold tracking-tight">
           <MushroomMark className="h-5 w-5 text-forest-100" />

@@ -15,7 +15,10 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: '#1A3409'
+  themeColor: '#1A3409',
+  // Lets the WebView extend under the status bar / notch so env(safe-area-inset-*)
+  // returns real values; the shell pads for them (Header, BottomNav, PageWrapper).
+  viewportFit: 'cover'
 };
 
 export default function RootLayout({
