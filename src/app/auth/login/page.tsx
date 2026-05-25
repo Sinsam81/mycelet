@@ -83,6 +83,12 @@ function LoginForm() {
             />
           </label>
 
+          <div className="-mt-1 text-right">
+            <Link href="/auth/forgot" className="text-sm font-medium text-forest-800 hover:underline">
+              Glemt passord?
+            </Link>
+          </div>
+
           {error ? <p className="text-sm text-red-600">{error}</p> : null}
 
           <Button type="submit" className="w-full" loading={loading}>
