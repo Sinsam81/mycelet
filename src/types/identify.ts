@@ -8,6 +8,10 @@ export interface IdentifySuggestion {
   taxonomy: Record<string, string> | null;
   similarImages: string[];
   speciesId?: number;
+  // Local context fused from the app's own data (see identify-ranking.ts)
+  inSeason?: boolean;
+  peakSeason?: boolean;
+  nearbyFindings?: number;
 }
 
 export interface IdentifyResultPayload {

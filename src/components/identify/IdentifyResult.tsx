@@ -30,8 +30,22 @@ export function IdentifyResult({ suggestions }: IdentifyResultProps) {
             <span className="text-sm font-bold text-forest-800">{suggestion.probability}%</span>
           </div>
 
-          <div className="mt-2">
+          <div className="mt-2 flex flex-wrap items-center gap-2">
             <EdibilityBadge edibility={normalizeEdibility(suggestion.edibility)} />
+            {suggestion.inSeason === true ? (
+              <span className="rounded-full bg-forest-100 px-2 py-0.5 text-xs font-medium text-forest-900">
+                {suggestion.peakSeason ? 'Topp-sesong nå' : 'I sesong nå'}
+              </span>
+            ) : suggestion.inSeason === false ? (
+              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900">
+                Utenom sesong
+              </span>
+            ) : null}
+            {suggestion.nearbyFindings && suggestion.nearbyFindings > 0 ? (
+              <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-700">
+                {suggestion.nearbyFindings} funn i nærheten
+              </span>
+            ) : null}
           </div>
 
           {suggestion.speciesId ? (
