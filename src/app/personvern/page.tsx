@@ -11,7 +11,7 @@ export const metadata = {
 // === Personvernerklæring — v1 (klar for lansering) ===
 // Behandlingsansvarlig, kontakt-e-post, tredjeparter og datalagring er fylt inn.
 // Gjenstår før/ved lansering:
-//   1) Opprett innboksen privacy@mycelet.no (lenkes til gjennom hele siden).
+//   1) Opprett innboksen privacy@mycelet.com (lenkes til gjennom hele siden).
 //   2) Anbefalt (ikke påkrevd for App Store): la en jurist se over teksten.
 //   3) Når kjøp i iOS-appen (RevenueCat/Apple IAP) skrus på: legg Apple + RevenueCat
 //      til som databehandlere i punkt 4.
@@ -41,8 +41,8 @@ export default function PersonvernPage() {
             <li>Sindre Øverås, som driver Mycelet som privatperson.</li>
             <li>
               Kontakt for personvern:{' '}
-              <a href="mailto:privacy@mycelet.no" className="font-medium text-forest-700 underline">
-                privacy@mycelet.no
+              <a href="mailto:privacy@mycelet.com" className="font-medium text-forest-700 underline">
+                privacy@mycelet.com
               </a>
             </li>
           </ul>
@@ -279,8 +279,8 @@ export default function PersonvernPage() {
               <p className="font-medium">Begrensning og innsigelse (Art. 18, 21)</p>
               <p>
                 Kontakt{' '}
-                <a href="mailto:privacy@mycelet.no" className="font-medium underline">
-                  privacy@mycelet.no
+                <a href="mailto:privacy@mycelet.com" className="font-medium underline">
+                  privacy@mycelet.com
                 </a>{' '}
                 hvis du vil begrense hvordan vi behandler dataene dine, eller motsette deg behandlingen.
               </p>
@@ -364,8 +364,8 @@ export default function PersonvernPage() {
           </h2>
           <p className="text-sm text-forest-900">
             Spørsmål om personvern? Send e-post til{' '}
-            <a href="mailto:privacy@mycelet.no" className="font-medium underline">
-              privacy@mycelet.no
+            <a href="mailto:privacy@mycelet.com" className="font-medium underline">
+              privacy@mycelet.com
             </a>
             .
           </p>
