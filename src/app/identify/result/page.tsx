@@ -17,6 +17,7 @@ export default function IdentifyResultPage() {
   const [payload, setPayload] = useState<IdentifyResultPayload | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [selectedIndex, setSelectedIndex] = useState(0);
 
   useEffect(() => {
     const raw = sessionStorage.getItem('identifyResult');
@@ -54,6 +55,9 @@ export default function IdentifyResultPage() {
         throw new Error('GPS-posisjon mangler. Ta nytt bilde med lokasjon aktivert.');
       }
 
+      // The user confirms which suggestion is correct (defaults to the AI's top).
+      const chosen = payload.suggestions[selectedIndex] ?? topSuggestion;
+
       // Save the identified photo with the find (best-effort — a photo upload
       // hiccup must not block logging). Gives every AI-logged find an image:
       // richer community feed + a labelled record for later review.
@@ -77,14 +81,14 @@ export default function IdentifyResultPage() {
         user_id: user.id,
         latitude: payload.location.latitude,
         longitude: payload.location.longitude,
-        species_id: topSuggestion.speciesId ?? null,
-        species_name_override: topSuggestion.name,
+        species_id: chosen.speciesId ?? null,
+        species_name_override: chosen.name,
         ai_used: true,
         ai_top_suggestion: topSuggestion.name,
         ai_confidence: topSuggestion.probability / 100,
-        ai_raw_response: { suggestions: payload.suggestions },
+        ai_raw_response: { suggestions: payload.suggestions, confirmedIndex: selectedIndex },
         visibility: 'approximate',
-        user_confirmed_species: Boolean(topSuggestion.speciesId),
+        user_confirmed_species: true,
         image_url: imageUrl,
         thumbnail_url: imageUrl
       });
@@ -118,7 +122,12 @@ export default function IdentifyResultPage() {
           <img src={payload.originalImageDataUrl} alt="Opplastet soppbilde" className="h-56 w-full object-cover" />
         </div>
 
-        <IdentifyResult suggestions={payload.suggestions.slice(0, 3)} />
+        <p className="text-sm text-gray-700">Velg arten som stemmer — vi logger den du velger:</p>
+        <IdentifyResult
+          suggestions={payload.suggestions.slice(0, 3)}
+          selectedIndex={selectedIndex}
+          onSelect={setSelectedIndex}
+        />
 
         {error ? <p className="text-sm text-red-600">{error}</p> : null}
 
