@@ -1,20 +1,7 @@
 import Link from 'next/link';
 import { PageWrapper } from '@/components/layout/PageWrapper';
-import { EdibilityBadge } from '@/components/ui/EdibilityBadge';
 import { createClient } from '@/lib/supabase/server';
-import type { Edibility } from '@/types/species';
-
-interface SpeciesRow {
-  id: number;
-  norwegian_name: string;
-  latin_name: string;
-  edibility: Edibility;
-  season_start: number;
-  season_end: number;
-  peak_season_start: number | null;
-  peak_season_end: number | null;
-  primary_image_url: string | null;
-}
+import { SeasonNow, type CalendarSpecies } from '@/components/calendar/SeasonNow';
 
 const MONTH_NAMES = [
   'januar', 'februar', 'mars', 'april', 'mai', 'juni',
@@ -33,14 +20,7 @@ export default async function CalendarPage() {
     .select('id,norwegian_name,latin_name,edibility,season_start,season_end,peak_season_start,peak_season_end,primary_image_url')
     .order('norwegian_name', { ascending: true });
 
-  const species = (data ?? []) as SpeciesRow[];
-  const currentMonth = new Date().getMonth() + 1;
-  const nextMonth = currentMonth === 12 ? 1 : currentMonth + 1;
-
-  const inSeason = species.filter((s) => isInMonth(currentMonth, s.season_start, s.season_end));
-  const comingNext = species.filter(
-    (s) => !isInMonth(currentMonth, s.season_start, s.season_end) && isInMonth(nextMonth, s.season_start, s.season_end)
-  );
+  const species = (data ?? []) as CalendarSpecies[];
 
   return (
     <PageWrapper>
@@ -52,69 +32,8 @@ export default async function CalendarPage() {
 
         {error ? <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">Kunne ikke hente arter.</p> : null}
 
-        <article className="space-y-3 rounded-xl bg-white p-4 shadow-sm">
-          <h2 className="font-semibold">I sesong nå ({MONTH_NAMES[currentMonth - 1]})</h2>
-          {inSeason.length === 0 ? (
-            <p className="text-sm text-gray-700">Ingen av de registrerte artene er i sesong i {MONTH_NAMES[currentMonth - 1]}.</p>
-          ) : (
-            <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-              {inSeason.map((s) => {
-                const peak =
-                  s.peak_season_start !== null &&
-                  s.peak_season_end !== null &&
-                  isInMonth(currentMonth, s.peak_season_start, s.peak_season_end);
-                return (
-                  <li key={s.id}>
-                    <Link
-                      href={`/species/${s.id}`}
-                      className="flex items-center gap-3 rounded-lg border border-gray-200 p-2 hover:border-forest-700"
-                    >
-                      <div className="h-12 w-12 shrink-0 overflow-hidden rounded bg-gray-100">
-                        {s.primary_image_url ? (
-                          <img src={s.primary_image_url} alt={s.norwegian_name} className="h-full w-full object-cover" />
-                        ) : null}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate font-medium text-gray-900">{s.norwegian_name}</p>
-                        <p className="truncate text-xs italic text-gray-600">{s.latin_name}</p>
-                        <div className="mt-1 flex items-center gap-1.5">
-                          <EdibilityBadge edibility={s.edibility} />
-                          {peak ? <span className="rounded-full bg-forest-100 px-2 py-0.5 text-xs font-semibold text-forest-900">Topp-sesong</span> : null}
-                        </div>
-                      </div>
-                    </Link>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </article>
-
-        {comingNext.length > 0 ? (
-          <article className="space-y-3 rounded-xl bg-white p-4 shadow-sm">
-            <h2 className="font-semibold">Kommer i {MONTH_NAMES[nextMonth - 1]}</h2>
-            <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-              {comingNext.map((s) => (
-                <li key={s.id}>
-                  <Link
-                    href={`/species/${s.id}`}
-                    className="flex items-center gap-3 rounded-lg border border-gray-200 p-2 hover:border-forest-700"
-                  >
-                    <div className="h-10 w-10 shrink-0 overflow-hidden rounded bg-gray-100">
-                      {s.primary_image_url ? (
-                        <img src={s.primary_image_url} alt={s.norwegian_name} className="h-full w-full object-cover" />
-                      ) : null}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate font-medium text-gray-900">{s.norwegian_name}</p>
-                      <EdibilityBadge edibility={s.edibility} />
-                    </div>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </article>
-        ) : null}
+        {/* Location-aware "in season now" + "coming soon" (client — needs the user's position). */}
+        <SeasonNow species={species} />
 
         <article className="space-y-3 rounded-xl bg-white p-4 shadow-sm">
           <h2 className="font-semibold">Hele året</h2>
