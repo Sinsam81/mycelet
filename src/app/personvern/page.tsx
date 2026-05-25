@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { AlertTriangle, Cookie, Database, FileDown, Lock, Mail, Trash2, Users } from 'lucide-react';
+import { Cookie, Database, FileDown, Lock, Mail, Trash2, Users } from 'lucide-react';
 import { PageWrapper } from '@/components/layout/PageWrapper';
 
 export const metadata = {
@@ -8,13 +8,15 @@ export const metadata = {
     'Hvordan Mycelet samler inn, bruker og beskytter personopplysningene dine. GDPR-rettighetene dine og hvem du kan kontakte.'
 };
 
-// === MAL — IKKE PUBLISER FØR ===
-// 1) Tekst i [HAKEPARENTESER] er fylles inn av deg
-// 2) Send hele dokumentet til advokat for gjennomgang
-// 3) DPA-er må signeres med Supabase, Stripe, OpenWeather, Plant.id (se "Hvem vi deler data med")
-// 4) Sett opp privacy@mycelet.no før lansering
+// === Personvernerklæring — v1 (klar for lansering) ===
+// Behandlingsansvarlig, kontakt-e-post, tredjeparter og datalagring er fylt inn.
+// Gjenstår før/ved lansering:
+//   1) Opprett innboksen privacy@mycelet.no (lenkes til gjennom hele siden).
+//   2) Anbefalt (ikke påkrevd for App Store): la en jurist se over teksten.
+//   3) Når kjøp i iOS-appen (RevenueCat/Apple IAP) skrus på: legg Apple + RevenueCat
+//      til som databehandlere i punkt 4.
 
-const LAST_UPDATED = '4. mai 2026';
+const LAST_UPDATED = '25. mai 2026';
 
 export default function PersonvernPage() {
   return (
@@ -27,18 +29,6 @@ export default function PersonvernPage() {
           </p>
         </div>
 
-        <article className="rounded-xl border-2 border-amber-300 bg-amber-50 p-4">
-          <div className="flex items-start gap-3">
-            <AlertTriangle className="h-6 w-6 shrink-0 text-amber-700" />
-            <div className="space-y-1">
-              <p className="text-base font-bold text-amber-900">Mal under utvikling</p>
-              <p className="text-sm text-amber-900">
-                Denne siden er en arbeidsmal og må gjennomgås av advokat før lansering. Felter i [hakeparenteser] må fylles inn.
-              </p>
-            </div>
-          </div>
-        </article>
-
         {/* === 1. Behandlingsansvarlig === */}
         <article className="space-y-2 rounded-xl border border-gray-200 bg-white p-4">
           <h2 className="flex items-center gap-2 text-lg font-semibold">
@@ -48,9 +38,7 @@ export default function PersonvernPage() {
             Behandlingsansvarlig for personopplysningene dine er:
           </p>
           <ul className="list-disc space-y-1 pl-5 text-sm text-gray-700">
-            <li>[FYLL INN: Selskapets juridiske navn / enkeltpersonforetak]</li>
-            <li>Organisasjonsnummer: [FYLL INN]</li>
-            <li>Adresse: [FYLL INN]</li>
+            <li>Sindre Øverås, som driver Mycelet som privatperson.</li>
             <li>
               Kontakt for personvern:{' '}
               <a href="mailto:privacy@mycelet.no" className="font-medium text-forest-700 underline">
@@ -134,33 +122,70 @@ export default function PersonvernPage() {
         <article className="space-y-2 rounded-xl border border-gray-200 bg-white p-4">
           <h2 className="text-lg font-semibold">4. Hvem vi deler data med (databehandlere)</h2>
           <p className="text-sm text-gray-700">
-            Vi har inngått databehandleravtaler (DPA) med følgende leverandører:
+            Vi bruker følgende leverandører (databehandlere) for å drive tjenesten. De behandler kun dataene som er nødvendige for
+            sin funksjon, på våre vegne:
           </p>
           <ul className="list-disc space-y-1 pl-5 text-sm text-gray-700">
             <li>
-              <span className="font-medium">Supabase</span> (database, autentisering, fillagring) — region:{' '}
-              [FYLL INN: EU/Frankfurt eller US?]. DPA: [LENKE/STATUS].
+              <span className="font-medium">Supabase</span> (database, innlogging, fillagring) — dataene lagres i EU.
+              Databehandleravtale:{' '}
+              <a
+                href="https://supabase.com/legal/dpa"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-medium text-forest-700 underline"
+              >
+                supabase.com/legal/dpa
+              </a>
+              .
             </li>
             <li>
-              <span className="font-medium">Vercel</span> (hosting). DPA: [LENKE/STATUS].
+              <span className="font-medium">Vercel</span> (hosting/drift) — Databehandleravtale:{' '}
+              <a
+                href="https://vercel.com/legal/dpa"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-medium text-forest-700 underline"
+              >
+                vercel.com/legal/dpa
+              </a>
+              . Trafikk kan rutes via servere utenfor EØS under EUs standardavtaler (SCC).
             </li>
             <li>
-              <span className="font-medium">Stripe</span> (betaling). DPA: [LENKE/STATUS]. Stripe overfører data til USA under SCC.
+              <span className="font-medium">Stripe</span> (betaling på web) — Databehandleravtale:{' '}
+              <a
+                href="https://stripe.com/legal/dpa"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-medium text-forest-700 underline"
+              >
+                stripe.com/legal/dpa
+              </a>
+              . Stripe kan overføre data til USA under SCC.
             </li>
             <li>
-              <span className="font-medium">OpenWeather</span> (vær for områder utenfor Norden) — kun koordinater, ingen
-              brukerinformasjon.
+              <span className="font-medium">Kindwise</span> (AI-soppidentifikasjon) — når du bruker foto-ID, sendes bildet og
+              koordinatene til Kindwise for analyse. Personvern:{' '}
+              <a
+                href="https://www.kindwise.com/privacy-policy"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-medium text-forest-700 underline"
+              >
+                kindwise.com/privacy-policy
+              </a>
+              .
             </li>
             <li>
-              <span className="font-medium">MET Norge (Frost)</span> og <span className="font-medium">SMHI (Sverige)</span> — kun
-              koordinater, ingen brukerinformasjon.
+              <span className="font-medium">MET Norge (Frost)</span> og <span className="font-medium">SMHI (Sverige)</span>{' '}
+              (værdata) — kun koordinater sendes, ingen brukerinformasjon.
             </li>
             <li>
-              <span className="font-medium">Plant.id / Kindwise</span> (AI-identifikasjon, hvis aktivert) — bilde + koordinater
-              sendes for analyse. DPA: [LENKE/STATUS].
+              <span className="font-medium">NIBIO (Norge)</span> og <span className="font-medium">CORINE / EEA (Europa)</span>{' '}
+              (skog- og arealdata for prediksjon) — kun koordinater sendes, ingen brukerinformasjon.
             </li>
             <li>
-              <span className="font-medium">Wikimedia Commons</span> — vi bruker bare offentlige bilde-URL-er, ingen brukerdata
+              <span className="font-medium">Wikimedia Commons</span> — vi bruker bare offentlige bilde-URL-er; ingen brukerdata
               sendes.
             </li>
           </ul>
