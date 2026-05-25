@@ -119,6 +119,37 @@ describe('computeHabitatScore', () => {
     expect(result.reasons.some((r) => r.toLowerCase().includes('favoritt'))).toBe(true);
   });
 
+  it('matches coarse CORINE bar (coniferous) to a conifer-loving species', () => {
+    // CORINE (Sweden) only knows "coniferous" — 'bar' should reward a species
+    // that names gran or furu, mirroring how 'lauv' rewards deciduous partners.
+    const result = computeHabitatScore(
+      forest({ forestType: 'bar', ageYears: null, productivity: null, source: 'corine' }),
+      CONIFER_ONLY_PREFS
+    );
+    // Base 0.5 + 0.3 (bar conifer-group match) = 0.8
+    expect(result.score).toBeCloseTo(0.8, 2);
+    expect(result.reasons.some((r) => r.toLowerCase().includes('barskog'))).toBe(true);
+  });
+
+  it('matches kantarell (gran/furu among partners) in bar forest', () => {
+    const result = computeHabitatScore(
+      forest({ forestType: 'bar', ageYears: null, productivity: null, source: 'corine' }),
+      KANTARELL_PREFS
+    );
+    // Base 0.5 + 0.3 (bar conifer-group match) = 0.8 (no age/bonitet data in CORINE)
+    expect(result.score).toBeCloseTo(0.8, 2);
+  });
+
+  it('penalizes a deciduous-only species in bar forest', () => {
+    const result = computeHabitatScore(
+      forest({ forestType: 'bar', ageYears: null, productivity: null, source: 'corine' }),
+      TROMPETSOPP_PREFS
+    );
+    // Base 0.5 - 0.15 (bar is not a deciduous-lover's favorite) = 0.35
+    expect(result.score).toBeCloseTo(0.35, 2);
+    expect(result.reasons.some((r) => r.toLowerCase().includes('favoritt'))).toBe(true);
+  });
+
   it('rewards high productivity for kalkrik-loving species (piggsopp)', () => {
     const result = computeHabitatScore(
       forest({ forestType: 'gran', ageYears: 80, productivity: 18 }),

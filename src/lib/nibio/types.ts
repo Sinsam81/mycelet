@@ -24,7 +24,13 @@
  * because species' mycorrhizal_partners name specific trees; habitat
  * scoring maps the coarse 'lauv' onto them as a deciduous-group match.
  *
- * 'blandet' (mixed) is not produced by SR16 treslag but kept for a future
+ * 'bar' (coniferous) is the conifer counterpart of the coarse 'lauv' class:
+ * a source knows the cell is barskog but not whether it's gran or furu.
+ * CORINE Land Cover (the Swedish/pan-European source, class 312) produces
+ * exactly this — habitat scoring maps 'bar' onto gran/furu partners as a
+ * coniferous-group match, mirroring how 'lauv' maps onto deciduous trees.
+ *
+ * 'blandet' (mixed) is produced by CORINE class 313/324 and kept for a future
  * AR5/landcover source. 'apent' covers non-forest cells; note SR16 returns
  * nodata (-9999) for water/urban/open land, which getForestProperties maps
  * to null (not 'apent') so callers fall back to the climate signal.
@@ -33,6 +39,7 @@
 export type ForestType =
   | 'gran'
   | 'furu'
+  | 'bar'
   | 'lauv'
   | 'bjork'
   | 'eik'
@@ -63,8 +70,14 @@ export interface ForestProperties {
   productivity: number | null;
   /** Stem volume in m³/ha. */
   volumePerHa: number | null;
-  /** Where the values came from. 'fallback' = no SR16 cell, neutral defaults. */
-  source: 'sr16' | 'fallback';
+  /**
+   * Where the values came from.
+   *   'sr16'     — NIBIO SR16 raster (Norway), full treslag/alder/bonitet.
+   *   'corine'   — CORINE Land Cover (Sweden/Europe), forest TYPE only;
+   *                ageYears/productivity/volumePerHa are null.
+   *   'fallback' — no cell found, neutral defaults.
+   */
+  source: 'sr16' | 'corine' | 'fallback';
 }
 
 export interface HabitatQuery {

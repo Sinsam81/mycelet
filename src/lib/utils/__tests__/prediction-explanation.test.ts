@@ -250,6 +250,26 @@ describe('buildExplanation — real forest data (NIBIO)', () => {
     const reason = lines.find((l) => l.category === 'habitat' && l.text.includes('Åpent'));
     expect(reason?.level).toBe('negative');
   });
+
+  it('credits CORINE and labels barskog for a Swedish coniferous point', () => {
+    const lines = buildExplanation({
+      species: KANTARELL,
+      month: 8,
+      weather: PERFECT_KANTARELL_WEATHER,
+      forest: {
+        forestType: 'bar',
+        productivity: null,
+        volumePerHa: null,
+        habitatScore: 0.8,
+        habitatReasons: ['Barskog matcher artens bartre-partnere (eksakt treslag ukjent i CORINE).'],
+        source: 'corine'
+      }
+    });
+    const head = lines.find((l) => l.category === 'habitat' && l.text.startsWith('Skog her'));
+    expect(head?.text).toContain('(CORINE)');
+    expect(head?.text).toContain('barskog');
+    expect(head?.text).not.toContain('NIBIO');
+  });
 });
 
 describe('buildExplanation — output ordering', () => {

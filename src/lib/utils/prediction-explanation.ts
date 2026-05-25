@@ -76,6 +76,8 @@ export interface ExplanationForest {
   habitatScore: number | null;
   /** Server-built Norwegian reasons (tree-species match, soil richness). */
   habitatReasons: string[];
+  /** Data provider: 'sr16' (NO/NIBIO), 'corine' (SE/Europe). Drives the credit label. */
+  source?: string;
 }
 
 export interface ExplanationInput {
@@ -115,6 +117,7 @@ function inMonth(month: number, start: number, end: number): boolean {
 const FOREST_TYPE_LABEL: Record<string, string> = {
   gran: 'granskog',
   furu: 'furuskog',
+  bar: 'barskog',
   lauv: 'løvskog',
   blandet: 'blandingsskog',
   apent: 'åpent landskap'
@@ -122,6 +125,12 @@ const FOREST_TYPE_LABEL: Record<string, string> = {
 
 function forestLabel(forestType: string): string {
   return FOREST_TYPE_LABEL[forestType] ?? 'skog';
+}
+
+/** Credit the right data source in the habitat line. CORINE for Sweden/Europe,
+ *  NIBIO otherwise (Norway / unspecified — preserves the original label). */
+function forestSourceLabel(source: string | undefined): string {
+  return source === 'corine' ? 'CORINE' : 'NIBIO';
 }
 
 /** Map the habitat-fit multiplier to a color level for the UI. */
@@ -288,7 +297,7 @@ export function buildExplanation(input: ExplanationInput): Explanation[] {
     lines.push({
       level: 'neutral',
       category: 'habitat',
-      text: `Skog her (NIBIO): ${forestLabel(f.forestType)}${bonitetPart}`
+      text: `Skog her (${forestSourceLabel(f.source)}): ${forestLabel(f.forestType)}${bonitetPart}`
     });
     for (const reason of f.habitatReasons) {
       lines.push({ level, category: 'habitat', text: reason });
