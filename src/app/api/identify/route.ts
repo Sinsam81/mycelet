@@ -162,6 +162,7 @@ export async function POST(request: NextRequest) {
           peakSeason?: boolean;
           nearbyFindings: number;
           seasonFactor: number;
+          dangerousLookAlikes?: Array<{ name: string; danger: string }>;
         };
         mapped.seasonFactor = 1;
         mapped.nearbyFindings = 0;
@@ -192,33 +193,57 @@ export async function POST(request: NextRequest) {
       })
     );
 
-    // Fuse the app's own data: count recent nearby finds of each matched species
-    // (privacy-safe display coords from public_findings), then re-rank by local
-    // relevance. The re-rank can never bury a poisonous match (identify-ranking.ts).
-    if (body.latitude != null && body.longitude != null) {
-      const speciesIds = suggestions
-        .map((s) => s.speciesId)
-        .filter((id): id is number => id != null);
-      if (speciesIds.length > 0) {
-        const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
-        const delta = 0.25; // ~20-28 km box
-        const { data: nearby } = await supabase
-          .from('public_findings')
-          .select('species_id')
-          .in('species_id', speciesIds)
-          .gte('found_at', since)
-          .gte('display_lat', body.latitude - delta)
-          .lte('display_lat', body.latitude + delta)
-          .gte('display_lng', body.longitude - delta)
-          .lte('display_lng', body.longitude + delta);
-        const counts = new Map<number, number>();
-        for (const row of nearby ?? []) {
-          const sid = (row as { species_id: number | null }).species_id;
-          if (sid != null) counts.set(sid, (counts.get(sid) ?? 0) + 1);
-        }
-        for (const s of suggestions) {
-          if (s.speciesId != null) s.nearbyFindings = counts.get(s.speciesId) ?? 0;
-        }
+    const speciesIds = suggestions
+      .map((s) => s.speciesId)
+      .filter((id): id is number => id != null);
+
+    // SAFETY: surface high/critical look-alikes right in the result (not hidden on
+    // the species page). Location-independent, so always run.
+    if (speciesIds.length > 0) {
+      const { data: lookAlikes } = await supabase
+        .from('look_alikes')
+        .select('species_id, danger_level, la:mushroom_species!look_alikes_look_alike_id_fkey(norwegian_name)')
+        .in('species_id', speciesIds)
+        .in('danger_level', ['high', 'critical']);
+      const byId = new Map<number, Array<{ name: string; danger: string }>>();
+      for (const row of lookAlikes ?? []) {
+        const r = row as unknown as {
+          species_id: number | null;
+          danger_level: string;
+          la: { norwegian_name: string } | { norwegian_name: string }[] | null;
+        };
+        const laObj = Array.isArray(r.la) ? r.la[0] : r.la;
+        if (r.species_id == null || !laObj?.norwegian_name) continue;
+        const arr = byId.get(r.species_id) ?? [];
+        arr.push({ name: laObj.norwegian_name, danger: r.danger_level });
+        byId.set(r.species_id, arr);
+      }
+      for (const s of suggestions) {
+        if (s.speciesId != null && byId.has(s.speciesId)) s.dangerousLookAlikes = byId.get(s.speciesId);
+      }
+    }
+
+    // Count recent nearby finds (privacy-safe display coords from public_findings),
+    // then re-rank by local relevance. The re-rank can never bury a poisonous match.
+    if (body.latitude != null && body.longitude != null && speciesIds.length > 0) {
+      const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+      const delta = 0.25; // ~20-28 km box
+      const { data: nearby } = await supabase
+        .from('public_findings')
+        .select('species_id')
+        .in('species_id', speciesIds)
+        .gte('found_at', since)
+        .gte('display_lat', body.latitude - delta)
+        .lte('display_lat', body.latitude + delta)
+        .gte('display_lng', body.longitude - delta)
+        .lte('display_lng', body.longitude + delta);
+      const counts = new Map<number, number>();
+      for (const row of nearby ?? []) {
+        const sid = (row as { species_id: number | null }).species_id;
+        if (sid != null) counts.set(sid, (counts.get(sid) ?? 0) + 1);
+      }
+      for (const s of suggestions) {
+        if (s.speciesId != null) s.nearbyFindings = counts.get(s.speciesId) ?? 0;
       }
     }
 
@@ -244,7 +269,8 @@ export async function POST(request: NextRequest) {
         speciesId: s.speciesId,
         inSeason: s.inSeason,
         peakSeason: s.peakSeason,
-        nearbyFindings: s.nearbyFindings
+        nearbyFindings: s.nearbyFindings,
+        dangerousLookAlikes: s.dangerousLookAlikes
       };
     });
 
