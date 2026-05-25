@@ -6,6 +6,7 @@ import { PageWrapper } from '@/components/layout/PageWrapper';
 import { IdentifyResult } from '@/components/identify/IdentifyResult';
 import { SafetyWarning } from '@/components/identify/SafetyWarning';
 import { Button } from '@/components/ui/Button';
+import toast from 'react-hot-toast';
 import { createClient } from '@/lib/supabase/client';
 import { IdentifyResultPayload } from '@/types/identify';
 
@@ -53,6 +54,25 @@ export default function IdentifyResultPage() {
         throw new Error('GPS-posisjon mangler. Ta nytt bilde med lokasjon aktivert.');
       }
 
+      // Save the identified photo with the find (best-effort — a photo upload
+      // hiccup must not block logging). Gives every AI-logged find an image:
+      // richer community feed + a labelled record for later review.
+      let imageUrl: string | null = null;
+      if (payload.originalImageDataUrl) {
+        try {
+          const blob = await (await fetch(payload.originalImageDataUrl)).blob();
+          const fileName = `${user.id}/${Date.now()}.jpg`;
+          const { error: uploadError } = await supabase.storage
+            .from('finding-images')
+            .upload(fileName, blob, { upsert: false, contentType: blob.type || 'image/jpeg' });
+          if (!uploadError) {
+            imageUrl = supabase.storage.from('finding-images').getPublicUrl(fileName).data.publicUrl;
+          }
+        } catch {
+          // ignore — log the find without the photo
+        }
+      }
+
       const { error: insertError } = await supabase.from('findings').insert({
         user_id: user.id,
         latitude: payload.location.latitude,
@@ -64,10 +84,13 @@ export default function IdentifyResultPage() {
         ai_confidence: topSuggestion.probability / 100,
         ai_raw_response: { suggestions: payload.suggestions },
         visibility: 'approximate',
-        user_confirmed_species: Boolean(topSuggestion.speciesId)
+        user_confirmed_species: Boolean(topSuggestion.speciesId),
+        image_url: imageUrl,
+        thumbnail_url: imageUrl
       });
 
       if (insertError) throw insertError;
+      toast.success('Funn lagret! 🍄');
       router.push('/map');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Kunne ikke lagre funn.');
