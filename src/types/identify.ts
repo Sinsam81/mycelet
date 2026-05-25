@@ -12,6 +12,7 @@ export interface IdentifySuggestion {
   inSeason?: boolean;
   peakSeason?: boolean;
   nearbyFindings?: number;
+  dangerousLookAlikes?: Array<{ name: string; danger: string }>;
 }
 
 export interface IdentifyResultPayload {

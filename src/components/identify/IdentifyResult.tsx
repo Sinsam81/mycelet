@@ -48,6 +48,12 @@ export function IdentifyResult({ suggestions }: IdentifyResultProps) {
             ) : null}
           </div>
 
+          {suggestion.dangerousLookAlikes && suggestion.dangerousLookAlikes.length > 0 ? (
+            <p className="mt-2 rounded-lg border border-red-300 bg-red-50 px-2 py-1.5 text-xs font-medium text-red-900">
+              ⚠️ Kan forveksles med {suggestion.dangerousLookAlikes.map((d) => d.name).join(', ')} — sjekk nøye før du spiser.
+            </p>
+          ) : null}
+
           {suggestion.speciesId ? (
             <Link href={`/species/${suggestion.speciesId}`} className="mt-2 inline-flex text-sm font-medium text-forest-800 hover:underline">
               Se artside
