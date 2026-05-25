@@ -476,7 +476,8 @@ export function MushroomMap() {
             productivity: data.forest.productivity,
             volumePerHa: data.forest.volumePerHa,
             habitatScore: data.habitat?.score ?? null,
-            habitatReasons: data.habitat?.reasons ?? []
+            habitatReasons: data.habitat?.reasons ?? [],
+            source: data.forest.source
           }
         : null,
       month: new Date().getMonth() + 1

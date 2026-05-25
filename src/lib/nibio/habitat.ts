@@ -35,6 +35,14 @@ const DECIDUOUS_PARTNERS: string[] = [
 ];
 
 /**
+ * Coniferous tree species. CORINE Land Cover (the Swedish source) collapses
+ * spruce and pine into a single coarse 'bar' (class 312, coniferous forest),
+ * so a species naming gran OR furu as a partner counts as a (partial) match
+ * when the cell is 'bar' — the conifer mirror of the 'lauv' rule above.
+ */
+const CONIFEROUS_PARTNERS: string[] = ['gran', 'furu', 'contorta'];
+
+/**
  * Compute the habitat-fit multiplier for a given (forest, species) pair.
  *
  * Returns a neutral score with a single "no data" reason when forest is
@@ -71,6 +79,15 @@ export function computeHabitatScore(
     // deciduous partner, a notch below an exact-species match.
     score += 0.3;
     reasons.push('Lauvskog matcher artens lauvtre-partnere (eksakt treslag ukjent i SR16).');
+  } else if (
+    forest.forestType === 'bar' &&
+    preferences.preferredPartners.some((partner) => CONIFEROUS_PARTNERS.includes(partner))
+  ) {
+    // CORINE collapses spruce + pine into one 'bar' (coniferous) class — we
+    // know it's conifer but not gran vs furu. Reward species that like any
+    // conifer partner, a notch below an exact-species match (mirror of lauv).
+    score += 0.3;
+    reasons.push('Barskog matcher artens bartre-partnere (eksakt treslag ukjent i CORINE).');
   } else if (forest.forestType === 'blandet') {
     score += 0.2;
     reasons.push('Blandingsskog — sannsynlig overlapp med foretrukket treslag.');
