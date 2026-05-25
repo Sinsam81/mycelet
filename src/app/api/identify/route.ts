@@ -5,6 +5,7 @@ import { getBillingCapabilities, getUserBillingSubscription } from '@/lib/billin
 import { checkRateLimit } from '@/lib/rate-limit';
 import { getClientKey, rateLimitResponse } from '@/lib/rate-limit/route';
 import { createRequestLogger } from '@/lib/log/request';
+import { seasonFit, rankOrder } from '@/lib/utils/identify-ranking';
 
 const PLANTID_API_URL = 'https://mushroom.kindwise.com/api/v1/identification';
 
@@ -135,6 +136,8 @@ export async function POST(request: NextRequest) {
     const plantIdData = await plantIdResponse.json();
     const suggestionsRaw: PlantIdSuggestion[] = plantIdData?.result?.classification?.suggestions ?? [];
 
+    const month = new Date().getMonth() + 1;
+
     const suggestions = await Promise.all(
       suggestionsRaw.slice(0, 3).map(async (suggestion) => {
         const mapped = {
@@ -155,11 +158,17 @@ export async function POST(request: NextRequest) {
           similarImages: string[];
           speciesId?: number;
           norwegianName?: string;
+          inSeason?: boolean;
+          peakSeason?: boolean;
+          nearbyFindings: number;
+          seasonFactor: number;
         };
+        mapped.seasonFactor = 1;
+        mapped.nearbyFindings = 0;
 
         const { data: species } = await supabase
           .from('mushroom_species')
-          .select('id,norwegian_name,edibility')
+          .select('id,norwegian_name,edibility,season_start,season_end,peak_season_start,peak_season_end')
           .ilike('latin_name', suggestion.name)
           .maybeSingle();
 
@@ -167,20 +176,86 @@ export async function POST(request: NextRequest) {
           mapped.speciesId = species.id;
           mapped.norwegianName = species.norwegian_name;
           mapped.edibility = species.edibility;
+          const fit = seasonFit(
+            month,
+            species.season_start,
+            species.season_end,
+            species.peak_season_start,
+            species.peak_season_end
+          );
+          mapped.inSeason = fit.inSeason;
+          mapped.peakSeason = fit.peakSeason;
+          mapped.seasonFactor = fit.factor;
         }
 
         return mapped;
       })
     );
 
+    // Fuse the app's own data: count recent nearby finds of each matched species
+    // (privacy-safe display coords from public_findings), then re-rank by local
+    // relevance. The re-rank can never bury a poisonous match (identify-ranking.ts).
+    if (body.latitude != null && body.longitude != null) {
+      const speciesIds = suggestions
+        .map((s) => s.speciesId)
+        .filter((id): id is number => id != null);
+      if (speciesIds.length > 0) {
+        const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+        const delta = 0.25; // ~20-28 km box
+        const { data: nearby } = await supabase
+          .from('public_findings')
+          .select('species_id')
+          .in('species_id', speciesIds)
+          .gte('found_at', since)
+          .gte('display_lat', body.latitude - delta)
+          .lte('display_lat', body.latitude + delta)
+          .gte('display_lng', body.longitude - delta)
+          .lte('display_lng', body.longitude + delta);
+        const counts = new Map<number, number>();
+        for (const row of nearby ?? []) {
+          const sid = (row as { species_id: number | null }).species_id;
+          if (sid != null) counts.set(sid, (counts.get(sid) ?? 0) + 1);
+        }
+        for (const s of suggestions) {
+          if (s.speciesId != null) s.nearbyFindings = counts.get(s.speciesId) ?? 0;
+        }
+      }
+    }
+
+    const order = rankOrder(
+      suggestions.map((s) => ({
+        probability: s.probability,
+        edibility: s.edibility,
+        seasonFactor: s.seasonFactor,
+        nearbyFindings: s.nearbyFindings
+      }))
+    );
+    const ranked = order.map((i) => {
+      const s = suggestions[i];
+      return {
+        name: s.name,
+        norwegianName: s.norwegianName,
+        commonNames: s.commonNames,
+        probability: s.probability,
+        edibility: s.edibility,
+        description: s.description,
+        taxonomy: s.taxonomy,
+        similarImages: s.similarImages,
+        speciesId: s.speciesId,
+        inSeason: s.inSeason,
+        peakSeason: s.peakSeason,
+        nearbyFindings: s.nearbyFindings
+      };
+    });
+
     userLog.info('identify.success', {
-      suggestionCount: suggestions.length,
-      topMatch: suggestions[0]?.name,
-      topProbability: suggestions[0]?.probability
+      suggestionCount: ranked.length,
+      topMatch: ranked[0]?.name,
+      topProbability: ranked[0]?.probability
     });
 
     return NextResponse.json({
-      suggestions,
+      suggestions: ranked,
       isPlant: plantIdData?.result?.is_plant?.binary ?? false
     });
   } catch (error) {
