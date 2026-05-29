@@ -10,3 +10,9 @@ pnpm-debug.log*
 .DS_Store
 coverage
 tsconfig.tsbuildinfo
+
+# Playwright
+/test-results
+/playwright-report
+/playwright/.cache
+/blob-report

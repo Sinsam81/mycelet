@@ -1,6 +1,6 @@
 # Mycelet — veikart
 
-> Sist oppdatert: 7. mai 2026
+> Sist oppdatert: 29. mai 2026
 > Eier: Sindre Øverås (`sindre.alstad@gmail.com`)
 
 Dette dokumentet samler alt arbeid som gjenstår før beta-launch (mai-juni 2026) og åpen launch (august 2026), pluss strategiske avgjørelser som ikke er tatt enda.
@@ -23,8 +23,9 @@ For andre planleggingsdokumenter, se [`docs/commercial-mvp-plan.md`](commercial-
 | Fase A (sikkerhet/GDPR før beta) | ✅ Alle 8 stegene shippet |
 | Fase B sikkerhet (audit-log, rate limiting, Næ 16-oppgradering) | ✅ De fleste stegene shippet |
 | Logger + observability (struktet logging, PII-redaksjon, /api/health) | ✅ Ferdig |
-| `fetchFrost()` — norsk vær | ⏳ Venter på Frost-API-nøkkel |
-| **Fase 2 prediksjon** (NIBIO + Frost + GBIF + raster-pipeline) | ⏳ Plan klar (se nedenfor), ikke startet |
+| `fetchFrost()` — norsk vær | ✅ Kode ferdig (`src/lib/weather/index.ts`) — aktiveres automatisk når `MET_FROST_CLIENT_ID` settes (Sindres oppgave) |
+| Live skogdata i prediksjon: NIBIO SR16 (NO) + CORINE (SE) | ✅ Implementert og live-verifisert (`/api/prediction`, modell `v3_computed_nibio_habitat`) |
+| **Fase 2 prediksjon** (habitat + vær + per-art kombinert) | 🟡 Kjernen bygget via live-API-kall (ikke raster-pipeline som opprinnelig planlagt). Gjenstår: GBIF-kalibrering + daglig tile-cron i skala |
 | Lansering på Vercel | ⏳ Du har Vercel-konto, ingen prosjekt opprettet ennå |
 
 ---
@@ -61,6 +62,8 @@ For andre planleggingsdokumenter, se [`docs/commercial-mvp-plan.md`](commercial-
 ## 🔬 Fase 2 prediksjonsmotoren (planen)
 
 Dette er det strategiske kjernearbeidet — det som gjør Mycelet unik. Alt under er nytt fra plan-økten 6. mai 2026.
+
+> **Statusoppdatering 29. mai 2026:** Kjernen i Fase 2 er nå bygget — men med en enklere arkitektur enn planen under beskriver. I stedet for å laste ned hele NIBIO SR16-datasettet og bygge en raster-pipeline, henter `/api/prediction` skogdata **live per punkt** (NIBIO WMS for Norge, CORINE for Sverige) og kombinerer med vær + habitat-scoring i sanntid (modellversjon `v3_computed_nibio_habitat`). Planen under er fortsatt nyttig for det som gjenstår: GBIF-backfill for kalibrering, og en daglig `prediction_tiles`-cron hvis live-kallene blir for trege i skala. Les den med det i mente.
 
 ### Hva vi har bygget grunnmur for
 
@@ -196,7 +199,7 @@ Med geo-utvikler: halvere alt, og kan inkludere Sentinel-2 NDVI i v1.
 | **B2 Dataretensjon** (cron sletter inaktive kontoer + gamle funn) | ⏳ Krever beslutning fra Sindre på perioder |
 | **B5 Sentry feil-monitorering** med PII-skrubbing | ⏳ Krever Sentry-konto fra Sindre |
 | **CSP enforce mode** (etter en uke i prod) | ⏳ |
-| **`next-pwa` → Serwist** (siste sikkerhets-advisorisety) | ⏳ ~90 min, breaking |
+| ~~**`next-pwa` → Serwist**~~ | ✅ Utgått — `next-pwa` er fjernet fra prosjektet, HIGH-sårbarheten finnes ikke lenger |
 | **Distribuert rate limiting** (Upstash Redis eller Vercel KV) | ⏳ Når trafikken vokser |
 | **Penetrasjonstest** | 👤 Eksternt firma, etter beta |
 
@@ -211,15 +214,15 @@ Med geo-utvikler: halvere alt, og kan inkludere Sentinel-2 NDVI i v1.
 
 ---
 
-## 🚨 Kjente sårbarheter (oppdatert 6. mai 2026)
+## 🚨 Kjente sårbarheter (oppdatert 29. mai 2026)
 
 | Pakke | Severity | Status |
 |-------|----------|--------|
-| ~~Næ 14.x — image-optimizer DoS, request smuggling, disk cache growth~~ | – | ✅ Fikset i Næ 16-oppgraderingen |
-| `next-pwa` 5.6.0 → `serialize-javascript` | HIGH (RCE) | ⏳ Krever migrering til Serwist |
-| `next-pwa` → `workbox-build` | HIGH (DoS) | Samme migrering |
+| ~~Next 14.x — image-optimizer DoS, request smuggling, disk cache growth~~ | – | ✅ Fikset i Next 16-oppgraderingen |
+| ~~`next-pwa` → `serialize-javascript` (RCE) / `workbox-build` (DoS)~~ | ~~HIGH~~ | ✅ Borte — `next-pwa` er fjernet fra prosjektet |
+| `next` → bundlet `postcss` <8.5.10 (XSS i CSS-stringify) | MODERATE | 🟡 Akseptert — fix krever nedgradering til `next@9.3.3` (urealistisk). Lav praktisk risiko. |
 
-`npm audit` etter Næ 16-oppgradering: 7 vulnerabilities gjenstår, alle i next-pwa-kjeden. Closes når vi migrerer til Serwist.
+`npm audit` per 29. mai 2026: **2 moderate** sårbarheter, begge i `next` sin egen bundlede `postcss`. De tidligere 7 HIGH-funnene i next-pwa-kjeden er borte etter at `next-pwa` ble fjernet.
 
 ---
 
