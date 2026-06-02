@@ -9,6 +9,32 @@ import { useAuth } from '@/lib/hooks/useAuth';
 // Next 15+ requires useSearchParams() to be inside a Suspense boundary so the
 // page can prerender. We wrap the inner form-rendering component below.
 
+// Supabase errors (PostgrestError, AuthError) are plain objects, NOT Error
+// instances, so `err instanceof Error` misses them and the user only ever saw a
+// generic fallback. Read `.message` defensively and map the common cases to
+// friendly Norwegian copy.
+function toRegisterErrorMessage(err: unknown): string {
+  const raw =
+    typeof err === 'object' && err !== null && 'message' in err
+      ? String((err as { message: unknown }).message)
+      : '';
+  const lower = raw.toLowerCase();
+
+  if (
+    lower.includes('profiles_username_key') ||
+    (lower.includes('username') && (lower.includes('duplicate') || lower.includes('unique')))
+  ) {
+    return 'Brukernavnet er allerede i bruk. Velg et annet.';
+  }
+  if (lower.includes('already registered') || lower.includes('already been registered')) {
+    return 'E-posten er allerede registrert. Prøv å logge inn i stedet.';
+  }
+  if (lower.includes('password') && (lower.includes('least') || lower.includes('short'))) {
+    return 'Passordet er for kort. Bruk minst 8 tegn.';
+  }
+  return raw || 'Kunne ikke registrere konto. Prøv igjen.';
+}
+
 function RegisterForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -30,7 +56,12 @@ function RegisterForm() {
     try {
       const result = await signUp({ email, password, username, displayName });
 
-      if (result.user) {
+      // With e-mail confirmation OFF, signUp returns an active session, so we
+      // can create the profile (RLS requires auth.uid() = id) and send the user
+      // straight into the app. With confirmation ON there is no session yet, so
+      // we route them to login with a "check your inbox" hint instead of
+      // attempting an unauthenticated profile insert that RLS would reject.
+      if (result.session && result.user) {
         const { error: profileError } = await supabase.from('profiles').upsert(
           {
             id: result.user.id,
@@ -43,11 +74,13 @@ function RegisterForm() {
         if (profileError) {
           throw profileError;
         }
-      }
 
-      router.push(`/auth/login?next=${encodeURIComponent(redirectPath)}`);
+        router.push(redirectPath);
+      } else {
+        router.push(`/auth/login?next=${encodeURIComponent(redirectPath)}&confirm=1`);
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Kunne ikke registrere konto');
+      setError(toRegisterErrorMessage(err));
     } finally {
       setLoading(false);
     }

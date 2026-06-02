@@ -1,11 +1,14 @@
 import { cookies } from 'next/headers';
-import { createServerClient } from '@supabase/ssr';
+import { createServerClient, type CookieOptions } from '@supabase/ssr';
 
-// Next 15+ made `cookies()` async — it now returns Promise<ReadonlyRequestCookies>.
-// We capture the promise once at construction time and await it inside each
-// callback. This keeps `createClient()` synchronous (so the rest of the
-// codebase doesn't have to migrate to `await createClient()` everywhere)
-// while still complying with the new API contract under the hood.
+// Next 15+ made `cookies()` async — it returns Promise<ReadonlyRequestCookies>.
+// We capture the promise once at construction and await it inside each cookie
+// callback, so `createClient()` stays synchronous for call sites.
+//
+// Uses the getAll/setAll adapter (the form Supabase SSR requires). In route
+// handlers and server actions the cookie store is writable, so setAll persists
+// a refreshed session; in server components writing throws, which we swallow
+// (session refresh is handled by the middleware there instead).
 
 export function createClient() {
   const cookieStorePromise = cookies();
@@ -15,12 +18,19 @@ export function createClient() {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
-        async get(name: string) {
+        async getAll() {
           const store = await cookieStorePromise;
-          return store.get(name)?.value;
+          return store.getAll();
         },
-        set() {},
-        remove() {}
+        async setAll(cookiesToSet: { name: string; value: string; options: CookieOptions }[]) {
+          try {
+            const store = await cookieStorePromise;
+            cookiesToSet.forEach(({ name, value, options }) => store.set(name, value, options));
+          } catch {
+            // Called from a Server Component (read-only cookies). Safe to
+            // ignore — the middleware refreshes the session in that context.
+          }
+        }
       }
     }
   );
