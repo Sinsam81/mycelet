@@ -46,8 +46,8 @@ const planCards = [
     id: 'season_pass',
     title: 'Sesongpass',
     price: '199 kr',
-    period: '/sesong',
-    features: ['Premium-funksjoner i sesong', 'Offline-kart (lagre områder lokalt)', 'Én betaling', 'Perfekt for august-november']
+    period: '/år',
+    features: ['Alle premium-funksjoner', 'Offline-kart (lagre områder lokalt)', 'Fornyes automatisk hvert år', 'Si opp når som helst']
   }
 ] as const;
 

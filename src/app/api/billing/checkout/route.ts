@@ -70,7 +70,9 @@ export async function POST(request: NextRequest) {
     }
 
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? request.nextUrl.origin;
-    const mode = plan === 'premium' ? 'subscription' : 'payment';
+    // Both plans are recurring subscriptions: Premium bills monthly, Sesongpass
+    // yearly (auto-renewing). The billing interval lives on the Stripe price.
+    const mode = 'subscription' as const;
     const idempotencyKey = `checkout_${user.id}_${plan}_${Math.floor(Date.now() / (1000 * 60 * 5))}`;
 
     const session = await stripe.checkout.sessions.create(
@@ -87,16 +89,12 @@ export async function POST(request: NextRequest) {
           tier: plan,
           price_id: priceId
         },
-        ...(mode === 'subscription'
-          ? {
-              subscription_data: {
-                metadata: {
-                  user_id: user.id,
-                  tier: plan
-                }
-              }
-            }
-          : {})
+        subscription_data: {
+          metadata: {
+            user_id: user.id,
+            tier: plan
+          }
+        }
       },
       {
         idempotencyKey

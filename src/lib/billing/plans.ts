@@ -9,7 +9,7 @@ export const BILLING_PLANS: Record<
     tier: Exclude<BillingTier, 'free'>;
     label: string;
     monthlyNok?: number;
-    oneTimeNok?: number;
+    yearlyNok?: number;
     description: string;
     priceEnvKey: 'STRIPE_PRICE_PREMIUM_MONTHLY' | 'STRIPE_PRICE_SEASON_PASS';
   }
@@ -24,8 +24,8 @@ export const BILLING_PLANS: Record<
   season_pass: {
     tier: 'season_pass',
     label: 'Sesongpass',
-    oneTimeNok: 199,
-    description: 'Premium-tilgang for soppsesongen.',
+    yearlyNok: 199,
+    description: 'Alle premium-funksjoner, fornyes årlig.',
     priceEnvKey: 'STRIPE_PRICE_SEASON_PASS'
   }
 };
