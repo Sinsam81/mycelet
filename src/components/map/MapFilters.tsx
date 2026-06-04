@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { SlidersHorizontal, X } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 
 export interface MapFilterState {
@@ -24,6 +25,7 @@ export function MapFilters({ filters, onChange }: MapFiltersProps) {
   const supabase = useMemo(() => createClient(), []);
   const [query, setQuery] = useState('');
   const [options, setOptions] = useState<SpeciesOption[]>([]);
+  const [open, setOpen] = useState(false);
 
   const activeCount = Number(Boolean(filters.speciesId)) + Number(filters.period !== 'all') + Number(filters.onlyMine);
 
@@ -45,11 +47,38 @@ export function MapFilters({ filters, onChange }: MapFiltersProps) {
     setOptions(data ?? []);
   };
 
+  // Collapsed: a small chip so the map stays the hero. Tap to reveal filters.
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="absolute left-3 top-3 z-[1000] inline-flex items-center gap-1.5 rounded-full bg-white/95 px-3 py-1.5 text-sm font-medium text-gray-800 shadow-lg backdrop-blur hover:bg-white"
+      >
+        <SlidersHorizontal className="h-4 w-4" />
+        Filtre
+        {activeCount > 0 ? (
+          <span className="rounded-full bg-forest-100 px-1.5 text-xs font-semibold text-forest-900">{activeCount}</span>
+        ) : null}
+      </button>
+    );
+  }
+
   return (
     <div className="absolute left-3 right-3 top-3 z-[1000] space-y-2 rounded-xl bg-white/95 p-3 shadow-lg backdrop-blur">
       <div className="flex items-center justify-between">
         <p className="text-sm font-semibold text-gray-900">Filtre</p>
-        <span className="rounded-full bg-forest-100 px-2 py-1 text-xs font-medium text-forest-900">{activeCount} aktive</span>
+        <div className="flex items-center gap-2">
+          <span className="rounded-full bg-forest-100 px-2 py-1 text-xs font-medium text-forest-900">{activeCount} aktive</span>
+          <button
+            type="button"
+            onClick={() => setOpen(false)}
+            aria-label="Lukk filtre"
+            className="rounded-full p-1 text-gray-500 hover:bg-gray-100"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
       </div>
 
       <div className="space-y-2">

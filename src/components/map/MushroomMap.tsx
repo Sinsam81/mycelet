@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { NonNativeOnly } from '@/components/native/NonNativeOnly';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Download, Navigation, Trash2 } from 'lucide-react';
+import { ChevronDown, ChevronUp, Download, Navigation, Trash2 } from 'lucide-react';
 import { createRoot, Root } from 'react-dom/client';
 import { createClient } from '@/lib/supabase/client';
 import { useGeolocation } from '@/lib/hooks/useGeolocation';
@@ -50,6 +50,7 @@ export function MushroomMap() {
   const [offlineName, setOfflineName] = useState('');
   const [offlineStatus, setOfflineStatus] = useState<string | null>(null);
   const [offlineBusy, setOfflineBusy] = useState(false);
+  const [offlineOpen, setOfflineOpen] = useState(false);
 
   const billing = useBillingStatus(true);
   const hasOfflineAccess = billing.data?.capabilities.paid ?? false;
@@ -496,12 +497,24 @@ export function MushroomMap() {
           consolidated HotspotPanel below — shown for every query, not just when
           a species is selected. */}
 
-      <div className="absolute right-3 top-28 z-[1000] w-72 rounded-xl border border-gray-200 bg-white/95 p-3 shadow-lg backdrop-blur">
+      <div className={`absolute right-3 top-28 z-[1000] ${offlineOpen ? 'w-72' : 'w-auto'} rounded-xl border border-gray-200 bg-white/95 p-3 shadow-lg backdrop-blur`}>
         <div className="flex items-center justify-between gap-2">
           <p className="text-sm font-semibold text-gray-900">Offline-kart</p>
-          {billing.isLoading ? <span className="text-[11px] text-gray-500">Sjekker plan...</span> : null}
+          <div className="flex items-center gap-2">
+            {billing.isLoading ? <span className="text-[11px] text-gray-500">Sjekker plan...</span> : null}
+            <button
+              type="button"
+              onClick={() => setOfflineOpen((v) => !v)}
+              aria-label={offlineOpen ? 'Skjul offline-kart' : 'Vis offline-kart'}
+              className="rounded-full p-1 text-gray-500 hover:bg-gray-100"
+            >
+              {offlineOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+            </button>
+          </div>
         </div>
 
+        {offlineOpen ? (
+          <>
         {showOfflineUpsell ? (
           <div className="mt-2 rounded border border-amber-300 bg-amber-50 px-2 py-2">
             <p className="text-xs text-amber-800">Lagring av kartområder offline krever Premium eller Sesongpass.</p>
@@ -564,6 +577,8 @@ export function MushroomMap() {
           ))}
           {offlineAreas.length === 0 ? <p className="text-[11px] text-gray-600">Ingen lagrede områder ennå.</p> : null}
         </div>
+          </>
+        ) : null}
       </div>
 
       <button

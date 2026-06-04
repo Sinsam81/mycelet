@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { ChevronDown, ChevronUp } from 'lucide-react';
+import { ChevronDown, ChevronUp, X } from 'lucide-react';
 import { PredictionResponse } from '@/types/prediction';
 import type { Explanation } from '@/lib/utils/prediction-explanation';
 import { PredictionExplanation } from '@/components/prediction/PredictionExplanation';
@@ -42,11 +42,30 @@ function sourceCredit(data: PredictionResponse): string | null {
 }
 
 export function HotspotPanel({ speciesId, data, explanations, isLoading, error }: HotspotPanelProps) {
+  const [open, setOpen] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
 
   const condition = data ? CONDITION[data.condition] ?? CONDITION.moderate : null;
   const credit = data ? sourceCredit(data) : null;
   const hotspotCount = data?.hotspots?.length ?? 0;
+
+  // Collapsed: a compact pill that still shows the verdict at a glance, so the
+  // map stays open. Tap to expand the full "hvorfor" + sources.
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="absolute left-3 bottom-20 z-[1000] inline-flex items-center gap-2 rounded-full bg-white/95 px-3 py-2 text-sm shadow-lg backdrop-blur hover:bg-white"
+      >
+        {condition ? <span className={`h-2.5 w-2.5 rounded-full ${condition.dot}`} aria-hidden="true" /> : null}
+        <span className="font-semibold text-gray-900">
+          {isLoading && !data ? 'Beregner…' : data ? `${data.score}/100` : 'Soppforhold'}
+        </span>
+        {condition ? <span className={`text-xs font-medium ${condition.text}`}>{condition.label}</span> : null}
+      </button>
+    );
+  }
 
   return (
     <div className="absolute left-3 bottom-20 z-[1000] w-[min(380px,calc(100%-1.5rem))] max-h-[calc(100%-9rem)] overflow-y-auto rounded-xl border border-gray-200 bg-white/95 p-3 shadow-lg backdrop-blur">
@@ -54,7 +73,17 @@ export function HotspotPanel({ speciesId, data, explanations, isLoading, error }
         <h3 className="text-sm font-semibold text-gray-900">
           {data?.species ? data.species.norwegianName : 'Soppforhold her'}
         </h3>
-        {data ? <span className="text-sm font-bold text-forest-900">{data.score}/100</span> : null}
+        <div className="flex items-center gap-2">
+          {data ? <span className="text-sm font-bold text-forest-900">{data.score}/100</span> : null}
+          <button
+            type="button"
+            onClick={() => setOpen(false)}
+            aria-label="Lukk"
+            className="rounded-full p-1 text-gray-500 hover:bg-gray-100"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
       </div>
       {data?.species ? (
         <p className="text-xs italic text-gray-600">{data.species.latinName}</p>
