@@ -31,6 +31,7 @@ export function MushroomMap() {
   const mapRef = useRef<import('leaflet').Map | null>(null);
   const clusterRef = useRef<any>(null);
   const heatLayerRef = useRef<import('leaflet').LayerGroup | null>(null);
+  const gridLayerRef = useRef<import('leaflet').LayerGroup | null>(null);
   const popupRootsRef = useRef<Root[]>([]);
   const loadFindingsRef = useRef<() => Promise<void>>(async () => {});
   const loadPredictionTilesRef = useRef<() => Promise<void>>(async () => {});
@@ -51,6 +52,9 @@ export function MushroomMap() {
   const [offlineStatus, setOfflineStatus] = useState<string | null>(null);
   const [offlineBusy, setOfflineBusy] = useState(false);
   const [offlineOpen, setOfflineOpen] = useState(false);
+  const [heatmap, setHeatmap] = useState<{ cells: { lat: number; lng: number; score: number }[]; latSpan: number; lngSpan: number } | null>(null);
+  const [heatmapLoading, setHeatmapLoading] = useState(false);
+  const [heatmapMsg, setHeatmapMsg] = useState<string | null>(null);
 
   const billing = useBillingStatus(true);
   const hasOfflineAccess = billing.data?.capabilities.paid ?? false;
@@ -124,6 +128,77 @@ export function MushroomMap() {
     }));
     setTileHotspots(mapped);
   }, [filters.speciesId, supabase]);
+
+  // On-demand local heatmap: draw one translucent rectangle per scored grid
+  // cell, colored by score. Cells without real forest data are simply absent
+  // (the server omits them), so we never paint a gradient over no-data areas.
+  const renderGrid = useCallback(
+    async (cells: { lat: number; lng: number; score: number }[], latSpan: number, lngSpan: number) => {
+      const layer = gridLayerRef.current;
+      if (!mapRef.current || !layer) return;
+      const leaflet = (await import('leaflet')).default;
+      layer.clearLayers();
+      for (const cell of cells) {
+        const rect = leaflet.rectangle(
+          [
+            [cell.lat - latSpan / 2, cell.lng - lngSpan / 2],
+            [cell.lat + latSpan / 2, cell.lng + lngSpan / 2]
+          ],
+          { stroke: false, fillColor: getHeatColor(cell.score), fillOpacity: 0.38 }
+        );
+        rect.bindTooltip(`${cell.score}%`, { direction: 'center' });
+        layer.addLayer(rect);
+      }
+    },
+    []
+  );
+
+  const clearHeatmap = useCallback(() => {
+    gridLayerRef.current?.clearLayers();
+    setHeatmap(null);
+    setHeatmapMsg(null);
+  }, []);
+
+  const generateHeatmap = useCallback(async () => {
+    const map = mapRef.current;
+    if (!map) return;
+    setHeatmapMsg(null);
+    setHeatmapLoading(true);
+    try {
+      const b = map.getBounds();
+      const params = new URLSearchParams({
+        minLat: String(b.getSouth()),
+        minLng: String(b.getWest()),
+        maxLat: String(b.getNorth()),
+        maxLng: String(b.getEast()),
+        n: '5'
+      });
+      if (filters.speciesId) params.set('speciesId', String(filters.speciesId));
+      const res = await fetch(`/api/prediction/grid?${params.toString()}`, { cache: 'no-store' });
+      const data = await res.json();
+      if (res.status === 403) {
+        setHeatmapMsg('Detaljert heatmap krever Premium eller Sesongpass.');
+        return;
+      }
+      if (!res.ok) {
+        setHeatmapMsg(data?.error ?? 'Kunne ikke lage heatmap.');
+        return;
+      }
+      const cells = (data.cells ?? []) as { lat: number; lng: number; score: number }[];
+      if (cells.length === 0) {
+        clearHeatmap();
+        setHeatmapMsg('Fant lite skogdata her — prøv et område med mer skog.');
+        return;
+      }
+      setHeatmap({ cells, latSpan: data.cellLatSpan, lngSpan: data.cellLngSpan });
+      await renderGrid(cells, data.cellLatSpan, data.cellLngSpan);
+      setHeatmapMsg(`Heatmap: ${cells.length} ruter (skogdekning ${Math.round((data.coverage ?? 0) * 100)}%).`);
+    } catch {
+      setHeatmapMsg('Kunne ikke lage heatmap.');
+    } finally {
+      setHeatmapLoading(false);
+    }
+  }, [filters.speciesId, renderGrid, clearHeatmap]);
 
   const focusSavedArea = useCallback((area: OfflineArea) => {
     const map = mapRef.current;
@@ -345,9 +420,12 @@ export function MushroomMap() {
       map.addLayer(clusters);
       const heatLayer = L.layerGroup();
       map.addLayer(heatLayer);
+      const gridLayer = L.layerGroup();
+      map.addLayer(gridLayer);
       mapRef.current = map;
       clusterRef.current = clusters;
       heatLayerRef.current = heatLayer;
+      gridLayerRef.current = gridLayer;
 
       const onMoveEnd = () => {
         const center = map.getCenter();
@@ -376,6 +454,7 @@ export function MushroomMap() {
       mapRef.current = null;
       clusterRef.current = null;
       heatLayerRef.current = null;
+      gridLayerRef.current = null;
     };
   }, [latitude, longitude]);
 
@@ -492,6 +571,31 @@ export function MushroomMap() {
       <div ref={containerRef} className="h-full w-full" />
 
       <MapFilters filters={filters} onChange={setFilters} />
+
+      <div className="absolute left-1/2 top-3 z-[1000] flex -translate-x-1/2 flex-col items-center">
+        {hasOfflineAccess ? (
+          <button
+            type="button"
+            onClick={() => (heatmap ? clearHeatmap() : void generateHeatmap())}
+            disabled={heatmapLoading}
+            className="rounded-full bg-forest-800 px-4 py-2 text-sm font-medium text-white shadow-lg hover:bg-forest-700 disabled:opacity-60"
+          >
+            {heatmapLoading ? 'Lager heatmap…' : heatmap ? 'Skjul heatmap' : 'Lag heatmap her'}
+          </button>
+        ) : (
+          <NonNativeOnly>
+            <Link
+              href="/pricing"
+              className="rounded-full bg-white/95 px-4 py-2 text-sm font-medium text-forest-900 shadow-lg backdrop-blur"
+            >
+              Lag heatmap (Premium)
+            </Link>
+          </NonNativeOnly>
+        )}
+        {heatmapMsg ? (
+          <p className="mt-1 max-w-[80vw] rounded bg-white/90 px-2 py-1 text-center text-[11px] text-gray-700 shadow">{heatmapMsg}</p>
+        ) : null}
+      </div>
 
       {/* The prediction verdict + "hvorfor" + source credit now live in the
           consolidated HotspotPanel below — shown for every query, not just when
