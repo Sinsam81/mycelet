@@ -63,6 +63,7 @@ export function MushroomMap() {
   const heatLayerRef = useRef<import('leaflet').LayerGroup | null>(null);
   const gridLayerRef = useRef<import('leaflet').LayerGroup | null>(null);
   const topLayerRef = useRef<import('leaflet').LayerGroup | null>(null);
+  const speciesLayerRef = useRef<import('leaflet').LayerGroup | null>(null);
   const popupRootsRef = useRef<Root[]>([]);
   const loadFindingsRef = useRef<() => Promise<void>>(async () => {});
   const loadPredictionTilesRef = useRef<() => Promise<void>>(async () => {});
@@ -89,6 +90,9 @@ export function MushroomMap() {
   const [topSpots, setTopSpots] = useState<{ lat: number; lng: number; score: number; forestType: string; productivity: number | null }[] | null>(null);
   const [topLoading, setTopLoading] = useState(false);
   const [topMsg, setTopMsg] = useState<string | null>(null);
+  const [speciesSpots, setSpeciesSpots] = useState<{ speciesId: number; norwegianName: string; latinName: string; imageUrl: string; lat: number; lng: number; score: number }[] | null>(null);
+  const [speciesLoading, setSpeciesLoading] = useState(false);
+  const [speciesMsg, setSpeciesMsg] = useState<string | null>(null);
 
   const billing = useBillingStatus(true);
   const hasOfflineAccess = billing.data?.capabilities.paid ?? false;
@@ -321,6 +325,78 @@ export function MushroomMap() {
     }
   }, [latitude, longitude, filters.speciesId, renderTopSpots, clearTopSpots]);
 
+  // "Soppbilder på kartet": round species photos on each species' best ground.
+  const renderSpeciesSpots = useCallback(
+    async (
+      spots: { speciesId: number; norwegianName: string; latinName: string; imageUrl: string; lat: number; lng: number; score: number }[]
+    ) => {
+      const layer = speciesLayerRef.current;
+      if (!mapRef.current || !layer) return;
+      const leaflet = (await import('leaflet')).default;
+      layer.clearLayers();
+      for (const spot of spots) {
+        const color = getHeatColor(spot.score);
+        const icon = leaflet.divIcon({
+          className: 'species-spot-marker',
+          html: `<div style="width:46px;height:46px;border-radius:9999px;border:3px solid #fff;box-shadow:0 1px 5px rgba(0,0,0,0.5);overflow:hidden;background:${color}"><img src="${spot.imageUrl}" alt="" style="width:100%;height:100%;object-fit:cover" onerror="this.style.display='none'"/></div>`,
+          iconSize: [46, 46],
+          iconAnchor: [23, 23]
+        });
+        leaflet
+          .marker([spot.lat, spot.lng], { icon })
+          .bindPopup(`<b>${spot.norwegianName}</b><br/><i>${spot.latinName}</i><br/>Beste sted her: ${spot.score}%`)
+          .addTo(layer);
+      }
+    },
+    []
+  );
+
+  const clearSpeciesSpots = useCallback(() => {
+    speciesLayerRef.current?.clearLayers();
+    setSpeciesSpots(null);
+    setSpeciesMsg(null);
+  }, []);
+
+  const generateSpeciesSpots = useCallback(async () => {
+    const map = mapRef.current;
+    if (!map) return;
+    setSpeciesMsg(null);
+    setSpeciesLoading(true);
+    try {
+      const b = map.getBounds();
+      const params = new URLSearchParams({
+        minLat: String(b.getSouth()),
+        maxLat: String(b.getNorth()),
+        minLng: String(b.getWest()),
+        maxLng: String(b.getEast()),
+        n: '6'
+      });
+      const res = await fetch(`/api/prediction/species-spots?${params.toString()}`, { cache: 'no-store' });
+      const data = await res.json();
+      if (res.status === 403) {
+        setSpeciesMsg('Krever Premium eller Sesongpass.');
+        return;
+      }
+      if (!res.ok) {
+        setSpeciesMsg(data?.error ?? 'Kunne ikke hente soppbilder.');
+        return;
+      }
+      const spots = (data.spots ?? []) as { speciesId: number; norwegianName: string; latinName: string; imageUrl: string; lat: number; lng: number; score: number }[];
+      if (spots.length === 0) {
+        clearSpeciesSpots();
+        setSpeciesMsg(data?.message ?? 'Ingen arter i sesong her nå.');
+        return;
+      }
+      setSpeciesSpots(spots);
+      await renderSpeciesSpots(spots);
+      setSpeciesMsg(`${spots.length} arter i sesong — bilde på beste sted for hver.`);
+    } catch {
+      setSpeciesMsg('Kunne ikke hente soppbilder.');
+    } finally {
+      setSpeciesLoading(false);
+    }
+  }, [renderSpeciesSpots, clearSpeciesSpots]);
+
   const focusSavedArea = useCallback((area: OfflineArea) => {
     const map = mapRef.current;
     if (!map) return;
@@ -545,11 +621,14 @@ export function MushroomMap() {
       map.addLayer(gridLayer);
       const topLayer = L.layerGroup();
       map.addLayer(topLayer);
+      const speciesLayer = L.layerGroup();
+      map.addLayer(speciesLayer);
       mapRef.current = map;
       clusterRef.current = clusters;
       heatLayerRef.current = heatLayer;
       gridLayerRef.current = gridLayer;
       topLayerRef.current = topLayer;
+      speciesLayerRef.current = speciesLayer;
 
       const onMoveEnd = () => {
         const center = map.getCenter();
@@ -580,6 +659,7 @@ export function MushroomMap() {
       heatLayerRef.current = null;
       gridLayerRef.current = null;
       topLayerRef.current = null;
+      speciesLayerRef.current = null;
     };
   }, [latitude, longitude]);
 
@@ -706,7 +786,15 @@ export function MushroomMap() {
               disabled={topLoading}
               className="rounded-full bg-forest-800 px-3 py-2 text-xs font-medium text-white shadow-lg hover:bg-forest-700 disabled:opacity-60"
             >
-              {topLoading ? 'Søker…' : topSpots ? 'Skjul topp 5' : 'Topp 5 nær meg'}
+              {topLoading ? 'Søker…' : topSpots ? 'Skjul topp 5' : 'Topp 5'}
+            </button>
+            <button
+              type="button"
+              onClick={() => (speciesSpots ? clearSpeciesSpots() : void generateSpeciesSpots())}
+              disabled={speciesLoading}
+              className="rounded-full bg-forest-800 px-3 py-2 text-xs font-medium text-white shadow-lg hover:bg-forest-700 disabled:opacity-60"
+            >
+              {speciesLoading ? 'Laster…' : speciesSpots ? 'Skjul bilder' : 'Soppbilder'}
             </button>
             <button
               type="button"
@@ -729,6 +817,9 @@ export function MushroomMap() {
         )}
         {topMsg ? (
           <p className="max-w-[80vw] rounded bg-white/90 px-2 py-1 text-center text-[11px] text-gray-700 shadow">{topMsg}</p>
+        ) : null}
+        {speciesMsg ? (
+          <p className="max-w-[80vw] rounded bg-white/90 px-2 py-1 text-center text-[11px] text-gray-700 shadow">{speciesMsg}</p>
         ) : null}
         {heatmapMsg ? (
           <p className="max-w-[80vw] rounded bg-white/90 px-2 py-1 text-center text-[11px] text-gray-700 shadow">{heatmapMsg}</p>
