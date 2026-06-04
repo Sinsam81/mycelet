@@ -75,6 +75,8 @@ export interface PredictionHabitat {
 
 export interface PredictionResponse {
   source?: 'prediction_tiles' | 'computed_fallback';
+  /** Weather provider behind the snapshot — for source credit in the UI. */
+  weatherSource?: 'met_frost' | 'smhi' | 'openweather' | 'unavailable' | null;
   access?: 'free_limited' | 'premium_full';
   upsellMessage?: string;
   model?: {

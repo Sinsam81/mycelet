@@ -17,7 +17,6 @@ import { MapFilters, MapFilterState } from './MapFilters';
 import { MapFinding } from '@/types/finding';
 import { OfflineArea, cacheMapTilesForArea, readOfflineAreas, removeOfflineAreaById, saveOfflineAreas } from '@/lib/utils/offlineMap';
 import { buildExplanation } from '@/lib/utils/prediction-explanation';
-import { PredictionExplanation } from '@/components/prediction/PredictionExplanation';
 
 type LeafletType = typeof import('leaflet');
 
@@ -458,7 +457,10 @@ export function MushroomMap() {
   // for "is it mushroom weather?".
   const explanationLines = useMemo(() => {
     const data = prediction.data;
-    if (!data?.species) return null;
+    // Build the "why" for every prediction (species-specific when one is
+    // selected, generic otherwise) — but only with real weather, so we never
+    // render placeholder "0°C / 0mm" lines when no provider was reachable.
+    if (!data || !data.weatherSource || data.weatherSource === 'unavailable') return null;
     return buildExplanation({
       weather: {
         temperatureC: data.weather.temperature,
@@ -490,23 +492,9 @@ export function MushroomMap() {
 
       <MapFilters filters={filters} onChange={setFilters} />
 
-      {explanationLines && explanationLines.length > 0 && prediction.data?.species ? (
-        <aside className="absolute left-3 top-28 z-[1000] w-72 max-h-[calc(100%-9rem)] overflow-y-auto rounded-xl border border-gray-200 bg-white/95 p-3 shadow-lg backdrop-blur">
-          <header className="mb-2">
-            <h3 className="text-sm font-semibold text-gray-900">{prediction.data.species.norwegianName}</h3>
-            <p className="text-xs italic text-gray-600">{prediction.data.species.latinName}</p>
-            <p className="mt-1 text-xs text-gray-700">
-              Sannsynlighet:{' '}
-              <span className="font-semibold text-gray-900">{prediction.data.score}/100</span>{' '}
-              <span className="text-gray-500">({prediction.data.condition})</span>
-            </p>
-          </header>
-          <PredictionExplanation explanations={explanationLines} inline />
-          <p className="mt-3 text-[11px] italic text-gray-500">
-            Områder som matcher habitatet og værvinduet — ikke en garanti for at det er sopp der.
-          </p>
-        </aside>
-      ) : null}
+      {/* The prediction verdict + "hvorfor" + source credit now live in the
+          consolidated HotspotPanel below — shown for every query, not just when
+          a species is selected. */}
 
       <div className="absolute right-3 top-28 z-[1000] w-72 rounded-xl border border-gray-200 bg-white/95 p-3 shadow-lg backdrop-blur">
         <div className="flex items-center justify-between gap-2">
@@ -601,6 +589,7 @@ export function MushroomMap() {
       <HotspotPanel
         speciesId={filters.speciesId}
         data={panelData}
+        explanations={explanationLines}
         isLoading={(prediction.isLoading || prediction.isFetching) && tileHotspots.length === 0}
         error={prediction.isError && tileHotspots.length === 0}
       />

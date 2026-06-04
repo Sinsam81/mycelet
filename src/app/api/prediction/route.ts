@@ -240,6 +240,7 @@ export async function GET(request: NextRequest) {
         upsellMessage: premiumPrediction ? undefined : 'Gratis viser forenklet heatmap. Oppgrader for full detalj.',
         score,
         condition,
+        weatherSource: weather?.source ?? null,
         model: {
           version: 'v2_tiles_weighted',
           factors: modelFactors
@@ -402,6 +403,7 @@ export async function GET(request: NextRequest) {
       speciesFit,
       habitatFit,
       condition,
+      weatherSource: weather.source,
       model: {
         version: forest
           ? 'v3_computed_nibio_habitat'

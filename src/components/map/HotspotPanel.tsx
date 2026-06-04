@@ -1,86 +1,130 @@
 'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
+import { ChevronDown, ChevronUp } from 'lucide-react';
 import { PredictionResponse } from '@/types/prediction';
+import type { Explanation } from '@/lib/utils/prediction-explanation';
+import { PredictionExplanation } from '@/components/prediction/PredictionExplanation';
 import { NonNativeOnly } from '@/components/native/NonNativeOnly';
 
 interface HotspotPanelProps {
   speciesId: number | null;
   data: PredictionResponse | undefined;
+  explanations?: Explanation[] | null;
   isLoading: boolean;
   error: boolean;
 }
 
-const conditionLabel: Record<string, string> = {
-  poor: 'Lav sjanse',
-  moderate: 'Moderat sjanse',
-  good: 'God sjanse',
-  excellent: 'Svært god sjanse'
+// Verdict styling per condition bucket. The colored dot gives an at-a-glance
+// read before the user even reads the label.
+const CONDITION: Record<string, { label: string; dot: string; text: string }> = {
+  poor: { label: 'Lav sjanse', dot: 'bg-gray-400', text: 'text-gray-700' },
+  moderate: { label: 'Moderat sjanse', dot: 'bg-amber-400', text: 'text-amber-700' },
+  good: { label: 'God sjanse', dot: 'bg-forest-500', text: 'text-forest-800' },
+  excellent: { label: 'Svært god sjanse', dot: 'bg-forest-600', text: 'text-forest-900' }
 };
 
-const sourceLabel: Record<string, string> = {
-  prediction_tiles: 'Datakilde: pregenererte prediksjonsfliser',
-  computed_fallback: 'Datakilde: live beregning (vær + historikk)'
+const WEATHER_SOURCE_LABEL: Record<string, string> = {
+  met_frost: 'MET Norge',
+  smhi: 'SMHI',
+  openweather: 'OpenWeather'
 };
 
-export function HotspotPanel({ speciesId, data, isLoading, error }: HotspotPanelProps) {
+// Build a "Kilder: …" credit from the real providers behind this prediction.
+// Naming the authoritative sources (MET, NIBIO) is both honest and a trust lever.
+function sourceCredit(data: PredictionResponse): string | null {
+  const parts: string[] = [];
+  const weather = data.weatherSource ? WEATHER_SOURCE_LABEL[data.weatherSource] : undefined;
+  if (weather) parts.push(`${weather} (vær)`);
+  if (data.forest?.source === 'sr16') parts.push('NIBIO (skog)');
+  return parts.length ? parts.join(' · ') : null;
+}
+
+export function HotspotPanel({ speciesId, data, explanations, isLoading, error }: HotspotPanelProps) {
+  const [showDetails, setShowDetails] = useState(false);
+
+  const condition = data ? CONDITION[data.condition] ?? CONDITION.moderate : null;
+  const credit = data ? sourceCredit(data) : null;
+  const hotspotCount = data?.hotspots?.length ?? 0;
+
   return (
-    <div className="absolute left-3 bottom-20 z-[1000] w-[min(380px,calc(100%-1.5rem))] rounded-xl border border-gray-200 bg-white/95 p-3 shadow-lg backdrop-blur">
-      <h3 className="text-sm font-semibold text-gray-900">Vegetasjonsbasert soppestimat</h3>
-      <p className="text-xs text-gray-600">{speciesId ? `Filter: art #${speciesId}` : 'Filter: alle arter'}</p>
-      {data?.source ? <p className="mt-0.5 text-[11px] text-gray-500">{sourceLabel[data.source] ?? data.source}</p> : null}
-      {data?.model?.version ? <p className="text-[11px] text-gray-500">Modell: {data.model.version}</p> : null}
+    <div className="absolute left-3 bottom-20 z-[1000] w-[min(380px,calc(100%-1.5rem))] max-h-[calc(100%-9rem)] overflow-y-auto rounded-xl border border-gray-200 bg-white/95 p-3 shadow-lg backdrop-blur">
+      <div className="flex items-baseline justify-between gap-2">
+        <h3 className="text-sm font-semibold text-gray-900">
+          {data?.species ? data.species.norwegianName : 'Soppforhold her'}
+        </h3>
+        {data ? <span className="text-sm font-bold text-forest-900">{data.score}/100</span> : null}
+      </div>
+      {data?.species ? (
+        <p className="text-xs italic text-gray-600">{data.species.latinName}</p>
+      ) : (
+        <p className="text-xs text-gray-600">{speciesId ? `Art #${speciesId}` : 'Alle arter'}</p>
+      )}
 
-      {isLoading ? <p className="mt-2 text-xs text-gray-700">Beregner prediksjon...</p> : null}
+      {isLoading ? <p className="mt-2 text-xs text-gray-700">Beregner forhold...</p> : null}
       {error ? <p className="mt-2 text-xs text-red-600">Kunne ikke hente prediksjon.</p> : null}
-      {data?.access === 'free_limited' ? (
-        <div className="mt-2 rounded border border-amber-300 bg-amber-50 px-2 py-1.5">
-          <p className="text-xs text-amber-800">{data.upsellMessage ?? 'Gratis viser forenklet prediksjon.'}</p>
-          <NonNativeOnly>
-            <Link href="/pricing" className="text-xs font-medium text-amber-900 underline">
-              Oppgrader for full vegetasjonsanalyse
-            </Link>
-          </NonNativeOnly>
-        </div>
-      ) : null}
 
       {data ? (
         <>
-          <div className="mt-2 flex items-center justify-between">
-            <p className="text-xs text-gray-600">Total score</p>
-            <p className="text-sm font-bold text-forest-900">{data.score}/100</p>
-          </div>
-          <p className="text-xs text-forest-800">{conditionLabel[data.condition] ?? data.condition}</p>
+          {condition ? (
+            <p className={`mt-1 flex items-center gap-1.5 text-sm font-medium ${condition.text}`}>
+              <span className={`h-2.5 w-2.5 rounded-full ${condition.dot}`} aria-hidden="true" />
+              {condition.label}
+            </p>
+          ) : null}
 
-          <div className="mt-2 grid grid-cols-3 gap-2 text-xs">
-            <div className="rounded bg-forest-50 p-2">Miljø: {data.components.environment}</div>
-            <div className="rounded bg-forest-50 p-2">Historikk: {data.components.historical}</div>
-            <div className="rounded bg-forest-50 p-2">Sesong: {data.components.seasonal}</div>
-          </div>
-
-          {data.model ? (
-            <div className="mt-2 grid grid-cols-2 gap-1 text-[11px] text-gray-700">
-              <div className="rounded bg-gray-50 px-2 py-1">Vegetasjon: {data.model.factors.vegetation}</div>
-              <div className="rounded bg-gray-50 px-2 py-1">Fukt: {data.model.factors.moisture}</div>
-              <div className="rounded bg-gray-50 px-2 py-1">Terreng: {data.model.factors.terrain}</div>
-              <div className="rounded bg-gray-50 px-2 py-1">Jord: {data.model.factors.soil}</div>
+          {data.access === 'free_limited' ? (
+            <div className="mt-2 rounded border border-amber-300 bg-amber-50 px-2 py-1.5">
+              <p className="text-xs text-amber-800">{data.upsellMessage ?? 'Gratis viser forenklet prediksjon.'}</p>
+              <NonNativeOnly>
+                <Link href="/pricing" className="text-xs font-medium text-amber-900 underline">
+                  Oppgrader for full vegetasjonsanalyse
+                </Link>
+              </NonNativeOnly>
             </div>
           ) : null}
 
-          <div className="mt-2">
-            <p className="text-xs font-medium text-gray-800">Hotspots</p>
-            <div className="mt-1 max-h-28 space-y-1 overflow-auto">
-              {(data.hotspots ?? []).map((spot, index) => (
-                <div key={`${spot.lat}-${spot.lng}-${index}`} className="flex items-center justify-between rounded border border-gray-200 px-2 py-1 text-xs">
-                  <span>
-                    {spot.lat}, {spot.lng}
-                  </span>
-                  <span>{spot.score}%</span>
-                </div>
-              ))}
-              {(data.hotspots?.length ?? 0) === 0 ? <p className="text-xs text-gray-600">Ingen tydelige hotspots i valgt område.</p> : null}
+          {explanations && explanations.length > 0 ? (
+            <div className="mt-2 border-t border-gray-100 pt-2">
+              <p className="mb-1 text-[11px] font-medium uppercase tracking-wide text-gray-500">Hvorfor</p>
+              <PredictionExplanation explanations={explanations} inline />
             </div>
-          </div>
+          ) : null}
+
+          {hotspotCount > 0 ? (
+            <p className="mt-2 text-xs text-gray-700">
+              {hotspotCount} {hotspotCount === 1 ? 'sterkt område' : 'sterke områder'} markert på kartet (de lyse feltene).
+            </p>
+          ) : (
+            <p className="mt-2 text-xs text-gray-600">Ingen tydelige hotspots i valgt område.</p>
+          )}
+
+          {credit ? <p className="mt-2 text-[11px] text-gray-500">Kilder: {credit}</p> : null}
+
+          <p className="mt-1 text-[11px] italic text-gray-500">
+            Områder som matcher habitat og værvindu — ingen garanti for at det er sopp der.
+          </p>
+
+          <button
+            type="button"
+            onClick={() => setShowDetails((v) => !v)}
+            className="mt-2 inline-flex items-center gap-1 text-[11px] font-medium text-gray-500 hover:text-gray-700"
+          >
+            {showDetails ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+            {showDetails ? 'Skjul tekniske detaljer' : 'Vis tekniske detaljer'}
+          </button>
+
+          {showDetails ? (
+            <div className="mt-1 space-y-1 text-[11px] text-gray-600">
+              <div className="grid grid-cols-3 gap-2">
+                <div className="rounded bg-forest-50 p-1.5">Miljø: {data.components.environment}</div>
+                <div className="rounded bg-forest-50 p-1.5">Historikk: {data.components.historical}</div>
+                <div className="rounded bg-forest-50 p-1.5">Sesong: {data.components.seasonal}</div>
+              </div>
+              {data.model?.version ? <p className="text-gray-400">Modell: {data.model.version}</p> : null}
+            </div>
+          ) : null}
         </>
       ) : null}
     </div>
