@@ -77,6 +77,8 @@ export async function GET(request: NextRequest) {
   const speciesIdParam = url.searchParams.get('speciesId');
   const speciesId = speciesIdParam ? Number(speciesIdParam) : null;
   const n = Math.max(3, Math.min(MAX_N, Math.round(Number(url.searchParams.get('n'))) || DEFAULT_N));
+  const topParam = Math.round(Number(url.searchParams.get('top')));
+  const top = Number.isFinite(topParam) && topParam > 0 ? Math.min(20, topParam) : null;
 
   if (![minLat, minLng, maxLat, maxLng].every(Number.isFinite) || maxLat <= minLat || maxLng <= minLng) {
     return NextResponse.json({ error: 'Ugyldige koordinater' }, { status: 400 });
@@ -180,25 +182,38 @@ export async function GET(request: NextRequest) {
         recent30d: 0,
         recent365d: 0
       });
-      return { lat: Number(cell.lat.toFixed(5)), lng: Number(cell.lng.toFixed(5)), score: prediction.score };
+      return {
+        lat: Number(cell.lat.toFixed(5)),
+        lng: Number(cell.lng.toFixed(5)),
+        score: prediction.score,
+        forestType: forest.forestType,
+        productivity: forest.productivity
+      };
     });
 
-    const cells = scored.filter((c): c is { lat: number; lng: number; score: number } => c !== null);
+    type ScoredCell = NonNullable<(typeof scored)[number]>;
+    const allCells = scored.filter((c): c is ScoredCell => c !== null);
+    // `top` mode returns the best N cells (for "5 beste steder nær meg"); the
+    // default returns every scored cell (for the heatmap).
+    const cells = top ? [...allCells].sort((a, b) => b.score - a.score).slice(0, top) : allCells;
 
     log.info('prediction.grid.success', {
       n,
+      top,
       total: cellCenters.length,
-      withForest: cells.length,
+      withForest: allCells.length,
+      returned: cells.length,
       weatherSource: weather.source,
       speciesId
     });
 
     return NextResponse.json({
       cells,
+      top,
       n,
       cellLatSpan: latSpan,
       cellLngSpan: lngSpan,
-      coverage: cellCenters.length ? cells.length / cellCenters.length : 0,
+      coverage: cellCenters.length ? allCells.length / cellCenters.length : 0,
       weatherSource: weather.source
     });
   } catch (error) {

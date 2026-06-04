@@ -20,6 +20,36 @@ import { buildExplanation } from '@/lib/utils/prediction-explanation';
 
 type LeafletType = typeof import('leaflet');
 
+const FOREST_LABEL: Record<string, string> = {
+  gran: 'granskog',
+  furu: 'furuskog',
+  bar: 'barskog',
+  lauv: 'løvskog',
+  blandet: 'blandingsskog',
+  apent: 'åpent landskap'
+};
+
+function haversineKm(aLat: number, aLng: number, bLat: number, bLng: number): number {
+  const R = 6371;
+  const dLat = ((bLat - aLat) * Math.PI) / 180;
+  const dLng = ((bLng - aLng) * Math.PI) / 180;
+  const s =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((aLat * Math.PI) / 180) * Math.cos((bLat * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(s), Math.sqrt(1 - s));
+}
+
+function bearingLabel(aLat: number, aLng: number, bLat: number, bLng: number): string {
+  const dLng = ((bLng - aLng) * Math.PI) / 180;
+  const y = Math.sin(dLng) * Math.cos((bLat * Math.PI) / 180);
+  const x =
+    Math.cos((aLat * Math.PI) / 180) * Math.sin((bLat * Math.PI) / 180) -
+    Math.sin((aLat * Math.PI) / 180) * Math.cos((bLat * Math.PI) / 180) * Math.cos(dLng);
+  const deg = ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
+  const dirs = ['nord', 'nordøst', 'øst', 'sørøst', 'sør', 'sørvest', 'vest', 'nordvest'];
+  return dirs[Math.round(deg / 45) % 8];
+}
+
 const initialFilters: MapFilterState = {
   speciesId: null,
   period: 'month',
@@ -32,6 +62,7 @@ export function MushroomMap() {
   const clusterRef = useRef<any>(null);
   const heatLayerRef = useRef<import('leaflet').LayerGroup | null>(null);
   const gridLayerRef = useRef<import('leaflet').LayerGroup | null>(null);
+  const topLayerRef = useRef<import('leaflet').LayerGroup | null>(null);
   const popupRootsRef = useRef<Root[]>([]);
   const loadFindingsRef = useRef<() => Promise<void>>(async () => {});
   const loadPredictionTilesRef = useRef<() => Promise<void>>(async () => {});
@@ -55,6 +86,9 @@ export function MushroomMap() {
   const [heatmap, setHeatmap] = useState<{ cells: { lat: number; lng: number; score: number }[]; latSpan: number; lngSpan: number } | null>(null);
   const [heatmapLoading, setHeatmapLoading] = useState(false);
   const [heatmapMsg, setHeatmapMsg] = useState<string | null>(null);
+  const [topSpots, setTopSpots] = useState<{ lat: number; lng: number; score: number; forestType: string; productivity: number | null }[] | null>(null);
+  const [topLoading, setTopLoading] = useState(false);
+  const [topMsg, setTopMsg] = useState<string | null>(null);
 
   const billing = useBillingStatus(true);
   const hasOfflineAccess = billing.data?.capabilities.paid ?? false;
@@ -199,6 +233,93 @@ export function MushroomMap() {
       setHeatmapLoading(false);
     }
   }, [filters.speciesId, renderGrid, clearHeatmap]);
+
+  // "Topp 5 nær meg": numbered pins on the best forest cells within ~10 km.
+  const renderTopSpots = useCallback(
+    async (
+      spots: { lat: number; lng: number; score: number; forestType: string; productivity: number | null }[],
+      origin: { lat: number; lng: number }
+    ) => {
+      const layer = topLayerRef.current;
+      if (!mapRef.current || !layer) return;
+      const leaflet = (await import('leaflet')).default;
+      layer.clearLayers();
+      spots.forEach((spot, index) => {
+        const rank = index + 1;
+        const color = getHeatColor(spot.score);
+        const icon = leaflet.divIcon({
+          className: 'top-spot-marker',
+          html: `<div style="background:${color};color:#fff;border-radius:9999px;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,0.45)">${rank}</div>`,
+          iconSize: [28, 28],
+          iconAnchor: [14, 14]
+        });
+        const km = haversineKm(origin.lat, origin.lng, spot.lat, spot.lng);
+        const dir = bearingLabel(origin.lat, origin.lng, spot.lat, spot.lng);
+        const forestText = `${FOREST_LABEL[spot.forestType] ?? 'skog'}${spot.productivity != null ? `, bonitet ${spot.productivity}` : ''}`;
+        leaflet
+          .marker([spot.lat, spot.lng], { icon })
+          .bindPopup(`<b>Topp ${rank} · ${spot.score}%</b><br/>~${km.toFixed(1)} km ${dir}<br/>${forestText}`)
+          .addTo(layer);
+      });
+    },
+    []
+  );
+
+  const clearTopSpots = useCallback(() => {
+    topLayerRef.current?.clearLayers();
+    setTopSpots(null);
+    setTopMsg(null);
+  }, []);
+
+  const generateTopSpots = useCallback(async () => {
+    const map = mapRef.current;
+    if (!map) return;
+    setTopMsg(null);
+    setTopLoading(true);
+    try {
+      const center = map.getCenter();
+      const originLat = latitude ?? center.lat;
+      const originLng = longitude ?? center.lng;
+      const latDelta = 10 / 111;
+      const lngDelta = 10 / (111 * Math.cos((originLat * Math.PI) / 180));
+      const params = new URLSearchParams({
+        minLat: String(originLat - latDelta),
+        maxLat: String(originLat + latDelta),
+        minLng: String(originLng - lngDelta),
+        maxLng: String(originLng + lngDelta),
+        n: '6',
+        top: '5'
+      });
+      if (filters.speciesId) params.set('speciesId', String(filters.speciesId));
+      const res = await fetch(`/api/prediction/grid?${params.toString()}`, { cache: 'no-store' });
+      const data = await res.json();
+      if (res.status === 403) {
+        setTopMsg('Krever Premium eller Sesongpass.');
+        return;
+      }
+      if (!res.ok) {
+        setTopMsg(data?.error ?? 'Kunne ikke finne topp-steder.');
+        return;
+      }
+      const spots = (data.cells ?? []) as { lat: number; lng: number; score: number; forestType: string; productivity: number | null }[];
+      if (spots.length === 0) {
+        clearTopSpots();
+        setTopMsg('Fant lite skogdata innen 10 km — prøv et område med mer skog.');
+        return;
+      }
+      setTopSpots(spots);
+      await renderTopSpots(spots, { lat: originLat, lng: originLng });
+      const leaflet = (await import('leaflet')).default;
+      const bounds = leaflet.latLngBounds(spots.map((s) => [s.lat, s.lng] as [number, number]));
+      bounds.extend([originLat, originLng]);
+      map.fitBounds(bounds.pad(0.2));
+      setTopMsg(`${spots.length} beste steder innen 10 km.`);
+    } catch {
+      setTopMsg('Kunne ikke finne topp-steder.');
+    } finally {
+      setTopLoading(false);
+    }
+  }, [latitude, longitude, filters.speciesId, renderTopSpots, clearTopSpots]);
 
   const focusSavedArea = useCallback((area: OfflineArea) => {
     const map = mapRef.current;
@@ -422,10 +543,13 @@ export function MushroomMap() {
       map.addLayer(heatLayer);
       const gridLayer = L.layerGroup();
       map.addLayer(gridLayer);
+      const topLayer = L.layerGroup();
+      map.addLayer(topLayer);
       mapRef.current = map;
       clusterRef.current = clusters;
       heatLayerRef.current = heatLayer;
       gridLayerRef.current = gridLayer;
+      topLayerRef.current = topLayer;
 
       const onMoveEnd = () => {
         const center = map.getCenter();
@@ -455,6 +579,7 @@ export function MushroomMap() {
       clusterRef.current = null;
       heatLayerRef.current = null;
       gridLayerRef.current = null;
+      topLayerRef.current = null;
     };
   }, [latitude, longitude]);
 
@@ -572,28 +697,41 @@ export function MushroomMap() {
 
       <MapFilters filters={filters} onChange={setFilters} />
 
-      <div className="absolute left-1/2 top-3 z-[1000] flex -translate-x-1/2 flex-col items-center">
+      <div className="absolute left-1/2 top-3 z-[1000] flex w-[calc(100%-7rem)] max-w-md -translate-x-1/2 flex-col items-center gap-1">
         {hasOfflineAccess ? (
-          <button
-            type="button"
-            onClick={() => (heatmap ? clearHeatmap() : void generateHeatmap())}
-            disabled={heatmapLoading}
-            className="rounded-full bg-forest-800 px-4 py-2 text-sm font-medium text-white shadow-lg hover:bg-forest-700 disabled:opacity-60"
-          >
-            {heatmapLoading ? 'Lager heatmap…' : heatmap ? 'Skjul heatmap' : 'Lag heatmap her'}
-          </button>
+          <div className="flex flex-wrap justify-center gap-2">
+            <button
+              type="button"
+              onClick={() => (topSpots ? clearTopSpots() : void generateTopSpots())}
+              disabled={topLoading}
+              className="rounded-full bg-forest-800 px-3 py-2 text-xs font-medium text-white shadow-lg hover:bg-forest-700 disabled:opacity-60"
+            >
+              {topLoading ? 'Søker…' : topSpots ? 'Skjul topp 5' : 'Topp 5 nær meg'}
+            </button>
+            <button
+              type="button"
+              onClick={() => (heatmap ? clearHeatmap() : void generateHeatmap())}
+              disabled={heatmapLoading}
+              className="rounded-full bg-white/95 px-3 py-2 text-xs font-medium text-forest-900 shadow-lg backdrop-blur hover:bg-white disabled:opacity-60"
+            >
+              {heatmapLoading ? 'Lager…' : heatmap ? 'Skjul heatmap' : 'Heatmap'}
+            </button>
+          </div>
         ) : (
           <NonNativeOnly>
             <Link
               href="/pricing"
               className="rounded-full bg-white/95 px-4 py-2 text-sm font-medium text-forest-900 shadow-lg backdrop-blur"
             >
-              Lag heatmap (Premium)
+              Soppkart-verktøy (Premium)
             </Link>
           </NonNativeOnly>
         )}
+        {topMsg ? (
+          <p className="max-w-[80vw] rounded bg-white/90 px-2 py-1 text-center text-[11px] text-gray-700 shadow">{topMsg}</p>
+        ) : null}
         {heatmapMsg ? (
-          <p className="mt-1 max-w-[80vw] rounded bg-white/90 px-2 py-1 text-center text-[11px] text-gray-700 shadow">{heatmapMsg}</p>
+          <p className="max-w-[80vw] rounded bg-white/90 px-2 py-1 text-center text-[11px] text-gray-700 shadow">{heatmapMsg}</p>
         ) : null}
       </div>
 
