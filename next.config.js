@@ -28,7 +28,7 @@ const cspDirectives = [
   // Image sources: own bucket, Wikimedia commons, Plant.id (Kindwise),
   // Norwegian Kartverket tiles, Swedish OpenStreetMap tiles for areas
   // Kartverket doesn't cover. data: + blob: for FileReader uploads.
-  "img-src 'self' data: blob: https://*.supabase.co https://upload.wikimedia.org https://*.wikimedia.org https://*.kindwise.com https://*.kartverket.no https://opencache.statkart.no https://*.tile.openstreetmap.org",
+  "img-src 'self' data: blob: https://*.supabase.co https://upload.wikimedia.org https://*.wikimedia.org https://*.kindwise.com https://*.kartverket.no https://opencache.statkart.no https://*.tile.openstreetmap.org https://*.arcgisonline.com",
   // data: for base64-inlined fonts in CSS.
   "font-src 'self' data:",
   // XHR/fetch/WebSocket destinations. wss://*.supabase.co is for Realtime.

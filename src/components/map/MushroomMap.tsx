@@ -664,12 +664,36 @@ export function MushroomMap() {
         zoomControl: false
       });
 
-      L.tileLayer('https://cache.kartverket.no/v1/wmts/1.0.0/topo/default/webmercator/{z}/{y}/{x}.png', {
+      // Base layers — switchable like Google Maps (Kart / Satellitt / Terreng).
+      // Terreng (Kartverket) is the default: best detail for Norway (trails,
+      // contours, forest shading). Kart (OSM) covers Sweden + the rest of the
+      // world where Kartverket is blank. Satellitt (Esri) shows the real forest
+      // from above — the most useful view for spotting clearings and tree cover.
+      const baseTerreng = L.tileLayer('https://cache.kartverket.no/v1/wmts/1.0.0/topo/default/webmercator/{z}/{y}/{x}.png', {
         attribution: '&copy; Kartverket',
         maxZoom: 18
-      }).addTo(map);
+      });
+      const baseKart = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap',
+        maxZoom: 19
+      });
+      const baseSatellitt = L.tileLayer(
+        'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+        {
+          attribution: 'Flyfoto &copy; Esri, Maxar, Earthstar Geographics',
+          maxZoom: 19
+        }
+      );
+      baseTerreng.addTo(map);
 
       L.control.zoom({ position: 'topright' }).addTo(map);
+      L.control
+        .layers(
+          { Terreng: baseTerreng, Kart: baseKart, Satellitt: baseSatellitt },
+          {},
+          { position: 'topright', collapsed: true }
+        )
+        .addTo(map);
 
       const clusters = L.markerClusterGroup({
         chunkedLoading: true,
