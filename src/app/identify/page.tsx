@@ -111,6 +111,18 @@ export default function IdentifyPage() {
           </div>
         ) : null}
 
+        <div className="rounded-xl border-2 border-red-300 bg-red-50 p-4 text-sm text-red-900">
+          <p className="font-semibold">⚠️ Bruk aldri appen til å avgjøre om en sopp er spiselig.</p>
+          <p className="mt-1">
+            AI-identifikasjon er kun et hjelpemiddel, ikke en fasit. Sikker artsbestemmelse kan kreve lukt,
+            konsistens og voksested — ikke bare et bilde. Er du i tvil: send bilde til{' '}
+            <a href="https://soppognyttevekster.no/soppkontroll/" target="_blank" rel="noreferrer" className="underline">
+              Soppkontrollen
+            </a>
+            , eller ring Giftinformasjonen <strong>22 59 13 00</strong>.
+          </p>
+        </div>
+
         <div className="rounded-xl bg-white p-4 shadow-sm">
           <div className="mb-3 rounded-lg border-2 border-dashed border-gray-300 p-6 text-center">
             <p className="text-sm text-gray-700">Sentrer soppen i bildet. Ta gjerne flere vinkler.</p>
@@ -141,10 +153,6 @@ export default function IdentifyPage() {
           {identify.isPending ? <p className="mt-3 text-sm text-gray-700">Analyserer bilde...</p> : null}
         </div>
 
-        <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-900">
-          <strong>Husk:</strong> AI-identifikasjon er et hjelpemiddel — ikke en fasit. Sjekk alltid mot
-          forvekslingsarter på artsiden, og send bilde til Soppkontrollen før du spiser usikre arter.
-        </div>
       </section>
     </PageWrapper>
   );
