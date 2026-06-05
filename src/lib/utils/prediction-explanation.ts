@@ -288,6 +288,15 @@ export function buildExplanation(input: ExplanationInput): Explanation[] {
     });
   }
 
+  // ── Fruiting window (a wet base + recent drying often triggers a flush) ──
+  if (input.weather.rain14dMm != null && input.weather.rain14dMm >= optMm * 2 && input.weather.rain3dMm < optMm) {
+    lines.push({
+      level: 'positive',
+      category: 'rain',
+      text: 'God fukt-base de siste ukene + tørrere de siste dagene — gunstig vindu for soppfruktsetting'
+    });
+  }
+
   // ── Humidity ────────────────────────────────────────────────────────
   const hum = input.weather.humidityPct;
   if (hum >= 80) {
@@ -332,4 +341,32 @@ export function buildExplanation(input: ExplanationInput): Explanation[] {
   }
 
   return lines;
+}
+
+const LEVEL_MARK: Record<ExplanationLevel, string> = { positive: '✓', neutral: '•', negative: '✕' };
+
+function verdictText(score: number, speciesName?: string): string {
+  const who = speciesName ? ` for ${speciesName.toLowerCase()}` : '';
+  if (score >= 75) return `Svært lovende sted${who} akkurat nå`;
+  if (score >= 55) return `God sjanse${who} her`;
+  if (score >= 35) return `Brukbar sjanse${who} her`;
+  return `Lav sjanse${who} akkurat nå`;
+}
+
+export interface SpotSummary {
+  verdict: string;
+  reasons: string[];
+}
+
+/**
+ * Persuasive, data-backed summary for one map spot (top-5 pin / species photo):
+ * a confident verdict headline + evidence lines (season, weather, fruiting
+ * window, forest, prior finds), each marked by level.
+ */
+export function buildSpotSummary(input: ExplanationInput & { score: number }): SpotSummary {
+  const lines = buildExplanation(input);
+  return {
+    verdict: verdictText(input.score, input.species?.norwegianName),
+    reasons: lines.map((line) => `${LEVEL_MARK[line.level]} ${line.text}`)
+  };
 }

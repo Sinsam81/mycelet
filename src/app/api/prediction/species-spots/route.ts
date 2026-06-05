@@ -2,10 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { getBillingCapabilities, getUserBillingSubscription } from '@/lib/billing/subscription';
 import { fetchWeatherSummary } from '@/lib/weather';
-import { getForestProperties, buildSpeciesHabitatPreferences } from '@/lib/forest';
+import { getForestProperties, buildSpeciesHabitatPreferences, computeHabitatScore } from '@/lib/forest';
 import { computeCellPrediction } from '@/lib/prediction/cell-score';
 import { countWithinKm } from '@/lib/prediction/occurrences';
 import { getElevation } from '@/lib/terrain';
+import { buildSpotSummary } from '@/lib/utils/prediction-explanation';
 import type { SpeciesContext } from '@/lib/utils/species-scoring';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { getClientKey, rateLimitResponse } from '@/lib/rate-limit/route';
@@ -183,6 +184,16 @@ export async function GET(request: NextRequest) {
       rain3dMm: weather.rain3dMm
     };
 
+    const whyWeather = {
+      temperatureC: weather.temperatureC,
+      humidityPct: weather.humidityPct,
+      rain3dMm: weather.rain3dMm,
+      rain7dMm: weather.rain7dMm,
+      rain14dMm: weather.rain14dMm,
+      minTemp7dC: weather.minTemp7dC,
+      maxTemp7dC: weather.maxTemp7dC
+    };
+
     const spots: {
       speciesId: number;
       norwegianName: string;
@@ -191,6 +202,8 @@ export async function GET(request: NextRequest) {
       lat: number;
       lng: number;
       score: number;
+      verdict: string;
+      reasons: string[];
     }[] = [];
 
     for (const sp of candidates) {
@@ -208,8 +221,9 @@ export async function GET(request: NextRequest) {
       });
       const spOcc = occBySpecies.get(sp.id as number) ?? [];
 
-      let best: { lat: number; lng: number; score: number } | null = null;
+      let best: { cell: (typeof cells)[number]; score: number; nearby: number } | null = null;
       for (const cell of cells) {
+        const nearby = countWithinKm(spOcc, cell.lat, cell.lng, 4);
         const prediction = computeCellPrediction({
           lat: cell.lat,
           lon: cell.lng,
@@ -220,23 +234,51 @@ export async function GET(request: NextRequest) {
           speciesHabitat,
           recent30d: 0,
           recent365d: 0,
-          nearbyOccurrences: countWithinKm(spOcc, cell.lat, cell.lng, 4),
+          nearbyOccurrences: nearby,
           elevation: cell.elevation
         });
         if (!best || prediction.score > best.score) {
-          best = { lat: cell.lat, lng: cell.lng, score: prediction.score };
+          best = { cell, score: prediction.score, nearby };
         }
       }
 
       if (best && best.score > 0) {
+        const habitat = computeHabitatScore(best.cell.forest, speciesHabitat);
+        const summary = buildSpotSummary({
+          weather: whyWeather,
+          species: {
+            norwegianName: (sp.norwegian_name as string | null) ?? '',
+            latinName: (sp.latin_name as string | null) ?? '',
+            genus: (sp.genus as string | null) ?? null,
+            seasonStart: sp.season_start as number,
+            seasonEnd: sp.season_end as number,
+            peakSeasonStart: (sp.peak_season_start as number | null) ?? null,
+            peakSeasonEnd: (sp.peak_season_end as number | null) ?? null,
+            habitat: (sp.habitat as string[] | null) ?? null,
+            mycorrhizalPartners: (sp.mycorrhizal_partners as string[] | null) ?? null
+          },
+          forest: {
+            forestType: best.cell.forest.forestType,
+            productivity: best.cell.forest.productivity,
+            volumePerHa: best.cell.forest.volumePerHa,
+            habitatScore: habitat.score,
+            habitatReasons: habitat.reasons,
+            source: best.cell.forest.source
+          },
+          nearbyOccurrences: best.nearby,
+          month,
+          score: best.score
+        });
         spots.push({
           speciesId: sp.id as number,
           norwegianName: (sp.norwegian_name as string | null) ?? '',
           latinName: (sp.latin_name as string | null) ?? '',
           imageUrl: sp.primary_image_url as string,
-          lat: Number(best.lat.toFixed(5)),
-          lng: Number(best.lng.toFixed(5)),
-          score: best.score
+          lat: Number(best.cell.lat.toFixed(5)),
+          lng: Number(best.cell.lng.toFixed(5)),
+          score: best.score,
+          verdict: summary.verdict,
+          reasons: summary.reasons
         });
       }
     }

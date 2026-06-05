@@ -87,10 +87,10 @@ export function MushroomMap() {
   const [heatmap, setHeatmap] = useState<{ cells: { lat: number; lng: number; score: number }[]; latSpan: number; lngSpan: number } | null>(null);
   const [heatmapLoading, setHeatmapLoading] = useState(false);
   const [heatmapMsg, setHeatmapMsg] = useState<string | null>(null);
-  const [topSpots, setTopSpots] = useState<{ lat: number; lng: number; score: number; forestType: string; productivity: number | null }[] | null>(null);
+  const [topSpots, setTopSpots] = useState<{ lat: number; lng: number; score: number; forestType: string; productivity: number | null; verdict?: string; reasons?: string[] }[] | null>(null);
   const [topLoading, setTopLoading] = useState(false);
   const [topMsg, setTopMsg] = useState<string | null>(null);
-  const [speciesSpots, setSpeciesSpots] = useState<{ speciesId: number; norwegianName: string; latinName: string; imageUrl: string; lat: number; lng: number; score: number }[] | null>(null);
+  const [speciesSpots, setSpeciesSpots] = useState<{ speciesId: number; norwegianName: string; latinName: string; imageUrl: string; lat: number; lng: number; score: number; verdict?: string; reasons?: string[] }[] | null>(null);
   const [speciesLoading, setSpeciesLoading] = useState(false);
   const [speciesMsg, setSpeciesMsg] = useState<string | null>(null);
 
@@ -204,12 +204,16 @@ export function MushroomMap() {
     setHeatmapLoading(true);
     try {
       const b = map.getBounds();
+      // Adaptive resolution: aim for ~2 km cells, capped 5–8 (perf). Zooming in
+      // gives genuinely finer, more credible cells.
+      const widthKm = (b.getEast() - b.getWest()) * 111 * Math.cos((b.getCenter().lat * Math.PI) / 180);
+      const gridN = Math.max(5, Math.min(8, Math.round(widthKm / 2)));
       const params = new URLSearchParams({
         minLat: String(b.getSouth()),
         minLng: String(b.getWest()),
         maxLat: String(b.getNorth()),
         maxLng: String(b.getEast()),
-        n: '5'
+        n: String(gridN)
       });
       if (filters.speciesId) params.set('speciesId', String(filters.speciesId));
       const res = await fetch(`/api/prediction/grid?${params.toString()}`, { cache: 'no-store' });
@@ -230,7 +234,7 @@ export function MushroomMap() {
       }
       setHeatmap({ cells, latSpan: data.cellLatSpan, lngSpan: data.cellLngSpan });
       await renderGrid(cells, data.cellLatSpan, data.cellLngSpan);
-      setHeatmapMsg(`Heatmap: ${cells.length} ruter (skogdekning ${Math.round((data.coverage ?? 0) * 100)}%).`);
+      setHeatmapMsg(`Heatmap: ${cells.length} ruter (skogdekning ${Math.round((data.coverage ?? 0) * 100)}%)${widthKm > 18 ? ' — zoom inn for finere ruter' : ''}.`);
     } catch {
       setHeatmapMsg('Kunne ikke lage heatmap.');
     } finally {
@@ -241,7 +245,7 @@ export function MushroomMap() {
   // "Topp 5 nær meg": numbered pins on the best forest cells within ~10 km.
   const renderTopSpots = useCallback(
     async (
-      spots: { lat: number; lng: number; score: number; forestType: string; productivity: number | null }[],
+      spots: { lat: number; lng: number; score: number; forestType: string; productivity: number | null; verdict?: string; reasons?: string[] }[],
       origin: { lat: number; lng: number }
     ) => {
       const layer = topLayerRef.current;
@@ -259,11 +263,14 @@ export function MushroomMap() {
         });
         const km = haversineKm(origin.lat, origin.lng, spot.lat, spot.lng);
         const dir = bearingLabel(origin.lat, origin.lng, spot.lat, spot.lng);
-        const forestText = `${FOREST_LABEL[spot.forestType] ?? 'skog'}${spot.productivity != null ? `, bonitet ${spot.productivity}` : ''}`;
-        leaflet
-          .marker([spot.lat, spot.lng], { icon })
-          .bindPopup(`<b>Topp ${rank} · ${spot.score}%</b><br/>~${km.toFixed(1)} km ${dir}<br/>${forestText}`)
-          .addTo(layer);
+        const reasonsHtml = (spot.reasons ?? []).map((r) => `<div style="margin-top:3px">${r}</div>`).join('');
+        const popup = `<div style="min-width:210px;max-width:265px">
+          <div style="font-weight:700;color:#14532d">${spot.verdict ?? `Topp ${rank}`}</div>
+          <div style="color:#555;font-size:12px;margin-top:2px">~${km.toFixed(1)} km ${dir} · ${spot.score}/100</div>
+          <div style="font-size:12px;margin-top:6px;color:#1f2937">${reasonsHtml}</div>
+          <div style="color:#9ca3af;font-size:10px;margin-top:7px">Kilder: MET (vær) · NIBIO/CORINE (skog) · Artsdatabanken (funn)</div>
+        </div>`;
+        leaflet.marker([spot.lat, spot.lng], { icon }).bindPopup(popup).addTo(layer);
       });
     },
     []
@@ -284,8 +291,8 @@ export function MushroomMap() {
       const center = map.getCenter();
       const originLat = latitude ?? center.lat;
       const originLng = longitude ?? center.lng;
-      const latDelta = 10 / 111;
-      const lngDelta = 10 / (111 * Math.cos((originLat * Math.PI) / 180));
+      const latDelta = 5 / 111;
+      const lngDelta = 5 / (111 * Math.cos((originLat * Math.PI) / 180));
       const params = new URLSearchParams({
         minLat: String(originLat - latDelta),
         maxLat: String(originLat + latDelta),
@@ -305,10 +312,10 @@ export function MushroomMap() {
         setTopMsg(data?.error ?? 'Kunne ikke finne topp-steder.');
         return;
       }
-      const spots = (data.cells ?? []) as { lat: number; lng: number; score: number; forestType: string; productivity: number | null }[];
+      const spots = (data.cells ?? []) as { lat: number; lng: number; score: number; forestType: string; productivity: number | null; verdict?: string; reasons?: string[] }[];
       if (spots.length === 0) {
         clearTopSpots();
-        setTopMsg('Fant lite skogdata innen 10 km — prøv et område med mer skog.');
+        setTopMsg('Fant lite skogdata innen 5 km — prøv et område med mer skog.');
         return;
       }
       setTopSpots(spots);
@@ -317,7 +324,7 @@ export function MushroomMap() {
       const bounds = leaflet.latLngBounds(spots.map((s) => [s.lat, s.lng] as [number, number]));
       bounds.extend([originLat, originLng]);
       map.fitBounds(bounds.pad(0.2));
-      setTopMsg(`${spots.length} beste steder innen 10 km.`);
+      setTopMsg(`${spots.length} beste steder innen 5 km. Trykk på en nål for begrunnelse.`);
     } catch {
       setTopMsg('Kunne ikke finne topp-steder.');
     } finally {
@@ -328,7 +335,7 @@ export function MushroomMap() {
   // "Soppbilder på kartet": round species photos on each species' best ground.
   const renderSpeciesSpots = useCallback(
     async (
-      spots: { speciesId: number; norwegianName: string; latinName: string; imageUrl: string; lat: number; lng: number; score: number }[]
+      spots: { speciesId: number; norwegianName: string; latinName: string; imageUrl: string; lat: number; lng: number; score: number; verdict?: string; reasons?: string[] }[]
     ) => {
       const layer = speciesLayerRef.current;
       if (!mapRef.current || !layer) return;
@@ -342,10 +349,15 @@ export function MushroomMap() {
           iconSize: [46, 46],
           iconAnchor: [23, 23]
         });
-        leaflet
-          .marker([spot.lat, spot.lng], { icon })
-          .bindPopup(`<b>${spot.norwegianName}</b><br/><i>${spot.latinName}</i><br/>Beste sted her: ${spot.score}%`)
-          .addTo(layer);
+        const reasonsHtml = (spot.reasons ?? []).map((r) => `<div style="margin-top:3px">${r}</div>`).join('');
+        const popup = `<div style="min-width:210px;max-width:265px">
+          <div style="font-weight:700;color:#14532d">${spot.norwegianName}</div>
+          <div style="font-style:italic;color:#6b7280;font-size:11px">${spot.latinName}</div>
+          <div style="color:#555;font-size:12px;margin-top:3px">${spot.verdict ?? 'Beste sted her'} · ${spot.score}/100</div>
+          <div style="font-size:12px;margin-top:6px;color:#1f2937">${reasonsHtml}</div>
+          <div style="color:#9ca3af;font-size:10px;margin-top:7px">Kilder: MET (vær) · NIBIO/CORINE (skog) · Artsdatabanken (funn)</div>
+        </div>`;
+        leaflet.marker([spot.lat, spot.lng], { icon }).bindPopup(popup).addTo(layer);
       }
     },
     []
@@ -381,7 +393,7 @@ export function MushroomMap() {
         setSpeciesMsg(data?.error ?? 'Kunne ikke hente soppbilder.');
         return;
       }
-      const spots = (data.spots ?? []) as { speciesId: number; norwegianName: string; latinName: string; imageUrl: string; lat: number; lng: number; score: number }[];
+      const spots = (data.spots ?? []) as { speciesId: number; norwegianName: string; latinName: string; imageUrl: string; lat: number; lng: number; score: number; verdict?: string; reasons?: string[] }[];
       if (spots.length === 0) {
         clearSpeciesSpots();
         setSpeciesMsg(data?.message ?? 'Ingen arter i sesong her nå.');

@@ -6,6 +6,8 @@ import { getForestProperties, buildSpeciesHabitatPreferences } from '@/lib/fores
 import { computeCellPrediction } from '@/lib/prediction/cell-score';
 import { countWithinKm } from '@/lib/prediction/occurrences';
 import { getElevation } from '@/lib/terrain';
+import { computeHabitatScore } from '@/lib/forest';
+import { buildSpotSummary } from '@/lib/utils/prediction-explanation';
 import type { SpeciesContext } from '@/lib/utils/species-scoring';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { getClientKey, rateLimitResponse } from '@/lib/rate-limit/route';
@@ -124,7 +126,7 @@ export async function GET(request: NextRequest) {
       speciesId
         ? supabase
             .from('mushroom_species')
-            .select('id,latin_name,genus,season_start,season_end,peak_season_start,peak_season_end,habitat,mycorrhizal_partners')
+            .select('id,norwegian_name,latin_name,genus,season_start,season_end,peak_season_start,peak_season_end,habitat,mycorrhizal_partners')
             .eq('id', speciesId)
             .maybeSingle()
         : Promise.resolve(null),
@@ -185,6 +187,7 @@ export async function GET(request: NextRequest) {
       ]);
       // No real forest signal → skip (never invent a gradient).
       if (!forest) return null;
+      const nearby = countWithinKm(occurrences, cell.lat, cell.lng, 4);
       const prediction = computeCellPrediction({
         lat: cell.lat,
         lon: cell.lng,
@@ -195,7 +198,7 @@ export async function GET(request: NextRequest) {
         speciesHabitat,
         recent30d: 0,
         recent365d: 0,
-        nearbyOccurrences: countWithinKm(occurrences, cell.lat, cell.lng, 4),
+        nearbyOccurrences: nearby,
         elevation: elev?.elevationM ?? null
       });
       return {
@@ -203,15 +206,73 @@ export async function GET(request: NextRequest) {
         lng: Number(cell.lng.toFixed(5)),
         score: prediction.score,
         forestType: forest.forestType,
-        productivity: forest.productivity
+        productivity: forest.productivity,
+        forest,
+        nearbyOccurrences: nearby
       };
     });
 
     type ScoredCell = NonNullable<(typeof scored)[number]>;
     const allCells = scored.filter((c): c is ScoredCell => c !== null);
-    // `top` mode returns the best N cells (for "5 beste steder nær meg"); the
-    // default returns every scored cell (for the heatmap).
-    const cells = top ? [...allCells].sort((a, b) => b.score - a.score).slice(0, top) : allCells;
+
+    const whyWeather = {
+      temperatureC: weather.temperatureC,
+      humidityPct: weather.humidityPct,
+      rain3dMm: weather.rain3dMm,
+      rain7dMm: weather.rain7dMm,
+      rain14dMm: weather.rain14dMm,
+      minTemp7dC: weather.minTemp7dC,
+      maxTemp7dC: weather.maxTemp7dC
+    };
+    const whySpecies = speciesRes?.data
+      ? {
+          norwegianName: (speciesRes.data.norwegian_name as string | null) ?? '',
+          latinName: (speciesRes.data.latin_name as string | null) ?? '',
+          genus: (speciesRes.data.genus as string | null) ?? null,
+          seasonStart: speciesRes.data.season_start as number,
+          seasonEnd: speciesRes.data.season_end as number,
+          peakSeasonStart: (speciesRes.data.peak_season_start as number | null) ?? null,
+          peakSeasonEnd: (speciesRes.data.peak_season_end as number | null) ?? null,
+          habitat: (speciesRes.data.habitat as string[] | null) ?? null,
+          mycorrhizalPartners: (speciesRes.data.mycorrhizal_partners as string[] | null) ?? null
+        }
+      : undefined;
+
+    // `top` mode returns the best N cells with a persuasive "why" per spot
+    // (for "5 beste steder nær meg"); the default returns lean cells for the heatmap.
+    let cells: Record<string, unknown>[];
+    if (top) {
+      const topCells = [...allCells].sort((a, b) => b.score - a.score).slice(0, top);
+      cells = topCells.map((c) => {
+        const habitat = speciesHabitat ? computeHabitatScore(c.forest, speciesHabitat) : null;
+        const summary = buildSpotSummary({
+          weather: whyWeather,
+          species: whySpecies,
+          forest: {
+            forestType: c.forest.forestType,
+            productivity: c.forest.productivity,
+            volumePerHa: c.forest.volumePerHa,
+            habitatScore: habitat ? habitat.score : null,
+            habitatReasons: habitat ? habitat.reasons : [],
+            source: c.forest.source
+          },
+          nearbyOccurrences: c.nearbyOccurrences,
+          month,
+          score: c.score
+        });
+        return {
+          lat: c.lat,
+          lng: c.lng,
+          score: c.score,
+          forestType: c.forestType,
+          productivity: c.productivity,
+          verdict: summary.verdict,
+          reasons: summary.reasons
+        };
+      });
+    } else {
+      cells = allCells.map((c) => ({ lat: c.lat, lng: c.lng, score: c.score, forestType: c.forestType, productivity: c.productivity }));
+    }
 
     log.info('prediction.grid.success', {
       n,
