@@ -767,6 +767,7 @@ export function MushroomMap() {
             source: data.forest.source
           }
         : null,
+      nearbyOccurrences: data.nearbyOccurrences,
       month: new Date().getMonth() + 1
     });
   }, [prediction.data]);

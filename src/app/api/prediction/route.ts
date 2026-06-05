@@ -421,6 +421,7 @@ export async function GET(request: NextRequest) {
       habitatFit,
       condition,
       weatherSource: weather.source,
+      nearbyOccurrences,
       model: {
         version: forest
           ? 'v3_computed_nibio_habitat'

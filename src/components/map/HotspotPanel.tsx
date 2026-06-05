@@ -38,6 +38,7 @@ function sourceCredit(data: PredictionResponse): string | null {
   const weather = data.weatherSource ? WEATHER_SOURCE_LABEL[data.weatherSource] : undefined;
   if (weather) parts.push(`${weather} (vær)`);
   if (data.forest?.source === 'sr16') parts.push('NIBIO (skog)');
+  if (data.nearbyOccurrences && data.nearbyOccurrences > 0) parts.push('Artsdatabanken (funn)');
   return parts.length ? parts.join(' · ') : null;
 }
 

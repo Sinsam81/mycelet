@@ -27,7 +27,7 @@ import { resolveSpeciesPreferences, type SpeciesContext } from '@/lib/utils/spec
 
 export type ExplanationLevel = 'positive' | 'neutral' | 'negative';
 
-export type ExplanationCategory = 'season' | 'temperature' | 'rain' | 'humidity' | 'habitat' | 'mycorrhizal';
+export type ExplanationCategory = 'season' | 'temperature' | 'rain' | 'humidity' | 'habitat' | 'mycorrhizal' | 'occurrence';
 
 export interface Explanation {
   level: ExplanationLevel;
@@ -86,6 +86,8 @@ export interface ExplanationInput {
   species?: SpeciesExplanationContext;
   /** Optional real forest data at the point (NIBIO). Supersedes generic habitat. */
   forest?: ExplanationForest | null;
+  /** Count of real prior finds (GBIF/Artsdatabanken) near the point. */
+  nearbyOccurrences?: number;
   /** Current month (1-12). Pass `new Date().getMonth() + 1`. */
   month: number;
 }
@@ -195,6 +197,16 @@ export function buildExplanation(input: ExplanationInput): Explanation[] {
     } else {
       lines.push({ level: 'negative', category: 'season', text: 'Lav sesong for de fleste arter' });
     }
+  }
+
+  // ── Prior finds nearby (GBIF / Artsdatabanken) ──────────────────────
+  // Our strongest validated signal — real registered finds in the area.
+  if (input.nearbyOccurrences && input.nearbyOccurrences > 0) {
+    lines.push({
+      level: 'positive',
+      category: 'occurrence',
+      text: `${input.nearbyOccurrences} tidligere funn registrert i nærheten (Artsdatabanken/GBIF)`
+    });
   }
 
   // ── Temperature ─────────────────────────────────────────────────────
