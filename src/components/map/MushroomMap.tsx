@@ -67,6 +67,10 @@ export function MushroomMap() {
   const popupRootsRef = useRef<Root[]>([]);
   const loadFindingsRef = useRef<() => Promise<void>>(async () => {});
   const loadPredictionTilesRef = useRef<() => Promise<void>>(async () => {});
+  const occClusterRef = useRef<any>(null);
+  const loadOccurrencesRef = useRef<() => Promise<void>>(async () => {});
+  const showOccurrencesRef = useRef(false);
+  const speciesNamesRef = useRef<Map<number, string>>(new Map());
 
   const supabase = useRef(createClient()).current;
   const { latitude, longitude, loading: geoLoading, error: geoError } = useGeolocation();
@@ -74,6 +78,8 @@ export function MushroomMap() {
   const [filters, setFilters] = useState<MapFilterState>(initialFilters);
   const [showAddSheet, setShowAddSheet] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [showOccurrences, setShowOccurrences] = useState(false);
+  const [occCount, setOccCount] = useState(0);
   const [predictionCoords, setPredictionCoords] = useState<{ lat: number | null; lon: number | null }>({
     lat: null,
     lon: null
@@ -268,7 +274,8 @@ export function MushroomMap() {
           <div style="font-weight:700;color:#14532d">${spot.verdict ?? `Topp ${rank}`}</div>
           <div style="color:#555;font-size:12px;margin-top:2px">~${km.toFixed(1)} km ${dir} · ${spot.score}/100</div>
           <div style="font-size:12px;margin-top:6px;color:#1f2937">${reasonsHtml}</div>
-          <div style="color:#9ca3af;font-size:10px;margin-top:7px">Kilder: MET (vær) · NIBIO/CORINE (skog) · Artsdatabanken (funn)</div>
+          <a href="https://www.google.com/maps/search/?api=1&query=${spot.lat},${spot.lng}" target="_blank" rel="noreferrer" style="display:block;margin-top:7px;color:#15803d;font-weight:600;font-size:12px;text-decoration:underline">📍 Åpne i kart (naviger hit)</a>
+          <div style="color:#9ca3af;font-size:10px;margin-top:6px">Kilder: MET (vær) · NIBIO/CORINE (skog) · Artsdatabanken (funn)</div>
         </div>`;
         leaflet.marker([spot.lat, spot.lng], { icon }).bindPopup(popup).addTo(layer);
       });
@@ -355,7 +362,8 @@ export function MushroomMap() {
           <div style="font-style:italic;color:#6b7280;font-size:11px">${spot.latinName}</div>
           <div style="color:#555;font-size:12px;margin-top:3px">${spot.verdict ?? 'Beste sted her'} · ${spot.score}/100</div>
           <div style="font-size:12px;margin-top:6px;color:#1f2937">${reasonsHtml}</div>
-          <div style="color:#9ca3af;font-size:10px;margin-top:7px">Kilder: MET (vær) · NIBIO/CORINE (skog) · Artsdatabanken (funn)</div>
+          <a href="https://www.google.com/maps/search/?api=1&query=${spot.lat},${spot.lng}" target="_blank" rel="noreferrer" style="display:block;margin-top:7px;color:#15803d;font-weight:600;font-size:12px;text-decoration:underline">📍 Åpne i kart (naviger hit)</a>
+          <div style="color:#9ca3af;font-size:10px;margin-top:6px">Kilder: MET (vær) · NIBIO/CORINE (skog) · Artsdatabanken (funn)</div>
         </div>`;
         leaflet.marker([spot.lat, spot.lng], { icon }).bindPopup(popup).addTo(layer);
       }
@@ -408,6 +416,59 @@ export function MushroomMap() {
       setSpeciesLoading(false);
     }
   }, [renderSpeciesSpots, clearSpeciesSpots]);
+
+  // Registered finds (GBIF/Artsdatabanken) as clustered points — the concrete
+  // "where mushrooms have actually been found" layer. Free for all.
+  const loadOccurrences = useCallback(async () => {
+    const map = mapRef.current;
+    const cluster = occClusterRef.current;
+    if (!map || !cluster) return;
+    if (!showOccurrencesRef.current) {
+      cluster.clearLayers();
+      return;
+    }
+    const b = map.getBounds();
+    const { data } = await supabase.rpc('get_occurrences_in_bounds', {
+      min_lat: b.getSouth(),
+      min_lng: b.getWest(),
+      max_lat: b.getNorth(),
+      max_lng: b.getEast(),
+      p_species_id: filters.speciesId,
+      p_limit: 3000
+    });
+    const leaflet = (await import('leaflet')).default;
+    cluster.clearLayers();
+    const names = speciesNamesRef.current;
+    const points = (data ?? []) as { latitude: number; longitude: number; species_id: number | null }[];
+    for (const o of points) {
+      const name = o.species_id != null ? names.get(o.species_id) ?? 'Sopp' : 'Sopp';
+      const icon = leaflet.divIcon({
+        className: 'occ-marker',
+        html: '<div style="width:12px;height:12px;border-radius:9999px;background:#8b5e34;border:2px solid #fff;box-shadow:0 0 2px rgba(0,0,0,0.5)"></div>',
+        iconSize: [12, 12],
+        iconAnchor: [6, 6]
+      });
+      const popup = `<div><b>${name}</b><br/><span style="color:#555;font-size:12px">Registrert funn</span><br/><a href="https://www.google.com/maps/search/?api=1&query=${o.latitude},${o.longitude}" target="_blank" rel="noreferrer" style="color:#15803d;font-weight:600;font-size:12px;text-decoration:underline">📍 Åpne i kart</a><br/><span style="color:#9ca3af;font-size:10px">Artsdatabanken/GBIF</span></div>`;
+      leaflet.marker([o.latitude, o.longitude], { icon }).bindPopup(popup).addTo(cluster);
+    }
+    setOccCount(points.length);
+  }, [filters.speciesId, supabase]);
+
+  useEffect(() => {
+    loadOccurrencesRef.current = loadOccurrences;
+  }, [loadOccurrences]);
+
+  const toggleOccurrences = useCallback(() => {
+    const next = !showOccurrencesRef.current;
+    showOccurrencesRef.current = next;
+    setShowOccurrences(next);
+    if (next) {
+      void loadOccurrences();
+    } else {
+      occClusterRef.current?.clearLayers();
+      setOccCount(0);
+    }
+  }, [loadOccurrences]);
 
   const focusSavedArea = useCallback((area: OfflineArea) => {
     const map = mapRef.current;
@@ -627,6 +688,8 @@ export function MushroomMap() {
       });
 
       map.addLayer(clusters);
+      const occCluster = L.markerClusterGroup({ chunkedLoading: true, maxClusterRadius: 60, showCoverageOnHover: false });
+      map.addLayer(occCluster);
       const heatLayer = L.layerGroup();
       map.addLayer(heatLayer);
       const gridLayer = L.layerGroup();
@@ -637,6 +700,7 @@ export function MushroomMap() {
       map.addLayer(speciesLayer);
       mapRef.current = map;
       clusterRef.current = clusters;
+      occClusterRef.current = occCluster;
       heatLayerRef.current = heatLayer;
       gridLayerRef.current = gridLayer;
       topLayerRef.current = topLayer;
@@ -650,6 +714,7 @@ export function MushroomMap() {
         });
         void loadFindingsRef.current();
         void loadPredictionTilesRef.current();
+        void loadOccurrencesRef.current();
       };
 
       map.on('moveend', onMoveEnd);
@@ -672,6 +737,7 @@ export function MushroomMap() {
       gridLayerRef.current = null;
       topLayerRef.current = null;
       speciesLayerRef.current = null;
+      occClusterRef.current = null;
     };
   }, [latitude, longitude]);
 
@@ -679,6 +745,17 @@ export function MushroomMap() {
     supabase.auth.getUser().then(({ data }) => {
       setCurrentUserId(data.user?.id ?? null);
     });
+  }, [supabase]);
+
+  useEffect(() => {
+    supabase
+      .from('mushroom_species')
+      .select('id,norwegian_name')
+      .then(({ data }) => {
+        const map = new Map<number, string>();
+        for (const s of data ?? []) map.set(s.id as number, (s.norwegian_name as string | null) ?? 'Sopp');
+        speciesNamesRef.current = map;
+      });
   }, [supabase]);
 
   useEffect(() => {
@@ -791,6 +868,13 @@ export function MushroomMap() {
       <MapFilters filters={filters} onChange={setFilters} />
 
       <div className="absolute left-1/2 top-3 z-[1000] flex w-[calc(100%-7rem)] max-w-md -translate-x-1/2 flex-col items-center gap-1">
+        <button
+          type="button"
+          onClick={toggleOccurrences}
+          className="rounded-full bg-white/95 px-3 py-2 text-xs font-medium text-amber-900 shadow-lg backdrop-blur hover:bg-white"
+        >
+          {showOccurrences ? `Skjul funn${occCount ? ` (${occCount})` : ''}` : '📍 Vis registrerte funn'}
+        </button>
         {hasOfflineAccess ? (
           <div className="flex flex-wrap justify-center gap-2">
             <button
