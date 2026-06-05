@@ -9,6 +9,7 @@ import type { SpeciesContext } from '@/lib/utils/species-scoring';
 import { getForestProperties, buildSpeciesHabitatPreferences } from '@/lib/forest';
 import { computeCellPrediction } from '@/lib/prediction/cell-score';
 import { countWithinKm } from '@/lib/prediction/occurrences';
+import { getElevation } from '@/lib/terrain';
 import { createRequestLogger } from '@/lib/log/request';
 
 interface FindingRow {
@@ -290,7 +291,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const [findingsRes, forest, occRes] = await Promise.all([
+    const [findingsRes, forest, occRes, elevationData] = await Promise.all([
       supabase.rpc('get_findings_in_bounds', {
         min_lat: minLat,
         min_lng: minLng,
@@ -309,7 +310,9 @@ export async function GET(request: NextRequest) {
         max_lng: maxLng,
         p_species_id: speciesId,
         p_limit: 4000
-      })
+      }),
+      // Real terrain elevation (Kartverket) → replaces the pseudo-noise proxy.
+      getElevation({ lat, lon })
     ]);
     const nearbyOccurrences = countWithinKm(
       (occRes?.data ?? []) as { latitude: number; longitude: number }[],
@@ -351,7 +354,8 @@ export async function GET(request: NextRequest) {
         : null,
       recent30d,
       recent365d,
-      nearbyOccurrences
+      nearbyOccurrences,
+      elevation: elevationData?.elevationM ?? null
     });
 
     const { score, baseScore, speciesFit, habitatFit, habitat: habitatScore, factors: advancedFactors } = cell;

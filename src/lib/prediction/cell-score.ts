@@ -26,6 +26,7 @@ import {
   type HabitatScore,
   type SpeciesHabitatPreferences
 } from '@/lib/forest';
+import { elevationToTerrainScore } from '@/lib/terrain';
 
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, Math.round(value)));
@@ -58,6 +59,8 @@ export interface CellPredictionInput {
   /** Historical finding counts in the area (optional; default 0). */
   recent30d?: number;
   recent365d?: number;
+  /** Real terrain elevation (m) at the cell, from Kartverket. */
+  elevation?: number | null;
   /** Count of real GBIF occurrences of this species near the cell (boost-only). */
   nearbyOccurrences?: number;
 }
@@ -93,11 +96,14 @@ export function computeCellPrediction(input: CellPredictionInput): CellPredictio
   const factors = computeAdvancedFactors({ latitude: lat, longitude: lon, month, weather });
 
   // Real NIBIO signal replaces the pseudo-noise soil/vegetation proxies.
-  // Terrain stays a proxy for now (no elevation/slope source yet).
   if (forest) {
     if (forest.productivity != null) factors.soil = bonitetToSoilScore(forest.productivity);
     if (forest.volumePerHa != null) factors.vegetation = volumeToVegetationScore(forest.volumePerHa);
   }
+
+  // Real Kartverket elevation replaces the pseudo-noise terrain proxy; neutral
+  // 50 when unavailable (never fabricate).
+  factors.terrain = input.elevation != null ? elevationToTerrainScore(input.elevation) : 50;
 
   const advancedEnvironment100 = computeAdvancedEnvironmentScore(factors);
   const environment = clamp(legacyEnvironment * 0.6 + (advancedEnvironment100 / 2) * 0.4, 0, 50);

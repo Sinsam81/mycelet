@@ -5,6 +5,7 @@ import { fetchWeatherSummary } from '@/lib/weather';
 import { getForestProperties, buildSpeciesHabitatPreferences } from '@/lib/forest';
 import { computeCellPrediction } from '@/lib/prediction/cell-score';
 import { countWithinKm } from '@/lib/prediction/occurrences';
+import { getElevation } from '@/lib/terrain';
 import type { SpeciesContext } from '@/lib/utils/species-scoring';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { getClientKey, rateLimitResponse } from '@/lib/rate-limit/route';
@@ -178,7 +179,10 @@ export async function GET(request: NextRequest) {
     };
 
     const scored = await mapWithConcurrency(cellCenters, FOREST_CONCURRENCY, async (cell) => {
-      const forest = await withTimeout(getForestProperties({ lat: cell.lat, lon: cell.lng }), FOREST_TIMEOUT_MS);
+      const [forest, elev] = await Promise.all([
+        withTimeout(getForestProperties({ lat: cell.lat, lon: cell.lng }), FOREST_TIMEOUT_MS),
+        getElevation({ lat: cell.lat, lon: cell.lng })
+      ]);
       // No real forest signal → skip (never invent a gradient).
       if (!forest) return null;
       const prediction = computeCellPrediction({
@@ -191,7 +195,8 @@ export async function GET(request: NextRequest) {
         speciesHabitat,
         recent30d: 0,
         recent365d: 0,
-        nearbyOccurrences: countWithinKm(occurrences, cell.lat, cell.lng, 4)
+        nearbyOccurrences: countWithinKm(occurrences, cell.lat, cell.lng, 4),
+        elevation: elev?.elevationM ?? null
       });
       return {
         lat: Number(cell.lat.toFixed(5)),
