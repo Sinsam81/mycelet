@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getForestProperties as nibioGet } from '@/lib/nibio';
-import { getSwedishForestProperties as sluGet } from '@/lib/slu';
+import { getCorineForest as corineGet } from '@/lib/corine';
 import { buildSpeciesHabitatPreferences, getForestProperties } from '@/lib/forest';
 import type { ForestProperties } from '@/lib/forest';
 
@@ -8,12 +8,12 @@ vi.mock('@/lib/nibio', () => ({
   getForestProperties: vi.fn(),
   computeHabitatScore: vi.fn()
 }));
-vi.mock('@/lib/slu', () => ({
-  getSwedishForestProperties: vi.fn()
+vi.mock('@/lib/corine', () => ({
+  getCorineForest: vi.fn()
 }));
 
 const mockNibio = vi.mocked(nibioGet);
-const mockSlu = vi.mocked(sluGet);
+const mockCorine = vi.mocked(corineGet);
 
 describe('getForestProperties (region dispatcher)', () => {
   beforeEach(() => {
@@ -34,16 +34,16 @@ describe('getForestProperties (region dispatcher)', () => {
 
     expect(result).toBe(sample);
     expect(mockNibio).toHaveBeenCalledWith({ lat: 59.9, lon: 10.75 });
-    expect(mockSlu).not.toHaveBeenCalled();
+    expect(mockCorine).not.toHaveBeenCalled();
   });
 
-  it('routes Swedish coordinates to the SLU adapter', async () => {
-    mockSlu.mockResolvedValue(null);
+  it('routes Swedish coordinates to the CORINE adapter', async () => {
+    mockCorine.mockResolvedValue(null);
 
     const result = await getForestProperties({ lat: 59.33, lon: 18.07 });
 
     expect(result).toBeNull();
-    expect(mockSlu).toHaveBeenCalledWith({ lat: 59.33, lon: 18.07 });
+    expect(mockCorine).toHaveBeenCalledWith({ lat: 59.33, lon: 18.07 });
     expect(mockNibio).not.toHaveBeenCalled();
   });
 
@@ -52,7 +52,7 @@ describe('getForestProperties (region dispatcher)', () => {
 
     expect(result).toBeNull();
     expect(mockNibio).not.toHaveBeenCalled();
-    expect(mockSlu).not.toHaveBeenCalled();
+    expect(mockCorine).not.toHaveBeenCalled();
   });
 });
 

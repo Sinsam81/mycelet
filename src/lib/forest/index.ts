@@ -5,7 +5,7 @@
  * pattern src/lib/weather/index.ts uses for weather:
  *
  *   NO    -> NIBIO SR16        (live, no account)   [src/lib/nibio]
- *   SE    -> SLU Forest Map    (stub for now)       [src/lib/slu]
+ *   SE    -> CORINE Land Cover (live, no account)   [src/lib/corine]
  *   other -> null (prediction falls back to the climate signal)
  *
  * Callers should treat null as "no forest signal here" and lean on weather
@@ -14,7 +14,7 @@
 
 import { getRegion } from '@/lib/utils/region';
 import { getForestProperties as getNorwegianForestProperties } from '@/lib/nibio';
-import { getSwedishForestProperties } from '@/lib/slu';
+import { getCorineForest } from '@/lib/corine';
 import type {
   ForestProperties,
   ForestType,
@@ -25,7 +25,8 @@ import type {
 export async function getForestProperties(query: HabitatQuery): Promise<ForestProperties | null> {
   const region = getRegion(query.lat, query.lon);
   if (region === 'NO') return getNorwegianForestProperties(query);
-  if (region === 'SE') return getSwedishForestProperties(query);
+  // Sweden: CORINE Land Cover (forest type only).
+  if (region === 'SE') return getCorineForest(query);
   return null;
 }
 

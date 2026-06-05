@@ -18,6 +18,9 @@ const admin = createClient(url, key, { auth: { persistSession: false } });
 
 const PER_SPECIES_CAP = 4000;
 const PAGE = 300;
+// Countries to import. Pass as CLI args (e.g. `... import-gbif-occurrences.mjs SE`),
+// or default to both Norway and Sweden.
+const COUNTRIES = process.argv.slice(2).length ? process.argv.slice(2) : ['NO', 'SE'];
 
 async function gbifMatch(latin) {
   const res = await fetch(`https://api.gbif.org/v1/species/match?name=${encodeURIComponent(latin)}`);
@@ -31,11 +34,11 @@ function parseObservedAt(r) {
   return null;
 }
 
-async function gbifOccurrences(taxonKey) {
+async function gbifOccurrences(taxonKey, country) {
   const out = [];
   for (let offset = 0; offset < PER_SPECIES_CAP; offset += PAGE) {
     const res = await fetch(
-      `https://api.gbif.org/v1/occurrence/search?taxonKey=${taxonKey}&country=NO&hasCoordinate=true&limit=${PAGE}&offset=${offset}`
+      `https://api.gbif.org/v1/occurrence/search?taxonKey=${taxonKey}&country=${country}&hasCoordinate=true&limit=${PAGE}&offset=${offset}`
     );
     const j = await res.json();
     const results = j.results ?? [];
@@ -79,21 +82,23 @@ for (const sp of species) {
       console.log(`- ${sp.latin_name}: ingen GBIF-match`);
       continue;
     }
-    const occ = await gbifOccurrences(taxonKey);
-    if (occ.length === 0) {
-      console.log(`- ${sp.norwegian_name} (${sp.latin_name}): 0 funn`);
-      continue;
+    for (const country of COUNTRIES) {
+      const occ = await gbifOccurrences(taxonKey, country);
+      if (occ.length === 0) {
+        console.log(`- ${sp.norwegian_name} [${country}]: 0 funn`);
+        continue;
+      }
+      const rows = occ.map((o) => ({ ...o, species_id: sp.id, source: 'gbif' }));
+      for (let i = 0; i < rows.length; i += 500) {
+        const chunk = rows.slice(i, i + 500);
+        const { error } = await admin
+          .from('species_occurrences')
+          .upsert(chunk, { onConflict: 'gbif_key', ignoreDuplicates: true });
+        if (error) console.log(`  upsert-feil (${sp.latin_name} ${country}):`, error.message);
+      }
+      grandTotal += rows.length;
+      console.log(`✓ ${sp.norwegian_name} [${country}]: ${rows.length} funn`);
     }
-    const rows = occ.map((o) => ({ ...o, species_id: sp.id, source: 'gbif' }));
-    for (let i = 0; i < rows.length; i += 500) {
-      const chunk = rows.slice(i, i + 500);
-      const { error } = await admin
-        .from('species_occurrences')
-        .upsert(chunk, { onConflict: 'gbif_key', ignoreDuplicates: true });
-      if (error) console.log(`  upsert-feil (${sp.latin_name}):`, error.message);
-    }
-    grandTotal += rows.length;
-    console.log(`✓ ${sp.norwegian_name} (${sp.latin_name}): ${rows.length} funn`);
   } catch (e) {
     console.log(`! ${sp.latin_name}: ${e.message}`);
   }
