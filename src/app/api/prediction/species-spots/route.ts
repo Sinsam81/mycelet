@@ -4,6 +4,7 @@ import { getBillingCapabilities, getUserBillingSubscription } from '@/lib/billin
 import { fetchWeatherSummary } from '@/lib/weather';
 import { getForestProperties, buildSpeciesHabitatPreferences } from '@/lib/forest';
 import { computeCellPrediction } from '@/lib/prediction/cell-score';
+import { countWithinKm } from '@/lib/prediction/occurrences';
 import type { SpeciesContext } from '@/lib/utils/species-scoring';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { getClientKey, rateLimitResponse } from '@/lib/rate-limit/route';
@@ -133,6 +134,24 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Værdata ikke tilgjengelig for området' }, { status: 502 });
     }
 
+    // Real occurrences in the bounds (all species), grouped per species so each
+    // species' best-spot search gets its own "observasjoner nær her" boost.
+    const { data: occRows } = await supabase.rpc('get_occurrences_in_bounds', {
+      min_lat: minLat,
+      min_lng: minLng,
+      max_lat: maxLat,
+      max_lng: maxLng,
+      p_species_id: null,
+      p_limit: 4000
+    });
+    const occBySpecies = new Map<number, { latitude: number; longitude: number }[]>();
+    for (const o of (occRows ?? []) as { latitude: number; longitude: number; species_id: number | null }[]) {
+      if (o.species_id == null) continue;
+      const arr = occBySpecies.get(o.species_id);
+      if (arr) arr.push(o);
+      else occBySpecies.set(o.species_id, [o]);
+    }
+
     const latSpan = (maxLat - minLat) / n;
     const lngSpan = (maxLng - minLng) / n;
     const cellCenters: { lat: number; lng: number }[] = [];
@@ -183,6 +202,7 @@ export async function GET(request: NextRequest) {
         mycorrhizalPartners: (sp.mycorrhizal_partners as string[] | null) ?? null,
         habitat: (sp.habitat as string[] | null) ?? null
       });
+      const spOcc = occBySpecies.get(sp.id as number) ?? [];
 
       let best: { lat: number; lng: number; score: number } | null = null;
       for (const cell of cells) {
@@ -195,7 +215,8 @@ export async function GET(request: NextRequest) {
           species: ctx,
           speciesHabitat,
           recent30d: 0,
-          recent365d: 0
+          recent365d: 0,
+          nearbyOccurrences: countWithinKm(spOcc, cell.lat, cell.lng, 4)
         });
         if (!best || prediction.score > best.score) {
           best = { lat: cell.lat, lng: cell.lng, score: prediction.score };

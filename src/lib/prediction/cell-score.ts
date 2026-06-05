@@ -58,6 +58,8 @@ export interface CellPredictionInput {
   /** Historical finding counts in the area (optional; default 0). */
   recent30d?: number;
   recent365d?: number;
+  /** Count of real GBIF occurrences of this species near the cell (boost-only). */
+  nearbyOccurrences?: number;
 }
 
 export interface CellPrediction {
@@ -66,6 +68,8 @@ export interface CellPrediction {
   speciesFit: number | null;
   habitatFit: number;
   habitat: HabitatScore | null;
+  occurrenceBoost: number;
+  nearbyOccurrences: number;
   components: { environment: number; historical: number; seasonal: number };
   factors: AdvancedPredictionFactors;
 }
@@ -111,7 +115,15 @@ export function computeCellPrediction(input: CellPredictionInput): CellPredictio
   const habitatFit = habitat ? 0.5 + habitat.score : 1;
 
   const baseSpeciesScore = speciesFit !== null ? baseScore * speciesFit : baseScore;
-  const score = clamp(baseSpeciesScore * habitatFit, 0, 100);
+
+  // "Observasjoner nær her" (GBIF) — our strongest validated signal (AUC ~0.95
+  // on spatial recurrence). Boost-only: real prior finds raise the score, but
+  // absence never lowers it (presence-only data is sampling-biased, so 0
+  // records ≠ no mushrooms). Capped so it complements, not dominates.
+  const nearbyOccurrences = input.nearbyOccurrences ?? 0;
+  const occurrenceBoost = 1 + Math.min(0.6, nearbyOccurrences * 0.05);
+
+  const score = clamp(baseSpeciesScore * habitatFit * occurrenceBoost, 0, 100);
 
   return {
     score,
@@ -119,6 +131,8 @@ export function computeCellPrediction(input: CellPredictionInput): CellPredictio
     speciesFit,
     habitatFit,
     habitat,
+    occurrenceBoost,
+    nearbyOccurrences,
     components: { environment, historical, seasonal },
     factors
   };

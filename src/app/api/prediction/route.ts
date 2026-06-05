@@ -8,6 +8,7 @@ import { computeSeasonalScore, scoreToCondition } from '@/lib/utils/prediction';
 import type { SpeciesContext } from '@/lib/utils/species-scoring';
 import { getForestProperties, buildSpeciesHabitatPreferences } from '@/lib/forest';
 import { computeCellPrediction } from '@/lib/prediction/cell-score';
+import { countWithinKm } from '@/lib/prediction/occurrences';
 import { createRequestLogger } from '@/lib/log/request';
 
 interface FindingRow {
@@ -289,7 +290,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const [findingsRes, forest] = await Promise.all([
+    const [findingsRes, forest, occRes] = await Promise.all([
       supabase.rpc('get_findings_in_bounds', {
         min_lat: minLat,
         min_lng: minLng,
@@ -299,8 +300,23 @@ export async function GET(request: NextRequest) {
         month_filter: null
       }),
       // Real forest/soil signal: NIBIO SR16 (NO), SLU (SE, stub), null elsewhere.
-      getForestProperties({ lat, lon })
+      getForestProperties({ lat, lon }),
+      // Real prior finds (GBIF) near the point → "observasjoner nær her" boost.
+      supabase.rpc('get_occurrences_in_bounds', {
+        min_lat: minLat,
+        min_lng: minLng,
+        max_lat: maxLat,
+        max_lng: maxLng,
+        p_species_id: speciesId,
+        p_limit: 4000
+      })
     ]);
+    const nearbyOccurrences = countWithinKm(
+      (occRes?.data ?? []) as { latitude: number; longitude: number }[],
+      lat,
+      lon,
+      5
+    );
 
     const currentTemp = weather.temperatureC;
     const currentHumidity = weather.humidityPct;
@@ -334,7 +350,8 @@ export async function GET(request: NextRequest) {
           })
         : null,
       recent30d,
-      recent365d
+      recent365d,
+      nearbyOccurrences
     });
 
     const { score, baseScore, speciesFit, habitatFit, habitat: habitatScore, factors: advancedFactors } = cell;

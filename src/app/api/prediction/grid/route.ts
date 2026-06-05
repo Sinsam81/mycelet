@@ -4,6 +4,7 @@ import { getBillingCapabilities, getUserBillingSubscription } from '@/lib/billin
 import { fetchWeatherSummary } from '@/lib/weather';
 import { getForestProperties, buildSpeciesHabitatPreferences } from '@/lib/forest';
 import { computeCellPrediction } from '@/lib/prediction/cell-score';
+import { countWithinKm } from '@/lib/prediction/occurrences';
 import type { SpeciesContext } from '@/lib/utils/species-scoring';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { getClientKey, rateLimitResponse } from '@/lib/rate-limit/route';
@@ -117,7 +118,7 @@ export async function GET(request: NextRequest) {
     const month = new Date().getMonth() + 1;
 
     // Weather is ~uniform across a local view → fetch once for the center.
-    const [weather, speciesRes] = await Promise.all([
+    const [weather, speciesRes, occRes] = await Promise.all([
       fetchWeatherSummary({ lat: centerLat, lon: centerLng }),
       speciesId
         ? supabase
@@ -125,8 +126,17 @@ export async function GET(request: NextRequest) {
             .select('id,latin_name,genus,season_start,season_end,peak_season_start,peak_season_end,habitat,mycorrhizal_partners')
             .eq('id', speciesId)
             .maybeSingle()
-        : Promise.resolve(null)
+        : Promise.resolve(null),
+      supabase.rpc('get_occurrences_in_bounds', {
+        min_lat: minLat,
+        min_lng: minLng,
+        max_lat: maxLat,
+        max_lng: maxLng,
+        p_species_id: speciesId,
+        p_limit: 4000
+      })
     ]);
+    const occurrences = (occRes?.data ?? []) as { latitude: number; longitude: number; species_id: number | null }[];
 
     if (!weather) {
       return NextResponse.json({ error: 'Værdata ikke tilgjengelig for området' }, { status: 502 });
@@ -180,7 +190,8 @@ export async function GET(request: NextRequest) {
         species: speciesContext,
         speciesHabitat,
         recent30d: 0,
-        recent365d: 0
+        recent365d: 0,
+        nearbyOccurrences: countWithinKm(occurrences, cell.lat, cell.lng, 4)
       });
       return {
         lat: Number(cell.lat.toFixed(5)),
