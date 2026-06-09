@@ -7,7 +7,7 @@ import { PageWrapper } from '@/components/layout/PageWrapper';
 import { Button } from '@/components/ui/Button';
 import { useGeolocation } from '@/lib/hooks/useGeolocation';
 import { useIdentify } from '@/lib/hooks/useIdentify';
-import { fileToDataUrl, optimizeImageForIdentification } from '@/lib/utils/image';
+import { optimizeImageForIdentification } from '@/lib/utils/image';
 import { isNativePlatform } from '@/lib/native/platform';
 import { captureNativePhoto } from '@/lib/native/camera';
 
@@ -38,14 +38,13 @@ export default function IdentifyPage() {
     setAiDisabled(false);
 
     try {
-      const [optimizedBase64, originalDataUrl] = await Promise.all([
-        optimizeImageForIdentification(file),
-        fileToDataUrl(file)
-      ]);
+      // One EXIF-free re-encode serves both the AI call and the saved find
+      // photo — the raw file (with GPS metadata) never leaves the device.
+      const optimizedBase64 = await optimizeImageForIdentification(file);
 
       const result = await identify.mutateAsync({
         imageBase64: optimizedBase64,
-        originalImageDataUrl: originalDataUrl,
+        originalImageDataUrl: `data:image/jpeg;base64,${optimizedBase64}`,
         latitude: latitude ?? undefined,
         longitude: longitude ?? undefined
       });

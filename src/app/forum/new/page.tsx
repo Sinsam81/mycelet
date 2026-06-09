@@ -6,6 +6,7 @@ import { PageWrapper } from '@/components/layout/PageWrapper';
 import { Button } from '@/components/ui/Button';
 import { useCreatePost, useMyFindings } from '@/lib/hooks/useForum';
 import { createClient } from '@/lib/supabase/client';
+import { reencodeImageForUpload } from '@/lib/utils/image';
 
 type Category = 'find' | 'question' | 'tip' | 'discussion';
 
@@ -46,10 +47,11 @@ function NewForumPostInner() {
 
     if (!user) throw new Error('Du må være logget inn');
 
-    const ext = file.name.split('.').pop()?.toLowerCase() ?? 'jpg';
-    const path = `${user.id}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+    // EXIF-stripped re-encode — forum photos must not carry GPS metadata.
+    const blob = await reencodeImageForUpload(file);
+    const path = `${user.id}/${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`;
 
-    const { error: uploadError } = await supabase.storage.from('forum-images').upload(path, file, { upsert: false });
+    const { error: uploadError } = await supabase.storage.from('forum-images').upload(path, blob, { upsert: false, contentType: 'image/jpeg' });
     if (uploadError) throw new Error(uploadError.message);
 
     const {

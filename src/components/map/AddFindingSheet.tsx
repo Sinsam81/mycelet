@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { Button } from '@/components/ui/Button';
+import { reencodeImageForUpload } from '@/lib/utils/image';
 
 type Visibility = 'public' | 'approximate' | 'private';
 type SharingMode = 'public' | 'approximate' | 'zone' | 'private';
@@ -67,11 +68,14 @@ export function AddFindingSheet({ latitude, longitude, onClose, onSaved }: AddFi
     } = await supabase.auth.getUser();
     if (!user) throw new Error('Du må være logget inn');
 
-    const fileExt = file.name.split('.').pop()?.toLowerCase() ?? 'jpg';
-    const fileName = `${user.id}/${Date.now()}.${fileExt}`;
+    // Re-encode via canvas before upload: strips EXIF (incl. GPS), so the
+    // photo can't leak the exact spot of an approximate/private find.
+    const blob = await reencodeImageForUpload(file);
+    const fileName = `${user.id}/${Date.now()}.jpg`;
 
-    const { error: uploadError } = await supabase.storage.from('finding-images').upload(fileName, file, {
-      upsert: false
+    const { error: uploadError } = await supabase.storage.from('finding-images').upload(fileName, blob, {
+      upsert: false,
+      contentType: 'image/jpeg'
     });
 
     if (uploadError) throw new Error(`Bildeopplasting feilet: ${uploadError.message}`);

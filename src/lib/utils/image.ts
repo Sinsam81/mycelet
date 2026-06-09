@@ -1,16 +1,19 @@
-export async function optimizeImageForIdentification(file: File): Promise<string> {
+/**
+ * Client-side image re-encoding.
+ *
+ * SECURITY/PRIVACY: every photo leaves the device ONLY after a canvas
+ * re-encode. Canvas drawing copies pixels, never metadata — so EXIF
+ * (including the GPS position phone cameras embed) is stripped. Mushroom
+ * finds are location-sensitive: uploading the raw file would leak the exact
+ * spot inside the image file even when the find is shown as "approximate"
+ * on the map. Re-encoding also shrinks uploads (faster on forest networks).
+ */
+
+function drawToCanvas(file: File, maxDim: number): Promise<HTMLCanvasElement> {
   return new Promise((resolve, reject) => {
     const img = new Image();
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
-
-    if (!ctx) {
-      reject(new Error('Kunne ikke initialisere canvas.'));
-      return;
-    }
 
     img.onload = () => {
-      const maxDim = 1500;
       let { width, height } = img;
 
       if (width > maxDim || height > maxDim) {
@@ -19,25 +22,45 @@ export async function optimizeImageForIdentification(file: File): Promise<string
         height = Math.round(height * ratio);
       }
 
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        URL.revokeObjectURL(img.src);
+        reject(new Error('Kunne ikke initialisere canvas.'));
+        return;
+      }
+
       canvas.width = width;
       canvas.height = height;
       ctx.drawImage(img, 0, 0, width, height);
-
-      const base64 = canvas.toDataURL('image/jpeg', 0.85);
-      resolve(base64.split(',')[1]);
       URL.revokeObjectURL(img.src);
+      resolve(canvas);
     };
 
-    img.onerror = () => reject(new Error('Kunne ikke lese bilde.'));
+    img.onerror = () => {
+      URL.revokeObjectURL(img.src);
+      reject(new Error('Kunne ikke lese bilde.'));
+    };
+
     img.src = URL.createObjectURL(file);
   });
 }
 
-export async function fileToDataUrl(file: File): Promise<string> {
+/** EXIF-free base64 JPEG (max 1500px) for the AI identification call. */
+export async function optimizeImageForIdentification(file: File): Promise<string> {
+  const canvas = await drawToCanvas(file, 1500);
+  const base64 = canvas.toDataURL('image/jpeg', 0.85);
+  return base64.split(',')[1];
+}
+
+/** EXIF-free JPEG blob (max 2000px) for storage uploads (finding/forum photos). */
+export async function reencodeImageForUpload(file: File, maxDim = 2000): Promise<Blob> {
+  const canvas = await drawToCanvas(file, maxDim);
   return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result));
-    reader.onerror = () => reject(new Error('Kunne ikke lese filen.'));
-    reader.readAsDataURL(file);
+    canvas.toBlob(
+      (blob) => (blob ? resolve(blob) : reject(new Error('Kunne ikke komprimere bilde.'))),
+      'image/jpeg',
+      0.85
+    );
   });
 }
