@@ -4,6 +4,7 @@ import { AlertTriangle, Calendar, Camera, Lock, Map, MessageSquare, Shield } fro
 import { PageWrapper } from '@/components/layout/PageWrapper';
 import { EdibilityBadge } from '@/components/ui/EdibilityBadge';
 import { MushroomDayCard } from '@/components/home/MushroomDayCard';
+import { LastTripCard } from '@/components/home/LastTripCard';
 import { createClient } from '@/lib/supabase/server';
 import type { Edibility } from '@/types/species';
 
@@ -61,6 +62,9 @@ function getSeasonHeadline(month: number, edibleCount: number) {
 export default async function HomePage() {
   const supabase = createClient();
   const month = new Date().getMonth() + 1;
+  const {
+    data: { user }
+  } = await supabase.auth.getUser();
 
   const [{ data }, { data: recentFindings }] = await Promise.all([
     supabase
@@ -81,6 +85,22 @@ export default async function HomePage() {
     .filter((s) => (s.edibility === 'edible' || s.edibility === 'conditionally_edible') && isInMonth(month, s.season_start, s.season_end))
     .slice(0, 4);
   const dangerousInSeason = species.filter((s) => (s.edibility === 'toxic' || s.edibility === 'deadly') && isInMonth(month, s.season_start, s.season_end));
+
+  let userStats: { total: number; species: number } | null = null;
+  if (user) {
+    const { data: myFindings } = await supabase
+      .from('findings')
+      .select('species_id')
+      .eq('user_id', user.id)
+      .limit(1000);
+    const rows = (myFindings ?? []) as { species_id: number | null }[];
+    if (rows.length > 0) {
+      userStats = {
+        total: rows.length,
+        species: new Set(rows.map((r) => r.species_id).filter((id): id is number => id != null)).size
+      };
+    }
+  }
 
   return (
     <PageWrapper>
@@ -116,6 +136,29 @@ export default async function HomePage() {
             </div>
           </div>
         </Link>
+
+        {userStats ? (
+          <article className="rounded-xl bg-white p-4 shadow-sm">
+            <div className="flex items-center justify-between">
+              <h2 className="font-semibold text-forest-900">🍄 Dine funn</h2>
+              <Link href="/profile" className="text-xs font-medium text-forest-800 hover:underline">
+                Se profilen din →
+              </Link>
+            </div>
+            <div className="mt-3 flex gap-8">
+              <div>
+                <p className="text-2xl font-bold text-forest-900">{userStats.total}</p>
+                <p className="text-xs text-gray-600">funn registrert</p>
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-forest-900">{userStats.species}</p>
+                <p className="text-xs text-gray-600">{userStats.species === 1 ? 'art' : 'arter'}</p>
+              </div>
+            </div>
+          </article>
+        ) : null}
+
+        <LastTripCard />
 
         <article className="rounded-xl bg-white p-4 shadow-sm">
           <div className="mb-3 flex items-center justify-between">

@@ -575,6 +575,12 @@ export function MushroomMap() {
     setTripFinds([]);
     if (typeof window !== 'undefined') {
       window.localStorage.removeItem('mycelet:trip-v1');
+      if (count > 0) {
+        window.localStorage.setItem(
+          'mycelet:last-trip',
+          JSON.stringify({ count, species: unique, at: new Date().toISOString() })
+        );
+      }
     }
     if (count > 0) {
       toast.success(`Fin tur! Du registrerte ${count} funn 🍄${unique.length ? ` (${unique.join(', ')})` : ''}`);
