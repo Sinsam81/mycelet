@@ -104,7 +104,13 @@ export async function GET(request: NextRequest) {
 
     const payload = { today, days, hasForecast: future.length > 0, weatherSource: observed.source };
     cache.set(cacheKey, { at: Date.now(), payload });
-    log.info('mushroom_forecast.success', { lat, lon, days: days.length, hasForecast: future.length > 0 });
+    // Coarse (~1 km) on purpose — server logs must not hold a position trail.
+    log.info('mushroom_forecast.success', {
+      lat: Number(lat.toFixed(2)),
+      lon: Number(lon.toFixed(2)),
+      days: days.length,
+      hasForecast: future.length > 0
+    });
 
     return NextResponse.json(payload);
   } catch (error) {

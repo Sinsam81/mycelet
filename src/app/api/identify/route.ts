@@ -102,6 +102,12 @@ export async function POST(request: NextRequest) {
       userLog.warn('identify.missing_image');
       return NextResponse.json({ error: 'Bilde mangler' }, { status: 400 });
     }
+    // The client sends a ~1500px re-encoded JPEG (well under 2 MB of base64).
+    // Reject absurd payloads before paying for a Kindwise call.
+    if (typeof body.image !== 'string' || body.image.length > 8_000_000) {
+      userLog.warn('identify.image_too_large');
+      return NextResponse.json({ error: 'Bildet er for stort' }, { status: 400 });
+    }
 
     userLog.debug('identify.calling_plantid', {
       hasCoordinates: body.latitude != null && body.longitude != null,

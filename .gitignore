@@ -16,3 +16,13 @@ tsconfig.tsbuildinfo
 /playwright-report
 /playwright/.cache
 /blob-report
+
+# Supabase CLI scratch (contains the project ref) — never commit
+supabase/.temp/
+
+# iCloud sync duplicates ("fil 2.ext") — never commit these
+* 2.*
+* 3.*
+
+# Unrelated local folder living inside the project dir
+Rørlegger.no/

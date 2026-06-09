@@ -62,7 +62,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Ugyldige koordinater' }, { status: 400 });
   }
 
-  log.info('prediction.start', { lat, lon, radiusKm, speciesId });
+  // Coarse (~1 km) on purpose — server logs must not hold a position trail.
+  log.info('prediction.start', { lat: Number(lat.toFixed(2)), lon: Number(lon.toFixed(2)), radiusKm, speciesId });
 
   const latDelta = radiusKm / 111;
   const lonDelta = radiusKm / (111 * Math.cos((lat * Math.PI) / 180));

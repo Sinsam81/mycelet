@@ -68,7 +68,14 @@ export async function GET(request: NextRequest) {
 
     const payload = { ...assessment, weatherSource: weather.source };
     dayCache.set(cacheKey, { at: Date.now(), payload });
-    log.info('mushroom_day.success', { lat, lon, optimal: assessment.optimal, score: assessment.score, weatherSource: weather.source });
+    // Coarse (~1 km) on purpose — server logs must not hold a position trail.
+    log.info('mushroom_day.success', {
+      lat: Number(lat.toFixed(2)),
+      lon: Number(lon.toFixed(2)),
+      optimal: assessment.optimal,
+      score: assessment.score,
+      weatherSource: weather.source
+    });
 
     return NextResponse.json(payload);
   } catch (error) {

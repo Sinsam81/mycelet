@@ -63,7 +63,8 @@ export function MapFilters({ filters, onChange, onSelectPlace }: MapFiltersProps
     placeTimer.current = setTimeout(async () => {
       try {
         const res = await fetch(
-          `https://ws.geonorge.no/stedsnavn/v1/navn?sok=${encodeURIComponent(value)}&fuzzy=true&utkoordsys=4258&treffPerSide=6&side=1`
+          `https://ws.geonorge.no/stedsnavn/v1/navn?sok=${encodeURIComponent(value)}&fuzzy=true&utkoordsys=4258&treffPerSide=6&side=1`,
+          { signal: AbortSignal.timeout(5000) }
         );
         const data = await res.json();
         const results = ((data?.navn ?? []) as any[])
