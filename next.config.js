@@ -3,12 +3,11 @@
 // Security headers applied to every response. Conservative on purpose so we
 // don't break the app on rollout.
 //
-// Content-Security-Policy is shipped here in REPORT-ONLY mode first. Browsers
-// log violations to the console without blocking anything, so we can collect a
-// week or two of real traffic, see what actually fires, and only then flip to
-// the enforcing `Content-Security-Policy` header. When we do flip, also
-// tighten X-Frame-Options to DENY (currently SAMEORIGIN) to match
-// `frame-ancestors 'none'`.
+// Content-Security-Policy is ENFORCING (flipped 2026-06 after a month of
+// report-only with no violations surfacing in real use). 'unsafe-eval' is
+// dev-only — Turbopack/HMR needs it; production bundles don't. If a new
+// third-party SDK is wired in, add its hosts below BEFORE deploying, or the
+// browser will block it.
 //
 // Allowlist sources documented inline below.
 
@@ -16,13 +15,14 @@
 // providers, plus the weather APIs we hit server-side. If you wire a new
 // third-party SDK, add it here AND verify in dev console that the report-only
 // header doesn't flag it before flipping to enforce.
+const isDev = process.env.NODE_ENV !== 'production';
+
 const cspDirectives = [
   // Default fallback for resource types not explicitly listed below.
   "default-src 'self'",
-  // 'unsafe-inline' + 'unsafe-eval' are intentional for now — Next.js inline
-  // hydration scripts and some bundled libs need them. When we move to enforce
-  // mode we should switch to nonce-based script-src instead.
-  "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.stripe.com https://checkout.stripe.com",
+  // 'unsafe-inline' is required by Next.js inline hydration scripts (the
+  // long-term fix is nonce-based script-src). 'unsafe-eval' only in dev (HMR).
+  `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ''} https://js.stripe.com https://checkout.stripe.com`,
   // Tailwind / framer-motion / Next inject inline styles.
   "style-src 'self' 'unsafe-inline'",
   // Image sources: own bucket, Wikimedia commons, Plant.id (Kindwise),
@@ -32,7 +32,9 @@ const cspDirectives = [
   // data: for base64-inlined fonts in CSS.
   "font-src 'self' data:",
   // XHR/fetch/WebSocket destinations. wss://*.supabase.co is for Realtime.
-  "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.openweathermap.org https://opendata-download-metobs.smhi.se https://frost.met.no https://api.stripe.com https://*.kindwise.com https://ws.geonorge.no",
+  // cache.kartverket.no: the premium offline-map feature fetches tiles with
+  // fetch() (not <img>) to put them in the Cache API.
+  "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.openweathermap.org https://opendata-download-metobs.smhi.se https://frost.met.no https://api.stripe.com https://*.kindwise.com https://ws.geonorge.no https://cache.kartverket.no",
   // We embed Stripe Checkout / Elements in iframes.
   "frame-src https://js.stripe.com https://hooks.stripe.com https://checkout.stripe.com",
   // Service worker (next-pwa) + blob: for any dynamically created workers.
@@ -49,7 +51,7 @@ const cspDirectives = [
   // Auto-promote http:// references to https://.
   'upgrade-insecure-requests'
 ];
-const cspReportOnly = cspDirectives.join('; ');
+const csp = cspDirectives.join('; ');
 
 const securityHeaders = [
   // Force HTTPS for 2 years on this domain and all subdomains; preload-eligible.
@@ -64,11 +66,11 @@ const securityHeaders = [
     key: 'X-Content-Type-Options',
     value: 'nosniff'
   },
-  // Prevent other sites from embedding Mycelet in an <iframe> (clickjacking).
-  // SAMEORIGIN allows our own pages to embed each other if needed later.
+  // Prevent ANY site (including ourselves) from embedding Mycelet in an
+  // <iframe> (clickjacking) — matches CSP frame-ancestors 'none'.
   {
     key: 'X-Frame-Options',
-    value: 'SAMEORIGIN'
+    value: 'DENY'
   },
   // Send origin (no path/query) when navigating cross-origin; full URL for
   // same-origin. Avoids leaking finding IDs / search queries to third parties.
@@ -92,8 +94,8 @@ const securityHeaders = [
   },
   // Report-only CSP — see policy + monitoring notes at top of file.
   {
-    key: 'Content-Security-Policy-Report-Only',
-    value: cspReportOnly
+    key: 'Content-Security-Policy',
+    value: csp
   }
 ];
 

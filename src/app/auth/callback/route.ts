@@ -42,6 +42,23 @@ export async function GET(request: NextRequest) {
     }
   );
 
-  await supabase.auth.exchangeCodeForSession(code);
+  const { data: exchanged } = await supabase.auth.exchangeCodeForSession(code);
+
+  // E-mail-confirmation flow: the register page can't create the profile
+  // (no session exists pre-confirmation, and RLS requires auth.uid() = id),
+  // so ensure it here from the metadata signUp stored. ignoreDuplicates keeps
+  // this from overwriting an existing profile; failures must not block login.
+  const user = exchanged?.user ?? null;
+  if (user) {
+    const meta = (user.user_metadata ?? {}) as { username?: string; display_name?: string };
+    const username = meta.username ?? user.email?.split('@')[0] ?? `bruker-${user.id.slice(0, 8)}`;
+    await supabase
+      .from('profiles')
+      .upsert(
+        { id: user.id, username, display_name: meta.display_name ?? username },
+        { onConflict: 'id', ignoreDuplicates: true }
+      );
+  }
+
   return response;
 }
