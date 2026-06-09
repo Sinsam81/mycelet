@@ -1,12 +1,23 @@
 # Mycelet — veikart
 
-> Sist oppdatert: 29. mai 2026
+> Sist oppdatert: 6. juni 2026
 > Eier: Sindre Øverås (`sindre.alstad@gmail.com`)
 
 Dette dokumentet samler alt arbeid som gjenstår før beta-launch (mai-juni 2026) og åpen launch (august 2026), pluss strategiske avgjørelser som ikke er tatt enda.
 
 For arkitektur og konvensjoner, se [`CLAUDE.md`](../CLAUDE.md).
 For andre planleggingsdokumenter, se [`docs/commercial-mvp-plan.md`](commercial-mvp-plan.md), [`docs/8-step-status.md`](8-step-status.md), m.fl.
+
+---
+
+## 🗺️ Nylig shippet — 6. juni 2026 (stor kart- + forside-økt)
+
+Alt live på mycelet.com (etter konkurrent-analyse + UX-ønsker):
+- **Kart:** base-layer-velger (Terreng/Kart/Satellitt), 187k registrerte GBIF-funn (fargekodet etter spiselighet + filter Alle/Spiselige/Giftige + «kun i sesong» + funn-dato), presise «Beste steder» (erstattet grovt, upresist heatmap) med «🍄 mest sannsynlig her»-arter per sted, «Hvilken sopp vil du finne?»-søk → beste steder for arten, «Finn meg»-knapp, stedssøk (Kartverket Stedsnavn), sopptur-modus, førstegangs-intro. Ryddet verktøylinja (rent, funksjonelt design — søk-øverst + én handlingsrad + toasts).
+- **Forside:** «Soppforhold i dag»-måler (fargekodet score-ring + «hvorfor»), «Dine funn»-statistikk, «Din siste sopptur».
+- **«Perfekt soppdag»-hjerne:** `src/lib/prediction/mushroom-day.ts` (`assessMushroomDay`) + `/api/mushroom-day` — klar for proaktivt daglig varsel. **Push er utsatt til native-appen** (web-push har dårlig iOS-rekkevidde uten PWA-install).
+
+Gjenstår av dette: 7-dagers værtrend-graf (MET Locationforecast 2.0 — gratis, global), og migrasjon `014_occurrences_observed_at.sql` (Sindre limer i Supabase SQL Editor for presise funn-datoer + sesong-filter — degraderer pent uten).
 
 ---
 

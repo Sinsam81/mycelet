@@ -4,12 +4,17 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { MapPin } from 'lucide-react';
 
-interface Assessment {
-  optimal: boolean;
+interface DayPoint {
+  date: string;
+  label: string;
   score: number;
-  title: string;
-  message: string;
-  reasons: string[];
+  optimal: boolean;
+}
+
+interface Forecast {
+  today: { optimal: boolean; score: number; title: string; message: string; reasons: string[] };
+  days: DayPoint[];
+  hasForecast: boolean;
 }
 
 // Default region (Sør-Norge) used until the visitor opts to share their position —
@@ -19,16 +24,17 @@ const DEFAULT = { lat: 59.91, lon: 10.75, label: 'Sør-Norge' };
 function colorFor(score: number): string {
   if (score >= 65) return '#15803d'; // forest green — great
   if (score >= 40) return '#d97706'; // amber — moderate
-  return '#6b7280'; // gray — quiet
+  return '#9ca3af'; // gray — quiet
 }
 
 /**
- * "Soppforhold i dag" — a daily foraging-conditions gauge on the home page.
- * Calls /api/mushroom-day and shows a color-coded score ring + verdict + the
- * data-backed "why". Personalizes silently only if location is already granted.
+ * "Soppforhold i dag" + 7-day trend on the home page. Calls /api/mushroom-forecast
+ * and shows a color-coded score ring + verdict + the data-backed "why" for today,
+ * plus a small bar chart of the days ahead. Personalizes silently only if location
+ * is already granted (never prompts on load).
  */
 export function MushroomDayCard() {
-  const [assessment, setAssessment] = useState<Assessment | null>(null);
+  const [data, setData] = useState<Forecast | null>(null);
   const [loading, setLoading] = useState(true);
   const [areaLabel, setAreaLabel] = useState(DEFAULT.label);
   const [usingDefault, setUsingDefault] = useState(true);
@@ -38,10 +44,10 @@ export function MushroomDayCard() {
     setAreaLabel(label);
     setUsingDefault(isDefault);
     try {
-      const res = await fetch(`/api/mushroom-day?lat=${lat}&lon=${lon}`, { cache: 'no-store' });
-      setAssessment(res.ok ? ((await res.json()) as Assessment) : null);
+      const res = await fetch(`/api/mushroom-forecast?lat=${lat}&lon=${lon}`, { cache: 'no-store' });
+      setData(res.ok ? ((await res.json()) as Forecast) : null);
     } catch {
-      setAssessment(null);
+      setData(null);
     } finally {
       setLoading(false);
     }
@@ -84,18 +90,17 @@ export function MushroomDayCard() {
     );
   };
 
-  if (loading && !assessment) {
-    return (
-      <div className="rounded-xl bg-white p-4 text-sm text-gray-500 shadow-sm">Sjekker soppforholdene …</div>
-    );
+  if (loading && !data) {
+    return <div className="rounded-xl bg-white p-4 text-sm text-gray-500 shadow-sm">Sjekker soppforholdene …</div>;
   }
   // Weather unavailable → render nothing rather than a broken card.
-  if (!assessment) return null;
+  if (!data) return null;
 
-  const color = colorFor(assessment.score);
+  const { today, days } = data;
+  const color = colorFor(today.score);
   const r = 46;
   const circumference = 2 * Math.PI * r;
-  const offset = circumference * (1 - assessment.score / 100);
+  const offset = circumference * (1 - today.score / 100);
 
   return (
     <article className="rounded-xl bg-white p-4 shadow-sm">
@@ -115,18 +120,18 @@ export function MushroomDayCard() {
             transform="rotate(-90 55 55)"
           />
           <text x="55" y="52" textAnchor="middle" fontSize="26" fontWeight="700" fill={color}>
-            {assessment.score}
+            {today.score}
           </text>
           <text x="55" y="70" textAnchor="middle" fontSize="10" fill="#6b7280">
             av 100
           </text>
         </svg>
         <div className="min-w-0 flex-1">
-          <h2 className="font-semibold text-forest-900">{assessment.title}</h2>
-          <p className="mt-0.5 text-sm text-gray-700">{assessment.message}</p>
-          {assessment.reasons.length > 0 ? (
+          <h2 className="font-semibold text-forest-900">{today.title}</h2>
+          <p className="mt-0.5 text-sm text-gray-700">{today.message}</p>
+          {today.reasons.length > 0 ? (
             <ul className="mt-2 space-y-0.5">
-              {assessment.reasons.slice(0, 2).map((reason, i) => (
+              {today.reasons.slice(0, 2).map((reason, i) => (
                 <li key={i} className="truncate text-xs text-gray-600">
                   ✓ {reason}
                 </li>
@@ -135,6 +140,28 @@ export function MushroomDayCard() {
           ) : null}
         </div>
       </div>
+
+      {data.hasForecast && days.length > 1 ? (
+        <div className="mt-3 border-t border-gray-100 pt-3">
+          <p className="mb-1.5 text-xs font-medium text-gray-500">Utsikten fremover</p>
+          <div className="flex h-16 items-end justify-between gap-1.5">
+            {days.map((d) => (
+              <div key={d.date} className="flex flex-1 flex-col items-center gap-1" title={`${d.score}/100`}>
+                <div className="flex h-12 w-full items-end">
+                  <div
+                    className="w-full rounded-t"
+                    style={{ height: `${Math.max(10, d.score)}%`, backgroundColor: colorFor(d.score) }}
+                  />
+                </div>
+                <span className={`text-[9px] ${d.label === 'I dag' ? 'font-semibold text-forest-900' : 'text-gray-500'}`}>
+                  {d.label}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
       <div className="mt-3 flex items-center justify-between text-xs">
         <span className="text-gray-500">📍 {areaLabel}</span>
         <div className="flex items-center gap-3">
