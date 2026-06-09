@@ -19,6 +19,12 @@ function num(value: string | null): number {
   return Number.isFinite(n) ? n : NaN;
 }
 
+// The daily verdict changes slowly, but the home page mounts this for every
+// visitor — cache per coarse location + month so we don't hammer the weather
+// providers. In-memory (per serverless instance); a simple throttle, not a CDN.
+const dayCache = new Map<string, { at: number; payload: Record<string, unknown> }>();
+const CACHE_TTL_MS = 30 * 60 * 1000;
+
 export async function GET(request: NextRequest) {
   const log = createRequestLogger(request);
   const url = new URL(request.url);
@@ -34,13 +40,19 @@ export async function GET(request: NextRequest) {
     return rateLimitResponse(rl);
   }
 
+  const month = new Date().getMonth() + 1;
+  const cacheKey = `${lat.toFixed(2)},${lon.toFixed(2)},${month}`;
+  const cached = dayCache.get(cacheKey);
+  if (cached && Date.now() - cached.at < CACHE_TTL_MS) {
+    return NextResponse.json(cached.payload);
+  }
+
   try {
     const weather = await fetchWeatherSummary({ lat, lon });
     if (!weather) {
       return NextResponse.json({ error: 'Værdata ikke tilgjengelig for området' }, { status: 502 });
     }
 
-    const month = new Date().getMonth() + 1;
     const assessment = assessMushroomDay(
       {
         temperatureC: weather.temperatureC,
@@ -54,9 +66,11 @@ export async function GET(request: NextRequest) {
       month
     );
 
+    const payload = { ...assessment, weatherSource: weather.source };
+    dayCache.set(cacheKey, { at: Date.now(), payload });
     log.info('mushroom_day.success', { lat, lon, optimal: assessment.optimal, score: assessment.score, weatherSource: weather.source });
 
-    return NextResponse.json({ ...assessment, weatherSource: weather.source });
+    return NextResponse.json(payload);
   } catch (error) {
     log.error('mushroom_day.failed', error);
     return NextResponse.json(

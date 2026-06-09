@@ -3,6 +3,7 @@ import { NonNativeOnly } from '@/components/native/NonNativeOnly';
 import { AlertTriangle, Calendar, Camera, Lock, Map, MessageSquare, Shield } from 'lucide-react';
 import { PageWrapper } from '@/components/layout/PageWrapper';
 import { EdibilityBadge } from '@/components/ui/EdibilityBadge';
+import { MushroomDayCard } from '@/components/home/MushroomDayCard';
 import { createClient } from '@/lib/supabase/server';
 import type { Edibility } from '@/types/species';
 
@@ -100,6 +101,8 @@ export default async function HomePage() {
             </p>
           ) : null}
         </header>
+
+        <MushroomDayCard />
 
         <Link
           href="/identify"
