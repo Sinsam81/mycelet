@@ -70,6 +70,8 @@ export function MushroomMap() {
   const loadOccurrencesRef = useRef<() => Promise<void>>(async () => {});
   const showOccurrencesRef = useRef(false);
   const speciesNamesRef = useRef<Map<number, string>>(new Map());
+  const speciesEdibilityRef = useRef<Map<number, string>>(new Map());
+  const occEdibilityRef = useRef<'all' | 'edible' | 'toxic'>('all');
 
   const supabase = useRef(createClient()).current;
   const { latitude, longitude, loading: geoLoading, error: geoError } = useGeolocation();
@@ -79,6 +81,7 @@ export function MushroomMap() {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [showOccurrences, setShowOccurrences] = useState(false);
   const [occCount, setOccCount] = useState(0);
+  const [occEdibility, setOccEdibility] = useState<'all' | 'edible' | 'toxic'>('all');
   const [predictionCoords, setPredictionCoords] = useState<{ lat: number | null; lon: number | null }>({
     lat: null,
     lon: null
@@ -360,16 +363,42 @@ export function MushroomMap() {
     const leaflet = (await import('leaflet')).default;
     cluster.clearLayers();
     const names = speciesNamesRef.current;
-    const points = (data ?? []) as { latitude: number; longitude: number; species_id: number | null }[];
+    const edibilities = speciesEdibilityRef.current;
+    const EDIBILITY_HEX: Record<string, string> = {
+      edible: '#059669',
+      conditionally_edible: '#f59e0b',
+      inedible: '#f97316',
+      toxic: '#dc2626',
+      deadly: '#7f1d1d'
+    };
+    const EDIBILITY_LABEL: Record<string, string> = {
+      edible: 'Spiselig',
+      conditionally_edible: 'Betinget spiselig',
+      inedible: 'Uspiselig',
+      toxic: 'Giftig',
+      deadly: 'Dødelig giftig'
+    };
+    const filter = occEdibilityRef.current;
+    const all = (data ?? []) as { latitude: number; longitude: number; species_id: number | null }[];
+    const points = all.filter((o) => {
+      if (filter === 'all') return true;
+      const e = o.species_id != null ? edibilities.get(o.species_id) : undefined;
+      if (filter === 'edible') return e === 'edible' || e === 'conditionally_edible';
+      return e === 'toxic' || e === 'deadly';
+    });
     for (const o of points) {
       const name = o.species_id != null ? names.get(o.species_id) ?? 'Sopp' : 'Sopp';
+      const edi = o.species_id != null ? edibilities.get(o.species_id) : undefined;
+      const color = (edi && EDIBILITY_HEX[edi]) || '#8b5e34';
+      const ediLabel = edi ? EDIBILITY_LABEL[edi] : null;
       const icon = leaflet.divIcon({
         className: 'occ-marker',
-        html: '<div style="width:12px;height:12px;border-radius:9999px;background:#8b5e34;border:2px solid #fff;box-shadow:0 0 2px rgba(0,0,0,0.5)"></div>',
+        html: `<div style="width:12px;height:12px;border-radius:9999px;background:${color};border:2px solid #fff;box-shadow:0 0 2px rgba(0,0,0,0.5)"></div>`,
         iconSize: [12, 12],
         iconAnchor: [6, 6]
       });
-      const popup = `<div><b>${name}</b><br/><span style="color:#555;font-size:12px">Registrert funn</span><br/><a href="https://www.google.com/maps/search/?api=1&query=${o.latitude},${o.longitude}" target="_blank" rel="noreferrer" style="color:#15803d;font-weight:600;font-size:12px;text-decoration:underline">📍 Åpne i kart</a><br/><span style="color:#9ca3af;font-size:10px">Artsdatabanken/GBIF</span></div>`;
+      const ediHtml = ediLabel ? `<br/><span style="color:${color};font-weight:600;font-size:12px">${ediLabel}</span>` : '';
+      const popup = `<div><b>${name}</b>${ediHtml}<br/><span style="color:#555;font-size:12px">Registrert funn</span><br/><a href="https://www.google.com/maps/search/?api=1&query=${o.latitude},${o.longitude}" target="_blank" rel="noreferrer" style="color:#15803d;font-weight:600;font-size:12px;text-decoration:underline">📍 Åpne i kart</a><br/><span style="color:#9ca3af;font-size:10px">Artsdatabanken/GBIF</span></div>`;
       leaflet.marker([o.latitude, o.longitude], { icon }).bindPopup(popup).addTo(cluster);
     }
     setOccCount(points.length);
@@ -390,6 +419,15 @@ export function MushroomMap() {
       setOccCount(0);
     }
   }, [loadOccurrences]);
+
+  const setOccEdibilityFilter = useCallback(
+    (value: 'all' | 'edible' | 'toxic') => {
+      occEdibilityRef.current = value;
+      setOccEdibility(value);
+      void loadOccurrences();
+    },
+    [loadOccurrences]
+  );
 
   const focusSavedArea = useCallback((area: OfflineArea) => {
     const map = mapRef.current;
@@ -691,11 +729,16 @@ export function MushroomMap() {
   useEffect(() => {
     supabase
       .from('mushroom_species')
-      .select('id,norwegian_name')
+      .select('id,norwegian_name,edibility')
       .then(({ data }) => {
-        const map = new Map<number, string>();
-        for (const s of data ?? []) map.set(s.id as number, (s.norwegian_name as string | null) ?? 'Sopp');
-        speciesNamesRef.current = map;
+        const nameMap = new Map<number, string>();
+        const ediMap = new Map<number, string>();
+        for (const s of data ?? []) {
+          nameMap.set(s.id as number, (s.norwegian_name as string | null) ?? 'Sopp');
+          if (s.edibility) ediMap.set(s.id as number, s.edibility as string);
+        }
+        speciesNamesRef.current = nameMap;
+        speciesEdibilityRef.current = ediMap;
       });
   }, [supabase]);
 
@@ -816,6 +859,28 @@ export function MushroomMap() {
         >
           {showOccurrences ? `Skjul funn${occCount ? ` (${occCount})` : ''}` : '📍 Vis registrerte funn'}
         </button>
+        {showOccurrences ? (
+          <div className="flex items-center gap-1 rounded-full bg-white/95 px-2 py-1 text-[11px] shadow-lg backdrop-blur">
+            {(
+              [
+                ['all', 'Alle'],
+                ['edible', '🟢 Spiselige'],
+                ['toxic', '🔴 Giftige']
+              ] as const
+            ).map(([val, label]) => (
+              <button
+                key={val}
+                type="button"
+                onClick={() => setOccEdibilityFilter(val)}
+                className={`rounded-full px-2 py-0.5 font-medium ${
+                  occEdibility === val ? 'bg-forest-800 text-white' : 'text-gray-700 hover:bg-gray-100'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        ) : null}
         {hasOfflineAccess ? (
           <div className="flex flex-wrap justify-center gap-2">
             <button
