@@ -72,6 +72,7 @@ export function MushroomMap() {
   const speciesNamesRef = useRef<Map<number, string>>(new Map());
   const speciesEdibilityRef = useRef<Map<number, string>>(new Map());
   const occEdibilityRef = useRef<'all' | 'edible' | 'toxic'>('all');
+  const occSeasonRef = useRef(false);
   const meMarkerRef = useRef<any>(null);
 
   const supabase = useRef(createClient()).current;
@@ -83,6 +84,8 @@ export function MushroomMap() {
   const [showOccurrences, setShowOccurrences] = useState(false);
   const [occCount, setOccCount] = useState(0);
   const [occEdibility, setOccEdibility] = useState<'all' | 'edible' | 'toxic'>('all');
+  const [occSeason, setOccSeason] = useState(false);
+  const [showIntro, setShowIntro] = useState(false);
   const [locating, setLocating] = useState(false);
   const [predictionCoords, setPredictionCoords] = useState<{ lat: number | null; lon: number | null }>({
     lat: null,
@@ -393,8 +396,19 @@ export function MushroomMap() {
       return `${MONTHS_NO[month - 1]} ${m[1]}`;
     };
     const filter = occEdibilityRef.current;
+    const seasonOnly = occSeasonRef.current;
+    const nowMonth = new Date().getMonth() + 1;
+    const inSeasonMonth = (d?: string | null) => {
+      if (!d) return true; // no date → keep (graceful before dates are loaded)
+      const m = /^\d{4}-(\d{2})/.exec(d);
+      if (!m) return true;
+      const month = parseInt(m[1], 10);
+      const diff = Math.min((month - nowMonth + 12) % 12, (nowMonth - month + 12) % 12);
+      return diff <= 1; // within ±1 month of now (wraps the year boundary)
+    };
     const all = (data ?? []) as { latitude: number; longitude: number; species_id: number | null; observed_at?: string | null }[];
     const points = all.filter((o) => {
+      if (seasonOnly && !inSeasonMonth(o.observed_at)) return false;
       if (filter === 'all') return true;
       const e = o.species_id != null ? edibilities.get(o.species_id) : undefined;
       if (filter === 'edible') return e === 'edible' || e === 'conditionally_edible';
@@ -444,6 +458,26 @@ export function MushroomMap() {
     },
     [loadOccurrences]
   );
+
+  const toggleOccSeason = useCallback(() => {
+    const next = !occSeasonRef.current;
+    occSeasonRef.current = next;
+    setOccSeason(next);
+    void loadOccurrences();
+  }, [loadOccurrences]);
+
+  const dismissIntro = useCallback(() => {
+    setShowIntro(false);
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem('mycelet:map-intro-v1', '1');
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && !window.localStorage.getItem('mycelet:map-intro-v1')) {
+      setShowIntro(true);
+    }
+  }, []);
 
   // "Finn meg": recenter on a fresh GPS fix (falling back to the last known
   // position) and drop a "you are here" dot so the user can tell themselves
@@ -941,6 +975,15 @@ export function MushroomMap() {
                 </button>
               ))}
             </div>
+            <button
+              type="button"
+              onClick={toggleOccSeason}
+              className={`rounded-full px-3 py-1 text-[11px] font-medium shadow-lg backdrop-blur ${
+                occSeason ? 'bg-amber-600 text-white' : 'bg-white/95 text-gray-700 hover:bg-white'
+              }`}
+            >
+              {occSeason ? '🍂 Kun i sesong nå' : '🍂 Vis alle tider'}
+            </button>
             <div className="rounded-full bg-white/90 px-2.5 py-1 text-[10px] text-gray-600 shadow backdrop-blur">
               🟢 Spiselig · 🟡 Betinget · 🟠 Uspiselig · 🔴 Giftig
             </div>
@@ -1089,6 +1132,30 @@ export function MushroomMap() {
       >
         +
       </button>
+
+      {showIntro ? (
+        <div
+          className="absolute inset-0 z-[1100] flex items-end justify-center bg-black/30 p-4 sm:items-center"
+          onClick={dismissIntro}
+        >
+          <div className="max-w-sm rounded-2xl bg-white p-5 shadow-2xl" onClick={(event) => event.stopPropagation()}>
+            <p className="text-base font-semibold text-gray-900">👋 Velkommen til soppkartet!</p>
+            <ul className="mt-3 space-y-2 text-sm text-gray-700">
+              <li>📍 <b>Vis registrerte funn</b> — ekte soppfunn, fargekodet etter spiselighet (🟢 spiselig, 🔴 giftig).</li>
+              <li>⭐ <b>Beste steder</b> — våre beste tips akkurat nå, med begrunnelse for hvorfor.</li>
+              <li>🛰️ Bytt til <b>Satellitt</b> (oppe til høyre) for å se skogen ovenfra.</li>
+              <li>📍-knappen nederst til høyre finner <b>din posisjon</b>.</li>
+            </ul>
+            <button
+              type="button"
+              onClick={dismissIntro}
+              className="mt-4 w-full rounded-full bg-forest-800 px-4 py-2 text-sm font-medium text-white hover:bg-forest-700"
+            >
+              Skjønner!
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       {showAddSheet ? (
         <AddFindingSheet
