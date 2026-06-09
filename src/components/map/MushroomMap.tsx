@@ -380,8 +380,20 @@ export function MushroomMap() {
       toxic: 'Giftig',
       deadly: 'Dødelig giftig'
     };
+    const MONTHS_NO = ['jan.', 'feb.', 'mars', 'apr.', 'mai', 'juni', 'juli', 'aug.', 'sep.', 'okt.', 'nov.', 'des.'];
+    const formatFound = (d?: string | null): string | null => {
+      if (!d) return null;
+      const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(d);
+      if (!m) return null;
+      const month = parseInt(m[2], 10);
+      const day = parseInt(m[3], 10);
+      // Year-only GBIF records are stored as YYYY-01-01 — show just the year so
+      // we never claim a January find for a species that doesn't fruit then.
+      if (month === 1 && day === 1) return m[1];
+      return `${MONTHS_NO[month - 1]} ${m[1]}`;
+    };
     const filter = occEdibilityRef.current;
-    const all = (data ?? []) as { latitude: number; longitude: number; species_id: number | null }[];
+    const all = (data ?? []) as { latitude: number; longitude: number; species_id: number | null; observed_at?: string | null }[];
     const points = all.filter((o) => {
       if (filter === 'all') return true;
       const e = o.species_id != null ? edibilities.get(o.species_id) : undefined;
@@ -400,7 +412,9 @@ export function MushroomMap() {
         iconAnchor: [6, 6]
       });
       const ediHtml = ediLabel ? `<br/><span style="color:${color};font-weight:600;font-size:12px">${ediLabel}</span>` : '';
-      const popup = `<div><b>${name}</b>${ediHtml}<br/><span style="color:#555;font-size:12px">Registrert funn</span><br/><a href="https://www.google.com/maps/search/?api=1&query=${o.latitude},${o.longitude}" target="_blank" rel="noreferrer" style="color:#15803d;font-weight:600;font-size:12px;text-decoration:underline">📍 Åpne i kart</a><br/><span style="color:#9ca3af;font-size:10px">Artsdatabanken/GBIF</span></div>`;
+      const found = formatFound(o.observed_at);
+      const foundHtml = found ? ` · ${found}` : '';
+      const popup = `<div><b>${name}</b>${ediHtml}<br/><span style="color:#555;font-size:12px">Registrert funn${foundHtml}</span><br/><a href="https://www.google.com/maps/search/?api=1&query=${o.latitude},${o.longitude}" target="_blank" rel="noreferrer" style="color:#15803d;font-weight:600;font-size:12px;text-decoration:underline">📍 Åpne i kart</a><br/><span style="color:#9ca3af;font-size:10px">Artsdatabanken/GBIF</span></div>`;
       leaflet.marker([o.latitude, o.longitude], { icon }).bindPopup(popup).addTo(cluster);
     }
     setOccCount(points.length);
