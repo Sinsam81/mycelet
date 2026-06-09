@@ -72,6 +72,7 @@ export function MushroomMap() {
   const speciesNamesRef = useRef<Map<number, string>>(new Map());
   const speciesEdibilityRef = useRef<Map<number, string>>(new Map());
   const occEdibilityRef = useRef<'all' | 'edible' | 'toxic'>('all');
+  const meMarkerRef = useRef<any>(null);
 
   const supabase = useRef(createClient()).current;
   const { latitude, longitude, loading: geoLoading, error: geoError } = useGeolocation();
@@ -82,6 +83,7 @@ export function MushroomMap() {
   const [showOccurrences, setShowOccurrences] = useState(false);
   const [occCount, setOccCount] = useState(0);
   const [occEdibility, setOccEdibility] = useState<'all' | 'edible' | 'toxic'>('all');
+  const [locating, setLocating] = useState(false);
   const [predictionCoords, setPredictionCoords] = useState<{ lat: number | null; lon: number | null }>({
     lat: null,
     lon: null
@@ -429,6 +431,45 @@ export function MushroomMap() {
     [loadOccurrences]
   );
 
+  // "Finn meg": recenter on a fresh GPS fix (falling back to the last known
+  // position) and drop a "you are here" dot so the user can tell themselves
+  // apart from the find points.
+  const locateMe = useCallback(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const goTo = async (lat: number, lng: number) => {
+      const leaflet = (await import('leaflet')).default;
+      map.setView([lat, lng], 14);
+      if (meMarkerRef.current) {
+        meMarkerRef.current.setLatLng([lat, lng]);
+      } else {
+        const icon = leaflet.divIcon({
+          className: 'me-marker',
+          html: '<div style="width:16px;height:16px;border-radius:9999px;background:#2563eb;border:3px solid #fff;box-shadow:0 0 0 3px rgba(37,99,235,0.35)"></div>',
+          iconSize: [16, 16],
+          iconAnchor: [8, 8]
+        });
+        meMarkerRef.current = leaflet.marker([lat, lng], { icon, zIndexOffset: 1000 }).addTo(map);
+      }
+    };
+    if (!navigator.geolocation) {
+      if (latitude != null && longitude != null) void goTo(latitude, longitude);
+      return;
+    }
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setLocating(false);
+        void goTo(pos.coords.latitude, pos.coords.longitude);
+      },
+      () => {
+        setLocating(false);
+        if (latitude != null && longitude != null) void goTo(latitude, longitude);
+      },
+      { enableHighAccuracy: true, timeout: 8000, maximumAge: 30000 }
+    );
+  }, [latitude, longitude]);
+
   const focusSavedArea = useCallback((area: OfflineArea) => {
     const map = mapRef.current;
     if (!map) return;
@@ -717,6 +758,7 @@ export function MushroomMap() {
       topLayerRef.current = null;
       speciesLayerRef.current = null;
       occClusterRef.current = null;
+      meMarkerRef.current = null;
     };
   }, [latitude, longitude]);
 
@@ -860,26 +902,31 @@ export function MushroomMap() {
           {showOccurrences ? `Skjul funn${occCount ? ` (${occCount})` : ''}` : '📍 Vis registrerte funn'}
         </button>
         {showOccurrences ? (
-          <div className="flex items-center gap-1 rounded-full bg-white/95 px-2 py-1 text-[11px] shadow-lg backdrop-blur">
-            {(
-              [
-                ['all', 'Alle'],
-                ['edible', '🟢 Spiselige'],
-                ['toxic', '🔴 Giftige']
-              ] as const
-            ).map(([val, label]) => (
-              <button
-                key={val}
-                type="button"
-                onClick={() => setOccEdibilityFilter(val)}
-                className={`rounded-full px-2 py-0.5 font-medium ${
-                  occEdibility === val ? 'bg-forest-800 text-white' : 'text-gray-700 hover:bg-gray-100'
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
+          <>
+            <div className="flex items-center gap-1 rounded-full bg-white/95 px-2 py-1 text-[11px] shadow-lg backdrop-blur">
+              {(
+                [
+                  ['all', 'Alle'],
+                  ['edible', '🟢 Spiselige'],
+                  ['toxic', '🔴 Giftige']
+                ] as const
+              ).map(([val, label]) => (
+                <button
+                  key={val}
+                  type="button"
+                  onClick={() => setOccEdibilityFilter(val)}
+                  className={`rounded-full px-2 py-0.5 font-medium ${
+                    occEdibility === val ? 'bg-forest-800 text-white' : 'text-gray-700 hover:bg-gray-100'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <div className="rounded-full bg-white/90 px-2.5 py-1 text-[10px] text-gray-600 shadow backdrop-blur">
+              🟢 Spiselig · 🟡 Betinget · 🟠 Uspiselig · 🔴 Giftig
+            </div>
+          </>
         ) : null}
         {hasOfflineAccess ? (
           <div className="flex flex-wrap justify-center gap-2">
@@ -1005,6 +1052,17 @@ export function MushroomMap() {
           </>
         ) : null}
       </div>
+
+      <button
+        type="button"
+        onClick={locateMe}
+        disabled={locating}
+        className="absolute bottom-20 right-4 z-[1000] flex h-12 w-12 items-center justify-center rounded-full bg-white/95 text-xl shadow-xl backdrop-blur transition-colors hover:bg-white disabled:opacity-60"
+        aria-label="Finn min posisjon"
+        title="Finn min posisjon"
+      >
+        {locating ? '…' : '📍'}
+      </button>
 
       <button
         onClick={() => setShowAddSheet(true)}
