@@ -10,6 +10,18 @@ For andre planleggingsdokumenter, se [`docs/commercial-mvp-plan.md`](commercial-
 
 ---
 
+## 🔒 Nylig shippet — 9.–10. juni 2026 (sikkerhetsrevisjon + fikserunde)
+
+Full defensiv revisjon før App Store, etterfulgt av seks fiksesteg (alle live):
+- **Kritisk tettet:** rå funn-koordinater kan ikke lenger leses via databasens REST-API (owner-only `findings` + maskert view, migrasjon 015) — «omtrentlig» posisjon er nå reelt omtrentlig. Premium-prediksjonsrasteret kan ikke scrapes utenom betalingsmuren.
+- **Kritisk tettet:** alle bildeopplastinger EXIF-strippes på enheten (canvas-reenkoding) — bilder kan ikke lenger lekke eksakt GPS-posisjon for hemmelige steder.
+- CSP håndhevende (`unsafe-eval` kun dev, X-Frame-Options DENY), koordinater i serverlogger avrundes til ~1 km, e-postbekreftelse på igjen (profil opprettes nå i auth/callback — rotårsaken fra mai).
+- **Juridisk:** GBIF-data refiltrert til kun frie lisenser (CC0/CC BY) — 186 117 funn, 7 952 ulisensierte slettet (migrasjon 016); ny `/datakilder`-side krediterer alle kilder.
+- **iOS-skall:** `PrivacyInfo.xcprivacy` (Apple-krav) opprettet og registrert, `server.url` → www.mycelet.com, offline-feilside med auto-retry.
+- Gjenstår til lansering: Upstash rate limit, Vercel Pro, personvern-advokat, native plugins + Apple-konto.
+
+---
+
 ## 🗺️ Nylig shippet — 6. juni 2026 (stor kart- + forside-økt)
 
 Alt live på mycelet.com (etter konkurrent-analyse + UX-ønsker):
