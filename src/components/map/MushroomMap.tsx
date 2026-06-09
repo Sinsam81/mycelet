@@ -1055,6 +1055,17 @@ export function MushroomMap() {
     });
   }, [prediction.data]);
 
+  // Status messages surface as transient toasts (no permanent boxes cluttering
+  // the map). topMsg/speciesMsg are still the single source; we just render
+  // them as toasts when they change to a value.
+  useEffect(() => {
+    if (topMsg) toast(topMsg);
+  }, [topMsg]);
+
+  useEffect(() => {
+    if (speciesMsg) toast(speciesMsg);
+  }, [speciesMsg]);
+
   return (
     <div className="relative h-[calc(100vh-8.5rem)] overflow-hidden rounded-xl border border-gray-200">
       <div ref={containerRef} className="h-full w-full" />
@@ -1103,15 +1114,73 @@ export function MushroomMap() {
             </div>
           )}
         </div>
-        <button
-          type="button"
-          onClick={toggleOccurrences}
-          className="rounded-full bg-white/95 px-3 py-2 text-xs font-medium text-amber-900 shadow-lg backdrop-blur hover:bg-white"
-        >
-          {showOccurrences ? `Skjul funn${occCount ? ` (${occCount})` : ''}` : '📍 Vis registrerte funn'}
-        </button>
+        <div className="flex flex-wrap justify-center gap-1.5">
+          <button
+            type="button"
+            onClick={toggleOccurrences}
+            className={`rounded-full px-3 py-1.5 text-xs font-medium shadow-lg backdrop-blur ${
+              showOccurrences ? 'bg-forest-800 text-white hover:bg-forest-700' : 'bg-white/95 text-gray-800 hover:bg-white'
+            }`}
+          >
+            {showOccurrences ? `Skjul funn${occCount ? ` (${occCount})` : ''}` : '📍 Funn'}
+          </button>
+          {hasOfflineAccess ? (
+            <>
+              <button
+                type="button"
+                onClick={() => (topSpots ? clearTopSpots() : void generateTopSpots())}
+                disabled={topLoading}
+                className={`rounded-full px-3 py-1.5 text-xs font-medium shadow-lg backdrop-blur disabled:opacity-60 ${
+                  topSpots ? 'bg-forest-800 text-white hover:bg-forest-700' : 'bg-white/95 text-gray-800 hover:bg-white'
+                }`}
+              >
+                {topLoading ? 'Søker…' : topSpots ? 'Skjul steder' : '⭐ Beste steder'}
+              </button>
+              <button
+                type="button"
+                onClick={() => (speciesSpots ? clearSpeciesSpots() : void generateSpeciesSpots())}
+                disabled={speciesLoading}
+                className={`rounded-full px-3 py-1.5 text-xs font-medium shadow-lg backdrop-blur disabled:opacity-60 ${
+                  speciesSpots ? 'bg-forest-800 text-white hover:bg-forest-700' : 'bg-white/95 text-gray-800 hover:bg-white'
+                }`}
+              >
+                {speciesLoading ? 'Laster…' : speciesSpots ? 'Skjul bilder' : '📸 Bilder'}
+              </button>
+            </>
+          ) : (
+            <NonNativeOnly>
+              <Link
+                href="/pricing"
+                className="rounded-full bg-white/95 px-3 py-1.5 text-xs font-medium text-forest-900 shadow-lg backdrop-blur hover:bg-white"
+              >
+                ⭐ Premium-verktøy
+              </Link>
+            </NonNativeOnly>
+          )}
+          {!tripActive ? (
+            <button
+              type="button"
+              onClick={startTrip}
+              className="rounded-full bg-white/95 px-3 py-1.5 text-xs font-medium text-gray-800 shadow-lg backdrop-blur hover:bg-white"
+            >
+              🎒 Tur
+            </button>
+          ) : null}
+        </div>
+        {tripActive ? (
+          <div className="flex items-center gap-2 rounded-full bg-amber-700 px-3 py-1.5 text-xs font-medium text-white shadow-lg">
+            <span>🎒 Sopptur · {tripFinds.length} funn</span>
+            <button
+              type="button"
+              onClick={endTrip}
+              className="rounded-full bg-white/20 px-2 py-0.5 font-semibold hover:bg-white/30"
+            >
+              Avslutt
+            </button>
+          </div>
+        ) : null}
         {showOccurrences ? (
-          <>
+          <div className="flex flex-wrap items-center justify-center gap-1">
             <div className="flex items-center gap-1 rounded-full bg-white/95 px-2 py-1 text-[11px] shadow-lg backdrop-blur">
               {(
                 [
@@ -1141,65 +1210,7 @@ export function MushroomMap() {
             >
               {occSeason ? '🍂 Kun i sesong nå' : '🍂 Vis alle tider'}
             </button>
-            <div className="rounded-full bg-white/90 px-2.5 py-1 text-[10px] text-gray-600 shadow backdrop-blur">
-              🟢 Spiselig · 🟡 Betinget · 🟠 Uspiselig · 🔴 Giftig
-            </div>
-          </>
-        ) : null}
-        {tripActive ? (
-          <div className="flex items-center gap-2 rounded-full bg-amber-700 px-3 py-1.5 text-xs font-medium text-white shadow-lg">
-            <span>🎒 Sopptur · {tripFinds.length} funn</span>
-            <button
-              type="button"
-              onClick={endTrip}
-              className="rounded-full bg-white/20 px-2 py-0.5 font-semibold hover:bg-white/30"
-            >
-              Avslutt
-            </button>
           </div>
-        ) : (
-          <button
-            type="button"
-            onClick={startTrip}
-            className="rounded-full bg-white/95 px-3 py-2 text-xs font-medium text-amber-900 shadow-lg backdrop-blur hover:bg-white"
-          >
-            🎒 Start sopptur
-          </button>
-        )}
-        {hasOfflineAccess ? (
-          <div className="flex flex-wrap justify-center gap-2">
-            <button
-              type="button"
-              onClick={() => (topSpots ? clearTopSpots() : void generateTopSpots())}
-              disabled={topLoading}
-              className="rounded-full bg-forest-800 px-3 py-2 text-xs font-medium text-white shadow-lg hover:bg-forest-700 disabled:opacity-60"
-            >
-              {topLoading ? 'Søker…' : topSpots ? 'Skjul beste steder' : '⭐ Beste steder'}
-            </button>
-            <button
-              type="button"
-              onClick={() => (speciesSpots ? clearSpeciesSpots() : void generateSpeciesSpots())}
-              disabled={speciesLoading}
-              className="rounded-full bg-forest-800 px-3 py-2 text-xs font-medium text-white shadow-lg hover:bg-forest-700 disabled:opacity-60"
-            >
-              {speciesLoading ? 'Laster…' : speciesSpots ? 'Skjul bilder' : 'Soppbilder'}
-            </button>
-          </div>
-        ) : (
-          <NonNativeOnly>
-            <Link
-              href="/pricing"
-              className="rounded-full bg-white/95 px-4 py-2 text-sm font-medium text-forest-900 shadow-lg backdrop-blur"
-            >
-              Soppkart-verktøy (Premium)
-            </Link>
-          </NonNativeOnly>
-        )}
-        {topMsg ? (
-          <p className="max-w-[80vw] rounded bg-white/90 px-2 py-1 text-center text-[11px] text-gray-700 shadow">{topMsg}</p>
-        ) : null}
-        {speciesMsg ? (
-          <p className="max-w-[80vw] rounded bg-white/90 px-2 py-1 text-center text-[11px] text-gray-700 shadow">{speciesMsg}</p>
         ) : null}
       </div>
 
