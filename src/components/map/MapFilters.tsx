@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { SlidersHorizontal, X } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 
@@ -19,13 +19,17 @@ interface SpeciesOption {
 interface MapFiltersProps {
   filters: MapFilterState;
   onChange: (next: MapFilterState) => void;
+  onSelectPlace: (lat: number, lng: number) => void;
 }
 
-export function MapFilters({ filters, onChange }: MapFiltersProps) {
+export function MapFilters({ filters, onChange, onSelectPlace }: MapFiltersProps) {
   const supabase = useMemo(() => createClient(), []);
   const [query, setQuery] = useState('');
   const [options, setOptions] = useState<SpeciesOption[]>([]);
   const [open, setOpen] = useState(false);
+  const [placeQuery, setPlaceQuery] = useState('');
+  const [placeResults, setPlaceResults] = useState<{ name: string; context: string; lat: number; lng: number }[]>([]);
+  const placeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const activeCount = Number(Boolean(filters.speciesId)) + Number(filters.period !== 'all') + Number(filters.onlyMine);
 
@@ -45,6 +49,36 @@ export function MapFilters({ filters, onChange }: MapFiltersProps) {
       .limit(10);
 
     setOptions(data ?? []);
+  };
+
+  // Place search via Kartverket's free Stedsnavn API (CORS-enabled, no key).
+  // Debounced so we don't hit it on every keystroke.
+  const searchPlace = (value: string) => {
+    setPlaceQuery(value);
+    if (placeTimer.current) clearTimeout(placeTimer.current);
+    if (value.trim().length < 2) {
+      setPlaceResults([]);
+      return;
+    }
+    placeTimer.current = setTimeout(async () => {
+      try {
+        const res = await fetch(
+          `https://ws.geonorge.no/stedsnavn/v1/navn?sok=${encodeURIComponent(value)}&fuzzy=true&utkoordsys=4258&treffPerSide=6&side=1`
+        );
+        const data = await res.json();
+        const results = ((data?.navn ?? []) as any[])
+          .map((n) => ({
+            name: n['skrivemåte'] as string,
+            context: [n.navneobjekttype, n.kommuner?.[0]?.kommunenavn].filter(Boolean).join(' · '),
+            lat: n.representasjonspunkt?.nord as number,
+            lng: n.representasjonspunkt?.['øst'] as number
+          }))
+          .filter((r) => typeof r.lat === 'number' && typeof r.lng === 'number');
+        setPlaceResults(results);
+      } catch {
+        setPlaceResults([]);
+      }
+    }, 300);
   };
 
   // Collapsed: a small chip so the map stays the hero. Tap to reveal filters.
@@ -79,6 +113,36 @@ export function MapFilters({ filters, onChange }: MapFiltersProps) {
             <X className="h-4 w-4" />
           </button>
         </div>
+      </div>
+
+      <div className="space-y-2">
+        <label className="block text-xs font-medium text-gray-700">Søk etter sted</label>
+        <input
+          value={placeQuery}
+          onChange={(event) => searchPlace(event.target.value)}
+          className="w-full rounded-lg border border-gray-300 px-2 py-1.5 text-sm"
+          placeholder="Nordmarka, Trondheim …"
+        />
+        {placeResults.length > 0 ? (
+          <div className="max-h-36 overflow-auto rounded-lg border border-gray-200">
+            {placeResults.map((p, i) => (
+              <button
+                key={i}
+                type="button"
+                onClick={() => {
+                  onSelectPlace(p.lat, p.lng);
+                  setPlaceResults([]);
+                  setPlaceQuery(p.name);
+                  setOpen(false);
+                }}
+                className="flex w-full flex-col items-start px-2 py-1.5 text-left text-sm hover:bg-gray-50"
+              >
+                <span>{p.name}</span>
+                {p.context ? <span className="text-xs text-gray-500">{p.context}</span> : null}
+              </button>
+            ))}
+          </div>
+        ) : null}
       </div>
 
       <div className="space-y-2">

@@ -32,7 +32,7 @@ const cspDirectives = [
   // data: for base64-inlined fonts in CSS.
   "font-src 'self' data:",
   // XHR/fetch/WebSocket destinations. wss://*.supabase.co is for Realtime.
-  "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.openweathermap.org https://opendata-download-metobs.smhi.se https://frost.met.no https://api.stripe.com https://*.kindwise.com",
+  "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.openweathermap.org https://opendata-download-metobs.smhi.se https://frost.met.no https://api.stripe.com https://*.kindwise.com https://ws.geonorge.no",
   // We embed Stripe Checkout / Elements in iframes.
   "frame-src https://js.stripe.com https://hooks.stripe.com https://checkout.stripe.com",
   // Service worker (next-pwa) + blob: for any dynamically created workers.

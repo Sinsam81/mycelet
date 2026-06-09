@@ -905,7 +905,11 @@ export function MushroomMap() {
     <div className="relative h-[calc(100vh-8.5rem)] overflow-hidden rounded-xl border border-gray-200">
       <div ref={containerRef} className="h-full w-full" />
 
-      <MapFilters filters={filters} onChange={setFilters} />
+      <MapFilters
+        filters={filters}
+        onChange={setFilters}
+        onSelectPlace={(lat, lng) => mapRef.current?.setView([lat, lng], 13)}
+      />
 
       <div className="absolute left-1/2 top-3 z-[1000] flex w-[calc(100%-7rem)] max-w-md -translate-x-1/2 flex-col items-center gap-1">
         <button
