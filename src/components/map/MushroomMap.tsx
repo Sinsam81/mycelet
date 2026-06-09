@@ -17,6 +17,7 @@ import { MapFilters, MapFilterState } from './MapFilters';
 import { MapFinding } from '@/types/finding';
 import { OfflineArea, cacheMapTilesForArea, readOfflineAreas, removeOfflineAreaById, saveOfflineAreas } from '@/lib/utils/offlineMap';
 import { buildExplanation } from '@/lib/utils/prediction-explanation';
+import toast from 'react-hot-toast';
 
 type LeafletType = typeof import('leaflet');
 
@@ -73,6 +74,8 @@ export function MushroomMap() {
   const speciesEdibilityRef = useRef<Map<number, string>>(new Map());
   const occEdibilityRef = useRef<'all' | 'edible' | 'toxic'>('all');
   const occSeasonRef = useRef(false);
+  const tripActiveRef = useRef(false);
+  const tripFindsRef = useRef<string[]>([]);
   const meMarkerRef = useRef<any>(null);
 
   const supabase = useRef(createClient()).current;
@@ -86,6 +89,8 @@ export function MushroomMap() {
   const [occEdibility, setOccEdibility] = useState<'all' | 'edible' | 'toxic'>('all');
   const [occSeason, setOccSeason] = useState(false);
   const [showIntro, setShowIntro] = useState(false);
+  const [tripActive, setTripActive] = useState(false);
+  const [tripFinds, setTripFinds] = useState<string[]>([]);
   const [locating, setLocating] = useState(false);
   const [predictionCoords, setPredictionCoords] = useState<{ lat: number | null; lon: number | null }>({
     lat: null,
@@ -476,6 +481,62 @@ export function MushroomMap() {
   useEffect(() => {
     if (typeof window !== 'undefined' && !window.localStorage.getItem('mycelet:map-intro-v1')) {
       setShowIntro(true);
+    }
+  }, []);
+
+  // "Sopptur-modus": a lightweight client-side trip log. Starting a trip records
+  // each find you add until you end it, then celebrates the haul. Persisted in
+  // localStorage so it survives a refresh mid-forage.
+  const startTrip = useCallback(() => {
+    tripActiveRef.current = true;
+    tripFindsRef.current = [];
+    setTripActive(true);
+    setTripFinds([]);
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem('mycelet:trip-v1', JSON.stringify({ finds: [] }));
+    }
+  }, []);
+
+  const addTripFind = useCallback((name?: string) => {
+    const next = [...tripFindsRef.current, name && name.trim() ? name.trim() : 'Sopp'];
+    tripFindsRef.current = next;
+    setTripFinds(next);
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem('mycelet:trip-v1', JSON.stringify({ finds: next }));
+    }
+  }, []);
+
+  const endTrip = useCallback(() => {
+    const finds = tripFindsRef.current;
+    const count = finds.length;
+    const unique = Array.from(new Set(finds));
+    tripActiveRef.current = false;
+    tripFindsRef.current = [];
+    setTripActive(false);
+    setTripFinds([]);
+    if (typeof window !== 'undefined') {
+      window.localStorage.removeItem('mycelet:trip-v1');
+    }
+    if (count > 0) {
+      toast.success(`Fin tur! Du registrerte ${count} funn 🍄${unique.length ? ` (${unique.join(', ')})` : ''}`);
+    } else {
+      toast('Tur avsluttet — ingen funn denne gangen.');
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const raw = window.localStorage.getItem('mycelet:trip-v1');
+    if (!raw) return;
+    try {
+      const parsed = JSON.parse(raw) as { finds?: string[] };
+      const finds = Array.isArray(parsed.finds) ? parsed.finds : [];
+      tripActiveRef.current = true;
+      tripFindsRef.current = finds;
+      setTripActive(true);
+      setTripFinds(finds);
+    } catch {
+      window.localStorage.removeItem('mycelet:trip-v1');
     }
   }, []);
 
@@ -989,6 +1050,26 @@ export function MushroomMap() {
             </div>
           </>
         ) : null}
+        {tripActive ? (
+          <div className="flex items-center gap-2 rounded-full bg-amber-700 px-3 py-1.5 text-xs font-medium text-white shadow-lg">
+            <span>🎒 Sopptur · {tripFinds.length} funn</span>
+            <button
+              type="button"
+              onClick={endTrip}
+              className="rounded-full bg-white/20 px-2 py-0.5 font-semibold hover:bg-white/30"
+            >
+              Avslutt
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={startTrip}
+            className="rounded-full bg-white/95 px-3 py-2 text-xs font-medium text-amber-900 shadow-lg backdrop-blur hover:bg-white"
+          >
+            🎒 Start sopptur
+          </button>
+        )}
         {hasOfflineAccess ? (
           <div className="flex flex-wrap justify-center gap-2">
             <button
@@ -1162,9 +1243,10 @@ export function MushroomMap() {
           latitude={latitude}
           longitude={longitude}
           onClose={() => setShowAddSheet(false)}
-          onSaved={() => {
+          onSaved={(speciesName) => {
             setShowAddSheet(false);
             void loadFindings();
+            if (tripActiveRef.current) addTripFind(speciesName);
           }}
         />
       ) : null}

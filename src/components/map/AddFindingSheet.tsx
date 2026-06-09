@@ -21,7 +21,7 @@ interface AddFindingSheetProps {
   latitude: number | null;
   longitude: number | null;
   onClose: () => void;
-  onSaved: () => void;
+  onSaved: (speciesName?: string) => void;
 }
 
 interface SpeciesOption {
@@ -147,7 +147,7 @@ export function AddFindingSheet({ latitude, longitude, onClose, onSaved }: AddFi
       });
 
       if (insertError) throw insertError;
-      onSaved();
+      onSaved(speciesQuery || undefined);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Kunne ikke lagre funn');
     } finally {
