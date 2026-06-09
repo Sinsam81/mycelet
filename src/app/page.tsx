@@ -18,16 +18,16 @@ interface SpeciesRow {
   primary_image_url: string | null;
 }
 
+// Rows come from the public_findings VIEW (masked display coords), never the
+// findings table — direct table reads are owner-only since migration 015.
 interface RecentFindingRow {
   id: string;
   found_at: string;
   location_name: string | null;
-  mushroom_species: {
-    id: number;
-    norwegian_name: string;
-    edibility: Edibility;
-    primary_image_url: string | null;
-  } | null;
+  species_id: number | null;
+  norwegian_name: string | null;
+  edibility: Edibility | null;
+  primary_image_url: string | null;
 }
 
 function formatTimeAgo(iso: string) {
@@ -72,9 +72,8 @@ export default async function HomePage() {
       .select('id,norwegian_name,latin_name,edibility,season_start,season_end,primary_image_url')
       .order('norwegian_name', { ascending: true }),
     supabase
-      .from('findings')
-      .select('id,found_at,location_name,mushroom_species(id,norwegian_name,edibility,primary_image_url)')
-      .in('visibility', ['public', 'approximate'])
+      .from('public_findings')
+      .select('id,found_at,location_name,species_id,norwegian_name,edibility,primary_image_url')
       .order('found_at', { ascending: false })
       .limit(4)
   ]);
@@ -234,21 +233,21 @@ export default async function HomePage() {
               {findings.map((f) => (
                 <li key={f.id}>
                   <Link
-                    href={f.mushroom_species ? `/species/${f.mushroom_species.id}` : '/map'}
+                    href={f.species_id ? `/species/${f.species_id}` : '/map'}
                     className="flex items-center gap-3 rounded-lg border border-gray-100 p-2 hover:border-forest-700"
                   >
                     <div className="h-12 w-12 shrink-0 overflow-hidden rounded bg-gray-100">
-                      {f.mushroom_species?.primary_image_url ? (
-                        <img src={f.mushroom_species.primary_image_url} alt={f.mushroom_species.norwegian_name} className="h-full w-full object-cover" />
+                      {f.primary_image_url ? (
+                        <img src={f.primary_image_url} alt={f.norwegian_name ?? 'Sopp'} className="h-full w-full object-cover" />
                       ) : null}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="truncate font-medium">{f.mushroom_species?.norwegian_name ?? 'Ukjent art'}</p>
+                      <p className="truncate font-medium">{f.norwegian_name ?? 'Ukjent art'}</p>
                       <p className="truncate text-xs text-gray-600">
                         {f.location_name ?? 'Ukjent sted'} · {formatTimeAgo(f.found_at)}
                       </p>
                     </div>
-                    {f.mushroom_species ? <EdibilityBadge edibility={f.mushroom_species.edibility} /> : null}
+                    {f.edibility ? <EdibilityBadge edibility={f.edibility} /> : null}
                   </Link>
                 </li>
               ))}
