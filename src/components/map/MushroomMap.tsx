@@ -76,6 +76,7 @@ export function MushroomMap() {
   const occSeasonRef = useRef(false);
   const tripActiveRef = useRef(false);
   const tripFindsRef = useRef<string[]>([]);
+  const speciesSearchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const meMarkerRef = useRef<any>(null);
 
   const supabase = useRef(createClient()).current;
@@ -91,6 +92,9 @@ export function MushroomMap() {
   const [showIntro, setShowIntro] = useState(false);
   const [tripActive, setTripActive] = useState(false);
   const [tripFinds, setTripFinds] = useState<string[]>([]);
+  const [speciesSearch, setSpeciesSearch] = useState('');
+  const [speciesSuggestions, setSpeciesSuggestions] = useState<{ id: number; name: string }[]>([]);
+  const [selectedSpeciesName, setSelectedSpeciesName] = useState<string | null>(null);
   const [locating, setLocating] = useState(false);
   const [predictionCoords, setPredictionCoords] = useState<{ lat: number | null; lon: number | null }>({
     lat: null,
@@ -102,7 +106,7 @@ export function MushroomMap() {
   const [offlineStatus, setOfflineStatus] = useState<string | null>(null);
   const [offlineBusy, setOfflineBusy] = useState(false);
   const [offlineOpen, setOfflineOpen] = useState(false);
-  const [topSpots, setTopSpots] = useState<{ lat: number; lng: number; score: number; forestType: string; productivity: number | null; verdict?: string; reasons?: string[] }[] | null>(null);
+  const [topSpots, setTopSpots] = useState<{ lat: number; lng: number; score: number; forestType: string; productivity: number | null; verdict?: string; reasons?: string[]; topSpecies?: string[] }[] | null>(null);
   const [topLoading, setTopLoading] = useState(false);
   const [topMsg, setTopMsg] = useState<string | null>(null);
   const [speciesSpots, setSpeciesSpots] = useState<{ speciesId: number; norwegianName: string; latinName: string; imageUrl: string; lat: number; lng: number; score: number; verdict?: string; reasons?: string[] }[] | null>(null);
@@ -185,7 +189,7 @@ export function MushroomMap() {
   // "Beste steder nær meg": numbered pins on the best forest cells within ~5 km.
   const renderTopSpots = useCallback(
     async (
-      spots: { lat: number; lng: number; score: number; forestType: string; productivity: number | null; verdict?: string; reasons?: string[] }[],
+      spots: { lat: number; lng: number; score: number; forestType: string; productivity: number | null; verdict?: string; reasons?: string[]; topSpecies?: string[] }[],
       origin: { lat: number; lng: number }
     ) => {
       const layer = topLayerRef.current;
@@ -204,9 +208,13 @@ export function MushroomMap() {
         const km = haversineKm(origin.lat, origin.lng, spot.lat, spot.lng);
         const dir = bearingLabel(origin.lat, origin.lng, spot.lat, spot.lng);
         const reasonsHtml = (spot.reasons ?? []).map((r) => `<div style="margin-top:3px">${r}</div>`).join('');
+        const topSpeciesHtml = (spot.topSpecies ?? []).length
+          ? `<div style="margin-top:6px;font-size:12px;font-weight:600;color:#14532d">🍄 Mest sannsynlig her: ${(spot.topSpecies ?? []).join(', ')}</div>`
+          : '';
         const popup = `<div style="min-width:210px;max-width:265px">
           <div style="font-weight:700;color:#14532d">${spot.verdict ?? `Topp ${rank}`}</div>
           <div style="color:#555;font-size:12px;margin-top:2px">~${km.toFixed(1)} km ${dir} · ${spot.score}/100</div>
+          ${topSpeciesHtml}
           <div style="font-size:12px;margin-top:6px;color:#1f2937">${reasonsHtml}</div>
           <a href="https://www.google.com/maps/search/?api=1&query=${spot.lat},${spot.lng}" target="_blank" rel="noreferrer" style="display:block;margin-top:7px;color:#15803d;font-weight:600;font-size:12px;text-decoration:underline">📍 Åpne i kart (naviger hit)</a>
           <div style="color:#9ca3af;font-size:10px;margin-top:6px">Kilder: MET (vær) · NIBIO/CORINE (skog) · Artsdatabanken (funn)</div>
@@ -223,9 +231,10 @@ export function MushroomMap() {
     setTopMsg(null);
   }, []);
 
-  const generateTopSpots = useCallback(async () => {
+  const generateTopSpots = useCallback(async (speciesIdOverride?: number | null) => {
     const map = mapRef.current;
     if (!map) return;
+    const sid = speciesIdOverride !== undefined ? speciesIdOverride : filters.speciesId;
     setTopMsg(null);
     setTopLoading(true);
     try {
@@ -242,7 +251,7 @@ export function MushroomMap() {
         n: '7',
         top: '12'
       });
-      if (filters.speciesId) params.set('speciesId', String(filters.speciesId));
+      if (sid) params.set('speciesId', String(sid));
       const res = await fetch(`/api/prediction/grid?${params.toString()}`, { cache: 'no-store' });
       const data = await res.json();
       if (res.status === 403) {
@@ -253,7 +262,7 @@ export function MushroomMap() {
         setTopMsg(data?.error ?? 'Kunne ikke finne topp-steder.');
         return;
       }
-      const spots = (data.cells ?? []) as { lat: number; lng: number; score: number; forestType: string; productivity: number | null; verdict?: string; reasons?: string[] }[];
+      const spots = (data.cells ?? []) as { lat: number; lng: number; score: number; forestType: string; productivity: number | null; verdict?: string; reasons?: string[]; topSpecies?: string[] }[];
       if (spots.length === 0) {
         clearTopSpots();
         setTopMsg('Fant lite skogdata innen 5 km — prøv et område med mer skog.');
@@ -265,13 +274,63 @@ export function MushroomMap() {
       const bounds = leaflet.latLngBounds(spots.map((s) => [s.lat, s.lng] as [number, number]));
       bounds.extend([originLat, originLng]);
       map.fitBounds(bounds.pad(0.2));
-      setTopMsg(`${spots.length} beste steder innen 5 km. Trykk på en nål for begrunnelse.`);
+      const sName = sid != null ? speciesNamesRef.current.get(sid) ?? null : null;
+      setTopMsg(
+        sName
+          ? `${spots.length} beste steder for ${sName} innen 5 km. Trykk på en nål.`
+          : `${spots.length} beste steder innen 5 km. Trykk på en nål for begrunnelse.`
+      );
     } catch {
       setTopMsg('Kunne ikke finne topp-steder.');
     } finally {
       setTopLoading(false);
     }
   }, [latitude, longitude, filters.speciesId, renderTopSpots, clearTopSpots]);
+
+  // Prominent "which mushroom do you want?" search: pick a species and we jump
+  // straight to the best spots for it (the prediction already re-ranks per
+  // species). Debounced species lookup.
+  const searchSpeciesForSpots = useCallback(
+    (value: string) => {
+      setSpeciesSearch(value);
+      if (speciesSearchTimer.current) clearTimeout(speciesSearchTimer.current);
+      if (value.trim().length < 2) {
+        setSpeciesSuggestions([]);
+        return;
+      }
+      speciesSearchTimer.current = setTimeout(async () => {
+        const { data } = await supabase
+          .from('mushroom_species')
+          .select('id,norwegian_name')
+          .or(`norwegian_name.ilike.%${value}%,latin_name.ilike.%${value}%`)
+          .order('norwegian_name', { ascending: true })
+          .limit(8);
+        setSpeciesSuggestions(
+          ((data ?? []) as { id: number; norwegian_name: string }[]).map((d) => ({ id: d.id, name: d.norwegian_name }))
+        );
+      }, 250);
+    },
+    [supabase]
+  );
+
+  const selectSpeciesForSpots = useCallback(
+    (id: number, name: string) => {
+      setFilters((prev) => ({ ...prev, speciesId: id }));
+      setSelectedSpeciesName(name);
+      setSpeciesSearch(name);
+      setSpeciesSuggestions([]);
+      void generateTopSpots(id);
+    },
+    [generateTopSpots]
+  );
+
+  const clearSpeciesSearch = useCallback(() => {
+    setFilters((prev) => ({ ...prev, speciesId: null }));
+    setSelectedSpeciesName(null);
+    setSpeciesSearch('');
+    setSpeciesSuggestions([]);
+    clearTopSpots();
+  }, [clearTopSpots]);
 
   // "Soppbilder på kartet": round species photos on each species' best ground.
   const renderSpeciesSpots = useCallback(
@@ -1007,6 +1066,43 @@ export function MushroomMap() {
       />
 
       <div className="absolute left-1/2 top-3 z-[1000] flex w-[calc(100%-7rem)] max-w-md -translate-x-1/2 flex-col items-center gap-1">
+        <div className="w-full">
+          {selectedSpeciesName ? (
+            <div className="flex items-center justify-between gap-2 rounded-full bg-forest-800 px-3 py-2 text-xs font-medium text-white shadow-lg">
+              <span className="truncate">🍄 Beste steder for {selectedSpeciesName}</span>
+              <button
+                type="button"
+                onClick={clearSpeciesSearch}
+                className="shrink-0 rounded-full bg-white/20 px-2 py-0.5 font-semibold hover:bg-white/30"
+              >
+                Nullstill
+              </button>
+            </div>
+          ) : (
+            <div className="relative">
+              <input
+                value={speciesSearch}
+                onChange={(event) => searchSpeciesForSpots(event.target.value)}
+                placeholder="🍄 Hvilken sopp vil du finne i dag?"
+                className="w-full rounded-full bg-white/95 px-4 py-2 text-xs text-gray-800 shadow-lg backdrop-blur placeholder:text-gray-500 focus:outline-none"
+              />
+              {speciesSuggestions.length > 0 ? (
+                <div className="absolute left-0 right-0 top-full z-[1001] mt-1 max-h-48 overflow-auto rounded-xl bg-white shadow-xl">
+                  {speciesSuggestions.map((s) => (
+                    <button
+                      key={s.id}
+                      type="button"
+                      onClick={() => selectSpeciesForSpots(s.id, s.name)}
+                      className="block w-full px-3 py-2 text-left text-xs text-gray-800 hover:bg-gray-50"
+                    >
+                      {s.name}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          )}
+        </div>
         <button
           type="button"
           onClick={toggleOccurrences}

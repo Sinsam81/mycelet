@@ -71,6 +71,11 @@ async function mapWithConcurrency<I, O>(items: I[], limit: number, fn: (item: I)
   return results;
 }
 
+function inSeason(month: number, start: number, end: number): boolean {
+  if (start <= end) return month >= start && month <= end;
+  return month >= start || month <= end; // season wraps the year boundary
+}
+
 export async function GET(request: NextRequest) {
   const log = createRequestLogger(request);
   const url = new URL(request.url);
@@ -162,6 +167,44 @@ export async function GET(request: NextRequest) {
         })
       : null;
 
+    // For the generic (no specific species) "beste steder" view, also name the
+    // most likely species at each top spot. Fetch the in-season candidates once
+    // and reuse each cell's already-fetched forest for a cheap per-species score.
+    let topSpeciesCandidates: {
+      name: string;
+      ctx: SpeciesContext;
+      habitat: ReturnType<typeof buildSpeciesHabitatPreferences>;
+    }[] = [];
+    if (top && !speciesId) {
+      const { data: rows } = await supabase
+        .from('mushroom_species')
+        .select(
+          'id,norwegian_name,latin_name,genus,season_start,season_end,peak_season_start,peak_season_end,habitat,mycorrhizal_partners'
+        );
+      topSpeciesCandidates = (rows ?? [])
+        .filter(
+          (s) =>
+            s.season_start != null &&
+            s.season_end != null &&
+            inSeason(month, s.season_start as number, s.season_end as number)
+        )
+        .map((s) => ({
+          name: (s.norwegian_name as string | null) ?? 'Sopp',
+          ctx: {
+            latinName: (s.latin_name as string | null) ?? null,
+            genus: (s.genus as string | null) ?? null,
+            seasonStart: s.season_start as number,
+            seasonEnd: s.season_end as number,
+            peakSeasonStart: (s.peak_season_start as number | null) ?? null,
+            peakSeasonEnd: (s.peak_season_end as number | null) ?? null
+          },
+          habitat: buildSpeciesHabitatPreferences({
+            mycorrhizalPartners: (s.mycorrhizal_partners as string[] | null) ?? null,
+            habitat: (s.habitat as string[] | null) ?? null
+          })
+        }));
+    }
+
     const latSpan = (maxLat - minLat) / n;
     const lngSpan = (maxLng - minLng) / n;
     const cellCenters: { lat: number; lng: number }[] = [];
@@ -208,7 +251,8 @@ export async function GET(request: NextRequest) {
         forestType: forest.forestType,
         productivity: forest.productivity,
         forest,
-        nearbyOccurrences: nearby
+        nearbyOccurrences: nearby,
+        elevation: elev?.elevationM ?? null
       };
     });
 
@@ -260,6 +304,30 @@ export async function GET(request: NextRequest) {
           month,
           score: c.score
         });
+        let topSpecies: string[] = [];
+        if (!speciesId && topSpeciesCandidates.length > 0) {
+          topSpecies = topSpeciesCandidates
+            .map((cand) => ({
+              name: cand.name,
+              score: computeCellPrediction({
+                lat: c.lat,
+                lon: c.lng,
+                month,
+                weather: weatherInput,
+                forest: c.forest,
+                species: cand.ctx,
+                speciesHabitat: cand.habitat,
+                recent30d: 0,
+                recent365d: 0,
+                nearbyOccurrences: c.nearbyOccurrences,
+                elevation: c.elevation
+              }).score
+            }))
+            .filter((s) => s.score >= 35)
+            .sort((a, b) => b.score - a.score)
+            .slice(0, 3)
+            .map((s) => s.name);
+        }
         return {
           lat: c.lat,
           lng: c.lng,
@@ -267,7 +335,8 @@ export async function GET(request: NextRequest) {
           forestType: c.forestType,
           productivity: c.productivity,
           verdict: summary.verdict,
-          reasons: summary.reasons
+          reasons: summary.reasons,
+          topSpecies
         };
       });
     } else {
