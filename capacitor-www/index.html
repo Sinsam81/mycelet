@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="no">
+<html lang="nb">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
@@ -21,17 +21,38 @@
       }
       p {
         opacity: 0.8;
+        margin: 0.4rem 1.5rem;
+      }
+      button {
+        margin-top: 1.2rem;
+        padding: 0.7rem 1.6rem;
+        border: 0;
+        border-radius: 9999px;
+        background: #f5f0e6;
+        color: #1a3a1a;
+        font-size: 1rem;
+        font-weight: 600;
       }
     </style>
   </head>
   <body>
     <!--
-      Fallback shown only if the hosted web app can't load (offline / server
-      down). Normally the native shell loads server.url from capacitor.config.ts.
+      Offline fallback: shown via server.errorPath when the hosted web app
+      can't load (no coverage in the forest, server down). Retries the remote
+      app on tap, and automatically as soon as the device comes back online.
     -->
     <div>
       <h1>🍄 Mycelet</h1>
-      <p>Laster… sjekk at du er på nett.</p>
+      <p>Ingen nettforbindelse akkurat nå.</p>
+      <p>Kartet og funnene trenger nett — prøv igjen når du har dekning.</p>
+      <button type="button" onclick="retry()">Prøv igjen</button>
     </div>
+    <script>
+      var APP_URL = 'https://www.mycelet.com';
+      function retry() {
+        window.location.replace(APP_URL);
+      }
+      window.addEventListener('online', retry);
+    </script>
   </body>
 </html>
