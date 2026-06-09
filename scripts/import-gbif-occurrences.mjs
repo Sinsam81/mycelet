@@ -5,6 +5,12 @@
 //
 // Idempotent: occurrences are upserted on gbif_key, so re-running refreshes
 // without duplicates. GBIF is open data (no account needed for the search API).
+//
+// LEGAL: only CC0 and CC BY records are fetched (the `license` filter below).
+// GBIF also hosts CC BY-NC datasets, which a commercial app cannot use — so
+// they never enter the table. License + dataset key are stored per row
+// (migration 016), and after a large successful import the script prunes rows
+// without a license (anything no longer obtainable under a free license).
 
 import { createClient } from '@supabase/supabase-js';
 
@@ -38,7 +44,7 @@ async function gbifOccurrences(taxonKey, country) {
   const out = [];
   for (let offset = 0; offset < PER_SPECIES_CAP; offset += PAGE) {
     const res = await fetch(
-      `https://api.gbif.org/v1/occurrence/search?taxonKey=${taxonKey}&country=${country}&hasCoordinate=true&limit=${PAGE}&offset=${offset}`
+      `https://api.gbif.org/v1/occurrence/search?taxonKey=${taxonKey}&country=${country}&hasCoordinate=true&license=CC0_1_0&license=CC_BY_4_0&limit=${PAGE}&offset=${offset}`
     );
     const j = await res.json();
     const results = j.results ?? [];
@@ -48,7 +54,9 @@ async function gbifOccurrences(taxonKey, country) {
           gbif_key: r.key,
           latitude: r.decimalLatitude,
           longitude: r.decimalLongitude,
-          observed_at: parseObservedAt(r)
+          observed_at: parseObservedAt(r),
+          license: r.license ?? null,
+          dataset_key: r.datasetKey ?? null
         });
       }
     }
@@ -75,6 +83,7 @@ if (spErr) {
 console.log('Arter å hente:', species.length);
 
 let grandTotal = 0;
+let upsertErrors = 0;
 for (const sp of species) {
   try {
     const taxonKey = await gbifMatch(sp.latin_name);
@@ -91,10 +100,14 @@ for (const sp of species) {
       const rows = occ.map((o) => ({ ...o, species_id: sp.id, source: 'gbif' }));
       for (let i = 0; i < rows.length; i += 500) {
         const chunk = rows.slice(i, i + 500);
+        // Merge (not ignore) so re-runs backfill license/dataset on existing rows.
         const { error } = await admin
           .from('species_occurrences')
-          .upsert(chunk, { onConflict: 'gbif_key', ignoreDuplicates: true });
-        if (error) console.log(`  upsert-feil (${sp.latin_name} ${country}):`, error.message);
+          .upsert(chunk, { onConflict: 'gbif_key' });
+        if (error) {
+          upsertErrors += 1;
+          console.log(`  upsert-feil (${sp.latin_name} ${country}):`, error.message);
+        }
       }
       grandTotal += rows.length;
       console.log(`✓ ${sp.norwegian_name} [${country}]: ${rows.length} funn`);
@@ -102,6 +115,25 @@ for (const sp of species) {
   } catch (e) {
     console.log(`! ${sp.latin_name}: ${e.message}`);
   }
+}
+
+// Prune rows that didn't get a license backfilled — they were imported before
+// the license filter and are no longer obtainable under CC0/CC-BY, so we must
+// not keep using them. Guarded: only after a clearly successful import, so a
+// failed run can't wipe the table.
+if (grandTotal >= 10000 && upsertErrors === 0) {
+  const { count: unlicensed } = await admin
+    .from('species_occurrences')
+    .select('id', { count: 'exact', head: true })
+    .is('license', null);
+  if (unlicensed && unlicensed > 0) {
+    const { error: delErr } = await admin.from('species_occurrences').delete().is('license', null);
+    console.log(delErr ? `PRUNE-FEIL: ${delErr.message}` : `Slettet ${unlicensed} rader uten fri lisens.`);
+  } else {
+    console.log('Ingen ulisensierte rader å slette.');
+  }
+} else {
+  console.log(`Hoppet over sletting (kun ${grandTotal} hentet — for lite til å være en full kjøring).`);
 }
 
 const { count } = await admin.from('species_occurrences').select('id', { count: 'exact', head: true });

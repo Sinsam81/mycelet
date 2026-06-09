@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { NonNativeOnly } from '@/components/native/NonNativeOnly';
-import { AlertTriangle, Calendar, Camera, Lock, Map, MessageSquare, Shield } from 'lucide-react';
+import { AlertTriangle, Calendar, Camera, Database, Lock, Map, MessageSquare, Shield } from 'lucide-react';
 import { PageWrapper } from '@/components/layout/PageWrapper';
 import { EdibilityBadge } from '@/components/ui/EdibilityBadge';
 import { MushroomDayCard } from '@/components/home/MushroomDayCard';
@@ -298,6 +298,12 @@ export default async function HomePage() {
             className="block rounded-lg border border-gray-200 bg-white p-3 text-sm font-medium text-gray-800 hover:bg-gray-50"
           >
             <span className="inline-flex items-center gap-2"><Lock className="h-4 w-4 text-forest-800" /> Personvern</span>
+          </Link>
+          <Link
+            href="/datakilder"
+            className="block rounded-lg border border-gray-200 bg-white p-3 text-sm font-medium text-gray-800 hover:bg-gray-50"
+          >
+            <span className="inline-flex items-center gap-2"><Database className="h-4 w-4 text-forest-800" /> Datakilder</span>
           </Link>
         </div>
       </section>
