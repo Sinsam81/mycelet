@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { Crown, Leaf, MapPin } from 'lucide-react';
+import { Crown, Leaf, MapPin, ShieldCheck } from 'lucide-react';
 import { PageWrapper } from '@/components/layout/PageWrapper';
 import { EdibilityBadge } from '@/components/ui/EdibilityBadge';
 import { AccountDataActions } from '@/components/profile/AccountDataActions';
@@ -54,7 +54,7 @@ export default async function ProfilePage() {
     );
   }
 
-  const [{ data: profile }, statsRes, findingsRes, postsRes, subscription] = await Promise.all([
+  const [{ data: profile }, statsRes, findingsRes, postsRes, subscription, { data: roleRow }] = await Promise.all([
     supabase.from('profiles').select('username,display_name,bio,location,created_at,avatar_url').eq('id', user.id).maybeSingle(),
     supabase.rpc('get_user_stats', { p_user_id: user.id }),
     supabase
@@ -69,7 +69,8 @@ export default async function ProfilePage() {
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
       .limit(5),
-    getUserBillingSubscription(supabase, user.id).catch(() => null)
+    getUserBillingSubscription(supabase, user.id).catch(() => null),
+    supabase.from('moderator_roles').select('role').eq('user_id', user.id).maybeSingle()
   ]);
 
   const stats = (statsRes.data?.[0] as UserStats | undefined) ?? {
@@ -81,6 +82,7 @@ export default async function ProfilePage() {
   const findings = (findingsRes.data ?? []) as unknown as FindingRow[];
   const posts = (postsRes.data ?? []) as PostRow[];
   const billing = getBillingCapabilities(subscription);
+  const isAdmin = roleRow?.role === 'admin' || roleRow?.role === 'moderator';
 
   const memberSince = profile?.created_at
     ? new Date(profile.created_at).toLocaleDateString('nb-NO', { year: 'numeric', month: 'long' })
@@ -182,6 +184,15 @@ export default async function ProfilePage() {
         </article>
 
         <article className="space-y-2">
+          {isAdmin ? (
+            <Link
+              href="/admin"
+              className="flex items-center gap-2 rounded-lg border border-forest-600/30 bg-forest-50 px-3 py-2 text-sm font-medium text-forest-900 hover:bg-forest-100"
+            >
+              <ShieldCheck className="h-4 w-4 shrink-0" />
+              Admin — statistikk &amp; verktøy
+            </Link>
+          ) : null}
           <Link
             href="/forum/reports"
             className="block rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-800 hover:bg-gray-50"
