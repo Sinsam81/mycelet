@@ -1,12 +1,21 @@
 # Mycelet — veikart
 
-> Sist oppdatert: 6. juni 2026
+> Sist oppdatert: 10. juni 2026
 > Eier: Sindre Øverås (`sindre.alstad@gmail.com`)
 
 Dette dokumentet samler alt arbeid som gjenstår før beta-launch (mai-juni 2026) og åpen launch (august 2026), pluss strategiske avgjørelser som ikke er tatt enda.
 
 For arkitektur og konvensjoner, se [`CLAUDE.md`](../CLAUDE.md).
 For andre planleggingsdokumenter, se [`docs/commercial-mvp-plan.md`](commercial-mvp-plan.md), [`docs/8-step-status.md`](8-step-status.md), m.fl.
+
+---
+
+## 🍄 Nylig shippet — 10. juni 2026 (artsutvidelse 36 → 72)
+
+Live på mycelet.com (migrasjon 017):
+- **Soppkatalogen doblet:** 36 nye arter — 13 gift/uspiselige (inkl. de fire klassiske dødelige: grønn fluesopp, flatklokkehatt, steinmorkel, butt giftslørsopp) + 23 spiselige/betinget spiselige. Alle latinske navn EXACT-verifisert mot GBIF, alle 36 bilder HTTP-200-sjekket, alle `verified=false` (venter ekspertgodkjenning, som de 36 første).
+- **11 forvekslings-advarsler** koblet — hver ny matsopp er knyttet til sin giftige tvilling (vintersopp↔flatklokkehatt, morkel↔steinmorkel, snøballsjampinjong↔grønn fluesopp, nellikhatt↔hvit trakttsopp, m.fl.). Alle ankerarter fantes fra før, så ingen kobling ble hoppet over.
+- **Gjenstår:** GBIF-funnpunkter for de nye artene — var blokkert av en GBIF-nedetid (HTTP 503) 10. juni; en bakgrunnsjobb kjører importen automatisk (`ONLY_MISSING=1`) når GBIF er tilbake. Nye arter virker allerede på kartets «beste steder» via live-fallback. Importskriptet feiler nå tydelig ved GBIF-feil (tidligere ble 503 stille tolket som «0 funn»).
 
 ---
 

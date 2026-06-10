@@ -28,9 +28,24 @@ const PAGE = 300;
 // or default to both Norway and Sweden.
 const COUNTRIES = process.argv.slice(2).length ? process.argv.slice(2) : ['NO', 'SE'];
 
+// Fetch JSON, throwing on a non-OK response with a couple of retries on the
+// transient classes (429 + 5xx). Without this a GBIF backend outage (e.g. the
+// 503 "Backend fetch failed" page) was silently parsed as zero occurrences,
+// recording false "0 funn" for every species instead of failing loudly.
+async function fetchJson(url) {
+  let lastStatus = 0;
+  for (let attempt = 1; attempt <= 4; attempt++) {
+    const res = await fetch(url, { headers: { 'User-Agent': 'mycelet.com/1.0 occurrence-import (support@mycelet.com)' } });
+    if (res.ok) return res.json();
+    lastStatus = res.status;
+    if (res.status !== 429 && res.status < 500) throw new Error(`GBIF HTTP ${res.status}`);
+    await new Promise((r) => setTimeout(r, attempt * 2000));
+  }
+  throw new Error(`GBIF HTTP ${lastStatus} (after retries)`);
+}
+
 async function gbifMatch(latin) {
-  const res = await fetch(`https://api.gbif.org/v1/species/match?name=${encodeURIComponent(latin)}`);
-  const j = await res.json();
+  const j = await fetchJson(`https://api.gbif.org/v1/species/match?name=${encodeURIComponent(latin)}`);
   return j && j.usageKey && j.matchType !== 'NONE' ? j.usageKey : null;
 }
 
@@ -43,10 +58,9 @@ function parseObservedAt(r) {
 async function gbifOccurrences(taxonKey, country) {
   const out = [];
   for (let offset = 0; offset < PER_SPECIES_CAP; offset += PAGE) {
-    const res = await fetch(
+    const j = await fetchJson(
       `https://api.gbif.org/v1/occurrence/search?taxonKey=${taxonKey}&country=${country}&hasCoordinate=true&license=CC0_1_0&license=CC_BY_4_0&limit=${PAGE}&offset=${offset}`
     );
-    const j = await res.json();
     const results = j.results ?? [];
     for (const r of results) {
       if (typeof r.decimalLatitude === 'number' && typeof r.decimalLongitude === 'number') {
@@ -72,7 +86,7 @@ if (probe.error) {
   process.exit(1);
 }
 
-const { data: species, error: spErr } = await admin
+const { data: allSpecies, error: spErr } = await admin
   .from('mushroom_species')
   .select('id, latin_name, norwegian_name')
   .not('latin_name', 'is', null);
@@ -80,7 +94,25 @@ if (spErr) {
   console.log('SPECIES_ERR', spErr.message);
   process.exit(1);
 }
-console.log('Arter å hente:', species.length);
+
+// ONLY_MISSING=1 limits the run to species that currently have zero occurrence
+// rows (e.g. freshly added catalog entries), so a backfill doesn't re-fetch the
+// thousands of records already stored for established species. NOTE: this also
+// skips the license-prune step, which is only meant to run after a full sweep.
+const onlyMissing = process.env.ONLY_MISSING === '1';
+let species = allSpecies;
+if (onlyMissing) {
+  const filtered = [];
+  for (const sp of allSpecies) {
+    const { count } = await admin
+      .from('species_occurrences')
+      .select('id', { count: 'exact', head: true })
+      .eq('species_id', sp.id);
+    if (!count) filtered.push(sp);
+  }
+  species = filtered;
+}
+console.log('Arter å hente:', species.length, onlyMissing ? '(kun arter uten funn fra før)' : '');
 
 let grandTotal = 0;
 let upsertErrors = 0;
@@ -121,7 +153,7 @@ for (const sp of species) {
 // the license filter and are no longer obtainable under CC0/CC-BY, so we must
 // not keep using them. Guarded: only after a clearly successful import, so a
 // failed run can't wipe the table.
-if (grandTotal >= 10000 && upsertErrors === 0) {
+if (!onlyMissing && grandTotal >= 10000 && upsertErrors === 0) {
   const { count: unlicensed } = await admin
     .from('species_occurrences')
     .select('id', { count: 'exact', head: true })

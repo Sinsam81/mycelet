@@ -1,9 +1,17 @@
 # Artsutvidelse 36 → 72 — gjennomgangsark
 
-> Bygget natt til 10. juni 2026. **Ingenting er live ennå.** Migrasjonen
-> `supabase/migrations/017_expand_species_catalog.sql` er skrevet og
-> strukturvalidert, men ikke kjørt. Les gjennom spiselighet-kolonnen under
-> (særlig giftsoppene), så setter vi det live sammen.
+> **STATUS: LIVE 10. juni 2026.** Migrasjonen
+> `supabase/migrations/017_expand_species_catalog.sql` er kjørt mot
+> produksjonsdatabasen — **72 arter totalt** (36 nye, alle `verified=false`),
+> 36 hovedbilder og 11 forvekslings-advarsler (ingen hoppet over). Før kjøring
+> ble alle 36 latinske navn re-verifisert EXACT mot GBIF og alle 36 bilder
+> re-sjekket (HTTP 200). Spiselighet round-trip-verifisert mot databasen.
+>
+> **Gjenstår:** GBIF-funnimport for de nye artene var blokkert av en GBIF-
+> nedetid (HTTP 503) 10. juni. En bakgrunnsjobb venter på at GBIF kommer
+> tilbake og kjører importen automatisk (kun de nye artene, `ONLY_MISSING=1`).
+> De nye artene virker allerede på kartets «beste steder» via live-fallback —
+> de mangler bare historiske funnpunkter til importen går.
 
 ## Hva som er gjort i natt
 - **36 nye arter** valgt, kuratert (navn, sesong, habitat, beskrivelse, spiselighet, forvekslinger).
