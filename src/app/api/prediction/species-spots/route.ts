@@ -183,7 +183,8 @@ export async function GET(request: NextRequest) {
     const weatherInput = {
       temperature: weather.temperatureC,
       humidity: weather.humidityPct,
-      rain3dMm: weather.rain3dMm
+      rain3dMm: weather.rain3dMm,
+      soilMoistureIndex: weather.soilMoistureIndex
     };
 
     const whyWeather = {

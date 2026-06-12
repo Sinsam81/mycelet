@@ -347,7 +347,7 @@ export async function GET(request: NextRequest) {
       lon,
       month,
       dayOfYear: dayOfYearOf(new Date()),
-      weather: { temperature: currentTemp, humidity: currentHumidity, rain3dMm },
+      weather: { temperature: currentTemp, humidity: currentHumidity, rain3dMm, soilMoistureIndex: weather.soilMoistureIndex },
       forest,
       species: speciesContext,
       speciesHabitat: speciesSummary

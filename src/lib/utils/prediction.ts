@@ -2,6 +2,12 @@ export interface WeatherInput {
   temperature: number;
   humidity: number;
   rain3dMm: number;
+  /**
+   * Antecedent soil-water-balance index 0..1 (see weather/soil-moisture.ts).
+   * Optional — when present it's the preferred moisture signal; when absent
+   * scoring falls back to rain3dMm + humidity unchanged.
+   */
+  soilMoistureIndex?: number | null;
 }
 
 export interface PredictionComponents {
@@ -96,7 +102,13 @@ export function computeAdvancedFactors(input: AdvancedPredictionInput): Advanced
   const terrain = computeTerrainProxyScore(input.latitude, input.longitude);
   const soil = computeSoilProxyScore(input.latitude, input.longitude);
   const weatherTrend = computeWeatherTrendScore(input.weather);
-  const moisture = clamp(Math.round(input.weather.humidity * 0.7 + input.weather.rain3dMm * 1.4), 0, 100);
+  // Soil-water balance is the better moisture proxy (it decays through dry
+  // spells, unlike a raw rain sum) — prefer it, blended with humidity. Fall
+  // back to the humidity + recent-rain heuristic when it isn't available.
+  const moisture =
+    input.weather.soilMoistureIndex != null
+      ? clamp(Math.round(input.weather.soilMoistureIndex * 100 * 0.7 + input.weather.humidity * 0.3), 0, 100)
+      : clamp(Math.round(input.weather.humidity * 0.7 + input.weather.rain3dMm * 1.4), 0, 100);
 
   return {
     vegetation,

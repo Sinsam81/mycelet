@@ -1,4 +1,5 @@
 import { getRegion } from '@/lib/utils/region';
+import { computeSoilMoistureIndex } from '@/lib/weather/soil-moisture';
 
 export interface WeatherSummary {
   source: 'met_frost' | 'smhi' | 'openweather' | 'unavailable';
@@ -10,6 +11,12 @@ export interface WeatherSummary {
   // Hottest/coldest in last 7 days (frost-stress matters for mushrooms)
   minTemp7dC: number | null;
   maxTemp7dC: number | null;
+  /**
+   * Antecedent soil-water-balance index 0..1 (root-zone bucket over the daily
+   * precip series). The mushroom-relevant moisture signal; null when the
+   * provider has no daily precip history (OpenWeather). See soil-moisture.ts.
+   */
+  soilMoistureIndex: number | null;
 }
 
 export interface WeatherFetchOptions {
@@ -213,6 +220,9 @@ async function fetchFrost({ lat, lon }: WeatherFetchOptions): Promise<WeatherSum
   const minSeries = nearestSeries(series.get('min(air_temperature P1D)'), sources);
   const maxSeries = nearestSeries(series.get('max(air_temperature P1D)'), sources);
 
+  // Daily precip oldest→newest over the 14-day window → soil-water bucket.
+  const precipDaily = [...precipSeries].sort((a, b) => a.time - b.time).map((p) => p.value);
+
   return {
     source: 'met_frost',
     temperatureC,
@@ -221,7 +231,8 @@ async function fetchFrost({ lat, lon }: WeatherFetchOptions): Promise<WeatherSum
     rain7dMm: frostSumWithinDays(precipSeries, 7, now),
     rain14dMm: precipSeries.length ? frostSumWithinDays(precipSeries, 14, now) : null,
     minTemp7dC: frostExtremeWithinDays(minSeries, 7, now, 'min'),
-    maxTemp7dC: frostExtremeWithinDays(maxSeries, 7, now, 'max')
+    maxTemp7dC: frostExtremeWithinDays(maxSeries, 7, now, 'max'),
+    soilMoistureIndex: computeSoilMoistureIndex(precipDaily, temperatureC)
   };
 }
 
@@ -378,6 +389,14 @@ async function fetchSmhi({ lat, lon }: WeatherFetchOptions): Promise<WeatherSumm
 
   const now = Date.now();
 
+  // Last ~30 daily precip values oldest→newest → soil-water bucket.
+  const precipDaily = (rainData ?? [])
+    .map((p) => ({ date: Number(p?.date), value: Number(p?.value) }))
+    .filter((p) => Number.isFinite(p.date) && Number.isFinite(p.value))
+    .sort((a, b) => a.date - b.date)
+    .slice(-30)
+    .map((p) => p.value);
+
   return {
     source: 'smhi',
     temperatureC,
@@ -386,7 +405,8 @@ async function fetchSmhi({ lat, lon }: WeatherFetchOptions): Promise<WeatherSumm
     rain7dMm: sumWithinDays(rainData, 7, now),
     rain14dMm: sumWithinDays(rainData, 14, now),
     minTemp7dC: extremeWithinDays(minData, 7, now, 'min'),
-    maxTemp7dC: extremeWithinDays(maxData, 7, now, 'max')
+    maxTemp7dC: extremeWithinDays(maxData, 7, now, 'max'),
+    soilMoistureIndex: computeSoilMoistureIndex(precipDaily, temperatureC)
   };
 }
 
@@ -414,6 +434,8 @@ async function fetchOpenWeather({ lat, lon }: WeatherFetchOptions): Promise<Weat
     rain7dMm: list.slice(0, 56).reduce((sum: number, item: any) => sum + Number(item?.rain?.['3h'] ?? 0), 0),
     rain14dMm: null,
     minTemp7dC: null,
-    maxTemp7dC: null
+    maxTemp7dC: null,
+    // OpenWeather here is a short forecast, not daily precip history → no bucket.
+    soilMoistureIndex: null
   };
 }

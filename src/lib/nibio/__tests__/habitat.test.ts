@@ -62,13 +62,30 @@ describe('computeHabitatScore', () => {
     expect(result.reasons.some((r) => r.toLowerCase().includes('bestandsalder'))).toBe(true);
   });
 
-  it('penalizes apent landskap for forest-loving species', () => {
+  it('host-gates a forest-loving species in apent landskap (~0, not a soft penalty)', () => {
     const result = computeHabitatScore(
       forest({ forestType: 'apent', ageYears: null }),
       KANTARELL_PREFS
     );
-    expect(result.score).toBeLessThan(0.5);
-    expect(result.reasons.some((r) => r.toLowerCase().includes('åpent'))).toBe(true);
+    // The suppression now lives in hostGate (a hard multiplier), not score.
+    expect(result.hostGate).toBeLessThan(0.2);
+    expect(result.reasons.some((r) => r.toLowerCase().includes('skogsavhengig'))).toBe(true);
+  });
+
+  it('does NOT gate a meadow species in apent landskap — it is their habitat', () => {
+    const meadowPrefs: SpeciesHabitatPreferences = {
+      preferredPartners: [], // saprotroph, no mycorrhizal trees
+      habitat: ['eng', 'beite', 'gressplen']
+    };
+    const result = computeHabitatScore(forest({ forestType: 'apent', ageYears: null }), meadowPrefs);
+    expect(result.hostGate).toBe(1);
+    expect(result.score).toBeGreaterThan(0.5); // open ground rewarded, not punished
+    expect(result.reasons.some((r) => r.toLowerCase().includes('habitat'))).toBe(true);
+  });
+
+  it('defaults hostGate to 1 for a normal forest match (no gate)', () => {
+    const result = computeHabitatScore(forest({ forestType: 'gran', ageYears: 80 }), KANTARELL_PREFS);
+    expect(result.hostGate).toBe(1);
   });
 
   it('gives partial credit to mixed forest', () => {

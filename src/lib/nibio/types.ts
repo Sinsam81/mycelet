@@ -107,6 +107,14 @@ export interface SpeciesHabitatPreferences {
 export interface HabitatScore {
   /** Score in [0, 1]. 0.5 means "neutral / no signal". */
   score: number;
+  /**
+   * Hard host-availability gate, multiplier in [0.1, 1.0]. 1.0 = no gate.
+   * Below 1.0 only for confident "this habitat cannot host this species"
+   * cases (a forest/ectomycorrhizal species in open landscape) — applied
+   * multiplicatively in cell-score so it can actually suppress the score,
+   * unlike the boost-leaning `score` term.
+   */
+  hostGate: number;
   /** Human-readable reasons — shown via PredictionExplanation. */
   reasons: string[];
 }

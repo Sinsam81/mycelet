@@ -376,9 +376,17 @@ export function computeSpeciesAdjustment(
   const rainScore = rainFit(weather.rain3dMm, prefs.rainOptMm);
   const humidScore = humidityFit(weather.humidity);
 
+  // Moisture component: when the soil-water index is available it carries the
+  // sustained-moisture signal (the base the mycelium needs), blended with the
+  // recent-rain trigger. Without it, just the recent-rain fit (unchanged).
+  const moistureScore =
+    weather.soilMoistureIndex != null
+      ? 0.6 * clamp01(weather.soilMoistureIndex) + 0.4 * rainScore
+      : rainScore;
+
   // Weighted average of the three weather components.
   const totalWeight = 1.0 + prefs.rainWeight + prefs.humidityWeight;
-  const weatherFit = (tempScore + rainScore * prefs.rainWeight + humidScore * prefs.humidityWeight) / totalWeight;
+  const weatherFit = (tempScore + moistureScore * prefs.rainWeight + humidScore * prefs.humidityWeight) / totalWeight;
 
   if (seasonality != null) {
     // Empirical phenology path. Season sets the ceiling (0.05 off-season →

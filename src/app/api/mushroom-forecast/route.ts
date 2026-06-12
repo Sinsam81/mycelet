@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { fetchWeatherSummary } from '@/lib/weather';
 import { fetchDailyForecast } from '@/lib/weather/forecast';
 import { assessMushroomDay } from '@/lib/prediction/mushroom-day';
+import { assessFlush } from '@/lib/prediction/flush';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { getClientKey, rateLimitResponse } from '@/lib/rate-limit/route';
 import { createRequestLogger } from '@/lib/log/request';
@@ -102,7 +103,17 @@ export async function GET(request: NextRequest) {
       days.push({ date: d.date, label: WEEKDAYS[dayDate.getUTCDay()], score: a.score, optimal: a.optimal });
     });
 
-    const payload = { today, days, hasForecast: future.length > 0, weatherSource: observed.source };
+    // Flush timing — "should I go now, or wait?" — from the moisture base now
+    // plus the upcoming forecast rain.
+    const flush = assessFlush({
+      month,
+      soilMoistureIndex: observed.soilMoistureIndex,
+      rain7dMm: observed.rain7dMm ?? observed.rain3dMm * 2,
+      currentTempC: observed.temperatureC,
+      forecast: future
+    });
+
+    const payload = { today, days, flush, hasForecast: future.length > 0, weatherSource: observed.source };
     cache.set(cacheKey, { at: Date.now(), payload });
     // Coarse (~1 km) on purpose — server logs must not hold a position trail.
     log.info('mushroom_forecast.success', {

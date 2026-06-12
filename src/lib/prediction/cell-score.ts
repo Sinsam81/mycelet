@@ -139,7 +139,12 @@ export function computeCellPrediction(input: CellPredictionInput): CellPredictio
   const nearbyOccurrences = input.nearbyOccurrences ?? 0;
   const occurrenceBoost = 1 + Math.min(0.6, nearbyOccurrences * 0.05);
 
-  const score = clamp(baseSpeciesScore * habitatFit * occurrenceBoost, 0, 100);
+  // Host gate: hard suppressor for a forest species in open landscape (1.0 =
+  // no gate). Unlike habitatFit (boost-leaning, floor 0.7), this can push the
+  // score toward zero where the habitat genuinely can't host the species.
+  const hostGate = habitat?.hostGate ?? 1;
+
+  const score = clamp(baseSpeciesScore * habitatFit * hostGate * occurrenceBoost, 0, 100);
 
   return {
     score,

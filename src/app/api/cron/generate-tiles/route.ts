@@ -139,7 +139,8 @@ export async function POST(request: NextRequest) {
     const weatherInput = {
       temperature: weather.temperatureC,
       humidity: weather.humidityPct,
-      rain3dMm: weather.rain3dMm
+      rain3dMm: weather.rain3dMm,
+      soilMoistureIndex: weather.soilMoistureIndex
     };
 
     const cells = gridCells(region);

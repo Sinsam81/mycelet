@@ -43,6 +43,60 @@ const DECIDUOUS_PARTNERS: string[] = [
 const CONIFEROUS_PARTNERS: string[] = ['gran', 'furu', 'contorta'];
 
 /**
+ * Raw Norwegian habitat tags (as stored in mushroom_species.habitat) that mark
+ * a species as comfortable in OPEN ground — meadow saprotrophs like
+ * parasollsopp and sjampinjong. For these, 'apent' is good, not a mismatch.
+ */
+const OPEN_HABITAT_TAGS: string[] = [
+  'eng',
+  'beite',
+  'beitemark',
+  'gress',
+  'gressplen',
+  'gressmark',
+  'plen',
+  'park',
+  'hage',
+  'lysninger',
+  'kantsoner',
+  'sti',
+  'veikant',
+  'sandig mark',
+  'sandgrunn'
+];
+
+/**
+ * Raw Norwegian habitat tags that mark a species as forest-dependent. Combined
+ * with a non-empty mycorrhizal-partner list, these identify species that
+ * genuinely cannot fruit in open landscape → eligible for the host gate.
+ */
+const FOREST_HABITAT_TAGS: string[] = [
+  'skog',
+  'barskog',
+  'granskog',
+  'furuskog',
+  'lovskog',
+  'løvskog',
+  'lauvskog',
+  'blandingsskog',
+  'eikeskog',
+  'fjellbjorkeskog',
+  'fjellbjørkeskog',
+  'lerkeskog',
+  'fuktig skog',
+  'moserik',
+  'mose',
+  'brannfelt',
+  'myr',
+  'myr-kant',
+  'elvebredder'
+];
+
+function hasTag(habitat: string[], tags: string[]): boolean {
+  return habitat.some((h) => tags.includes(h.toLowerCase().trim()));
+}
+
+/**
  * Compute the habitat-fit multiplier for a given (forest, species) pair.
  *
  * Returns a neutral score with a single "no data" reason when forest is
@@ -56,12 +110,19 @@ export function computeHabitatScore(
   if (!forest || forest.source === 'fallback') {
     return {
       score: 0.5,
+      hostGate: 1,
       reasons: ['Ingen NIBIO-data tilgjengelig — bruker værsignal alene.']
     };
   }
 
   const reasons: string[] = [];
   let score = 0.5;
+  let hostGate = 1;
+
+  // Open-ground tolerance vs forest-dependence drive the host gate below.
+  const opensTolerant = hasTag(preferences.habitat, OPEN_HABITAT_TAGS);
+  const forestDependent =
+    preferences.preferredPartners.length > 0 || hasTag(preferences.habitat, FOREST_HABITAT_TAGS);
 
   // ---- Tree-species match ----------------------------------------------
   // Mycorrhizal partner overlap is the single strongest habitat signal
@@ -92,8 +153,19 @@ export function computeHabitatScore(
     score += 0.2;
     reasons.push('Blandingsskog — sannsynlig overlapp med foretrukket treslag.');
   } else if (forest.forestType === 'apent') {
-    score -= 0.3;
-    reasons.push('Åpent landskap — sopp-arten foretrekker skog.');
+    // Host gate. Open landscape is GOOD for meadow species (eng/beite) but a
+    // hard "cannot grow here" for forest/ectomycorrhizal species — a steinsopp
+    // in a field should score ~0, not a soft 0.2.
+    if (opensTolerant) {
+      score += 0.3;
+      reasons.push('Åpen mark (eng/beite) — akkurat denne artens habitat.');
+    } else if (forestDependent) {
+      hostGate = 0.12;
+      reasons.push('Åpent landskap uten vertstrær — arten er skogsavhengig og finnes praktisk talt ikke her.');
+    } else {
+      score -= 0.1;
+      reasons.push('Åpent landskap — usikkert habitat for arten.');
+    }
   } else if (forest.forestType !== 'ukjent') {
     score -= 0.15;
     reasons.push(`Treslag (${forest.forestType}) er ikke artens favoritt.`);
@@ -132,6 +204,7 @@ export function computeHabitatScore(
 
   return {
     score: clamped,
+    hostGate,
     reasons
   };
 }
