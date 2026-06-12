@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { FREE_DAILY_AI_LIMIT } from '@/lib/billing/plans';
 import { getBillingCapabilities, getUserBillingSubscription } from '@/lib/billing/subscription';
 import { checkRateLimit } from '@/lib/rate-limit';
@@ -75,19 +76,46 @@ export async function POST(request: NextRequest) {
 
     if (!capabilities.paid) {
       const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-      const { count, error: countError } = await supabase
-        .from('findings')
-        .select('*', { count: 'exact', head: true })
-        .eq('user_id', user.id)
-        .eq('ai_used', true)
-        .gte('created_at', oneDayAgo);
 
-      if (countError) {
-        return NextResponse.json({ error: 'Kunne ikke validere rate limit' }, { status: 500 });
+      // Count actual identify CALLS in the last 24h (migration 020), not saved
+      // finds — counting saves let a user identify-without-saving past the cap.
+      let usageCount: number | null = null;
+      try {
+        const admin = createAdminClient();
+        const { count, error: countError } = await admin
+          .from('ai_identifications')
+          .select('*', { count: 'exact', head: true })
+          .eq('user_id', user.id)
+          .gte('created_at', oneDayAgo);
+        if (countError) {
+          // Anything other than "table missing" is a real failure.
+          if (countError.code !== '42P01') {
+            return NextResponse.json({ error: 'Kunne ikke validere rate limit' }, { status: 500 });
+          }
+        } else {
+          usageCount = count ?? 0;
+        }
+      } catch {
+        // Service-role client unavailable — fall through to the legacy count.
       }
 
-      if ((count ?? 0) >= FREE_DAILY_AI_LIMIT) {
-        userLog.info('identify.daily_quota_reached', { used: count ?? 0, limit: FREE_DAILY_AI_LIMIT });
+      // Fallback (migration 020 not applied yet, or no service key): the old
+      // saved-find count, so identify keeps working rather than failing.
+      if (usageCount === null) {
+        const { count: legacy, error: legacyError } = await supabase
+          .from('findings')
+          .select('*', { count: 'exact', head: true })
+          .eq('user_id', user.id)
+          .eq('ai_used', true)
+          .gte('created_at', oneDayAgo);
+        if (legacyError) {
+          return NextResponse.json({ error: 'Kunne ikke validere rate limit' }, { status: 500 });
+        }
+        usageCount = legacy ?? 0;
+      }
+
+      if (usageCount >= FREE_DAILY_AI_LIMIT) {
+        userLog.info('identify.daily_quota_reached', { used: usageCount, limit: FREE_DAILY_AI_LIMIT });
         return NextResponse.json(
           {
             error: `Gratisbrukere har maks ${FREE_DAILY_AI_LIMIT} identifikasjoner per døgn. Oppgrader til Premium eller Sesongpass for ubegrenset bruk.`
@@ -137,6 +165,17 @@ export async function POST(request: NextRequest) {
     if (!plantIdResponse.ok) {
       userLog.error('identify.plantid_failed', undefined, { status: plantIdResponse.status });
       return NextResponse.json({ error: 'Identifikasjon feilet. Prøv igjen.' }, { status: 502 });
+    }
+
+    // Record this successful (cost-incurring) call against the free daily cap.
+    // Best-effort + free-only: a logging hiccup must not fail the identification.
+    if (!capabilities.paid) {
+      try {
+        const admin = createAdminClient();
+        await admin.from('ai_identifications').insert({ user_id: user.id });
+      } catch {
+        // counter unavailable / table missing — skip silently
+      }
     }
 
     const plantIdData = await plantIdResponse.json();
