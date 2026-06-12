@@ -24,7 +24,7 @@ export default async function MapPage() {
     <PageWrapper>
       <div className="space-y-3">
         <div className="flex items-center justify-between">
-          <h1 className="text-xl font-semibold">SoppKart</h1>
+          <h1 className="font-serif text-2xl font-bold tracking-tight text-forest-900">Soppkart</h1>
           {canViewPredictionAdmin ? (
             <Link href="/admin/prediction" className="text-xs font-medium text-forest-800 hover:underline">
               Prediction admin

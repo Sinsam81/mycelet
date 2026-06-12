@@ -93,7 +93,7 @@ export default async function ProfilePage() {
   return (
     <PageWrapper>
       <section className="space-y-4">
-        <article className="rounded-xl bg-white p-4 shadow-sm">
+        <article className="rounded-2xl bg-white p-4 shadow-card">
           <div className="flex items-start gap-3">
             <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-forest-100 text-forest-900">
               <span className="text-xl font-semibold">
@@ -101,7 +101,7 @@ export default async function ProfilePage() {
               </span>
             </div>
             <div className="min-w-0 flex-1">
-              <h1 className="truncate text-xl font-semibold">{profile?.display_name ?? profile?.username ?? 'Min profil'}</h1>
+              <h1 className="truncate font-serif text-2xl font-bold text-forest-900">{profile?.display_name ?? profile?.username ?? 'Min profil'}</h1>
               {profile?.username ? <p className="text-sm text-gray-600">@{profile.username}</p> : null}
               <p className="truncate text-sm text-gray-700">{user.email}</p>
               {memberSince ? <p className="mt-1 text-xs text-gray-500">Medlem siden {memberSince}</p> : null}
@@ -117,7 +117,7 @@ export default async function ProfilePage() {
           <StatCard label="Likes" value={Number(stats.total_likes_received)} />
         </article>
 
-        <article className="rounded-xl bg-white p-4 shadow-sm">
+        <article className="rounded-2xl bg-white p-4 shadow-card">
           <div className="flex items-center justify-between">
             <h2 className="font-semibold">Abonnement</h2>
             <Link href="/pricing" className="text-xs font-medium text-forest-800 hover:underline">
@@ -135,7 +135,7 @@ export default async function ProfilePage() {
           ) : null}
         </article>
 
-        <article className="rounded-xl bg-white p-4 shadow-sm">
+        <article className="rounded-2xl bg-white p-4 shadow-card">
           <h2 className="mb-3 font-semibold">Mine siste funn</h2>
           {findings.length === 0 ? (
             <p className="text-sm text-gray-700">Du har ikke registrert funn ennå. Bruk kartet for å legge til ditt første.</p>
@@ -163,7 +163,7 @@ export default async function ProfilePage() {
           )}
         </article>
 
-        <article className="rounded-xl bg-white p-4 shadow-sm">
+        <article className="rounded-2xl bg-white p-4 shadow-card">
           <h2 className="mb-3 font-semibold">Mine innlegg</h2>
           {posts.length === 0 ? (
             <p className="text-sm text-gray-700">Du har ikke postet i forumet ennå.</p>
@@ -213,7 +213,7 @@ export default async function ProfilePage() {
 
 function StatCard({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-xl bg-white p-3 text-center shadow-sm">
+    <div className="rounded-2xl bg-white p-3 text-center shadow-card">
       <p className="text-2xl font-bold text-forest-900">{value}</p>
       <p className="text-xs text-gray-600">{label}</p>
     </div>

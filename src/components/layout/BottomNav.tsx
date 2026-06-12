@@ -28,11 +28,18 @@ export function BottomNav() {
               <Link
                 href={item.href}
                 className={cn(
-                  'flex min-w-14 flex-col items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors',
-                  active ? 'text-forest-800' : 'text-gray-500 hover:text-gray-700'
+                  'flex min-w-14 flex-col items-center gap-0.5 rounded-xl px-2 py-1 text-xs font-medium transition-colors',
+                  active ? 'text-forest-900' : 'text-gray-500 hover:text-gray-700'
                 )}
               >
-                <Icon className="h-5 w-5" />
+                <span
+                  className={cn(
+                    'flex h-7 w-12 items-center justify-center rounded-full transition-colors',
+                    active ? 'bg-forest-100' : 'bg-transparent'
+                  )}
+                >
+                  <Icon className="h-5 w-5" />
+                </span>
                 <span>{item.label}</span>
               </Link>
             </li>

@@ -1,11 +1,12 @@
 import Link from 'next/link';
 import { NonNativeOnly } from '@/components/native/NonNativeOnly';
-import { AlertTriangle, Calendar, Camera, Database, Lock, Map, MessageSquare, Shield } from 'lucide-react';
+import { AlertTriangle, Calendar, Camera, Check, Crown, Database, Lock, Map, MessageSquare, Shield } from 'lucide-react';
 import { PageWrapper } from '@/components/layout/PageWrapper';
 import { EdibilityBadge } from '@/components/ui/EdibilityBadge';
 import { MushroomDayCard } from '@/components/home/MushroomDayCard';
 import { LastTripCard } from '@/components/home/LastTripCard';
 import { createClient } from '@/lib/supabase/server';
+import { BILLING_PLANS } from '@/lib/billing/plans';
 import type { Edibility } from '@/types/species';
 
 interface SpeciesRow {
@@ -108,7 +109,7 @@ export default async function HomePage() {
           <p className="text-xs font-medium uppercase tracking-widest text-forest-700">
             {MONTH_NAMES[month - 1]} {new Date().getFullYear()}
           </p>
-          <h1 className="mt-1 text-3xl font-bold text-forest-900">
+          <h1 className="mt-1 font-serif text-4xl font-bold tracking-tight text-forest-900">
             {getSeasonHeadline(month, inSeasonEdible.length)}
           </h1>
           {inSeasonEdible.length > 0 ? (
@@ -125,14 +126,17 @@ export default async function HomePage() {
 
         <Link
           href="/identify"
-          className="block rounded-xl bg-forest-800 p-5 text-white shadow-md transition hover:bg-forest-700"
+          className="block rounded-2xl bg-gradient-to-br from-forest-800 via-forest-700 to-forest-800 p-5 text-white shadow-card transition hover:-translate-y-0.5 hover:shadow-lg"
         >
-          <div className="flex items-center gap-3">
-            <Camera className="h-5 w-5" />
-            <div>
-              <h2 className="text-lg font-semibold">Identifiser sopp</h2>
-              <p className="text-sm text-white/90">Ta bilde eller søk i databasen</p>
+          <div className="flex items-center gap-4">
+            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-white/15">
+              <Camera className="h-6 w-6" />
+            </span>
+            <div className="flex-1">
+              <h2 className="font-serif text-xl font-semibold">Identifiser sopp</h2>
+              <p className="text-sm text-white/85">Ta bilde eller søk i databasen</p>
             </div>
+            <span aria-hidden="true" className="text-2xl text-white/70">→</span>
           </div>
         </Link>
 
@@ -187,11 +191,15 @@ export default async function HomePage() {
                 <li key={s.id}>
                   <Link
                     href={`/species/${s.id}`}
-                    className="block overflow-hidden rounded-lg border border-gray-100 bg-forest-50/50 transition hover:border-forest-700"
+                    className="group block overflow-hidden rounded-xl border border-gray-100 bg-forest-50/50 transition hover:border-forest-600 hover:shadow-card"
                   >
-                    <div className="aspect-square w-full bg-gray-100">
+                    <div className="aspect-square w-full overflow-hidden bg-gray-100">
                       {s.primary_image_url ? (
-                        <img src={s.primary_image_url} alt={s.norwegian_name} className="h-full w-full object-cover" />
+                        <img
+                          src={s.primary_image_url}
+                          alt={s.norwegian_name}
+                          className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
+                        />
                       ) : null}
                     </div>
                     <p className="truncate p-2 text-sm font-medium text-forest-900">{s.norwegian_name}</p>
@@ -271,9 +279,33 @@ export default async function HomePage() {
         <NonNativeOnly>
           <Link
             href="/pricing"
-            className="block rounded-xl border border-forest-100 bg-forest-50 p-4 text-sm font-medium text-forest-900 hover:bg-forest-100"
+            className="block rounded-2xl bg-gradient-to-br from-forest-900 to-forest-800 p-5 text-white shadow-card transition hover:-translate-y-0.5 hover:shadow-lg"
           >
-            Oppgrader til Premium eller Sesongpass for ubegrenset AI-identifikasjon →
+            <div className="flex items-center gap-2">
+              <Crown className="h-5 w-5 text-amber-400" />
+              <h2 className="font-serif text-xl font-semibold">Finn mer sopp med Premium</h2>
+            </div>
+            <ul className="mt-3 space-y-1.5 text-sm text-white/90">
+              <li className="flex items-center gap-2">
+                <Check className="h-4 w-4 shrink-0 text-amber-400" /> Ubegrenset AI-identifikasjon
+              </li>
+              <li className="flex items-center gap-2">
+                <Check className="h-4 w-4 shrink-0 text-amber-400" /> Full prediksjon — de beste stedene nær deg
+              </li>
+              <li className="flex items-center gap-2">
+                <Check className="h-4 w-4 shrink-0 text-amber-400" /> Offline-kart for skogsturen
+              </li>
+            </ul>
+            <div className="mt-4 flex items-center justify-between gap-3">
+              <p className="text-sm text-white/80">
+                Fra{' '}
+                <span className="font-serif text-lg font-bold text-amber-300">
+                  {Math.round((BILLING_PLANS.season_pass.yearlyNok ?? 249) / 12)} kr/mnd
+                </span>{' '}
+                med Sesongpass
+              </p>
+              <span className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-forest-900">Se planer</span>
+            </div>
           </Link>
         </NonNativeOnly>
 

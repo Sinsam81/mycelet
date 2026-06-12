@@ -24,7 +24,7 @@ export const BILLING_PLANS: Record<
   season_pass: {
     tier: 'season_pass',
     label: 'Sesongpass',
-    yearlyNok: 199,
+    yearlyNok: 249,
     description: 'Alle premium-funksjoner, fornyes årlig.',
     priceEnvKey: 'STRIPE_PRICE_SEASON_PASS'
   }

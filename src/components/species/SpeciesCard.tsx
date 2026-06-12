@@ -11,7 +11,7 @@ export function SpeciesCard({ species, imageUrl }: SpeciesCardProps) {
   return (
     <Link
       href={`/species/${species.id}`}
-      className="group block overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm transition hover:border-forest-300 hover:shadow-md"
+      className="group block overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-card transition hover:-translate-y-0.5 hover:border-forest-600 hover:shadow-lg"
     >
       <div className="relative aspect-square w-full overflow-hidden bg-gray-100">
         {imageUrl ? (

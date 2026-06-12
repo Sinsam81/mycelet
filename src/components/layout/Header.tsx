@@ -28,18 +28,18 @@ export function Header() {
   const native = useIsNative();
 
   return (
-    <header className="sticky top-0 z-40 border-b border-gray-200 bg-forest-900 pt-[env(safe-area-inset-top)] text-white">
+    <header className="sticky top-0 z-40 bg-gradient-to-b from-forest-900 to-forest-800 pt-[env(safe-area-inset-top)] text-white shadow-md">
       <div className="mx-auto flex h-14 max-w-screen-md items-center justify-between px-4">
-        <Link href="/" className="flex items-center gap-2 text-lg font-semibold tracking-tight">
-          <MushroomMark className="h-5 w-5 text-forest-100" />
+        <Link href="/" className="flex items-center gap-2 font-serif text-xl font-semibold tracking-tight">
+          <MushroomMark className="h-5 w-5 text-amber-400" />
           Mycelet
         </Link>
         <div className="flex items-center gap-2">
           {!loading && user ? (
             native ? (
               <span
-                className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${
-                  tier === 'free' ? 'bg-white/15 text-white' : 'bg-forest-100 text-forest-900'
+                className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+                  tier === 'free' ? 'bg-white/15 text-white' : 'bg-amber-400 text-forest-900'
                 }`}
               >
                 {getTierLabel(tier)}
@@ -47,8 +47,8 @@ export function Header() {
             ) : (
               <Link
                 href="/pricing"
-                className={`rounded-full px-2 py-0.5 text-[11px] font-medium transition-opacity hover:opacity-90 ${
-                  tier === 'free' ? 'bg-white/15 text-white' : 'bg-forest-100 text-forest-900'
+                className={`rounded-full px-2.5 py-1 text-[11px] font-semibold transition-opacity hover:opacity-90 ${
+                  tier === 'free' ? 'bg-white/15 text-white' : 'bg-amber-400 text-forest-900'
                 }`}
               >
                 {getTierLabel(tier)}
