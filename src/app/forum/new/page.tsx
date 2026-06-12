@@ -1,12 +1,15 @@
 'use client';
 
-import { ChangeEvent, FormEvent, Suspense, useEffect, useMemo, useState } from 'react';
+import { ChangeEvent, FormEvent, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { Camera, X } from 'lucide-react';
 import { PageWrapper } from '@/components/layout/PageWrapper';
 import { Button } from '@/components/ui/Button';
 import { useCreatePost, useMyFindings } from '@/lib/hooks/useForum';
 import { createClient } from '@/lib/supabase/client';
 import { reencodeImageForUpload } from '@/lib/utils/image';
+import { isNativePlatform } from '@/lib/native/platform';
+import { captureNativePhoto } from '@/lib/native/camera';
 
 type Category = 'find' | 'question' | 'tip' | 'discussion';
 
@@ -34,11 +37,12 @@ function NewForumPostInner() {
   const [previews, setPreviews] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    return () => {
-      previews.forEach((url) => URL.revokeObjectURL(url));
-    };
-  }, [previews]);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  // Revoke object URLs on unmount only (via a ref) — depending on `previews`
+  // would revoke still-shown previews whenever we append a photo.
+  const previewsRef = useRef<string[]>([]);
+  previewsRef.current = previews;
+  useEffect(() => () => previewsRef.current.forEach((url) => URL.revokeObjectURL(url)), []);
 
   const uploadForumImage = async (file: File) => {
     const {
@@ -61,11 +65,38 @@ function NewForumPostInner() {
     return publicUrl;
   };
 
+  const addFiles = (files: File[]) => {
+    const toAdd = files.slice(0, 4 - images.length);
+    if (toAdd.length === 0) return;
+    setImages((prev) => [...prev, ...toAdd].slice(0, 4));
+    setPreviews((prev) => [...prev, ...toAdd.map((file) => URL.createObjectURL(file))].slice(0, 4));
+  };
+
   const onSelectImages = (event: ChangeEvent<HTMLInputElement>) => {
-    const selected = Array.from(event.target.files ?? []).slice(0, 4);
-    previews.forEach((url) => URL.revokeObjectURL(url));
-    setImages(selected);
-    setPreviews(selected.map((file) => URL.createObjectURL(file)));
+    addFiles(Array.from(event.target.files ?? []));
+    event.target.value = '';
+  };
+
+  // Native: open the camera/picker via Capacitor (one photo at a time, appended).
+  // Web: fall back to the hidden multi-file input.
+  const handleAddPhoto = async () => {
+    if (images.length >= 4) return;
+    if (!isNativePlatform()) {
+      fileInputRef.current?.click();
+      return;
+    }
+    try {
+      const file = await captureNativePhoto();
+      if (file) addFiles([file]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Kunne ikke hente bilde.');
+    }
+  };
+
+  const removePhoto = (index: number) => {
+    URL.revokeObjectURL(previews[index]);
+    setImages((prev) => prev.filter((_, i) => i !== index));
+    setPreviews((prev) => prev.filter((_, i) => i !== index));
   };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -140,18 +171,36 @@ function NewForumPostInner() {
             />
           </label>
 
-          <label className="block text-sm font-medium text-gray-800">
-            Bilder (opptil 4)
-            <input type="file" accept="image/*" multiple className="mt-1 w-full" onChange={onSelectImages} />
-          </label>
-
-          {previews.length > 0 ? (
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-              {previews.map((preview) => (
-                <img key={preview} src={preview} alt="Valgt bilde" className="h-20 w-full rounded-lg object-cover" />
-              ))}
-            </div>
-          ) : null}
+          <div className="text-sm font-medium text-gray-800">
+            <span>Bilder (opptil 4)</span>
+            <input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden" onChange={onSelectImages} />
+            {previews.length > 0 ? (
+              <div className="mt-1 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                {previews.map((preview, index) => (
+                  <div key={preview} className="relative">
+                    <img src={preview} alt="Valgt bilde" className="h-20 w-full rounded-lg object-cover" />
+                    <button
+                      type="button"
+                      onClick={() => removePhoto(index)}
+                      aria-label="Fjern bilde"
+                      className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full bg-black/60 text-white hover:bg-black/80"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+            {images.length < 4 ? (
+              <button
+                type="button"
+                onClick={handleAddPhoto}
+                className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-gray-300 px-3 py-3 text-sm font-medium text-gray-700 hover:border-forest-600 hover:bg-forest-50"
+              >
+                <Camera className="h-4 w-4" /> Ta bilde / velg bilde
+              </button>
+            ) : null}
+          </div>
 
           <label className="block text-sm font-medium text-gray-800">
             Koble til funn (valgfritt)

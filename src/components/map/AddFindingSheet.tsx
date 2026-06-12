@@ -1,9 +1,12 @@
 'use client';
 
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { Camera } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { Button } from '@/components/ui/Button';
 import { reencodeImageForUpload } from '@/lib/utils/image';
+import { isNativePlatform } from '@/lib/native/platform';
+import { captureNativePhoto } from '@/lib/native/camera';
 
 type Visibility = 'public' | 'approximate' | 'private';
 type SharingMode = 'public' | 'approximate' | 'zone' | 'private';
@@ -53,6 +56,29 @@ export function AddFindingSheet({ latitude, longitude, onClose, onSaved }: AddFi
       if (imagePreview) URL.revokeObjectURL(imagePreview);
     };
   }, [imagePreview]);
+
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const setImageFromFile = (file: File | null) => {
+    setImageFile(file);
+    if (imagePreview) URL.revokeObjectURL(imagePreview);
+    setImagePreview(file ? URL.createObjectURL(file) : null);
+  };
+
+  // On native, open the camera/photo picker via Capacitor; on web, fall back to
+  // the hidden <input type="file">. Both flow through the same EXIF-stripping upload.
+  const handleAddPhoto = async () => {
+    if (!isNativePlatform()) {
+      fileInputRef.current?.click();
+      return;
+    }
+    try {
+      const file = await captureNativePhoto();
+      if (file) setImageFromFile(file);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Kunne ikke hente bilde.');
+    }
+  };
 
   const applyOffset = (lat: number, lng: number, meters: number) => {
     if (meters <= 0) return { lat, lng };
@@ -240,22 +266,32 @@ export function AddFindingSheet({ latitude, longitude, onClose, onSaved }: AddFi
 
         {!isNegative ? (
           <>
-            <label className="block text-sm font-medium text-gray-800">
-              Bilde (valgfritt)
+            <div className="text-sm font-medium text-gray-800">
+              <span>Bilde (valgfritt)</span>
               <input
+                ref={fileInputRef}
                 type="file"
                 accept="image/*"
-                className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2"
-                onChange={(event) => {
-                  const file = event.target.files?.[0] ?? null;
-                  setImageFile(file);
-                  if (imagePreview) URL.revokeObjectURL(imagePreview);
-                  setImagePreview(file ? URL.createObjectURL(file) : null);
-                }}
+                className="hidden"
+                onChange={(event) => setImageFromFile(event.target.files?.[0] ?? null)}
               />
-            </label>
-
-            {imagePreview ? <img src={imagePreview} alt="Forhåndsvisning" className="h-28 w-full rounded-lg object-cover" /> : null}
+              {imagePreview ? (
+                <div className="mt-1 space-y-1">
+                  <img src={imagePreview} alt="Forhåndsvisning" className="h-28 w-full rounded-lg object-cover" />
+                  <button type="button" onClick={() => setImageFromFile(null)} className="text-xs font-medium text-red-700 hover:underline">
+                    Fjern bilde
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleAddPhoto}
+                  className="mt-1 flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-gray-300 px-3 py-3 text-sm font-medium text-gray-700 hover:border-forest-600 hover:bg-forest-50"
+                >
+                  <Camera className="h-4 w-4" /> Ta bilde / velg bilde
+                </button>
+              )}
+            </div>
           </>
         ) : null}
 
