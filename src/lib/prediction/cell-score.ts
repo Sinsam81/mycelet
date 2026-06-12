@@ -20,6 +20,7 @@ import {
   type WeatherInput
 } from '@/lib/utils/prediction';
 import { computeSpeciesAdjustment, type SpeciesContext } from '@/lib/utils/species-scoring';
+import { phenologyFactor, dayOfYearFromMonth } from '@/lib/prediction/phenology';
 import {
   computeHabitatScore,
   type ForestProperties,
@@ -63,6 +64,11 @@ export interface CellPredictionInput {
   elevation?: number | null;
   /** Count of real GBIF occurrences of this species near the cell (boost-only). */
   nearbyOccurrences?: number;
+  /**
+   * Day-of-year (1-366) the prediction is for. Drives the empirical phenology
+   * lookup; defaults to the middle of `month` when omitted (back-compat).
+   */
+  dayOfYear?: number;
 }
 
 export interface CellPrediction {
@@ -110,7 +116,11 @@ export function computeCellPrediction(input: CellPredictionInput): CellPredictio
 
   const baseScore = computeTotalScore({ environment, historical, seasonal });
 
-  const speciesFit = species ? computeSpeciesAdjustment(species, weather, month) : null;
+  // Empirical fruiting phenology (latitude-aware) overrides the hand-coded
+  // season months when we have a curve for this species; null → legacy months.
+  const dayOfYear = input.dayOfYear ?? dayOfYearFromMonth(month);
+  const seasonality = species ? phenologyFactor(species.speciesId, lat, dayOfYear) : null;
+  const speciesFit = species ? computeSpeciesAdjustment(species, weather, month, seasonality) : null;
 
   const habitat = forest && speciesHabitat ? computeHabitatScore(forest, speciesHabitat) : null;
   // Recenter on 1.0: computeHabitatScore is centered on 0.5 (= neutral / no

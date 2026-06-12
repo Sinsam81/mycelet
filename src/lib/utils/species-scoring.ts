@@ -26,6 +26,8 @@
 import type { WeatherInput } from '@/lib/utils/prediction';
 
 export interface SpeciesContext {
+  /** DB id — used to look up the empirical phenology curve (phenology.ts). */
+  speciesId?: number;
   /**
    * Latin binomial — used for species-level overrides via SPECIES_PREFERENCES.
    * When two species share a genus but have meaningfully different ecology
@@ -348,21 +350,26 @@ export function resolveSpeciesPreferences(species: SpeciesContext): GenusPrefere
 
 /**
  * Compute a multiplier in [0, 1.3] expressing how well current weather +
- * month match this species. Multiply against the base environment / weather
+ * season match this species. Multiply against the base environment / weather
  * score before combining.
  *
  *   < 0.2  : season window missed entirely
  *   0.5    : in season, average conditions
  *   1.0    : in season, near-optimal weather
  *   1.2-1.3: peak season + optimal weather
+ *
+ * `seasonality` is the empirical phenology weight 0..1 (peak week = 1) from
+ * phenology.ts. When provided it REPLACES the hand-coded month gate + peak
+ * bonus with a smooth, latitude-aware seasonal envelope built from real find
+ * dates. When null/undefined (no curve for this species) the legacy
+ * month-based logic is used unchanged.
  */
-export function computeSpeciesAdjustment(species: SpeciesContext, weather: WeatherInput, month: number): number {
-  // Season gate first — outside the species' window, return very low multiplier
-  // regardless of weather.
-  if (!inMonth(month, species.seasonStart, species.seasonEnd)) {
-    return 0.05;
-  }
-
+export function computeSpeciesAdjustment(
+  species: SpeciesContext,
+  weather: WeatherInput,
+  month: number,
+  seasonality?: number | null
+): number {
   const prefs = resolveSpeciesPreferences(species);
 
   const tempScore = triangularFit(weather.temperature, prefs.tempCFloor, prefs.tempCMin, prefs.tempCMax, prefs.tempCCeil);
@@ -373,9 +380,22 @@ export function computeSpeciesAdjustment(species: SpeciesContext, weather: Weath
   const totalWeight = 1.0 + prefs.rainWeight + prefs.humidityWeight;
   const weatherFit = (tempScore + rainScore * prefs.rainWeight + humidScore * prefs.humidityWeight) / totalWeight;
 
+  if (seasonality != null) {
+    // Empirical phenology path. Season sets the ceiling (0.05 off-season →
+    // 1.30 at peak week); weather modulates within it but a peak week never
+    // collapses to zero on mediocre weather. Mirrors the legacy range so the
+    // two paths stay comparable.
+    const seasonW = clamp01(seasonality);
+    const multiplier = (0.4 + 0.6 * weatherFit) * (0.05 + 1.25 * seasonW);
+    return Math.min(1.3, multiplier);
+  }
+
+  // Legacy month-based path (no phenology curve for this species).
+  if (!inMonth(month, species.seasonStart, species.seasonEnd)) {
+    return 0.05;
+  }
   // Baseline 0.5 for being in season, weather lifts it to 1.0
   let multiplier = 0.5 + weatherFit * 0.5;
-
   // Peak-season bonus
   if (
     species.peakSeasonStart != null &&
@@ -384,6 +404,5 @@ export function computeSpeciesAdjustment(species: SpeciesContext, weather: Weath
   ) {
     multiplier *= 1.2;
   }
-
   return Math.min(1.3, multiplier);
 }

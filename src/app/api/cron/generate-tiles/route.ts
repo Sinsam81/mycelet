@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { fetchWeatherSummary } from '@/lib/weather';
 import { getForestProperties, buildSpeciesHabitatPreferences } from '@/lib/forest';
 import { computeCellPrediction } from '@/lib/prediction/cell-score';
+import { dayOfYearOf } from '@/lib/prediction/phenology';
 import type { SpeciesContext } from '@/lib/utils/species-scoring';
 import { createRequestLogger } from '@/lib/log/request';
 
@@ -121,6 +122,7 @@ export async function POST(request: NextRequest) {
 
   const tileDate = new Date().toISOString().slice(0, 10);
   const month = new Date().getMonth() + 1;
+  const dayOfYear = dayOfYearOf(new Date());
   const generated: Record<string, number> = {};
 
   for (const region of regions) {
@@ -148,6 +150,7 @@ export async function POST(request: NextRequest) {
       const forest = forests[ci];
       return species.map((sp) => {
         const speciesCtx: SpeciesContext = {
+          speciesId: sp.id,
           latinName: sp.latin_name,
           genus: sp.genus,
           seasonStart: sp.season_start,
@@ -159,6 +162,7 @@ export async function POST(request: NextRequest) {
           lat: cell.lat,
           lon: cell.lng,
           month,
+          dayOfYear,
           weather: weatherInput,
           forest,
           species: speciesCtx,

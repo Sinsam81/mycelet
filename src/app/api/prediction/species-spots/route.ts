@@ -4,6 +4,7 @@ import { getBillingCapabilities, getUserBillingSubscription } from '@/lib/billin
 import { fetchWeatherSummary } from '@/lib/weather';
 import { getForestProperties, buildSpeciesHabitatPreferences, computeHabitatScore } from '@/lib/forest';
 import { computeCellPrediction } from '@/lib/prediction/cell-score';
+import { dayOfYearOf } from '@/lib/prediction/phenology';
 import { countWithinKm } from '@/lib/prediction/occurrences';
 import { getElevation } from '@/lib/terrain';
 import { buildSpotSummary } from '@/lib/utils/prediction-explanation';
@@ -108,6 +109,7 @@ export async function GET(request: NextRequest) {
     }
 
     const month = new Date().getMonth() + 1;
+    const dayOfYear = dayOfYearOf(new Date());
 
     const { data: speciesRows } = await supabase
       .from('mushroom_species')
@@ -208,6 +210,7 @@ export async function GET(request: NextRequest) {
 
     for (const sp of candidates) {
       const ctx: SpeciesContext = {
+        speciesId: sp.id as number,
         latinName: (sp.latin_name as string | null) ?? null,
         genus: (sp.genus as string | null) ?? null,
         seasonStart: sp.season_start as number,
@@ -228,6 +231,7 @@ export async function GET(request: NextRequest) {
           lat: cell.lat,
           lon: cell.lng,
           month,
+          dayOfYear,
           weather: weatherInput,
           forest: cell.forest,
           species: ctx,

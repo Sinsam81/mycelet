@@ -4,6 +4,7 @@ import { getBillingCapabilities, getUserBillingSubscription } from '@/lib/billin
 import { fetchWeatherSummary } from '@/lib/weather';
 import { getForestProperties, buildSpeciesHabitatPreferences } from '@/lib/forest';
 import { computeCellPrediction } from '@/lib/prediction/cell-score';
+import { dayOfYearOf } from '@/lib/prediction/phenology';
 import { countWithinKm } from '@/lib/prediction/occurrences';
 import { getElevation } from '@/lib/terrain';
 import { computeHabitatScore } from '@/lib/forest';
@@ -131,6 +132,7 @@ export async function GET(request: NextRequest) {
     const centerLat = (minLat + maxLat) / 2;
     const centerLng = (minLng + maxLng) / 2;
     const month = new Date().getMonth() + 1;
+    const dayOfYear = dayOfYearOf(new Date());
 
     // Weather is ~uniform across a local view → fetch once for the center.
     const [weather, speciesRes, occRes] = await Promise.all([
@@ -159,6 +161,7 @@ export async function GET(request: NextRequest) {
 
     const speciesContext: SpeciesContext | null = speciesRes?.data
       ? {
+          speciesId: speciesRes.data.id as number,
           latinName: (speciesRes.data.latin_name as string | null) ?? null,
           genus: (speciesRes.data.genus as string | null) ?? null,
           seasonStart: speciesRes.data.season_start as number,
@@ -198,6 +201,7 @@ export async function GET(request: NextRequest) {
         .map((s) => ({
           name: (s.norwegian_name as string | null) ?? 'Sopp',
           ctx: {
+            speciesId: s.id as number,
             latinName: (s.latin_name as string | null) ?? null,
             genus: (s.genus as string | null) ?? null,
             seasonStart: s.season_start as number,
@@ -242,6 +246,7 @@ export async function GET(request: NextRequest) {
         lat: cell.lat,
         lon: cell.lng,
         month,
+        dayOfYear,
         weather: weatherInput,
         forest,
         species: speciesContext,
@@ -325,6 +330,7 @@ export async function GET(request: NextRequest) {
                 lat: c.lat,
                 lon: c.lng,
                 month,
+                dayOfYear,
                 weather: weatherInput,
                 forest: c.forest,
                 species: cand.ctx,

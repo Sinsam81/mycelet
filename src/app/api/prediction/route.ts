@@ -8,6 +8,7 @@ import { computeSeasonalScore, scoreToCondition } from '@/lib/utils/prediction';
 import type { SpeciesContext } from '@/lib/utils/species-scoring';
 import { getForestProperties, buildSpeciesHabitatPreferences } from '@/lib/forest';
 import { computeCellPrediction } from '@/lib/prediction/cell-score';
+import { dayOfYearOf } from '@/lib/prediction/phenology';
 import { countWithinKm } from '@/lib/prediction/occurrences';
 import { getElevation } from '@/lib/terrain';
 import { createRequestLogger } from '@/lib/log/request';
@@ -122,6 +123,7 @@ export async function GET(request: NextRequest) {
 
     const speciesContext: SpeciesContext | null = speciesRes?.data
       ? {
+          speciesId: speciesRes.data.id as number,
           latinName: (speciesRes.data.latin_name as string | null) ?? null,
           genus: (speciesRes.data.genus as string | null) ?? null,
           seasonStart: speciesRes.data.season_start as number,
@@ -344,6 +346,7 @@ export async function GET(request: NextRequest) {
       lat,
       lon,
       month,
+      dayOfYear: dayOfYearOf(new Date()),
       weather: { temperature: currentTemp, humidity: currentHumidity, rain3dMm },
       forest,
       species: speciesContext,
