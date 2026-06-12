@@ -114,11 +114,11 @@ export default function IdentifyResultPage() {
   return (
     <PageWrapper>
       <section className="space-y-4">
-        <h1 className="text-xl font-semibold">Resultat</h1>
+        <h1 className="font-serif text-3xl font-bold tracking-tight text-forest-900">Resultat</h1>
 
         <SafetyWarning level={isDanger ? 'danger' : 'caution'} edibility={topSuggestion?.edibility} />
 
-        <div className="overflow-hidden rounded-xl bg-white shadow-sm">
+        <div className="overflow-hidden rounded-2xl bg-white shadow-card">
           <img src={payload.originalImageDataUrl} alt="Opplastet soppbilde" className="h-56 w-full object-cover" />
         </div>
 

@@ -78,7 +78,10 @@ export default function IdentifyPage() {
   return (
     <PageWrapper>
       <section className="space-y-4">
-        <h1 className="text-xl font-semibold">Identifiser sopp</h1>
+        <header>
+          <p className="text-xs font-medium uppercase tracking-widest text-forest-700">AI-hjelp</p>
+          <h1 className="mt-1 font-serif text-3xl font-bold tracking-tight text-forest-900">Identifiser sopp</h1>
+        </header>
 
         {aiDisabled ? (
           <div className="rounded-xl border border-amber-300 bg-amber-50 p-4">
@@ -122,8 +125,8 @@ export default function IdentifyPage() {
           </p>
         </div>
 
-        <div className="rounded-xl bg-white p-4 shadow-sm">
-          <div className="mb-3 rounded-lg border-2 border-dashed border-gray-300 p-6 text-center">
+        <div className="rounded-2xl bg-white p-4 shadow-card">
+          <div className="mb-3 rounded-xl border-2 border-dashed border-gray-300 p-6 text-center">
             <p className="text-sm text-gray-700">Sentrer soppen i bildet. Ta gjerne flere vinkler.</p>
           </div>
 

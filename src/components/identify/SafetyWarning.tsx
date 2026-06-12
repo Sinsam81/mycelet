@@ -23,7 +23,7 @@ export function SafetyWarning({ level, edibility }: SafetyWarningProps) {
               <Phone className="h-4 w-4" />
               <span className="text-sm font-medium">Giftinformasjonen: 22 59 13 00</span>
             </div>
-            <Link href="https://soppkontroll.no" target="_blank" rel="noreferrer" className="mt-2 inline-block text-sm font-medium text-red-800 underline">
+            <Link href="https://soppognyttevekster.no/soppkontroll/" target="_blank" rel="noreferrer" className="mt-2 inline-block text-sm font-medium text-red-800 underline">
               Få vurdering hos Soppkontrollen
             </Link>
           </div>
@@ -41,7 +41,7 @@ export function SafetyWarning({ level, edibility }: SafetyWarningProps) {
           <p className="mt-1 text-sm text-amber-700">
             Resultatet er kun veiledende (sannsynlig art). Spis aldri sopp du ikke er 100% sikker på.
           </p>
-          <Link href="https://soppkontroll.no" target="_blank" rel="noreferrer" className="mt-2 inline-block text-sm font-medium text-amber-800 underline">
+          <Link href="https://soppognyttevekster.no/soppkontroll/" target="_blank" rel="noreferrer" className="mt-2 inline-block text-sm font-medium text-amber-800 underline">
             Sjekk med Soppkontrollen
           </Link>
         </div>

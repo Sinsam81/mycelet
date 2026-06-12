@@ -31,7 +31,7 @@ export function IdentifyResult({ suggestions, selectedIndex, onSelect }: Identif
           <article
             key={suggestion.name}
             onClick={selectable ? () => onSelect?.(index) : undefined}
-            className={`rounded-xl border bg-white p-3 shadow-sm ${selectable ? 'cursor-pointer' : ''} ${
+            className={`rounded-2xl border bg-white p-3 shadow-card transition ${selectable ? 'cursor-pointer hover:border-forest-300' : ''} ${
               isSelected ? 'border-forest-700 ring-2 ring-forest-200' : 'border-gray-200'
             }`}
           >
@@ -46,7 +46,7 @@ export function IdentifyResult({ suggestions, selectedIndex, onSelect }: Identif
                   />
                 ) : null}
                 <div>
-                  <h3 className="font-semibold text-gray-900">
+                  <h3 className="font-serif text-base font-bold text-forest-900">
                     {suggestion.norwegianName ?? suggestion.commonNames?.[0] ?? suggestion.name}
                   </h3>
                   <p className="text-sm italic text-gray-600">{suggestion.name}</p>
