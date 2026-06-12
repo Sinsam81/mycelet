@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { FLAGS } from '@/lib/flags';
 
 interface LastTrip {
   count: number;
@@ -16,6 +17,7 @@ export function LastTripCard() {
   const [trip, setTrip] = useState<LastTrip | null>(null);
 
   useEffect(() => {
+    if (!FLAGS.tripMode) return;
     if (typeof window === 'undefined') return;
     const raw = window.localStorage.getItem('mycelet:last-trip');
     if (!raw) return;

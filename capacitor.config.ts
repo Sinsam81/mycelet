@@ -22,6 +22,13 @@ const config: CapacitorConfig = {
     url: 'https://www.mycelet.com',
     errorPath: 'index.html',
     cleartext: false
+  },
+  ios: {
+    // Service workers (the offline tile cache) only run in WKWebView when the
+    // domain is app-bound: WKAppBoundDomains in Info.plist + this flag.
+    // NB: external links must open via the system browser (Capacitor default),
+    // since in-webview navigation is then limited to the bound domains.
+    limitsNavigationsToAppBoundDomains: true
   }
 };
 

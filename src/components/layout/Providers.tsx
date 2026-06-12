@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ReactNode, useEffect, useState } from 'react';
 import { Toaster } from 'react-hot-toast';
 import { RetentionWarningBanner } from './RetentionWarningBanner';
+import { OnboardingIntro } from '@/components/onboarding/OnboardingIntro';
 
 interface ProvidersProps {
   children: ReactNode;
@@ -39,6 +40,7 @@ export function Providers({ children }: ProvidersProps) {
   return (
     <QueryClientProvider client={queryClient}>
       <RetentionWarningBanner />
+      <OnboardingIntro />
       {children}
       {/* App-wide toast notifications. Position bottom-center stays out of
           the way of the cookie banner (also bottom) on first visit because

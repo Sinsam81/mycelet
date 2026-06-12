@@ -17,6 +17,7 @@ import { MapFilters, MapFilterState } from './MapFilters';
 import { MapFinding } from '@/types/finding';
 import { OfflineArea, cacheMapTilesForArea, readOfflineAreas, removeOfflineAreaById, saveOfflineAreas } from '@/lib/utils/offlineMap';
 import { buildExplanation } from '@/lib/utils/prediction-explanation';
+import { FLAGS } from '@/lib/flags';
 import toast from 'react-hot-toast';
 
 type LeafletType = typeof import('leaflet');
@@ -109,6 +110,7 @@ export function MushroomMap() {
   const [topSpots, setTopSpots] = useState<{ lat: number; lng: number; score: number; forestType: string; productivity: number | null; verdict?: string; reasons?: string[]; topSpecies?: string[] }[] | null>(null);
   const [topLoading, setTopLoading] = useState(false);
   const [topMsg, setTopMsg] = useState<string | null>(null);
+  const [topAccess, setTopAccess] = useState<'premium_full' | 'free_limited' | null>(null);
   const [speciesSpots, setSpeciesSpots] = useState<{ speciesId: number; norwegianName: string; latinName: string; imageUrl: string; lat: number; lng: number; score: number; verdict?: string; reasons?: string[] }[] | null>(null);
   const [speciesLoading, setSpeciesLoading] = useState(false);
   const [speciesMsg, setSpeciesMsg] = useState<string | null>(null);
@@ -186,11 +188,51 @@ export function MushroomMap() {
     setTileHotspots(mapped);
   }, [filters.speciesId, supabase]);
 
+  // "Fant du sopp her?" feedback on top-spot popups. The popup body is plain
+  // HTML (Leaflet), so we bind the buttons on popupopen via data attributes.
+  // This is the calibration loop for the prediction engine: every yes/no lands
+  // in spot_feedback together with the score we showed.
+  const bindSpotFeedback = useCallback((popup: import('leaflet').Popup) => {
+    const el = popup.getElement();
+    if (!el) return;
+    const box = el.querySelector('[data-spot-feedback]') as HTMLElement | null;
+    if (!box || box.dataset.bound === '1') return;
+    box.dataset.bound = '1';
+    box.querySelectorAll('button[data-fb]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const found = (btn as HTMLElement).dataset.fb === 'yes';
+        try {
+          const res = await fetch('/api/spot-feedback', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              lat: Number(box.dataset.lat),
+              lng: Number(box.dataset.lng),
+              found,
+              scoreShown: box.dataset.score ? Number(box.dataset.score) : null,
+              speciesId: box.dataset.species ? Number(box.dataset.species) : null
+            })
+          });
+          if (res.status === 401) {
+            toast('Logg inn for å gi tilbakemelding.');
+            return;
+          }
+          if (!res.ok) throw new Error('feedback failed');
+          box.innerHTML =
+            '<div style="font-size:12px;font-weight:600;color:#15803d">Takk! Tilbakemeldingen gjør prediksjonene bedre. 🍄</div>';
+        } catch {
+          toast.error('Kunne ikke lagre tilbakemeldingen.');
+        }
+      });
+    });
+  }, []);
+
   // "Beste steder nær meg": numbered pins on the best forest cells within ~5 km.
   const renderTopSpots = useCallback(
     async (
       spots: { lat: number; lng: number; score: number; forestType: string; productivity: number | null; verdict?: string; reasons?: string[]; topSpecies?: string[] }[],
-      origin: { lat: number; lng: number }
+      origin: { lat: number; lng: number },
+      opts?: { limited?: boolean; speciesId?: number | null }
     ) => {
       const layer = topLayerRef.current;
       if (!mapRef.current || !layer) return;
@@ -211,24 +253,40 @@ export function MushroomMap() {
         const topSpeciesHtml = (spot.topSpecies ?? []).length
           ? `<div style="margin-top:6px;font-size:12px;font-weight:600;color:#14532d">🍄 Mest sannsynlig her: ${(spot.topSpecies ?? []).join(', ')}</div>`
           : '';
+        const limitedHtml = opts?.limited
+          ? '<div style="margin-top:6px;font-size:12px;color:#92400e;background:#fef3c7;border-radius:8px;padding:5px 8px">🔒 Premium viser hvorfor dette stedet scorer høyt — og alle 12 steder.</div>'
+          : '';
+        const feedbackHtml = `<div data-spot-feedback data-lat="${spot.lat}" data-lng="${spot.lng}" data-score="${spot.score}"${
+          opts?.speciesId ? ` data-species="${opts.speciesId}"` : ''
+        } style="margin-top:8px;border-top:1px solid #e5e7eb;padding-top:7px">
+          <div style="font-size:12px;font-weight:600;color:#1f2937">Var du her? Fant du sopp?</div>
+          <div style="display:flex;gap:6px;margin-top:5px">
+            <button type="button" data-fb="yes" style="flex:1;background:#15803d;color:#fff;border:none;border-radius:8px;padding:5px 0;font-size:12px;font-weight:600;cursor:pointer">Ja 🍄</button>
+            <button type="button" data-fb="no" style="flex:1;background:#f3f4f6;color:#374151;border:none;border-radius:8px;padding:5px 0;font-size:12px;font-weight:600;cursor:pointer">Nei</button>
+          </div>
+        </div>`;
         const popup = `<div style="min-width:210px;max-width:265px">
           <div style="font-weight:700;color:#14532d">${spot.verdict ?? `Topp ${rank}`}</div>
           <div style="color:#555;font-size:12px;margin-top:2px">~${km.toFixed(1)} km ${dir} · ${spot.score}/100</div>
           ${topSpeciesHtml}
           <div style="font-size:12px;margin-top:6px;color:#1f2937">${reasonsHtml}</div>
+          ${limitedHtml}
           <a href="https://www.google.com/maps/search/?api=1&query=${spot.lat},${spot.lng}" target="_blank" rel="noreferrer" style="display:block;margin-top:7px;color:#15803d;font-weight:600;font-size:12px;text-decoration:underline">📍 Åpne i kart (naviger hit)</a>
+          ${feedbackHtml}
           <div style="color:#9ca3af;font-size:10px;margin-top:6px">Kilder: MET (vær) · NIBIO/CORINE (skog) · Artsdatabanken (funn)</div>
         </div>`;
-        leaflet.marker([spot.lat, spot.lng], { icon }).bindPopup(popup).addTo(layer);
+        const marker = leaflet.marker([spot.lat, spot.lng], { icon }).bindPopup(popup).addTo(layer);
+        marker.on('popupopen', (event) => bindSpotFeedback(event.popup));
       });
     },
-    []
+    [bindSpotFeedback]
   );
 
   const clearTopSpots = useCallback(() => {
     topLayerRef.current?.clearLayers();
     setTopSpots(null);
     setTopMsg(null);
+    setTopAccess(null);
   }, []);
 
   const generateTopSpots = useCallback(async (speciesIdOverride?: number | null) => {
@@ -268,17 +326,21 @@ export function MushroomMap() {
         setTopMsg('Fant lite skogdata innen 5 km — prøv et område med mer skog.');
         return;
       }
+      const limited = data.access === 'free_limited';
+      setTopAccess(limited ? 'free_limited' : 'premium_full');
       setTopSpots(spots);
-      await renderTopSpots(spots, { lat: originLat, lng: originLng });
+      await renderTopSpots(spots, { lat: originLat, lng: originLng }, { limited, speciesId: sid ?? null });
       const leaflet = (await import('leaflet')).default;
       const bounds = leaflet.latLngBounds(spots.map((s) => [s.lat, s.lng] as [number, number]));
       bounds.extend([originLat, originLng]);
       map.fitBounds(bounds.pad(0.2));
       const sName = sid != null ? speciesNamesRef.current.get(sid) ?? null : null;
       setTopMsg(
-        sName
-          ? `${spots.length} beste steder for ${sName} innen 5 km. Trykk på en nål.`
-          : `${spots.length} beste steder innen 5 km. Trykk på en nål for begrunnelse.`
+        limited
+          ? `Viser de ${spots.length} beste stedene nær deg. Premium viser alle 12 med full begrunnelse.`
+          : sName
+            ? `${spots.length} beste steder for ${sName} innen 5 km. Trykk på en nål.`
+            : `${spots.length} beste steder innen 5 km. Trykk på en nål for begrunnelse.`
       );
     } catch {
       setTopMsg('Kunne ikke finne topp-steder.');
@@ -1130,29 +1192,27 @@ export function MushroomMap() {
           >
             {showOccurrences ? `Skjul funn${occCount ? ` (${occCount})` : ''}` : '📍 Funn'}
           </button>
+          <button
+            type="button"
+            onClick={() => (topSpots ? clearTopSpots() : void generateTopSpots())}
+            disabled={topLoading}
+            className={`rounded-full px-3 py-1.5 text-xs font-medium shadow-lg backdrop-blur disabled:opacity-60 ${
+              topSpots ? 'bg-forest-800 text-white hover:bg-forest-700' : 'bg-white/95 text-gray-800 hover:bg-white'
+            }`}
+          >
+            {topLoading ? 'Søker…' : topSpots ? 'Skjul steder' : '⭐ Beste steder'}
+          </button>
           {hasOfflineAccess ? (
-            <>
-              <button
-                type="button"
-                onClick={() => (topSpots ? clearTopSpots() : void generateTopSpots())}
-                disabled={topLoading}
-                className={`rounded-full px-3 py-1.5 text-xs font-medium shadow-lg backdrop-blur disabled:opacity-60 ${
-                  topSpots ? 'bg-forest-800 text-white hover:bg-forest-700' : 'bg-white/95 text-gray-800 hover:bg-white'
-                }`}
-              >
-                {topLoading ? 'Søker…' : topSpots ? 'Skjul steder' : '⭐ Beste steder'}
-              </button>
-              <button
-                type="button"
-                onClick={() => (speciesSpots ? clearSpeciesSpots() : void generateSpeciesSpots())}
-                disabled={speciesLoading}
-                className={`rounded-full px-3 py-1.5 text-xs font-medium shadow-lg backdrop-blur disabled:opacity-60 ${
-                  speciesSpots ? 'bg-forest-800 text-white hover:bg-forest-700' : 'bg-white/95 text-gray-800 hover:bg-white'
-                }`}
-              >
-                {speciesLoading ? 'Laster…' : speciesSpots ? 'Skjul bilder' : '📸 Bilder'}
-              </button>
-            </>
+            <button
+              type="button"
+              onClick={() => (speciesSpots ? clearSpeciesSpots() : void generateSpeciesSpots())}
+              disabled={speciesLoading}
+              className={`rounded-full px-3 py-1.5 text-xs font-medium shadow-lg backdrop-blur disabled:opacity-60 ${
+                speciesSpots ? 'bg-forest-800 text-white hover:bg-forest-700' : 'bg-white/95 text-gray-800 hover:bg-white'
+              }`}
+            >
+              {speciesLoading ? 'Laster…' : speciesSpots ? 'Skjul bilder' : '📸 Bilder'}
+            </button>
           ) : (
             <NonNativeOnly>
               <Link
@@ -1163,7 +1223,7 @@ export function MushroomMap() {
               </Link>
             </NonNativeOnly>
           )}
-          {!tripActive ? (
+          {FLAGS.tripMode && !tripActive ? (
             <button
               type="button"
               onClick={startTrip}
@@ -1173,7 +1233,17 @@ export function MushroomMap() {
             </button>
           ) : null}
         </div>
-        {tripActive ? (
+        {topAccess === 'free_limited' && topSpots ? (
+          <NonNativeOnly>
+            <Link
+              href="/pricing"
+              className="flex items-center gap-1.5 rounded-full bg-amber-500 px-3 py-1.5 text-xs font-semibold text-white shadow-lg hover:bg-amber-600"
+            >
+              🔒 Se alle 12 beste steder med Premium
+            </Link>
+          </NonNativeOnly>
+        ) : null}
+        {FLAGS.tripMode && tripActive ? (
           <div className="flex items-center gap-2 rounded-full bg-amber-700 px-3 py-1.5 text-xs font-medium text-white shadow-lg">
             <span>🎒 Sopptur · {tripFinds.length} funn</span>
             <button

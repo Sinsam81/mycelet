@@ -4,13 +4,14 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Calendar, Home, Library, Map, MessageSquare } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
+import { FLAGS } from '@/lib/flags';
 
 const items = [
   { href: '/', label: 'Hjem', icon: Home },
   { href: '/species', label: 'Bibliotek', icon: Library },
   { href: '/map', label: 'Kart', icon: Map },
   { href: '/calendar', label: 'Kalender', icon: Calendar },
-  { href: '/forum', label: 'Forum', icon: MessageSquare }
+  ...(FLAGS.forumInNav ? [{ href: '/forum', label: 'Forum', icon: MessageSquare }] : [])
 ];
 
 export function BottomNav() {

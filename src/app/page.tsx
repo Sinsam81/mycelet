@@ -7,6 +7,7 @@ import { MushroomDayCard } from '@/components/home/MushroomDayCard';
 import { LastTripCard } from '@/components/home/LastTripCard';
 import { createClient } from '@/lib/supabase/server';
 import { BILLING_PLANS } from '@/lib/billing/plans';
+import { FLAGS } from '@/lib/flags';
 import type { Edibility } from '@/types/species';
 
 interface SpeciesRow {
@@ -310,12 +311,17 @@ export default async function HomePage() {
         </NonNativeOnly>
 
         <div className="grid grid-cols-2 gap-3">
-          <Link href="/calendar" className="rounded-lg border border-gray-200 bg-white p-3 text-sm font-medium">
+          <Link
+            href="/calendar"
+            className={`rounded-lg border border-gray-200 bg-white p-3 text-sm font-medium ${FLAGS.forumInNav ? '' : 'col-span-2'}`}
+          >
             <span className="inline-flex items-center gap-2"><Calendar className="h-4 w-4" /> Kalender</span>
           </Link>
-          <Link href="/forum" className="rounded-lg border border-gray-200 bg-white p-3 text-sm font-medium">
-            <span className="inline-flex items-center gap-2"><MessageSquare className="h-4 w-4" /> Forum</span>
-          </Link>
+          {FLAGS.forumInNav ? (
+            <Link href="/forum" className="rounded-lg border border-gray-200 bg-white p-3 text-sm font-medium">
+              <span className="inline-flex items-center gap-2"><MessageSquare className="h-4 w-4" /> Forum</span>
+            </Link>
+          ) : null}
         </div>
 
         <div className="grid grid-cols-2 gap-3">

@@ -114,12 +114,19 @@ export async function GET(request: NextRequest) {
 
     const subscription = await getUserBillingSubscription(supabase, user.id);
     const billing = getBillingCapabilities(subscription);
-    if (!billing.paid) {
+    const paid = billing.paid;
+    // The full heatmap raster stays premium-only (it's the most expensive shape
+    // and was deliberately de-scraped in migration 015). Top-spots mode gives
+    // free users a teaser instead of a closed door: fewer cells sampled, top 3
+    // spots, and no "why" — the upsell is seeing the value, not a 403.
+    if (!paid && !top) {
       return NextResponse.json(
         { error: 'Detaljert heatmap krever Premium eller Sesongpass', upsell: true },
         { status: 403 }
       );
     }
+    const effectiveN = paid ? n : Math.min(n, 5);
+    const effectiveTop = top ? (paid ? top : Math.min(top, 3)) : null;
 
     const centerLat = (minLat + maxLat) / 2;
     const centerLng = (minLng + maxLng) / 2;
@@ -175,7 +182,7 @@ export async function GET(request: NextRequest) {
       ctx: SpeciesContext;
       habitat: ReturnType<typeof buildSpeciesHabitatPreferences>;
     }[] = [];
-    if (top && !speciesId) {
+    if (effectiveTop && paid && !speciesId) {
       const { data: rows } = await supabase
         .from('mushroom_species')
         .select(
@@ -205,11 +212,11 @@ export async function GET(request: NextRequest) {
         }));
     }
 
-    const latSpan = (maxLat - minLat) / n;
-    const lngSpan = (maxLng - minLng) / n;
+    const latSpan = (maxLat - minLat) / effectiveN;
+    const lngSpan = (maxLng - minLng) / effectiveN;
     const cellCenters: { lat: number; lng: number }[] = [];
-    for (let row = 0; row < n; row++) {
-      for (let col = 0; col < n; col++) {
+    for (let row = 0; row < effectiveN; row++) {
+      for (let col = 0; col < effectiveN; col++) {
         cellCenters.push({
           lat: minLat + latSpan * (row + 0.5),
           lng: minLng + lngSpan * (col + 0.5)
@@ -285,9 +292,14 @@ export async function GET(request: NextRequest) {
     // `top` mode returns the best N cells with a persuasive "why" per spot
     // (for "5 beste steder nær meg"); the default returns lean cells for the heatmap.
     let cells: Record<string, unknown>[];
-    if (top) {
-      const topCells = [...allCells].sort((a, b) => b.score - a.score).slice(0, top);
+    if (effectiveTop) {
+      const topCells = [...allCells].sort((a, b) => b.score - a.score).slice(0, effectiveTop);
       cells = topCells.map((c) => {
+        // Free tier: coordinates and score only — the persuasive "why" and the
+        // per-spot species list are the premium half of the feature.
+        if (!paid) {
+          return { lat: c.lat, lng: c.lng, score: c.score, forestType: c.forestType, productivity: c.productivity };
+        }
         const habitat = speciesHabitat ? computeHabitatScore(c.forest, speciesHabitat) : null;
         const summary = buildSpotSummary({
           weather: whyWeather,
@@ -344,8 +356,9 @@ export async function GET(request: NextRequest) {
     }
 
     log.info('prediction.grid.success', {
-      n,
-      top,
+      n: effectiveN,
+      top: effectiveTop,
+      paid,
       total: cellCenters.length,
       withForest: allCells.length,
       returned: cells.length,
@@ -355,8 +368,9 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       cells,
-      top,
-      n,
+      top: effectiveTop,
+      n: effectiveN,
+      access: paid ? 'premium_full' : 'free_limited',
       cellLatSpan: latSpan,
       cellLngSpan: lngSpan,
       coverage: cellCenters.length ? allCells.length / cellCenters.length : 0,

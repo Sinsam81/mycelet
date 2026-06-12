@@ -18,6 +18,8 @@ import { Cookie, X } from 'lucide-react';
  * unrelated entries don't collide.
  */
 const STORAGE_KEY = 'mycelet:cookie-notice-dismissed-v1';
+const ONBOARDING_KEY = 'mycelet:onboarding-v1';
+const ONBOARDING_DONE_EVENT = 'mycelet:onboarding-done';
 
 export function CookieNotice() {
   // Default to true so we don't flash the banner before reading localStorage.
@@ -25,15 +27,25 @@ export function CookieNotice() {
   const [dismissed, setDismissed] = useState(true);
 
   useEffect(() => {
+    let show: (() => void) | null = null;
     try {
       const stored = window.localStorage.getItem(STORAGE_KEY);
-      if (stored !== '1') {
-        setDismissed(false);
+      if (stored === '1') return;
+      show = () => setDismissed(false);
+      // A brand-new user sees the onboarding first; the cookie notice waits
+      // for its completion event instead of covering the very first screen.
+      if (window.localStorage.getItem(ONBOARDING_KEY) === '1') {
+        show();
+        return;
       }
     } catch {
       // Private mode / disabled storage — show the banner once per session.
       setDismissed(false);
+      return;
     }
+    const onDone = () => show?.();
+    window.addEventListener(ONBOARDING_DONE_EVENT, onDone);
+    return () => window.removeEventListener(ONBOARDING_DONE_EVENT, onDone);
   }, []);
 
   function handleDismiss() {
