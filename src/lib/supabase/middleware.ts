@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { logger } from '@/lib/log';
 import { getOrCreateRequestId } from '@/lib/log/request';
 
-const PROTECTED_PATHS = ['/profile', '/forum/new', '/map', '/admin'];
+const PROTECTED_PATHS = ['/profile', '/forum/new', '/map', '/admin', '/mine-steder'];
 
 export async function updateSession(request: NextRequest) {
   // Per-request correlation ID. Injected into the forwarded request headers so

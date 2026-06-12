@@ -136,7 +136,12 @@ export default async function ProfilePage() {
         </article>
 
         <article className="rounded-2xl bg-white p-4 shadow-card">
-          <h2 className="mb-3 font-semibold">Mine siste funn</h2>
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="font-semibold">Mine siste funn</h2>
+            <Link href="/mine-steder" className="text-xs font-medium text-forest-800 hover:underline">
+              📍 Mine steder →
+            </Link>
+          </div>
           {findings.length === 0 ? (
             <p className="text-sm text-gray-700">Du har ikke registrert funn ennå. Bruk kartet for å legge til ditt første.</p>
           ) : (

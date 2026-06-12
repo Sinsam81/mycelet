@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { PageWrapper } from '@/components/layout/PageWrapper';
 import { IdentifyResult } from '@/components/identify/IdentifyResult';
+import { LookAlikeCheck } from '@/components/identify/LookAlikeCheck';
 import { SafetyWarning } from '@/components/identify/SafetyWarning';
 import { Button } from '@/components/ui/Button';
 import toast from 'react-hot-toast';
@@ -128,6 +129,8 @@ export default function IdentifyResultPage() {
           selectedIndex={selectedIndex}
           onSelect={setSelectedIndex}
         />
+
+        <LookAlikeCheck suggestion={payload.suggestions[selectedIndex] ?? topSuggestion} />
 
         {error ? <p className="text-sm text-red-600">{error}</p> : null}
 

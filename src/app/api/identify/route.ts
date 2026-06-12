@@ -203,18 +203,27 @@ export async function POST(request: NextRequest) {
           similarImages: string[];
           speciesId?: number;
           norwegianName?: string;
+          imageUrl?: string | null;
           inSeason?: boolean;
           peakSeason?: boolean;
           nearbyFindings: number;
           seasonFactor: number;
-          dangerousLookAlikes?: Array<{ name: string; danger: string }>;
+          dangerousLookAlikes?: Array<{
+            name: string;
+            danger: string;
+            speciesId?: number;
+            imageUrl?: string | null;
+            edibility?: string | null;
+            whySimilar?: string | null;
+            howToTell?: string | null;
+          }>;
         };
         mapped.seasonFactor = 1;
         mapped.nearbyFindings = 0;
 
         const { data: species } = await supabase
           .from('mushroom_species')
-          .select('id,norwegian_name,edibility,season_start,season_end,peak_season_start,peak_season_end')
+          .select('id,norwegian_name,edibility,primary_image_url,season_start,season_end,peak_season_start,peak_season_end')
           .ilike('latin_name', suggestion.name)
           .maybeSingle();
 
@@ -222,6 +231,7 @@ export async function POST(request: NextRequest) {
           mapped.speciesId = species.id;
           mapped.norwegianName = species.norwegian_name;
           mapped.edibility = species.edibility;
+          mapped.imageUrl = (species.primary_image_url as string | null) ?? null;
           const fit = seasonFit(
             month,
             species.season_start,
@@ -245,26 +255,55 @@ export async function POST(request: NextRequest) {
     // SAFETY: surface high/critical look-alikes right in the result (not hidden on
     // the species page). Location-independent, so always run.
     if (speciesIds.length > 0) {
+      type LookAlikeEntry = {
+        name: string;
+        danger: string;
+        speciesId?: number;
+        imageUrl?: string | null;
+        edibility?: string | null;
+        whySimilar?: string | null;
+        howToTell?: string | null;
+      };
       const { data: lookAlikes } = await supabase
         .from('look_alikes')
-        .select('species_id, danger_level, la:mushroom_species!look_alikes_look_alike_id_fkey(norwegian_name)')
+        .select(
+          'species_id, danger_level, similarity_description, difference_description, la:mushroom_species!look_alikes_look_alike_id_fkey(id, norwegian_name, primary_image_url, edibility)'
+        )
         .in('species_id', speciesIds)
         .in('danger_level', ['high', 'critical']);
-      const byId = new Map<number, Array<{ name: string; danger: string }>>();
+      const byId = new Map<number, LookAlikeEntry[]>();
       for (const row of lookAlikes ?? []) {
         const r = row as unknown as {
           species_id: number | null;
           danger_level: string;
-          la: { norwegian_name: string } | { norwegian_name: string }[] | null;
+          similarity_description: string | null;
+          difference_description: string | null;
+          la:
+            | { id: number; norwegian_name: string; primary_image_url: string | null; edibility: string | null }
+            | { id: number; norwegian_name: string; primary_image_url: string | null; edibility: string | null }[]
+            | null;
         };
         const laObj = Array.isArray(r.la) ? r.la[0] : r.la;
         if (r.species_id == null || !laObj?.norwegian_name) continue;
         const arr = byId.get(r.species_id) ?? [];
-        arr.push({ name: laObj.norwegian_name, danger: r.danger_level });
+        arr.push({
+          name: laObj.norwegian_name,
+          danger: r.danger_level,
+          speciesId: laObj.id,
+          imageUrl: laObj.primary_image_url ?? null,
+          edibility: laObj.edibility ?? null,
+          whySimilar: r.similarity_description ?? null,
+          howToTell: r.difference_description ?? null
+        });
         byId.set(r.species_id, arr);
       }
       for (const s of suggestions) {
-        if (s.speciesId != null && byId.has(s.speciesId)) s.dangerousLookAlikes = byId.get(s.speciesId);
+        if (s.speciesId != null && byId.has(s.speciesId)) {
+          // Critical first, so UIs that show "the worst" can take index 0.
+          s.dangerousLookAlikes = byId
+            .get(s.speciesId)!
+            .sort((a, b) => (a.danger === b.danger ? 0 : a.danger === 'critical' ? -1 : 1));
+        }
       }
     }
 
