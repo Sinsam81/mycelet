@@ -105,9 +105,9 @@ export default async function SpeciesDetailPage({ params }: SpeciesDetailPagePro
 
             {isToxic ? (
               <div
-                className={`rounded-xl p-4 ${
+                className={`rounded-2xl p-4 ${
                   species.edibility === 'deadly'
-                    ? 'bg-red-900 text-white'
+                    ? 'bg-red-900 text-white shadow-lg'
                     : 'border-2 border-red-600 bg-red-50 text-red-900'
                 }`}
               >
@@ -151,7 +151,7 @@ export default async function SpeciesDetailPage({ params }: SpeciesDetailPagePro
             ) : null}
 
             {species.edibility === 'conditionally_edible' && species.edibility_notes ? (
-              <div className="rounded-xl border border-amber-300 bg-amber-50 p-4">
+              <div className="rounded-2xl border border-amber-300 bg-amber-50 p-4">
                 <div className="flex items-start gap-3">
                   <AlertTriangle className="h-5 w-5 shrink-0 text-amber-700" />
                   <div>
@@ -190,7 +190,7 @@ export default async function SpeciesDetailPage({ params }: SpeciesDetailPagePro
 
         {/* Look-alikes section */}
         {(lookAlikes?.length ?? 0) > 0 ? (
-          <article className="space-y-4 rounded-xl bg-white p-5 shadow-sm md:p-6">
+          <article className="space-y-4 rounded-2xl bg-white p-5 shadow-card md:p-6">
             <header>
               <p className="text-xs font-semibold uppercase tracking-widest text-forest-700">
                 Forveksling og nærarter
@@ -208,7 +208,7 @@ export default async function SpeciesDetailPage({ params }: SpeciesDetailPagePro
                   <Link
                     key={item.look_alike_id}
                     href={`/species/${lookAlike.id}`}
-                    className="group block overflow-hidden rounded-lg border border-gray-200 bg-white transition hover:border-forest-300 hover:shadow-md"
+                    className="group block overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-card transition hover:-translate-y-0.5 hover:border-forest-600 hover:shadow-lg"
                   >
                     <div className="relative aspect-[4/3] w-full overflow-hidden bg-gray-100">
                       {lookAlike.primary_image_url ? (

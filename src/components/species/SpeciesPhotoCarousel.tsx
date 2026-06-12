@@ -22,7 +22,7 @@ export function SpeciesPhotoCarousel({ photos, speciesName }: SpeciesPhotoCarous
 
   if (count === 0) {
     return (
-      <div className="flex aspect-square w-full items-center justify-center rounded-xl border border-gray-200 bg-gray-100 text-sm text-gray-500">
+      <div className="flex aspect-square w-full items-center justify-center rounded-2xl border border-gray-200 bg-gray-100 text-sm text-gray-500">
         Ingen bilder enda
       </div>
     );
@@ -40,7 +40,7 @@ export function SpeciesPhotoCarousel({ photos, speciesName }: SpeciesPhotoCarous
 
   return (
     <div>
-      <div className="relative aspect-square w-full overflow-hidden rounded-xl border border-gray-200 bg-gray-100">
+      <div className="relative aspect-square w-full overflow-hidden rounded-2xl border border-gray-200 bg-gray-100 shadow-card">
         <img src={photo.image_url} alt={photo.caption ?? speciesName} className="h-full w-full object-cover" />
 
         {count > 1 ? (
