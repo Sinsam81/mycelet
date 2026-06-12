@@ -98,9 +98,12 @@ function NewForumPostInner() {
   return (
     <PageWrapper>
       <section className="space-y-4">
-        <h1 className="text-xl font-semibold">Nytt innlegg</h1>
+        <header>
+          <p className="text-xs font-medium uppercase tracking-widest text-forest-700">Fellesskap</p>
+          <h1 className="mt-1 font-serif text-3xl font-bold tracking-tight text-forest-900">Nytt innlegg</h1>
+        </header>
 
-        <form className="space-y-3 rounded-xl bg-white p-4 shadow-sm" onSubmit={handleSubmit}>
+        <form className="space-y-3 rounded-2xl bg-white p-4 shadow-card" onSubmit={handleSubmit}>
           <label className="block text-sm font-medium text-gray-800">
             Tittel
             <input

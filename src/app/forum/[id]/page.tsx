@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useMemo, useState } from 'react';
+import { use, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
@@ -23,12 +23,12 @@ import {
 import { createClient } from '@/lib/supabase/client';
 
 interface ForumPostDetailPageProps {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }
 
 export default function ForumPostDetailPage({ params }: ForumPostDetailPageProps) {
+  const { id: postId } = use(params);
   const router = useRouter();
-  const postId = params.id;
   const queryClient = useQueryClient();
   const supabase = useMemo(() => createClient(), []);
 
@@ -117,8 +117,8 @@ export default function ForumPostDetailPage({ params }: ForumPostDetailPageProps
           />
         ) : null}
 
-        <div className="rounded-xl border border-gray-200 bg-cream-dark p-3">
-          <h2 className="mb-2 text-lg font-semibold">Kommentarer</h2>
+        <div className="rounded-2xl border border-gray-200 bg-cream-dark p-3">
+          <h2 className="mb-2 font-serif text-xl font-bold text-forest-900">Kommentarer</h2>
           {commentsLoading ? <p className="text-sm text-gray-700">Laster kommentarer...</p> : null}
           {commentsError ? <p className="text-sm text-red-600">Kunne ikke hente kommentarer.</p> : null}
           {comments.length > 0 ? (

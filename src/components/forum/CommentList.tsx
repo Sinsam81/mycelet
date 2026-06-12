@@ -72,7 +72,7 @@ function CommentCard({
   };
 
   return (
-    <article className={`rounded-lg border border-gray-200 bg-white p-3 ${isReply ? 'ml-6' : ''}`}>
+    <article className={`rounded-xl border border-gray-200 bg-white p-3 ${isReply ? 'ml-4 border-l-2 border-l-forest-300' : ''}`}>
       <div className="flex items-center gap-2">
         <p className="text-sm font-medium text-gray-900">{author}</p>
         {badge ? <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${forumBadgeClass(badge.tone)}`}>{badge.label}</span> : null}

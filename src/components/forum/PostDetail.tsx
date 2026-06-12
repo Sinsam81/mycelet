@@ -49,7 +49,7 @@ export function PostDetail({ post, onToggleLike, onReport, onEdit, onDelete, lik
   };
 
   return (
-    <article className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+    <article className="rounded-2xl border border-gray-200 bg-white p-4 shadow-card">
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <p className="text-sm font-medium text-gray-900">{author}</p>
@@ -80,8 +80,8 @@ export function PostDetail({ post, onToggleLike, onReport, onEdit, onDelete, lik
         </form>
       ) : (
         <>
-          <h1 className="mt-2 text-xl font-semibold text-gray-900">{post.title}</h1>
-          <p className="mt-2 whitespace-pre-wrap text-sm text-gray-800">{post.content}</p>
+          <h1 className="mt-2 font-serif text-2xl font-bold leading-tight text-forest-900">{post.title}</h1>
+          <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-gray-800">{post.content}</p>
           {post.finding ? (
             <p className="mt-2 text-xs text-gray-600">
               Koblet funn:{' '}

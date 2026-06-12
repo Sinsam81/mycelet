@@ -59,23 +59,22 @@ export default function ForumPage() {
 
   return (
     <PageWrapper>
-      <section className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h1 className="text-xl font-semibold">Forum</h1>
-          <div className="flex items-center gap-2">
-            <Link href="/forum/moderation" className="inline-flex rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-800">
-              Moderasjon
-            </Link>
-            <Link href="/forum/reports" className="inline-flex rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-800">
-              Mine rapporter
-            </Link>
-            <Link href="/forum/new" className="inline-flex items-center gap-1 rounded-lg bg-forest-800 px-3 py-2 text-sm font-medium text-white">
+      <section className="space-y-4">
+        <header>
+          <p className="text-xs font-medium uppercase tracking-widest text-forest-700">Fellesskap</p>
+          <div className="mt-1 flex items-center justify-between gap-3">
+            <h1 className="font-serif text-3xl font-bold tracking-tight text-forest-900">Forum</h1>
+            <Link
+              href="/forum/new"
+              className="inline-flex shrink-0 items-center gap-1 rounded-xl bg-forest-800 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-forest-700"
+            >
               <Plus className="h-4 w-4" /> Nytt innlegg
             </Link>
           </div>
-        </div>
+          <p className="mt-1 text-sm text-gray-700">Del funn, still spørsmål og lær av andre sopplukkere.</p>
+        </header>
 
-        <div className="flex gap-2">
+        <div className="flex gap-2 overflow-x-auto pb-1">
           {sortOptions.map((option) => {
             const active = option.value === sort;
             return (
@@ -83,7 +82,9 @@ export default function ForumPage() {
                 key={option.value}
                 type="button"
                 onClick={() => setSort(option.value)}
-                className={`rounded-lg px-3 py-1.5 text-sm ${active ? 'bg-forest-800 text-white' : 'bg-white border border-gray-300 text-gray-800'}`}
+                className={`whitespace-nowrap rounded-full px-3.5 py-1.5 text-sm font-medium transition ${
+                  active ? 'bg-forest-800 text-white' : 'border border-gray-300 bg-white text-gray-800 hover:border-forest-400'
+                }`}
               >
                 {option.label}
               </button>
@@ -114,7 +115,23 @@ export default function ForumPage() {
           </button>
         ) : null}
 
-        {!isLoading && posts.length === 0 ? <p className="text-sm text-gray-700">Ingen innlegg funnet.</p> : null}
+        {!isLoading && posts.length === 0 ? (
+          <div className="rounded-2xl bg-white p-6 text-center shadow-card">
+            <p className="text-sm text-gray-700">Ingen innlegg her ennå.</p>
+            <Link href="/forum/new" className="mt-2 inline-flex items-center gap-1 text-sm font-semibold text-forest-800 hover:underline">
+              <Plus className="h-4 w-4" /> Bli den første til å dele
+            </Link>
+          </div>
+        ) : null}
+
+        <div className="flex items-center justify-center gap-4 pt-2 text-xs text-gray-500">
+          <Link href="/forum/reports" className="hover:text-forest-800 hover:underline">
+            Mine rapporter
+          </Link>
+          <Link href="/forum/moderation" className="hover:text-forest-800 hover:underline">
+            Moderasjon
+          </Link>
+        </div>
       </section>
     </PageWrapper>
   );

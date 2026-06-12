@@ -30,7 +30,10 @@ export function CommentInput({ onSubmit, loading }: CommentInputProps) {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="sticky bottom-0 z-20 mt-3 rounded-xl border border-gray-200 bg-white p-3 shadow-sm">
+    <form
+      onSubmit={handleSubmit}
+      className="sticky bottom-[calc(4.75rem+env(safe-area-inset-bottom))] z-20 mt-3 rounded-2xl border border-gray-200 bg-white p-3 shadow-card"
+    >
       <textarea
         value={content}
         onChange={(event) => setContent(event.target.value)}
