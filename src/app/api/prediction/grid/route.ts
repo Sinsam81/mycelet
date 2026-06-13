@@ -5,7 +5,7 @@ import { fetchWeatherSummary } from '@/lib/weather';
 import { getForestProperties, buildSpeciesHabitatPreferences } from '@/lib/forest';
 import { computeCellPrediction } from '@/lib/prediction/cell-score';
 import { dayOfYearOf } from '@/lib/prediction/phenology';
-import { countWithinKm } from '@/lib/prediction/occurrences';
+import { weightedOccurrenceDensity } from '@/lib/prediction/occurrences';
 import { getElevation } from '@/lib/terrain';
 import { computeHabitatScore } from '@/lib/forest';
 import { buildSpotSummary } from '@/lib/utils/prediction-explanation';
@@ -242,7 +242,7 @@ export async function GET(request: NextRequest) {
       ]);
       // No real forest signal → skip (never invent a gradient).
       if (!forest) return null;
-      const nearby = countWithinKm(occurrences, cell.lat, cell.lng, 4);
+      const nearby = weightedOccurrenceDensity(occurrences, cell.lat, cell.lng);
       const prediction = computeCellPrediction({
         lat: cell.lat,
         lon: cell.lng,

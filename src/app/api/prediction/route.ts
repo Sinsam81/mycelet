@@ -9,7 +9,7 @@ import type { SpeciesContext } from '@/lib/utils/species-scoring';
 import { getForestProperties, buildSpeciesHabitatPreferences } from '@/lib/forest';
 import { computeCellPrediction } from '@/lib/prediction/cell-score';
 import { dayOfYearOf } from '@/lib/prediction/phenology';
-import { countWithinKm } from '@/lib/prediction/occurrences';
+import { weightedOccurrenceDensity } from '@/lib/prediction/occurrences';
 import { getElevation } from '@/lib/terrain';
 import { createRequestLogger } from '@/lib/log/request';
 
@@ -317,11 +317,10 @@ export async function GET(request: NextRequest) {
       // Real terrain elevation (Kartverket) → replaces the pseudo-noise proxy.
       getElevation({ lat, lon })
     ]);
-    const nearbyOccurrences = countWithinKm(
+    const nearbyOccurrences = weightedOccurrenceDensity(
       (occRes?.data ?? []) as { latitude: number; longitude: number }[],
       lat,
-      lon,
-      5
+      lon
     );
 
     const currentTemp = weather.temperatureC;

@@ -5,7 +5,7 @@ import { fetchWeatherSummary } from '@/lib/weather';
 import { getForestProperties, buildSpeciesHabitatPreferences, computeHabitatScore } from '@/lib/forest';
 import { computeCellPrediction } from '@/lib/prediction/cell-score';
 import { dayOfYearOf } from '@/lib/prediction/phenology';
-import { countWithinKm } from '@/lib/prediction/occurrences';
+import { weightedOccurrenceDensity } from '@/lib/prediction/occurrences';
 import { getElevation } from '@/lib/terrain';
 import { buildSpotSummary } from '@/lib/utils/prediction-explanation';
 import type { SpeciesContext } from '@/lib/utils/species-scoring';
@@ -227,7 +227,7 @@ export async function GET(request: NextRequest) {
 
       let best: { cell: (typeof cells)[number]; score: number; nearby: number } | null = null;
       for (const cell of cells) {
-        const nearby = countWithinKm(spOcc, cell.lat, cell.lng, 4);
+        const nearby = weightedOccurrenceDensity(spOcc, cell.lat, cell.lng);
         const prediction = computeCellPrediction({
           lat: cell.lat,
           lon: cell.lng,

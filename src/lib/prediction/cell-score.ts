@@ -132,10 +132,13 @@ export function computeCellPrediction(input: CellPredictionInput): CellPredictio
 
   const baseSpeciesScore = speciesFit !== null ? baseScore * speciesFit : baseScore;
 
-  // "Observasjoner nær her" (GBIF) — our strongest validated signal (AUC ~0.95
-  // on spatial recurrence). Boost-only: real prior finds raise the score, but
-  // absence never lowers it (presence-only data is sampling-biased, so 0
-  // records ≠ no mushrooms). Capped so it complements, not dominates.
+  // "Observasjoner nær her" (GBIF) — our strongest validated spatial signal.
+  // Boost-only: real prior finds raise the score, but absence never lowers it
+  // (presence-only data is sampling-biased, so 0 records ≠ no mushrooms).
+  // `nearbyOccurrences` is now a DISTANCE-DECAYED density (Gaussian kernel,
+  // weightedOccurrenceDensity) rather than a hard-radius count — a find on the
+  // cell weighs ~1, one ~3 km away ~0.02 — so hotspots sharpen on the cells
+  // that actually have close finds. Still capped so it complements, not dominates.
   const nearbyOccurrences = input.nearbyOccurrences ?? 0;
   const occurrenceBoost = 1 + Math.min(0.6, nearbyOccurrences * 0.05);
 
