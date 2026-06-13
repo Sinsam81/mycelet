@@ -11,11 +11,31 @@ interface DayPoint {
   optimal: boolean;
 }
 
+type FlushStatus = 'fruiting' | 'soon' | 'building' | 'dry' | 'dormant';
+
+interface Flush {
+  status: FlushStatus;
+  daysUntil: number | null;
+  title: string;
+  message: string;
+}
+
 interface Forecast {
   today: { optimal: boolean; score: number; title: string; message: string; reasons: string[] };
   days: DayPoint[];
+  flush?: Flush;
   hasForecast: boolean;
 }
+
+// Tint the flush banner by status — green when ripe, amber when on the way,
+// muted when dry/dormant. The flush title already carries its own emoji.
+const FLUSH_TINT: Record<FlushStatus, string> = {
+  fruiting: 'border-forest-200 bg-forest-50 text-forest-900',
+  soon: 'border-amber-200 bg-amber-50 text-amber-900',
+  building: 'border-amber-200 bg-amber-50 text-amber-900',
+  dry: 'border-gray-200 bg-gray-50 text-gray-700',
+  dormant: 'border-gray-200 bg-gray-50 text-gray-600'
+};
 
 // Default region (Sør-Norge) used until the visitor opts to share their position —
 // we never prompt for location on the landing page.
@@ -140,6 +160,13 @@ export function MushroomDayCard() {
           ) : null}
         </div>
       </div>
+
+      {data.flush ? (
+        <div className={`mt-3 rounded-xl border px-3 py-2 ${FLUSH_TINT[data.flush.status]}`}>
+          <p className="text-sm font-semibold">{data.flush.title}</p>
+          <p className="mt-0.5 text-xs opacity-90">{data.flush.message}</p>
+        </div>
+      ) : null}
 
       {data.hasForecast && days.length > 1 ? (
         <div className="mt-3 border-t border-gray-100 pt-3">
