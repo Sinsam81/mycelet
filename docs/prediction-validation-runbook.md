@@ -19,6 +19,14 @@ npm run typecheck
 npm test -- --run src/lib --exclude '.claude/**'
 ```
 
+Én-kommando-kjøring for hele valideringspakken:
+
+```bash
+npm run validation:all
+```
+
+Dette lager JSON-filer og `.next/validation/report.md`. Standardmodus kjører `features:occurrence-weather` som `DRY_RUN=1`; bruk `WRITE_FEATURES=1` når migrasjon 022 er kjørt og du vil skrive feature-rader.
+
 Kalibrering mot ekte brukerfeedback:
 
 ```bash
@@ -185,6 +193,18 @@ Eller skriv den til fil:
 
 ```bash
 OUT=.next/validation/report.md npm run validation:report
+```
+
+For en større nattkjøring:
+
+```bash
+MAX_TEST=1000 NEG_PER_POS=5 FEATURE_LIMIT=200 npm run validation:all
+```
+
+For å faktisk skrive historisk værfeatures i samme kjøring:
+
+```bash
+WRITE_FEATURES=1 FEATURE_REGION=NO FEATURE_LIMIT=100 npm run validation:all
 ```
 
 ## Hva du skal lime tilbake

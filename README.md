@@ -47,6 +47,8 @@ Teknisk grunnmur for Mycelet (Next.js 16 + TypeScript + Tailwind + Supabase).
   - `npm run fit:weather-preferences`
 - Samlerapport fra JSON-output:
   - `npm run validation:report`
+- Hele valideringspakken:
+  - `npm run validation:all`
 - Runbook:
   - `docs/prediction-validation-runbook.md`
 
