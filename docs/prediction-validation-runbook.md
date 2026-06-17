@@ -25,6 +25,12 @@ Kalibrering mot ekte brukerfeedback:
 npm run calibrate:spot-feedback
 ```
 
+Kandidat-tabell for scorekalibrering når du har nok feedback:
+
+```bash
+npm run calibrate:fit-score
+```
+
 Maskinlesbart uttrekk, hvis du vil lime tall tilbake til Codex senere:
 
 ```bash
@@ -67,6 +73,7 @@ Tolkning:
 - 500+ rader: begynn å justere scorekalibrering.
 - Positiv `Brier skill` er et minimumskrav for å hevde at scoren er kalibrert bedre enn en flat baseline.
 - Hvis `mean score` er mye høyere enn `found rate`, er produktet overkonfident.
+- `calibrate:fit-score` lager bare et forslag. Ikke wire tabellen i produktet før du har nok rader og region-splitten ser stabil ut.
 
 ## Hvordan lese full-pipeline-backtesten
 

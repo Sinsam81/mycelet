@@ -37,6 +37,8 @@ Teknisk grunnmur for Mycelet (Next.js 16 + TypeScript + Tailwind + Supabase).
 ## Prediksjonsvalidering
 - Kalibrering mot brukerfeedback:
   - `npm run calibrate:spot-feedback`
+- Kandidat-tabell for scorekalibrering:
+  - `npm run calibrate:fit-score`
 - Sampled target-group audit av habitat/skog-signalet:
   - `npm run backtest:full-pipeline`
 - Historisk vær-feature-cache for senere modellering:
