@@ -9,7 +9,7 @@ Teknisk grunnmur for Mycelet (Next.js 16 + TypeScript + Tailwind + Supabase).
 - Basiskomponenter: `Button`, `PageWrapper`, `cn`
 - MVP-prediksjon: `/api/prediction` + hotspotpanel i kart
 - Kart: arts-spesifikk prediksjon via filter + heatmap-overlay
-- Fase 2 scaffold: `prediction_tiles` migrasjon + `scripts/generate-prediction-tiles.ts`
+- Prediksjonsmotor: live skog/vær/fenologi + precomputed cron-tiles, med valideringsrunbook i `docs/prediction-validation-runbook.md`
 - Admin/dev: `/admin/prediction` for inspeksjon av prediction tiles
 - Betaling: Stripe checkout/portal/webhook + `/pricing` og abonnementsgating i `/api/identify`
 - Webhook-idempotency: `supabase/migrations/007_billing_webhook_events.sql` + duplikatbeskyttelse i Stripe webhook
@@ -33,6 +33,14 @@ Teknisk grunnmur for Mycelet (Next.js 16 + TypeScript + Tailwind + Supabase).
 ## Checkpoint-script
 - For rask pause/fortsett med git:
   - `./scripts/checkpoint.sh`
+
+## Prediksjonsvalidering
+- Kalibrering mot brukerfeedback:
+  - `npm run calibrate:spot-feedback`
+- Sampled target-group audit av habitat/skog-signalet:
+  - `npm run backtest:full-pipeline`
+- Runbook:
+  - `docs/prediction-validation-runbook.md`
 
 ## Stripe (lokal test)
 1. Sett `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_PREMIUM_MONTHLY`, `STRIPE_PRICE_SEASON_PASS` i `.env.local`.

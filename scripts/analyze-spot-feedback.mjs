@@ -81,7 +81,7 @@ async function rest(path) {
 
 function feedbackPath(offset) {
   const params = new URLSearchParams({
-    select: 'id,created_at,found,score_shown,species_id',
+    select: 'id,created_at,found,score_shown,species_id,latitude,longitude',
     score_shown: 'not.is.null',
     order: 'created_at.asc',
     offset: String(offset),
@@ -107,7 +107,10 @@ async function fetchFeedbackRows() {
       createdAt: r.created_at,
       found: Boolean(r.found),
       score: Number(r.score_shown),
-      speciesId: r.species_id == null ? null : Number(r.species_id)
+      speciesId: r.species_id == null ? null : Number(r.species_id),
+      latitude: Number(r.latitude),
+      longitude: Number(r.longitude),
+      region: getRegion(Number(r.latitude), Number(r.longitude))
     }))
     .filter((r) => Number.isFinite(r.score) && r.score >= 0 && r.score <= 100);
 }
@@ -241,11 +244,42 @@ function monthlyBreakdown(rows) {
     .map(([month, rs]) => ({ month, ...summarize(rs) }));
 }
 
+function regionBreakdown(rows) {
+  return [...groupBy(rows, (r) => r.region).entries()]
+    .sort(([a], [b]) => String(a).localeCompare(String(b)))
+    .map(([region, rs]) => ({ region, ...summarize(rs) }));
+}
+
 function speciesBreakdown(rows, speciesNames) {
   return [...groupBy(rows.filter((r) => r.speciesId != null), (r) => r.speciesId).entries()]
     .map(([speciesId, rs]) => ({ speciesId: Number(speciesId), species: speciesNames.get(Number(speciesId)) ?? `species ${speciesId}`, ...summarize(rs) }))
     .filter((r) => r.n >= MIN_SPECIES_N)
     .sort((a, b) => b.n - a.n);
+}
+
+const NORWAY = { minLat: 57.7, maxLat: 71.5, minLon: 4.0, maxLon: 31.5 };
+const SWEDEN = { minLat: 55.2, maxLat: 69.1, minLon: 10.9, maxLon: 24.2 };
+
+function inBox(lat, lon, box) {
+  return lat >= box.minLat && lat <= box.maxLat && lon >= box.minLon && lon <= box.maxLon;
+}
+
+function noSeBorderLon(lat) {
+  if (lat <= 59) return 11.4;
+  if (lat <= 61) return 11.4 + (lat - 59) * 0.6;
+  if (lat <= 65) return 12.6 + (lat - 61) * 0.475;
+  if (lat <= 69) return 14.5 + (lat - 65) * 1.5;
+  return 20.5;
+}
+
+function getRegion(lat, lon) {
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return 'unknown';
+  const isNorway = inBox(lat, lon, NORWAY);
+  const isSweden = inBox(lat, lon, SWEDEN);
+  if (isNorway && !isSweden) return 'NO';
+  if (isSweden && !isNorway) return 'SE';
+  if (isNorway && isSweden) return lon < noSeBorderLon(lat) ? 'NO' : 'SE';
+  return 'other';
 }
 
 function printText(report) {
@@ -272,6 +306,15 @@ function printText(report) {
     for (const r of report.bySpecies) {
       console.log(
         `  ${String(r.speciesId).padStart(3)}  ${r.species.padEnd(42).slice(0, 42)}  n=${String(r.n).padStart(4)}  found=${pct(r.foundRate).padStart(6)}  mean=${fixed(r.meanScore, 1).padStart(5)}  brier=${fixed(r.brier)}`
+      );
+    }
+  }
+
+  if (report.byRegion.length > 0) {
+    console.log('\nBy region:');
+    for (const r of report.byRegion) {
+      console.log(
+        `  ${String(r.region).padEnd(7)}  n=${String(r.n).padStart(4)}  found=${pct(r.foundRate).padStart(6)}  mean=${fixed(r.meanScore, 1).padStart(5)}  brier=${fixed(r.brier)}  auc=${fixed(r.auc)}`
       );
     }
   }
@@ -303,6 +346,7 @@ async function main() {
     },
     summary: summarize(rows),
     calibration,
+    byRegion: regionBreakdown(rows),
     bySpecies: speciesBreakdown(rows, speciesNames),
     byMonth: monthlyBreakdown(rows)
   };

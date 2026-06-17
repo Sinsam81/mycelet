@@ -554,6 +554,25 @@ function increment(map, key, by = 1) {
   map[key] = (map[key] ?? 0) + by;
 }
 
+function emptyCounters() {
+  return {
+    wins: Object.fromEntries(VARIANTS.map((v) => [v, 0])),
+    comparisons: Object.fromEntries(VARIANTS.map((v) => [v, 0]))
+  };
+}
+
+function addComparison(counter, variant, result) {
+  if (result == null) return;
+  counter.wins[variant] += result;
+  counter.comparisons[variant]++;
+}
+
+function aucFromCounters(counter) {
+  return Object.fromEntries(
+    VARIANTS.map((v) => [v, counter.comparisons[v] > 0 ? counter.wins[v] / counter.comparisons[v] : null])
+  );
+}
+
 async function main() {
   const rng = makeRng(246813579);
   const speciesById = await fetchSpecies();
@@ -602,8 +621,8 @@ async function main() {
   });
   saveForestCache(forestCache);
 
-  const wins = Object.fromEntries(VARIANTS.map((v) => [v, 0]));
-  const comparisons = Object.fromEntries(VARIANTS.map((v) => [v, 0]));
+  const overall = emptyCounters();
+  const byPresenceRegion = new Map();
   const sources = {
     presence: {},
     background: {}
@@ -617,15 +636,26 @@ async function main() {
 
     const ps = scorePoint(pair.presence, presenceForest, speciesById, occurrenceIndex);
     const bs = scorePoint(pair.background, bgForest, speciesById, occurrenceIndex);
+    const region = getRegion(pair.presence.lat, pair.presence.lng);
+    if (!byPresenceRegion.has(region)) byPresenceRegion.set(region, emptyCounters());
+    const regionCounter = byPresenceRegion.get(region);
     for (const v of VARIANTS) {
       const result = compare(ps[v], bs[v]);
-      if (result == null) continue;
-      wins[v] += result;
-      comparisons[v]++;
+      addComparison(overall, v, result);
+      addComparison(regionCounter, v, result);
     }
   }
 
-  const auc = Object.fromEntries(VARIANTS.map((v) => [v, comparisons[v] > 0 ? wins[v] / comparisons[v] : null]));
+  const auc = aucFromCounters(overall);
+  const byRegion = Object.fromEntries(
+    [...byPresenceRegion.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([region, counter]) => [
+      region,
+      {
+        auc: aucFromCounters(counter),
+        comparisons: counter.comparisons
+      }
+    ])
+  );
   const report = {
     method: {
       holdoutCutoff: HOLDOUT_CUTOFF,
@@ -646,7 +676,8 @@ async function main() {
       sources
     },
     auc,
-    comparisons
+    comparisons: overall.comparisons,
+    byRegion
   };
 
   if (JSON_OUTPUT) {
@@ -677,7 +708,15 @@ async function main() {
   };
   console.log('AUC, target-group paired ranking:');
   for (const v of VARIANTS) {
-    console.log(`  ${label[v].padEnd(76)} ${fixed(auc[v])}   n=${comparisons[v]}`);
+    console.log(`  ${label[v].padEnd(76)} ${fixed(auc[v])}   n=${overall.comparisons[v]}`);
+  }
+
+  console.log('\nAUC by presence region (NO/SE asymmetry check):');
+  for (const [region, result] of Object.entries(byRegion)) {
+    console.log(`  ${region}`);
+    for (const v of ['fullCore', 'habitatWithinForest', 'occurrenceOnly', 'forestMask']) {
+      console.log(`    ${v.padEnd(22)} ${fixed(result.auc[v])}   n=${result.comparisons[v]}`);
+    }
   }
 
   console.log('\nRead this honestly:');
