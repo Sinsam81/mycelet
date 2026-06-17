@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { getBillingCapabilities, getUserBillingSubscription } from '@/lib/billing/subscription';
-import { fetchWeatherSummary } from '@/lib/weather';
+import { fetchWeatherSamplesForBounds, nearestWeatherSample, weatherSourceSummary } from '@/lib/weather/samples';
 import { getForestProperties, buildSpeciesHabitatPreferences } from '@/lib/forest';
 import { computeCellPrediction } from '@/lib/prediction/cell-score';
 import { dayOfYearOf } from '@/lib/prediction/phenology';
@@ -134,9 +134,9 @@ export async function GET(request: NextRequest) {
     const month = new Date().getMonth() + 1;
     const dayOfYear = dayOfYearOf(new Date());
 
-    // Weather is ~uniform across a local view → fetch once for the center.
-    const [weather, speciesRes, occRes] = await Promise.all([
-      fetchWeatherSummary({ lat: centerLat, lon: centerLng }),
+    const bounds = { minLat, minLng, maxLat, maxLng };
+    const [weatherSamples, speciesRes, occRes] = await Promise.all([
+      fetchWeatherSamplesForBounds(bounds),
       speciesId
         ? supabase
             .from('mushroom_species')
@@ -154,8 +154,10 @@ export async function GET(request: NextRequest) {
       })
     ]);
     const occurrences = (occRes?.data ?? []) as { latitude: number; longitude: number; species_id: number | null }[];
+    const centerWeather = nearestWeatherSample(weatherSamples, centerLat, centerLng)?.weather ?? null;
+    const weatherSource = weatherSourceSummary(weatherSamples);
 
-    if (!weather) {
+    if (!centerWeather) {
       return NextResponse.json({ error: 'Værdata ikke tilgjengelig for området' }, { status: 502 });
     }
 
@@ -228,12 +230,12 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const weatherInput = {
+    const weatherInput = (weather: NonNullable<typeof centerWeather>) => ({
       temperature: weather.temperatureC,
       humidity: weather.humidityPct,
       rain3dMm: weather.rain3dMm,
       soilMoistureIndex: weather.soilMoistureIndex
-    };
+    });
 
     const scored = await mapWithConcurrency(cellCenters, FOREST_CONCURRENCY, async (cell) => {
       const [forest, elev] = await Promise.all([
@@ -242,13 +244,15 @@ export async function GET(request: NextRequest) {
       ]);
       // No real forest signal → skip (never invent a gradient).
       if (!forest) return null;
+      const cellWeather = nearestWeatherSample(weatherSamples, cell.lat, cell.lng)?.weather;
+      if (!cellWeather) return null;
       const nearby = weightedOccurrenceDensity(occurrences, cell.lat, cell.lng);
       const prediction = computeCellPrediction({
         lat: cell.lat,
         lon: cell.lng,
         month,
         dayOfYear,
-        weather: weatherInput,
+        weather: weatherInput(cellWeather),
         forest,
         species: speciesContext,
         speciesHabitat,
@@ -264,6 +268,7 @@ export async function GET(request: NextRequest) {
         forestType: forest.forestType,
         productivity: forest.productivity,
         forest,
+        weather: cellWeather,
         nearbyOccurrences: nearby,
         elevation: elev?.elevationM ?? null
       };
@@ -272,7 +277,7 @@ export async function GET(request: NextRequest) {
     type ScoredCell = NonNullable<(typeof scored)[number]>;
     const allCells = scored.filter((c): c is ScoredCell => c !== null);
 
-    const whyWeather = {
+    const whyWeather = (weather: NonNullable<typeof centerWeather>) => ({
       temperatureC: weather.temperatureC,
       humidityPct: weather.humidityPct,
       rain3dMm: weather.rain3dMm,
@@ -280,7 +285,7 @@ export async function GET(request: NextRequest) {
       rain14dMm: weather.rain14dMm,
       minTemp7dC: weather.minTemp7dC,
       maxTemp7dC: weather.maxTemp7dC
-    };
+    });
     const whySpecies = speciesRes?.data
       ? {
           norwegianName: (speciesRes.data.norwegian_name as string | null) ?? '',
@@ -308,7 +313,7 @@ export async function GET(request: NextRequest) {
         }
         const habitat = speciesHabitat ? computeHabitatScore(c.forest, speciesHabitat) : null;
         const summary = buildSpotSummary({
-          weather: whyWeather,
+          weather: whyWeather(c.weather),
           species: whySpecies,
           forest: {
             forestType: c.forest.forestType,
@@ -332,7 +337,7 @@ export async function GET(request: NextRequest) {
                 lon: c.lng,
                 month,
                 dayOfYear,
-                weather: weatherInput,
+                weather: weatherInput(c.weather),
                 forest: c.forest,
                 species: cand.ctx,
                 speciesHabitat: cand.habitat,
@@ -369,7 +374,8 @@ export async function GET(request: NextRequest) {
       total: cellCenters.length,
       withForest: allCells.length,
       returned: cells.length,
-      weatherSource: weather.source,
+      weatherSource,
+      weatherSamples: weatherSamples.length,
       speciesId
     });
 
@@ -381,7 +387,8 @@ export async function GET(request: NextRequest) {
       cellLatSpan: latSpan,
       cellLngSpan: lngSpan,
       coverage: cellCenters.length ? allCells.length / cellCenters.length : 0,
-      weatherSource: weather.source
+      weatherSource,
+      weatherSamples: weatherSamples.length
     });
   } catch (error) {
     log.error('prediction.grid.failed', error);

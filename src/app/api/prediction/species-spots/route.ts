@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { getBillingCapabilities, getUserBillingSubscription } from '@/lib/billing/subscription';
-import { fetchWeatherSummary } from '@/lib/weather';
+import { fetchWeatherSamplesForBounds, nearestWeatherSample, weatherSourceSummary } from '@/lib/weather/samples';
 import { getForestProperties, buildSpeciesHabitatPreferences, computeHabitatScore } from '@/lib/forest';
 import { computeCellPrediction } from '@/lib/prediction/cell-score';
 import { dayOfYearOf } from '@/lib/prediction/phenology';
@@ -133,8 +133,11 @@ export async function GET(request: NextRequest) {
 
     const centerLat = (minLat + maxLat) / 2;
     const centerLng = (minLng + maxLng) / 2;
-    const weather = await fetchWeatherSummary({ lat: centerLat, lon: centerLng });
-    if (!weather) {
+    const bounds = { minLat, minLng, maxLat, maxLng };
+    const weatherSamples = await fetchWeatherSamplesForBounds(bounds);
+    const centerWeather = nearestWeatherSample(weatherSamples, centerLat, centerLng)?.weather ?? null;
+    const weatherSource = weatherSourceSummary(weatherSamples);
+    if (!centerWeather) {
       return NextResponse.json({ error: 'Værdata ikke tilgjengelig for området' }, { status: 502 });
     }
 
@@ -172,7 +175,9 @@ export async function GET(request: NextRequest) {
         getElevation({ lat: cell.lat, lon: cell.lng })
       ]);
       if (!forest) return null;
-      return { lat: cell.lat, lng: cell.lng, forest, elevation: elev?.elevationM ?? null };
+      const cellWeather = nearestWeatherSample(weatherSamples, cell.lat, cell.lng)?.weather;
+      if (!cellWeather) return null;
+      return { lat: cell.lat, lng: cell.lng, forest, weather: cellWeather, elevation: elev?.elevationM ?? null };
     });
     const cells = forested.filter((c): c is NonNullable<typeof c> => c !== null);
 
@@ -180,14 +185,14 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ spots: [], message: 'Fant lite skogdata her — prøv et område med mer skog.' });
     }
 
-    const weatherInput = {
+    const weatherInput = (weather: NonNullable<typeof centerWeather>) => ({
       temperature: weather.temperatureC,
       humidity: weather.humidityPct,
       rain3dMm: weather.rain3dMm,
       soilMoistureIndex: weather.soilMoistureIndex
-    };
+    });
 
-    const whyWeather = {
+    const whyWeather = (weather: NonNullable<typeof centerWeather>) => ({
       temperatureC: weather.temperatureC,
       humidityPct: weather.humidityPct,
       rain3dMm: weather.rain3dMm,
@@ -195,7 +200,7 @@ export async function GET(request: NextRequest) {
       rain14dMm: weather.rain14dMm,
       minTemp7dC: weather.minTemp7dC,
       maxTemp7dC: weather.maxTemp7dC
-    };
+    });
 
     const spots: {
       speciesId: number;
@@ -233,7 +238,7 @@ export async function GET(request: NextRequest) {
           lon: cell.lng,
           month,
           dayOfYear,
-          weather: weatherInput,
+          weather: weatherInput(cell.weather),
           forest: cell.forest,
           species: ctx,
           speciesHabitat,
@@ -250,7 +255,7 @@ export async function GET(request: NextRequest) {
       if (best && best.score > 0) {
         const habitat = computeHabitatScore(best.cell.forest, speciesHabitat);
         const summary = buildSpotSummary({
-          weather: whyWeather,
+          weather: whyWeather(best.cell.weather),
           species: {
             norwegianName: (sp.norwegian_name as string | null) ?? '',
             latinName: (sp.latin_name as string | null) ?? '',
@@ -295,10 +300,11 @@ export async function GET(request: NextRequest) {
       candidates: candidates.length,
       spots: spots.length,
       cells: cells.length,
-      weatherSource: weather.source
+      weatherSource,
+      weatherSamples: weatherSamples.length
     });
 
-    return NextResponse.json({ spots, weatherSource: weather.source });
+    return NextResponse.json({ spots, weatherSource, weatherSamples: weatherSamples.length });
   } catch (error) {
     log.error('prediction.species_spots.failed', error);
     return NextResponse.json(
