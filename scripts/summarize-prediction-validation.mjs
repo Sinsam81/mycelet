@@ -36,6 +36,8 @@ Environment:
   OCCURRENCE_WEATHER_JSON        Default .next/validation/occurrence-weather.json
   WEATHER_PREFERENCES_JSON       Default .next/validation/weather-preferences.json
   OUT                            Optional markdown output path
+  --enforce / ENFORCE=1          Exit 1 if required gates are not PASS (default: off, report stays advisory)
+  REQUIRE_GATES=key1,key2        Limit enforcement to these gate keys (default: all gates)
 `);
   process.exit(0);
 }
@@ -53,7 +55,13 @@ const PATHS = {
 function readJson(path) {
   if (!existsSync(path)) return { ok: false, path };
   try {
-    return { ok: true, path, data: JSON.parse(readFileSync(path, 'utf8')) };
+    let raw = readFileSync(path, 'utf8');
+    // Tolerate leading progress noise: the runner captures child stdout, so a
+    // stray "…50000 rader" progress line can prefix the JSON. Slice to the
+    // first object brace so a polluted artifact still parses.
+    const start = raw.indexOf('{');
+    if (start > 0) raw = raw.slice(start);
+    return { ok: true, path, data: JSON.parse(raw) };
   } catch (err) {
     return { ok: false, path, error: err instanceof Error ? err.message : String(err) };
   }
@@ -369,4 +377,22 @@ if (process.env.OUT) {
   console.log(`Wrote ${process.env.OUT}`);
 } else {
   process.stdout.write(report);
+}
+
+// Optional enforcement. Audit runs stay exit-0 by default so the report is
+// advisory; turn this on (--enforce or ENFORCE=1) in a promotion check to make
+// a non-passing gate FAIL the process. REQUIRE_GATES narrows it to specific keys.
+const enforce = args.has('--enforce') || process.env.ENFORCE === '1';
+if (enforce) {
+  const allGates = parts.flatMap((p) => p.gates);
+  const required = process.env.REQUIRE_GATES
+    ? process.env.REQUIRE_GATES.split(',').map((s) => s.trim()).filter(Boolean)
+    : allGates.map((g) => g.key);
+  const failing = allGates.filter((g) => required.includes(g.key) && !g.pass);
+  if (failing.length) {
+    console.error(`\nGate enforcement: ${failing.length}/${required.length} required gate(s) NOT passing — promotion blocked:`);
+    for (const g of failing) console.error(`  WAIT ${g.key}: value=${fixed(g.value)}; need ${g.need}`);
+    process.exit(1);
+  }
+  console.error(`Gate enforcement: all ${required.length} required gate(s) passing.`);
 }

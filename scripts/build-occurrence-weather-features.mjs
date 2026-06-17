@@ -47,7 +47,7 @@ Environment:
   UNTIL                          Optional observed_at upper bound, e.g. 2025-01-01
   CONCURRENCY                    Weather fetch concurrency, default 3
   CACHE_DIR                      Default .next/weather-feature-cache
-  DRY_RUN=1                      Fetch/compute but do not upsert
+  WRITE_FEATURES=1 / DRY_RUN=0   Enable upsert. Writes are OFF by default (dry-run).
   SKIP_EXISTING=0                Rebuild rows already present
   WRITE_ERRORS=1                 Persist unavailable/error rows; off by default
   --json                         Print machine-readable JSON summary
@@ -72,7 +72,19 @@ const SINCE = process.env.SINCE || null;
 const UNTIL = process.env.UNTIL || null;
 const CONCURRENCY = clampInt(Number(process.env.CONCURRENCY || 3), 1, 8);
 const CACHE_DIR = process.env.CACHE_DIR || '.next/weather-feature-cache';
-const DRY_RUN = process.env.DRY_RUN === '1';
+
+// Bounding boxes (mirror src/lib/utils/region.ts) used to narrow the occurrence
+// query to a region server-side. Without this, a REGION=SE batch would have to
+// scan the NO-dominated low ids to find Swedish rows. The boxes overlap; the
+// client-side noSeBorderLon() check below still refines NO vs SE within it.
+const REGION_BBOX = {
+  NO: { minLat: 57.7, maxLat: 71.5, minLon: 4.0, maxLon: 31.5 },
+  SE: { minLat: 55.2, maxLat: 69.1, minLon: 10.9, maxLon: 24.2 }
+};
+// Safe by default: never upsert unless writes are explicitly enabled, so a
+// direct invocation can't accidentally write to the DB. The runner passes
+// DRY_RUN=0 when WRITE_FEATURES=1; a direct caller can use either flag.
+const DRY_RUN = !(process.env.DRY_RUN === '0' || process.env.WRITE_FEATURES === '1');
 const SKIP_EXISTING = process.env.SKIP_EXISTING !== '0';
 const WRITE_ERRORS = process.env.WRITE_ERRORS === '1';
 const JSON_OUTPUT = args.has('--json') || process.env.JSON === '1';
@@ -204,17 +216,26 @@ async function rest(path, options = {}) {
   return text ? JSON.parse(text) : null;
 }
 
-function occurrencePath() {
+function occurrencePath(offset, limit) {
   const params = new URLSearchParams({
     select: 'id,species_id,latitude,longitude,observed_at',
     observed_at: 'not.is.null',
     order: 'id',
-    offset: String(OFFSET),
-    limit: String(LIMIT)
+    offset: String(offset),
+    limit: String(limit)
   });
   if (SPECIES_ID != null) params.set('species_id', `eq.${SPECIES_ID}`);
   if (SINCE) params.append('observed_at', `gte.${SINCE}`);
   if (UNTIL) params.append('observed_at', `lt.${UNTIL}`);
+  // Narrow to the region's bounding box server-side so SE batches don't scan
+  // the NO-dominated low ids. noSeBorderLon() still refines NO/SE in the overlap.
+  const bbox = REGION ? REGION_BBOX[REGION] : null;
+  if (bbox) {
+    params.append('latitude', `gte.${bbox.minLat}`);
+    params.append('latitude', `lte.${bbox.maxLat}`);
+    params.append('longitude', `gte.${bbox.minLon}`);
+    params.append('longitude', `lte.${bbox.maxLon}`);
+  }
   return `species_occurrences?${params.toString()}`;
 }
 
@@ -550,20 +571,40 @@ async function upsertFeatures(rows) {
 
 async function main() {
   ensureDir(CACHE_DIR);
-  const occurrenceRows = await rest(occurrencePath());
-  const occurrences = (occurrenceRows ?? [])
-    .map((r) => ({
-      id: Number(r.id),
-      species_id: r.species_id == null ? null : Number(r.species_id),
-      latitude: Number(r.latitude),
-      longitude: Number(r.longitude),
-      observed_at: r.observed_at
-    }))
-    .filter((r) => Number.isFinite(r.id) && Number.isFinite(r.latitude) && Number.isFinite(r.longitude) && r.observed_at);
 
-  const regionFiltered = REGION
-    ? occurrences.filter((o) => getRegion(o.latitude, o.longitude) === REGION)
-    : occurrences;
+  // Collect up to LIMIT region-matched occurrences. Region-matched rows are
+  // interleaved by id (the low ids are NO-heavy), so a REGION batch pages
+  // through until it has enough rather than region-filtering a single
+  // LIMIT-sized page (which can yield zero SE rows). A non-region run keeps the
+  // original single-page behaviour. The bbox query narrows the scan server-side.
+  const PAGE_SIZE = REGION ? 1000 : LIMIT;
+  const MAX_SCAN = REGION ? 80000 : LIMIT;
+  const matched = [];
+  let scanned = 0;
+  let offset = OFFSET;
+  while (matched.length < LIMIT && scanned < MAX_SCAN) {
+    const rows = await rest(occurrencePath(offset, PAGE_SIZE));
+    const batch = (rows ?? [])
+      .map((r) => ({
+        id: Number(r.id),
+        species_id: r.species_id == null ? null : Number(r.species_id),
+        latitude: Number(r.latitude),
+        longitude: Number(r.longitude),
+        observed_at: r.observed_at
+      }))
+      .filter((r) => Number.isFinite(r.id) && Number.isFinite(r.latitude) && Number.isFinite(r.longitude) && r.observed_at);
+    if (!batch.length) break;
+    scanned += batch.length;
+    offset += batch.length;
+    for (const o of batch) {
+      if (!REGION || getRegion(o.latitude, o.longitude) === REGION) matched.push(o);
+      if (matched.length >= LIMIT) break;
+    }
+    if (batch.length < PAGE_SIZE) break; // exhausted the table
+    if (!REGION) break; // non-region run: a single page of LIMIT rows
+  }
+
+  const regionFiltered = matched.slice(0, LIMIT);
   const existing = await existingFeatureIds(regionFiltered.map((o) => o.id));
   const todo = regionFiltered.filter((o) => !existing.has(o.id));
   const results = await mapLimit(todo, CONCURRENCY, async (occ, idx) => {
@@ -592,7 +633,7 @@ async function main() {
       skipExisting: SKIP_EXISTING,
       writeErrors: WRITE_ERRORS
     },
-    inspected: occurrences.length,
+    inspected: scanned,
     regionMatched: regionFiltered.length,
     existingSkipped: existing.size,
     attempted: todo.length,

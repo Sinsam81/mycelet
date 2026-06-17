@@ -150,7 +150,7 @@ async function main() {
     }
     from += rows.length;
     if (rows.length < PAGE) break;
-    if (from % 50000 === 0) process.stdout.write(`  …${from} rader\r`);
+    if (from % 50000 === 0) process.stderr.write(`  …${from} rader\r`);
   }
 
   // Finalize train curves.
