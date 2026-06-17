@@ -35,6 +35,8 @@ Teknisk grunnmur for Mycelet (Next.js 16 + TypeScript + Tailwind + Supabase).
   - `./scripts/checkpoint.sh`
 
 ## Prediksjonsvalidering
+- Lokal preflight før kveldskjøring:
+  - `npm run validation:preflight`
 - Kalibrering mot brukerfeedback:
   - `npm run calibrate:spot-feedback`
 - Kandidat-tabell for scorekalibrering:

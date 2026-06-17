@@ -15,8 +15,15 @@ Kjør dette fra repo-roten med lokal `.env.local` som inneholder `NEXT_PUBLIC_SU
 Først en rask sanity:
 
 ```bash
+npm run validation:preflight
 npm run typecheck
 npm test -- --run src/lib --exclude '.claude/**'
+```
+
+Etter at migrasjon 022 er kjørt i Supabase, kan du også sjekke at de forventede tabellene faktisk er lesbare:
+
+```bash
+LIVE_DB_CHECK=1 npm run validation:preflight
 ```
 
 Én-kommando-kjøring for hele valideringspakken:
