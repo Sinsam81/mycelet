@@ -13,6 +13,7 @@
     "calibrate:fit-score": "node --env-file=.env.local scripts/fit-score-calibration.mjs",
     "backtest:full-pipeline": "node --env-file=.env.local scripts/backtest-full-pipeline.mjs",
     "features:occurrence-weather": "node --env-file=.env.local scripts/build-occurrence-weather-features.mjs",
+    "fit:weather-preferences": "node --env-file=.env.local scripts/fit-weather-preferences.mjs",
     "test:e2e": "playwright test",
     "test:e2e:report": "playwright show-report",
     "cap:sync": "cap sync",

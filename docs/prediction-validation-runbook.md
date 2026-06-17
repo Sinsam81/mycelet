@@ -139,6 +139,18 @@ Skriv en liten svensk batch:
 REGION=SE LIMIT=50 npm run features:occurrence-weather
 ```
 
+Når feature-tabellen har data, kan du se om de håndskrevne slektprofilene ligner virkeligheten:
+
+```bash
+npm run fit:weather-preferences
+```
+
+For art-nivå, når du har mange nok rader:
+
+```bash
+GROUP_BY=species MIN_N=30 npm run fit:weather-preferences
+```
+
 Viktige forbehold:
 
 - Norge krever `MET_FROST_CLIENT_ID`.
@@ -146,6 +158,7 @@ Viktige forbehold:
 - Standard er `SKIP_EXISTING=1`, så scriptet hopper over rader som allerede har features.
 - Standard er `WRITE_ERRORS=0`, så manglende værdata forsøpler ikke feature-tabellen.
 - Bruk `OFFSET=...` for å jobbe deg gjennom flere batcher.
+- `fit:weather-preferences` gir robuste empiriske vinduer og target-group-kontrast, men wirer ingenting i produksjon.
 
 ## Hva du skal lime tilbake
 
