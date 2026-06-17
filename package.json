@@ -9,6 +9,8 @@
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "test": "vitest",
+    "calibrate:spot-feedback": "node --env-file=.env.local scripts/analyze-spot-feedback.mjs",
+    "backtest:full-pipeline": "node --env-file=.env.local scripts/backtest-full-pipeline.mjs",
     "test:e2e": "playwright test",
     "test:e2e:report": "playwright show-report",
     "cap:sync": "cap sync",
