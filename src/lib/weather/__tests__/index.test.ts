@@ -420,7 +420,10 @@ describe('fetchFrost (via Norway coords with key)', () => {
     expect(await fetchWeatherSummary(OSLO)).toBeNull();
   });
 
-  it('defaults humidity to 0 when no humidity is reported', async () => {
+  it('defaults humidity to a neutral value when no humidity is reported', async () => {
+    // A missing humidity reading (precip-only station) must NOT be treated as
+    // 0 % = desert-dry, which silently penalised the humidity + moisture terms.
+    // It falls back to a neutral-typical value instead (NEUTRAL_HUMIDITY_PCT).
     const dailyNoHumidity = [
       frostItem('SN18700:0', 1, [
         { elementId: 'mean(air_temperature P1D)', value: 14 },
@@ -436,7 +439,7 @@ describe('fetchFrost (via Norway coords with key)', () => {
 
     const result = await fetchWeatherSummary(OSLO);
     expect(result?.temperatureC).toBe(14);
-    expect(result?.humidityPct).toBe(0);
+    expect(result?.humidityPct).toBe(75);
   });
 
   it('skips Frost entirely when the key is the placeholder', async () => {

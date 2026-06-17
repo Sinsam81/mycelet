@@ -70,7 +70,7 @@ const planCards = [
     lead: 'Alt i Gratis, pluss:',
     features: [
       'Ubegrenset AI-identifikasjon',
-      'Full prediksjon — de beste stedene nær deg',
+      'Full prediksjon — lovende steder nær deg',
       'Offline-kart (lagre områder lokalt)',
       'Prioritert eksperthjelp (kommer)'
     ],

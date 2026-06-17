@@ -227,7 +227,7 @@ export function MushroomMap() {
     });
   }, []);
 
-  // "Beste steder nær meg": numbered pins on the best forest cells within ~5 km.
+  // "Lovende steder nær meg": numbered pins on promising forest cells within ~5 km.
   const renderTopSpots = useCallback(
     async (
       spots: { lat: number; lng: number; score: number; forestType: string; productivity: number | null; verdict?: string; reasons?: string[]; topSpecies?: string[] }[],
@@ -317,7 +317,7 @@ export function MushroomMap() {
         return;
       }
       if (!res.ok) {
-        setTopMsg(data?.error ?? 'Kunne ikke finne topp-steder.');
+        setTopMsg(data?.error ?? 'Kunne ikke finne lovende steder.');
         return;
       }
       const spots = (data.cells ?? []) as { lat: number; lng: number; score: number; forestType: string; productivity: number | null; verdict?: string; reasons?: string[]; topSpecies?: string[] }[];
@@ -337,13 +337,13 @@ export function MushroomMap() {
       const sName = sid != null ? speciesNamesRef.current.get(sid) ?? null : null;
       setTopMsg(
         limited
-          ? `Viser de ${spots.length} beste stedene nær deg. Premium viser alle 12 med full begrunnelse.`
+          ? `Viser de ${spots.length} mest lovende stedene nær deg. Premium viser alle 12 med full begrunnelse.`
           : sName
-            ? `${spots.length} beste steder for ${sName} innen 5 km. Trykk på en nål.`
-            : `${spots.length} beste steder innen 5 km. Trykk på en nål for begrunnelse.`
+            ? `${spots.length} lovende steder for ${sName} innen 5 km. Trykk på en nål.`
+            : `${spots.length} lovende steder innen 5 km. Trykk på en nål for begrunnelse.`
       );
     } catch {
-      setTopMsg('Kunne ikke finne topp-steder.');
+      setTopMsg('Kunne ikke finne lovende steder.');
     } finally {
       setTopLoading(false);
     }
@@ -415,7 +415,7 @@ export function MushroomMap() {
         const popup = `<div style="min-width:210px;max-width:265px">
           <div style="font-weight:700;color:#14532d">${spot.norwegianName}</div>
           <div style="font-style:italic;color:#6b7280;font-size:11px">${spot.latinName}</div>
-          <div style="color:#555;font-size:12px;margin-top:3px">${spot.verdict ?? 'Beste sted her'} · ${spot.score}/100</div>
+          <div style="color:#555;font-size:12px;margin-top:3px">${spot.verdict ?? 'Lovende sted her'} · ${spot.score}/100</div>
           <div style="font-size:12px;margin-top:6px;color:#1f2937">${reasonsHtml}</div>
           <a href="https://www.google.com/maps/search/?api=1&query=${spot.lat},${spot.lng}" target="_blank" rel="noreferrer" style="display:block;margin-top:7px;color:#15803d;font-weight:600;font-size:12px;text-decoration:underline">📍 Åpne i kart (naviger hit)</a>
           <div style="color:#9ca3af;font-size:10px;margin-top:6px">Kilder: MET (vær) · NIBIO/CORINE (skog) · Artsdatabanken (funn)</div>
@@ -464,7 +464,7 @@ export function MushroomMap() {
       }
       setSpeciesSpots(spots);
       await renderSpeciesSpots(spots);
-      setSpeciesMsg(`${spots.length} arter i sesong — bilde på beste sted for hver.`);
+      setSpeciesMsg(`${spots.length} arter i sesong — bilde på lovende sted for hver.`);
     } catch {
       setSpeciesMsg('Kunne ikke hente soppbilder.');
     } finally {
@@ -1148,7 +1148,7 @@ export function MushroomMap() {
         <div className="w-full">
           {selectedSpeciesName ? (
             <div className="flex items-center justify-between gap-2 rounded-full bg-forest-800 px-3 py-2 text-xs font-medium text-white shadow-lg">
-              <span className="truncate">🍄 Beste steder for {selectedSpeciesName}</span>
+              <span className="truncate">🍄 Lovende steder for {selectedSpeciesName}</span>
               <button
                 type="button"
                 onClick={clearSpeciesSearch}
@@ -1200,7 +1200,7 @@ export function MushroomMap() {
               topSpots ? 'bg-forest-800 text-white hover:bg-forest-700' : 'bg-white/95 text-gray-800 hover:bg-white'
             }`}
           >
-            {topLoading ? 'Søker…' : topSpots ? 'Skjul steder' : '⭐ Beste steder'}
+            {topLoading ? 'Søker…' : topSpots ? 'Skjul steder' : '⭐ Lovende steder'}
           </button>
           {hasOfflineAccess ? (
             <button
@@ -1239,7 +1239,7 @@ export function MushroomMap() {
               href="/pricing"
               className="flex items-center gap-1.5 rounded-full bg-amber-500 px-3 py-1.5 text-xs font-semibold text-white shadow-lg hover:bg-amber-600"
             >
-              🔒 Se alle 12 beste steder med Premium
+              🔒 Se alle 12 lovende steder med Premium
             </Link>
           </NonNativeOnly>
         ) : null}
@@ -1406,7 +1406,7 @@ export function MushroomMap() {
             <p className="text-base font-semibold text-gray-900">👋 Velkommen til soppkartet!</p>
             <ul className="mt-3 space-y-2 text-sm text-gray-700">
               <li>📍 <b>Vis registrerte funn</b> — ekte soppfunn, fargekodet etter spiselighet (🟢 spiselig, 🔴 giftig).</li>
-              <li>⭐ <b>Beste steder</b> — våre beste tips akkurat nå, med begrunnelse for hvorfor.</li>
+              <li>⭐ <b>Lovende steder</b> — våre beste tips akkurat nå (ut fra forhold + tidligere funn), med begrunnelse.</li>
               <li>🛰️ Bytt til <b>Satellitt</b> (oppe til høyre) for å se skogen ovenfra.</li>
               <li>📍-knappen nederst til høyre finner <b>din posisjon</b>.</li>
             </ul>

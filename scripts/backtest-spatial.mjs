@@ -1,10 +1,10 @@
 /**
- * Spatial backtest — does WHERE past finds cluster (+ WHEN, via phenology)
- * predict where/when NEW finds appear?
+ * Spatial backtest — does recurrence of past finds (+ WHEN, via phenology)
+ * rank future finds above places people also search?
  *
- * This validates the dominant spatial signal (occurrence density / "beste
- * steder") and the C10 distance-decayed kernel, and gives a reusable spatial
- * baseline. It deliberately scores only the OFFLINE-computable core —
+ * This measures the occurrence-density recurrence signal and the C10
+ * distance-decayed kernel, and gives a reusable spatial baseline. It
+ * deliberately scores only the OFFLINE-computable core —
  * occurrence density + empirical phenology — because the habitat/forest terms
  * need a per-point WMS call each (the deep-dive's "multi-hour hammering" path,
  * left out on purpose). So: this gates occurrence-signal + seasonality changes,

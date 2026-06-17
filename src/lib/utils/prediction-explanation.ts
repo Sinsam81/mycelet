@@ -200,7 +200,10 @@ export function buildExplanation(input: ExplanationInput): Explanation[] {
   }
 
   // ── Prior finds nearby (GBIF / Artsdatabanken) ──────────────────────
-  // Our strongest validated signal — real registered finds in the area.
+  // A historical "where people have found before" hint (recurrence), not proof
+  // of good habitat — it's ~0.52 AUC vs a target-group background (near chance
+  // once accessibility bias is removed). The user-facing line below is worded
+  // honestly as "tidligere funn registrert i nærheten", which is exactly that.
   if (input.nearbyOccurrences && input.nearbyOccurrences > 0) {
     lines.push({
       level: 'positive',

@@ -4,6 +4,7 @@ import { fetchWeatherSummary } from '@/lib/weather';
 import { getForestProperties, buildSpeciesHabitatPreferences } from '@/lib/forest';
 import { computeCellPrediction } from '@/lib/prediction/cell-score';
 import { dayOfYearOf } from '@/lib/prediction/phenology';
+import { weightedOccurrenceDensity } from '@/lib/prediction/occurrences';
 import type { SpeciesContext } from '@/lib/utils/species-scoring';
 import { createRequestLogger } from '@/lib/log/request';
 
@@ -143,12 +144,42 @@ export async function POST(request: NextRequest) {
       soilMoistureIndex: weather.soilMoistureIndex
     };
 
+    // Real prior finds (GBIF) in the region → "observasjoner nær her" boost.
+    // This is a weak recurrence prior, not a validated habitat model. Fetch ALL
+    // species' occurrences in one RPC per region (gentle on the DB), group by
+    // species_id, and reuse the grouped points across every cell — same signal
+    // the live recompute paths (/api/prediction, /grid, /species-spots) apply,
+    // so precomputed tiles no longer drift below on-demand scores near known finds.
+    const { data: occRows, error: occErr } = await supabase.rpc('get_occurrences_in_bounds', {
+      min_lat: region.minLat,
+      min_lng: region.minLng,
+      max_lat: region.maxLat,
+      max_lng: region.maxLng,
+      p_species_id: null,
+      p_limit: 4000
+    });
+    if (occErr) {
+      // Non-fatal: a missing occurrence boost is better than no tiles at all.
+      log.warn('generate_tiles.occurrences_failed', { region: region.name, error: occErr.message });
+    }
+    const occBySpecies = new Map<number, { latitude: number; longitude: number }[]>();
+    for (const o of (occRows ?? []) as { latitude: number; longitude: number; species_id: number | null }[]) {
+      if (o.species_id == null) continue;
+      const arr = occBySpecies.get(o.species_id);
+      if (arr) arr.push(o);
+      else occBySpecies.set(o.species_id, [o]);
+    }
+
     const cells = gridCells(region);
     // Forest is per cell but species-agnostic — fetch once per cell.
     const forests = await mapLimit(cells, 5, (c) => getForestProperties({ lat: c.lat, lon: c.lng }));
 
     const rows = cells.flatMap((cell, ci) => {
       const forest = forests[ci];
+      // No real forest signal → skip the whole cell, matching the live grid
+      // route (grid/route.ts). Never store pseudo-scored no-forest cells as
+      // hotspot tiles (their vegetation/soil would be Math.sin proxy noise).
+      if (!forest) return [];
       return species.map((sp) => {
         const speciesCtx: SpeciesContext = {
           speciesId: sp.id,
@@ -159,6 +190,11 @@ export async function POST(request: NextRequest) {
           peakSeasonStart: sp.peak_season_start,
           peakSeasonEnd: sp.peak_season_end
         };
+        const nearbyOccurrences = weightedOccurrenceDensity(
+          occBySpecies.get(sp.id) ?? [],
+          cell.lat,
+          cell.lng
+        );
         const prediction = computeCellPrediction({
           lat: cell.lat,
           lon: cell.lng,
@@ -170,7 +206,8 @@ export async function POST(request: NextRequest) {
           speciesHabitat: buildSpeciesHabitatPreferences({
             mycorrhizalPartners: sp.mycorrhizal_partners,
             habitat: sp.habitat
-          })
+          }),
+          nearbyOccurrences
         });
         return {
           tile_date: tileDate,
@@ -180,7 +217,7 @@ export async function POST(request: NextRequest) {
           center_lng: cell.lng,
           radius_meters: 500,
           score: prediction.score,
-          confidence: forest ? 70 : 45,
+          confidence: 70, // forest is guaranteed non-null here (no-forest cells skipped above)
           components: {
             vegetation: prediction.factors.vegetation,
             moisture: prediction.factors.moisture,
@@ -230,6 +267,7 @@ export async function POST(request: NextRequest) {
       region: region.name,
       tiles: rows.length,
       cells: cells.length,
+      occurrences: occRows?.length ?? 0,
       weatherSource: weather.source
     });
   }

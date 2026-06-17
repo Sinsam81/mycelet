@@ -1,6 +1,6 @@
 -- 021: spot_feedback — calibration data for the prediction engine.
 --
--- Every "Var du her? Fant du sopp?" answer on a Beste steder-pin lands here
+-- Every "Var du her? Fant du sopp?" answer on a Lovende steder-pin lands here
 -- together with the score we showed. This is the ground truth that lets us
 -- calibrate species-scoring/cell-score against reality (the hand-tuned
 -- multipliers in species-scoring.ts have never been validated).

@@ -291,7 +291,7 @@ export default async function HomePage() {
                 <Check className="h-4 w-4 shrink-0 text-amber-400" /> Ubegrenset AI-identifikasjon
               </li>
               <li className="flex items-center gap-2">
-                <Check className="h-4 w-4 shrink-0 text-amber-400" /> Full prediksjon — de beste stedene nær deg
+                <Check className="h-4 w-4 shrink-0 text-amber-400" /> Full prediksjon — lovende steder nær deg
               </li>
               <li className="flex items-center gap-2">
                 <Check className="h-4 w-4 shrink-0 text-amber-400" /> Offline-kart for skogsturen

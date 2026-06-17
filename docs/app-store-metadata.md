@@ -28,8 +28,8 @@ Mycelet er sopplukkerens beste turvenn — laget for norske og svenske skoger.
 
 FINN SOPPEN
 • Soppkart med over 185 000 registrerte funn, fargekodet etter spiselighet
-• «Beste steder» — prediksjon basert på ekte skogdata, vær og sesong viser
-  hvor sjansene er størst akkurat nå
+• «Lovende steder» — prediksjon basert på ekte skogdata, vær og sesong peker på
+  steder som ser mest lovende ut akkurat nå
 • Dagens soppforhold: én score som forteller om det er en god soppdag
 
 IDENTIFISER TRYGT
@@ -46,7 +46,7 @@ BLI MED I FELLESSKAPET
 
 PREMIUM (valgfritt abonnement)
 • Ubegrenset AI-identifikasjon (gratis: 5 per døgn)
-• Full prediksjon — de beste stedene nær deg
+• Full prediksjon — lovende steder nær deg
 • Offline-kart for områder uten dekning
 
 Personvern først: bildene dine renses for GPS-data før opplasting, og du
@@ -64,7 +64,7 @@ sopp,sopptur,soppkart,kantarell,steinsopp,soppkontroll,soppbok,skog,friluftsliv,
 ## Reklametekst / Promotional text (maks 170 tegn, kan endres uten ny review)
 
 ```
-Soppsesongen er i gang! Sjekk dagens soppforhold, se de beste stedene nær deg
+Soppsesongen er i gang! Sjekk dagens soppforhold, se lovende steder nær deg
 og identifiser funn med AI — trygt, norsk og laget for skogen.
 ```
 
@@ -72,7 +72,7 @@ og identifiser funn med AI — trygt, norsk og laget for skogen.
 
 Plan (5–6 stk, i denne rekkefølgen):
 1. Forsiden med «Soppforhold i dag»-måleren
-2. Kartet med funn-klynger og «Beste steder»
+2. Kartet med funn-klynger og «Lovende steder»
 3. AI-identifisering (resultatside med artsforslag)
 4. Artsdetalj med fareadvarsel (viser sikkerhetsfokuset)
 5. Sesongkalenderen

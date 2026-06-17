@@ -31,6 +31,17 @@ function isRealKey(value: string | undefined) {
 }
 
 /**
+ * Fallback humidity when the nearest station reports no relative-humidity
+ * reading (e.g. precip-only Frost stations). A missing reading is NOT a dry
+ * reading — defaulting to 0 % used to score the cell as a desert, silently
+ * penalising the humidity + moisture terms everywhere a station lacked the
+ * sensor. 75 % is a neutral-typical Nordic growing-season value: it neither
+ * rewards nor punishes a cell we simply have no humidity data for. (A stricter
+ * future option is to make humidity nullable end-to-end and skip the term.)
+ */
+const NEUTRAL_HUMIDITY_PCT = 75;
+
+/**
  * Returns a WeatherSummary for the given coordinates, choosing the right
  * upstream provider based on country:
  *
@@ -226,7 +237,7 @@ async function fetchFrost({ lat, lon }: WeatherFetchOptions): Promise<WeatherSum
   return {
     source: 'met_frost',
     temperatureC,
-    humidityPct: latestValue(humidSeries) ?? 0,
+    humidityPct: latestValue(humidSeries) ?? NEUTRAL_HUMIDITY_PCT,
     rain3dMm: frostSumWithinDays(precipSeries, 3, now),
     rain7dMm: frostSumWithinDays(precipSeries, 7, now),
     rain14dMm: precipSeries.length ? frostSumWithinDays(precipSeries, 14, now) : null,
@@ -400,7 +411,7 @@ async function fetchSmhi({ lat, lon }: WeatherFetchOptions): Promise<WeatherSumm
   return {
     source: 'smhi',
     temperatureC,
-    humidityPct: latestNumeric(humidData) ?? 0,
+    humidityPct: latestNumeric(humidData) ?? NEUTRAL_HUMIDITY_PCT,
     rain3dMm: sumWithinDays(rainData, 3, now),
     rain7dMm: sumWithinDays(rainData, 7, now),
     rain14dMm: sumWithinDays(rainData, 14, now),
@@ -429,7 +440,7 @@ async function fetchOpenWeather({ lat, lon }: WeatherFetchOptions): Promise<Weat
   return {
     source: 'openweather',
     temperatureC: Number(first?.main?.temp ?? 0),
-    humidityPct: Number(first?.main?.humidity ?? 0),
+    humidityPct: Number(first?.main?.humidity ?? NEUTRAL_HUMIDITY_PCT),
     rain3dMm: list.slice(0, 24).reduce((sum: number, item: any) => sum + Number(item?.rain?.['3h'] ?? 0), 0),
     rain7dMm: list.slice(0, 56).reduce((sum: number, item: any) => sum + Number(item?.rain?.['3h'] ?? 0), 0),
     rain14dMm: null,

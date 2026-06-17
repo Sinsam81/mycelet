@@ -19,8 +19,8 @@ const STEPS = [
   },
   {
     emoji: '📍',
-    title: 'Finn de beste stedene',
-    body: 'Vi kombinerer ekte skogdata, vær og sesong og viser deg hvor sjansene er størst akkurat nå — sjekk «Soppforhold i dag» på forsiden og «Beste steder» på kartet.'
+    title: 'Finn lovende steder',
+    body: 'Vi kombinerer ekte skogdata, vær og sesong og peker deg mot lovende steder ut fra dagens forhold og tidligere funn i nærheten — et godt utgangspunkt, ikke en fasit. Sjekk «Soppforhold i dag» på forsiden og «Lovende steder» på kartet.'
   },
   {
     emoji: '🛡️',

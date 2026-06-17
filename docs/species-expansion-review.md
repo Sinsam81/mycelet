@@ -10,7 +10,7 @@
 > **Gjenstår:** GBIF-funnimport for de nye artene var blokkert av en GBIF-
 > nedetid (HTTP 503) 10. juni. En bakgrunnsjobb venter på at GBIF kommer
 > tilbake og kjører importen automatisk (kun de nye artene, `ONLY_MISSING=1`).
-> De nye artene virker allerede på kartets «beste steder» via live-fallback —
+> De nye artene virker allerede på kartets «lovende steder» via live-fallback —
 > de mangler bare historiske funnpunkter til importen går.
 
 ## Hva som er gjort i natt

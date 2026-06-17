@@ -15,7 +15,7 @@ For andre planleggingsdokumenter, se [`docs/commercial-mvp-plan.md`](commercial-
 Live på mycelet.com (migrasjon 017):
 - **Soppkatalogen doblet:** 36 nye arter — 13 gift/uspiselige (inkl. de fire klassiske dødelige: grønn fluesopp, flatklokkehatt, steinmorkel, butt giftslørsopp) + 23 spiselige/betinget spiselige. Alle latinske navn EXACT-verifisert mot GBIF, alle 36 bilder HTTP-200-sjekket, alle `verified=false` (venter ekspertgodkjenning, som de 36 første).
 - **11 forvekslings-advarsler** koblet — hver ny matsopp er knyttet til sin giftige tvilling (vintersopp↔flatklokkehatt, morkel↔steinmorkel, snøballsjampinjong↔grønn fluesopp, nellikhatt↔hvit trakttsopp, m.fl.). Alle ankerarter fantes fra før, så ingen kobling ble hoppet over.
-- **Gjenstår:** GBIF-funnpunkter for de nye artene — var blokkert av en GBIF-nedetid (HTTP 503) 10. juni; en bakgrunnsjobb kjører importen automatisk (`ONLY_MISSING=1`) når GBIF er tilbake. Nye arter virker allerede på kartets «beste steder» via live-fallback. Importskriptet feiler nå tydelig ved GBIF-feil (tidligere ble 503 stille tolket som «0 funn»).
+- **Gjenstår:** GBIF-funnpunkter for de nye artene — var blokkert av en GBIF-nedetid (HTTP 503) 10. juni; en bakgrunnsjobb kjører importen automatisk (`ONLY_MISSING=1`) når GBIF er tilbake. Nye arter virker allerede på kartets «lovende steder» via live-fallback. Importskriptet feiler nå tydelig ved GBIF-feil (tidligere ble 503 stille tolket som «0 funn»).
 
 ---
 
@@ -34,7 +34,7 @@ Full defensiv revisjon før App Store, etterfulgt av seks fiksesteg (alle live):
 ## 🗺️ Nylig shippet — 6. juni 2026 (stor kart- + forside-økt)
 
 Alt live på mycelet.com (etter konkurrent-analyse + UX-ønsker):
-- **Kart:** base-layer-velger (Terreng/Kart/Satellitt), 187k registrerte GBIF-funn (fargekodet etter spiselighet + filter Alle/Spiselige/Giftige + «kun i sesong» + funn-dato), presise «Beste steder» (erstattet grovt, upresist heatmap) med «🍄 mest sannsynlig her»-arter per sted, «Hvilken sopp vil du finne?»-søk → beste steder for arten, «Finn meg»-knapp, stedssøk (Kartverket Stedsnavn), sopptur-modus, førstegangs-intro. Ryddet verktøylinja (rent, funksjonelt design — søk-øverst + én handlingsrad + toasts).
+- **Kart:** base-layer-velger (Terreng/Kart/Satellitt), 187k registrerte GBIF-funn (fargekodet etter spiselighet + filter Alle/Spiselige/Giftige + «kun i sesong» + funn-dato), «Lovende steder» (erstattet grovt, upresist heatmap) med «🍄 mest lovende her»-arter per sted, «Hvilken sopp vil du finne?»-søk → lovende steder for arten, «Finn meg»-knapp, stedssøk (Kartverket Stedsnavn), sopptur-modus, førstegangs-intro. Ryddet verktøylinja (rent, funksjonelt design — søk-øverst + én handlingsrad + toasts).
 - **Forside:** «Soppforhold i dag»-måler (fargekodet score-ring + «hvorfor»), «Dine funn»-statistikk, «Din siste sopptur».
 - **«Perfekt soppdag»-hjerne:** `src/lib/prediction/mushroom-day.ts` (`assessMushroomDay`) + `/api/mushroom-day` — klar for proaktivt daglig varsel. **Push er utsatt til native-appen** (web-push har dårlig iOS-rekkevidde uten PWA-install).
 

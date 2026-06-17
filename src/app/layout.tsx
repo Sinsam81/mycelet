@@ -24,7 +24,7 @@ export const metadata: Metadata = {
     template: '%s — Mycelet'
   },
   description:
-    'Finn mer sopp: live soppvarsel, prediksjonskart med beste steder, AI-identifikasjon og artsbibliotek for Norge og Sverige.',
+    'Finn mer sopp: live soppvarsel, prediksjonskart med lovende steder, AI-identifikasjon og artsbibliotek for Norge og Sverige.',
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,

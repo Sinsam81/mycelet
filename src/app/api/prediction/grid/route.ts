@@ -177,7 +177,7 @@ export async function GET(request: NextRequest) {
         })
       : null;
 
-    // For the generic (no specific species) "beste steder" view, also name the
+    // For the generic (no specific species) "lovende steder" view, also name the
     // most likely species at each top spot. Fetch the in-season candidates once
     // and reuse each cell's already-fetched forest for a cheap per-species score.
     let topSpeciesCandidates: {
@@ -295,8 +295,8 @@ export async function GET(request: NextRequest) {
         }
       : undefined;
 
-    // `top` mode returns the best N cells with a persuasive "why" per spot
-    // (for "5 beste steder nær meg"); the default returns lean cells for the heatmap.
+    // `top` mode returns the most promising N cells with a persuasive "why" per spot
+    // (for "5 lovende steder nær meg"); the default returns lean cells for the heatmap.
     let cells: Record<string, unknown>[];
     if (effectiveTop) {
       const topCells = [...allCells].sort((a, b) => b.score - a.score).slice(0, effectiveTop);

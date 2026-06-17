@@ -5,7 +5,7 @@ import { getClientKey, rateLimitResponse } from '@/lib/rate-limit/route';
 import { createRequestLogger } from '@/lib/log/request';
 
 /**
- * "Var du her? Fant du sopp?" — one tap of ground truth per Beste steder-pin.
+ * "Var du her? Fant du sopp?" — one tap of ground truth per Lovende steder-pin.
  * Inserts run as the logged-in user so RLS guarantees user_id integrity.
  * Coordinates are rounded to ~1 m precision as sent; the row is only readable
  * by the user themselves + the service role (see migration 021).

@@ -132,7 +132,12 @@ export function computeCellPrediction(input: CellPredictionInput): CellPredictio
 
   const baseSpeciesScore = speciesFit !== null ? baseScore * speciesFit : baseScore;
 
-  // "Observasjoner nær her" (GBIF) — our strongest validated spatial signal.
+  // "Observasjoner nær her" (GBIF) — a recurrence/"where people have found
+  // before" hint, NOT validated habitat suitability. The spatial backtest
+  // (scripts/backtest-spatial.mjs) puts this at ~0.52 AUC against a target-group
+  // background — near chance once accessibility/sampling bias is removed. Keep
+  // it as a soft historical prior, and don't surface it to users as proof of a
+  // good spot (see prediction-explanation.ts; the validated signal is TEMPORAL).
   // Boost-only: real prior finds raise the score, but absence never lowers it
   // (presence-only data is sampling-biased, so 0 records ≠ no mushrooms).
   // `nearbyOccurrences` is now a DISTANCE-DECAYED density (Gaussian kernel,

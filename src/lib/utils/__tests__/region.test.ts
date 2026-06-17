@@ -32,9 +32,11 @@ describe('getRegion — Swedish cities', () => {
     expect(getRegion(59.3293, 18.0686)).toBe('SE');
   });
 
-  // NB: Göteborg lives in the "known imprecisions" block — see bottom
-  // of this file. The lon=12.5 overlap split routes it to NO, which is
-  // wrong but documented.
+  it('Göteborg resolves to SE', () => {
+    // Inside both boxes; the latitude-aware border (~11.4°E here) correctly
+    // routes Sweden's second-largest city to SE (the old fixed 12.5 sent it to NO).
+    expect(getRegion(57.7089, 11.9746)).toBe('SE');
+  });
 
   it('Malmö resolves to SE', () => {
     expect(getRegion(55.6049, 13.0038)).toBe('SE');
@@ -67,24 +69,32 @@ describe('getRegion — non-Nordic locations resolve to other', () => {
   });
 });
 
-describe('getRegion — overlap zone (lon 12.5 split rule)', () => {
-  // Coordinates inside BOTH bounding boxes (lat 58-69, lon 11-24).
-  // Rule: lon < 12.5 → NO, lon >= 12.5 → SE.
+describe('getRegion — overlap zone (latitude-aware NO/SE border)', () => {
+  // Coordinates inside BOTH bounding boxes (lat 58-69, lon 11-24) are split by
+  // an approximate border longitude that grows with latitude. At lat 60 the
+  // border is ~12.0°E: west → NO, at/east → SE.
 
-  it('overlap with lon < 12.5 → NO', () => {
+  it('overlap west of the border → NO', () => {
     expect(getRegion(60.0, 11.5)).toBe('NO');
   });
 
-  it('overlap exactly at lon = 12.5 → SE (>= side)', () => {
-    expect(getRegion(60.0, 12.5)).toBe('SE');
+  it('overlap at/east of the border → SE', () => {
+    expect(getRegion(60.0, 12.0)).toBe('SE');
   });
 
-  it('overlap with lon = 12.4 → NO (just below split)', () => {
-    expect(getRegion(60.0, 12.4)).toBe('NO');
+  it('overlap just west of the border → NO', () => {
+    expect(getRegion(60.0, 11.9)).toBe('NO');
   });
 
-  it('overlap with lon = 12.51 → SE (just above split)', () => {
-    expect(getRegion(60.0, 12.51)).toBe('SE');
+  it('overlap just east of the border → SE', () => {
+    expect(getRegion(60.0, 12.1)).toBe('SE');
+  });
+
+  it('border moves east with latitude (same lon, different country)', () => {
+    // At 57.7°N the border is ~11.4, so 11.97°E (Göteborg) is SE…
+    expect(getRegion(57.7089, 11.9746)).toBe('SE');
+    // …but the same longitude at lat 64 is well west of the border → NO.
+    expect(getRegion(64.0, 11.9746)).toBe('NO');
   });
 });
 
@@ -107,8 +117,8 @@ describe('getRegion — bounding-box edges', () => {
   });
 
   it('SE west edge (lon 10.9) inside', () => {
-    // Sweden box minLon
-    expect(getRegion(60.0, 10.9)).toBe('NO'); // overlap, lon < 12.5 wins for NO
+    // Sweden box minLon — still west of the lat-60 border (~12.0°E) → NO
+    expect(getRegion(60.0, 10.9)).toBe('NO');
   });
 
   it('SE east edge (lon 24.2) inside', () => {
@@ -162,11 +172,4 @@ describe('getRegion — known imprecisions (documented, not bugs)', () => {
     expect(getRegion(55.6761, 12.5683)).toBe('SE');
   });
 
-  it('Göteborg resolves to NO due to overlap rule (lon 11.97 < 12.5)', () => {
-    // Göteborg at (57.71, 11.97) is inside both boxes, so the lon=12.5
-    // overlap split sends it to NO. Sweden's second-largest city should
-    // probably go to SE, but the lon split was tuned for the inland
-    // border further north.
-    expect(getRegion(57.7089, 11.9746)).toBe('NO');
-  });
 });
