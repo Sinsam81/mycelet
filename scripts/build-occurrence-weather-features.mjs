@@ -50,6 +50,7 @@ Environment:
   DRY_RUN=1                      Fetch/compute but do not upsert
   SKIP_EXISTING=0                Rebuild rows already present
   WRITE_ERRORS=1                 Persist unavailable/error rows; off by default
+  --json                         Print machine-readable JSON summary
 `);
   process.exit(0);
 }
@@ -74,6 +75,7 @@ const CACHE_DIR = process.env.CACHE_DIR || '.next/weather-feature-cache';
 const DRY_RUN = process.env.DRY_RUN === '1';
 const SKIP_EXISTING = process.env.SKIP_EXISTING !== '0';
 const WRITE_ERRORS = process.env.WRITE_ERRORS === '1';
+const JSON_OUTPUT = args.has('--json') || process.env.JSON === '1';
 const SMHI_STATION_CANDIDATES = clampInt(Number(process.env.SMHI_STATION_CANDIDATES || 4), 1, 10);
 
 const NEUTRAL_HUMIDITY_PCT = 75;
@@ -564,7 +566,7 @@ async function main() {
   const todo = regionFiltered.filter((o) => !existing.has(o.id));
   const results = await mapLimit(todo, CONCURRENCY, async (occ, idx) => {
     const result = await featureForOccurrence(occ);
-    if ((idx + 1) % 25 === 0) process.stdout.write(`  processed ${idx + 1}/${todo.length}\r`);
+    if (!JSON_OUTPUT && (idx + 1) % 25 === 0) process.stdout.write(`  processed ${idx + 1}/${todo.length}\r`);
     return result;
   });
   const good = results.filter((r) => r && !r.skipped);
@@ -576,14 +578,43 @@ async function main() {
   const errors = {};
   for (const row of skipped) errors[row.error] = (errors[row.error] ?? 0) + 1;
 
+  const report = {
+    filters: {
+      limit: LIMIT,
+      offset: OFFSET,
+      region: REGION,
+      speciesId: SPECIES_ID,
+      since: SINCE,
+      until: UNTIL,
+      dryRun: DRY_RUN,
+      skipExisting: SKIP_EXISTING,
+      writeErrors: WRITE_ERRORS
+    },
+    inspected: occurrences.length,
+    regionMatched: regionFiltered.length,
+    existingSkipped: existing.size,
+    attempted: todo.length,
+    featuresReady: good.length,
+    byRegion,
+    skippedErrors: {
+      count: skipped.length,
+      errors
+    },
+    cacheDir: CACHE_DIR,
+    frostClientConfigured: Boolean(FROST_CLIENT_ID)
+  };
+
+  if (JSON_OUTPUT) {
+    console.log(JSON.stringify(report, null, 2));
+    return;
+  }
+
   console.log('\n=== Occurrence weather feature build ===');
-  console.log(
-    `Inspected: ${occurrences.length}  | region-matched: ${regionFiltered.length}  | existing skipped: ${existing.size}  | attempted: ${todo.length}`
-  );
-  console.log(`Features ready: ${good.length}${DRY_RUN ? ' (dry-run, not written)' : ''}`);
-  console.log(`By region: ${JSON.stringify(byRegion)}`);
-  console.log(`Skipped/errors not written: ${skipped.length} ${JSON.stringify(errors)}`);
-  console.log(`Cache dir: ${CACHE_DIR}`);
+  console.log(`Inspected: ${report.inspected}  | region-matched: ${report.regionMatched}  | existing skipped: ${report.existingSkipped}  | attempted: ${report.attempted}`);
+  console.log(`Features ready: ${report.featuresReady}${DRY_RUN ? ' (dry-run, not written)' : ''}`);
+  console.log(`By region: ${JSON.stringify(report.byRegion)}`);
+  console.log(`Skipped/errors not written: ${report.skippedErrors.count} ${JSON.stringify(report.skippedErrors.errors)}`);
+  console.log(`Cache dir: ${report.cacheDir}`);
   if (!FROST_CLIENT_ID) console.log('Note: MET_FROST_CLIENT_ID missing; NO rows will be skipped unless WRITE_ERRORS=1.');
 }
 

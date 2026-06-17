@@ -45,6 +45,8 @@ Teknisk grunnmur for Mycelet (Next.js 16 + TypeScript + Tailwind + Supabase).
   - `LIMIT=25 DRY_RUN=1 npm run features:occurrence-weather`
 - Empirisk sjekk av slekt-/artsværprofiler:
   - `npm run fit:weather-preferences`
+- Samlerapport fra JSON-output:
+  - `npm run validation:report`
 - Runbook:
   - `docs/prediction-validation-runbook.md`
 

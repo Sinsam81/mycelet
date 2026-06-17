@@ -36,6 +36,7 @@ Maskinlesbart uttrekk, hvis du vil lime tall tilbake til Codex senere:
 ```bash
 mkdir -p .next/validation
 npm run calibrate:spot-feedback -- --json > .next/validation/spot-feedback.json
+npm run calibrate:fit-score -- --json > .next/validation/score-calibration.json
 ```
 
 Sampled full-pipeline spatial audit:
@@ -127,6 +128,12 @@ Start alltid med dry-run og liten batch:
 LIMIT=25 DRY_RUN=1 npm run features:occurrence-weather
 ```
 
+Dry-run som JSON:
+
+```bash
+LIMIT=25 DRY_RUN=1 npm run features:occurrence-weather -- --json > .next/validation/occurrence-weather.json
+```
+
 Skriv en liten norsk batch:
 
 ```bash
@@ -145,6 +152,12 @@ Når feature-tabellen har data, kan du se om de håndskrevne slektprofilene lign
 npm run fit:weather-preferences
 ```
 
+Som JSON til rapport:
+
+```bash
+npm run fit:weather-preferences -- --json > .next/validation/weather-preferences.json
+```
+
 For art-nivå, når du har mange nok rader:
 
 ```bash
@@ -159,6 +172,20 @@ Viktige forbehold:
 - Standard er `WRITE_ERRORS=0`, så manglende værdata forsøpler ikke feature-tabellen.
 - Bruk `OFFSET=...` for å jobbe deg gjennom flere batcher.
 - `fit:weather-preferences` gir robuste empiriske vinduer og target-group-kontrast, men wirer ingenting i produksjon.
+
+## Samlerapport
+
+Når JSON-filene finnes, lag en beslutningsrapport:
+
+```bash
+npm run validation:report
+```
+
+Eller skriv den til fil:
+
+```bash
+OUT=.next/validation/report.md npm run validation:report
+```
 
 ## Hva du skal lime tilbake
 
