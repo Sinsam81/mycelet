@@ -219,7 +219,9 @@ function occurrencePath() {
 }
 
 async function existingFeatureIds(ids) {
-  if (!ids.length || !SKIP_EXISTING) return new Set();
+  // Dry-runs should work before migration 022 exists; they are often used as a
+  // preflight before writing the occurrence_weather_features table.
+  if (!ids.length || !SKIP_EXISTING || DRY_RUN) return new Set();
   const out = new Set();
   for (let i = 0; i < ids.length; i += 200) {
     const chunk = ids.slice(i, i + 200);
