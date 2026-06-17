@@ -274,3 +274,5 @@ Etter kveldskjøring, lim disse linjene tilbake til Codex:
 - Fra `features:occurrence-weather`: `Features ready`, `By region`, og `Skipped/errors not written`.
 
 Da kan neste steg være konkret: kalibrere score, endre habitatregler, eller konkludere med at stor SDM må prioriteres.
+
+For svensk skogdata-paritet, se `docs/swedish-forest-data-upgrade.md`. Ikke bytt fra CORINE til Skogsstyrelsen som default før SE-regionen faktisk løfter i `backtest:full-pipeline`.

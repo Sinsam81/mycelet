@@ -51,6 +51,8 @@ Teknisk grunnmur for Mycelet (Next.js 16 + TypeScript + Tailwind + Supabase).
   - `npm run fit:weather-preferences`
 - SDM-baseline fra target-group JSONL:
   - `npm run fit:sdm-logistic`
+- Svensk skogdata-oppgradering:
+  - `docs/swedish-forest-data-upgrade.md`
 - Samlerapport fra JSON-output:
   - `npm run validation:report`
 - Hele valideringspakken:

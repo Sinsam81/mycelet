@@ -12,7 +12,9 @@
  * outside the bounding box, on water/urban/open cells (SR16 nodata), and
  * on any network/parse failure — callers then lean on the climate signal.
  *
- * Sweden/Finland get a separate adapter (Skogsstyrelsen kNN — TODO).
+ * Sweden currently routes through CORINE in src/lib/forest. A richer Sweden
+ * adapter should use Skogsstyrelsens Skogliga grunddata when credentials and
+ * layer endpoints are configured.
  */
 
 import { getRegion } from '@/lib/utils/region';

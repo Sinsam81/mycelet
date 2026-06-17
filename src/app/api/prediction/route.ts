@@ -303,7 +303,7 @@ export async function GET(request: NextRequest) {
         species_filter: speciesId,
         month_filter: null
       }),
-      // Real forest/soil signal: NIBIO SR16 (NO), SLU (SE, stub), null elsewhere.
+      // Real forest/soil signal: NIBIO SR16 (NO), CORINE forest type (SE), null elsewhere.
       getForestProperties({ lat, lon }),
       // Real prior finds (GBIF) near the point → "observasjoner nær her" boost.
       supabase.rpc('get_occurrences_in_bounds', {
