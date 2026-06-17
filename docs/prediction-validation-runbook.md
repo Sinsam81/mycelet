@@ -106,6 +106,40 @@ Neste ekte modellsteg trenger en datakilde for vær ved funntidspunkt:
 
 Først når dette finnes kan vi si om værleddet predikerer funn utover fenologi og occurrence-bias.
 
+## Neste fase: historisk vær-cache
+
+Migrasjon `022_occurrence_weather_features.sql` legger opp en intern feature-tabell for vær ved funntidspunkt. Byggescriptet fyller den fra MET Frost (NO) og SMHI corrected archive (SE):
+
+```bash
+npm run features:occurrence-weather -- --help
+```
+
+Start alltid med dry-run og liten batch:
+
+```bash
+LIMIT=25 DRY_RUN=1 npm run features:occurrence-weather
+```
+
+Skriv en liten norsk batch:
+
+```bash
+REGION=NO LIMIT=100 npm run features:occurrence-weather
+```
+
+Skriv en liten svensk batch:
+
+```bash
+REGION=SE LIMIT=50 npm run features:occurrence-weather
+```
+
+Viktige forbehold:
+
+- Norge krever `MET_FROST_CLIENT_ID`.
+- Sverige laster store SMHI CSV-arkiv per stasjon/parameter første gang. Cache ligger i `.next/weather-feature-cache/`.
+- Standard er `SKIP_EXISTING=1`, så scriptet hopper over rader som allerede har features.
+- Standard er `WRITE_ERRORS=0`, så manglende værdata forsøpler ikke feature-tabellen.
+- Bruk `OFFSET=...` for å jobbe deg gjennom flere batcher.
+
 ## Hva du skal lime tilbake
 
 Etter kveldskjøring, lim disse linjene tilbake til Codex:
@@ -115,5 +149,6 @@ Etter kveldskjøring, lim disse linjene tilbake til Codex:
 - AUC-tabellen fra `backtest:full-pipeline`.
 - `AUC by presence region`.
 - `Presence forest coverage` og `background forest coverage`.
+- Fra `features:occurrence-weather`: `Features ready`, `By region`, og `Skipped/errors not written`.
 
 Da kan neste steg være konkret: kalibrere score, endre habitatregler, eller konkludere med at stor SDM må prioriteres.

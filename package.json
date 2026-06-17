@@ -11,6 +11,7 @@
     "test": "vitest",
     "calibrate:spot-feedback": "node --env-file=.env.local scripts/analyze-spot-feedback.mjs",
     "backtest:full-pipeline": "node --env-file=.env.local scripts/backtest-full-pipeline.mjs",
+    "features:occurrence-weather": "node --env-file=.env.local scripts/build-occurrence-weather-features.mjs",
     "test:e2e": "playwright test",
     "test:e2e:report": "playwright show-report",
     "cap:sync": "cap sync",
