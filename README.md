@@ -41,6 +41,8 @@ Teknisk grunnmur for Mycelet (Next.js 16 + TypeScript + Tailwind + Supabase).
   - `npm run calibrate:spot-feedback`
 - Kandidat-tabell for scorekalibrering:
   - `npm run calibrate:fit-score`
+- Temporal fenologi-backtest:
+  - `npm run backtest:phenology`
 - Sampled target-group audit av habitat/skog-signalet:
   - `npm run backtest:full-pipeline`
 - Historisk vær-feature-cache for senere modellering:

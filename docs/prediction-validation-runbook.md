@@ -46,12 +46,19 @@ Kandidat-tabell for scorekalibrering når du har nok feedback:
 npm run calibrate:fit-score
 ```
 
+Temporal fenologi-backtest:
+
+```bash
+npm run backtest:phenology
+```
+
 Maskinlesbart uttrekk, hvis du vil lime tall tilbake til Codex senere:
 
 ```bash
 mkdir -p .next/validation
 npm run calibrate:spot-feedback -- --json > .next/validation/spot-feedback.json
 npm run calibrate:fit-score -- --json > .next/validation/score-calibration.json
+npm run backtest:phenology -- --json > .next/validation/phenology.json
 ```
 
 Sampled full-pipeline spatial audit:
@@ -90,6 +97,25 @@ Tolkning:
 - Positiv `Brier skill` er et minimumskrav for å hevde at scoren er kalibrert bedre enn en flat baseline.
 - Hvis `mean score` er mye høyere enn `found rate`, er produktet overkonfident.
 - `calibrate:fit-score` lager bare et forslag. Ikke wire tabellen i produktet før du har nok rader og region-splitten ser stabil ut.
+
+## Hvordan lese fenologi-backtesten
+
+`backtest:phenology` svarer på: lærer den empiriske kurven riktig funn-timing bedre enn de håndskrevne månedene?
+
+Standard er en ekte temporal split: `train < 2021-01-01`, `test >= 2021-01-01`. Den gamle rad-hash-splitten kan kjøres med `SPLIT_MODE=hash`, men den må ikke omtales som fremtidig/temporal validering.
+
+Viktigste felt:
+
+- `oldMonthModel`: AUC for håndskrevne sesongmåneder.
+- `empiricalPhenology`: AUC for den lærte ukekurven.
+- `delta`: hvor mye den lærte kurven slår måned-modellen.
+- `splitMode`: skal være `year` når du vil vurdere robusthet over tid.
+
+Tolkning:
+
+- `delta > 0` betyr at kurven tilfører timing-signal utover månedene.
+- `empiricalPhenology >= 0.75` er sterkt nok til å bruke som et tydelig produktargument om når forholdene er gode.
+- Lavere score i temporal split enn hash-split er forventet; det betyr at år-til-år-drift er vanskeligere enn å holde ut tilfeldige rader.
 
 ## Hvordan lese full-pipeline-backtesten
 
@@ -220,6 +246,7 @@ Etter kveldskjøring, lim disse linjene tilbake til Codex:
 
 - `Rows`, `found rate`, `mean score`, `Brier`, `baseline Brier`, `Brier skill`, `ECE`.
 - `By region` fra `calibrate:spot-feedback`.
+- `oldMonthModel`, `empiricalPhenology`, `delta`, og `splitMode` fra `backtest:phenology`.
 - AUC-tabellen fra `backtest:full-pipeline`.
 - `AUC by presence region`.
 - `Presence forest coverage` og `background forest coverage`.

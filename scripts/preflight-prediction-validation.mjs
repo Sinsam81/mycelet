@@ -131,6 +131,7 @@ function checkPackageScripts() {
   const required = [
     'calibrate:spot-feedback',
     'calibrate:fit-score',
+    'backtest:phenology',
     'backtest:full-pipeline',
     'features:occurrence-weather',
     'fit:weather-preferences',
@@ -148,6 +149,7 @@ function checkFiles() {
   const required = [
     'scripts/analyze-spot-feedback.mjs',
     'scripts/fit-score-calibration.mjs',
+    'scripts/backtest-phenology.mjs',
     'scripts/backtest-full-pipeline.mjs',
     'scripts/build-occurrence-weather-features.mjs',
     'scripts/fit-weather-preferences.mjs',

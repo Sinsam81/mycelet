@@ -3,7 +3,8 @@
  * better than the hand-coded season months?
  *
  * Method (isolates the timing dimension, which is all phenology changes):
- *   - Split the dated finds per species into 80% train / 20% test.
+ *   - Default: temporal split (train before CUTOFF, test on/after CUTOFF).
+ *     SPLIT_MODE=hash keeps the older deterministic 80/20 row holdout.
  *   - Build phenology curves on TRAIN only (so we measure generalization, not
  *     memorization).
  *   - For each TEST find (species, lat, true week), draw N random "negative"
@@ -30,15 +31,50 @@ import {
   weekIndexFromISO
 } from './phenology-core.mjs';
 
+const HELP = new Set(['-h', '--help']);
+const args = new Set(process.argv.slice(2));
+
+if ([...args].some((a) => HELP.has(a))) {
+  console.log(`Usage: node --env-file=.env.local scripts/backtest-phenology.mjs [--json]
+
+Environment:
+  NEXT_PUBLIC_SUPABASE_URL       Supabase project URL
+  SUPABASE_SERVICE_ROLE_KEY      Service role key
+  SPLIT_MODE                     year (default) or hash
+  CUTOFF                         Temporal split for SPLIT_MODE=year, default 2021-01-01
+  TEST_FRACTION                  Hash holdout fraction, default 0.2
+  NEG_PER_POS                    Random negative weeks per test occurrence, default 4
+  --json                         Print machine-readable JSON
+`);
+  process.exit(0);
+}
+
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 if (!SUPABASE_URL || !SERVICE_KEY) {
   console.error('Mangler Supabase-miljøvariabler.');
   process.exit(1);
 }
-const PAGE = 1000;
-const NEG_PER_POS = 4; // random negative weeks drawn per test occurrence
-const TEST_FRACTION = 0.2;
+const PAGE = clampInt(Number(process.env.PAGE || 1000), 1, 5000);
+const NEG_PER_POS = clampInt(Number(process.env.NEG_PER_POS || 4), 1, 50);
+const TEST_FRACTION = clampNumber(Number(process.env.TEST_FRACTION || 0.2), 0.01, 0.9);
+const SPLIT_MODE = process.env.SPLIT_MODE === 'hash' ? 'hash' : 'year';
+const CUTOFF = process.env.CUTOFF || '2021-01-01';
+const JSON_OUTPUT = args.has('--json') || process.env.JSON === '1';
+
+function clampInt(value, min, max) {
+  if (!Number.isFinite(value)) return min;
+  return Math.max(min, Math.min(max, Math.floor(value)));
+}
+
+function clampNumber(value, min, max) {
+  if (!Number.isFinite(value)) return min;
+  return Math.max(min, Math.min(max, value));
+}
+
+function fixed(value, digits = 4) {
+  return value == null || !Number.isFinite(value) ? 'n/a' : value.toFixed(digits);
+}
 
 // Deterministic split + RNG so reruns match (no Math.random reliance for the split).
 function hash32(n) {
@@ -46,6 +82,11 @@ function hash32(n) {
   x = Math.imul(x ^ (x >>> 16), 0x45d9f3b) >>> 0;
   x = Math.imul(x ^ (x >>> 16), 0x45d9f3b) >>> 0;
   return (x ^ (x >>> 16)) >>> 0;
+}
+
+function isTestRow(row) {
+  if (SPLIT_MODE === 'year') return row.observed_at >= CUTOFF;
+  return hash32(row.id) % 100 < TEST_FRACTION * 100;
 }
 
 async function rest(path) {
@@ -97,8 +138,7 @@ async function main() {
       const w = weekIndexFromISO(r.observed_at);
       if (w == null) continue;
       const band = latBand(r.latitude);
-      // Deterministic 80/20 split on the row id.
-      const isTest = hash32(r.id) % 100 < TEST_FRACTION * 100;
+      const isTest = isTestRow(r);
       if (isTest) {
         test.push({ sid: r.species_id, band, week: w });
       } else {
@@ -167,18 +207,55 @@ async function main() {
     }
   }
 
-  const aucOld = oldWins / oldComparisons;
-  const aucNew = newWins / newComparisons;
+  const aucOld = oldComparisons > 0 ? oldWins / oldComparisons : null;
+  const aucNew = newComparisons > 0 ? newWins / newComparisons : null;
+  const lift =
+    aucOld != null && aucNew != null && aucOld !== 0.5 ? ((aucNew - aucOld) / (aucOld - 0.5)) * 100 : null;
+  const delta = aucOld != null && aucNew != null ? aucNew - aucOld : null;
+  const report = {
+    method: {
+      splitMode: SPLIT_MODE,
+      cutoff: SPLIT_MODE === 'year' ? CUTOFF : null,
+      testFraction: SPLIT_MODE === 'hash' ? TEST_FRACTION : null,
+      negativeWeeksPerPositive: NEG_PER_POS,
+      totalDatedFruitingRows: total,
+      trainRows: total - test.length,
+      testRows: test.length,
+      curves: curves.size
+    },
+    evaluated: {
+      testRowsEvaluated: evaluated,
+      rowsWithoutCurve: noCurve,
+      oldComparisons,
+      empiricalComparisons: newComparisons
+    },
+    auc: {
+      oldMonthModel: aucOld,
+      empiricalPhenology: aucNew,
+      delta,
+      liftOverOldSignalPct: lift
+    }
+  };
+
+  if (JSON_OUTPUT) {
+    console.log(JSON.stringify(report, null, 2));
+    return;
+  }
 
   console.log(`\n=== Backtest: tidspunkt-prediksjon (sesong) ===`);
+  console.log(
+    `Split: ${
+      SPLIT_MODE === 'year' ? `temporal train < ${CUTOFF}, test >= ${CUTOFF}` : `hash holdout ${Math.round(TEST_FRACTION * 100)}%`
+    }`
+  );
   console.log(`Treningsfunn: ${total - test.length}  |  testfunn: ${test.length}  |  arter med kurve: ${curves.size}`);
   console.log(`Testfunn evaluert: ${evaluated}  (${noCurve} uten kurve → faller til måned-modell i prod)\n`);
-  console.log(`  AUC, gammel måned-modell:    ${aucOld.toFixed(4)}`);
-  console.log(`  AUC, ny empirisk fenologi:   ${aucNew.toFixed(4)}`);
-  const lift = ((aucNew - aucOld) / (aucOld - 0.5)) * 100;
+  console.log(`  AUC, gammel måned-modell:    ${fixed(aucOld)}`);
+  console.log(`  AUC, ny empirisk fenologi:   ${fixed(aucNew)}`);
   console.log(
-    `  → ${aucNew > aucOld ? 'FORBEDRING' : 'INGEN forbedring'}: +${(aucNew - aucOld).toFixed(4)} AUC ` +
-      `(${lift > 0 ? '+' : ''}${lift.toFixed(0)}% av signalet over tilfeldig)\n`
+    `  → ${delta != null && delta > 0 ? 'FORBEDRING' : 'INGEN forbedring'}: ` +
+      `${delta != null ? `${delta >= 0 ? '+' : ''}${delta.toFixed(4)}` : 'n/a'} AUC ` +
+      `(${lift != null ? `${lift > 0 ? '+' : ''}${lift.toFixed(0)}%` : 'n/a'} av signalet over tilfeldig)\n`
   );
   console.log('AUC 0.5 = terningkast, 1.0 = perfekt rangering av ekte funn-uke over tilfeldig uke.');
   console.log(

@@ -11,7 +11,7 @@
  * Useful knobs:
  *   MAX_TEST=1000 NEG_PER_POS=5 npm run validation:all
  *   WRITE_FEATURES=1 FEATURE_REGION=NO FEATURE_LIMIT=100 npm run validation:all
- *   SKIP_BACKTEST=1 SKIP_WEATHER_PREFS=1 npm run validation:all
+ *   SKIP_PHENOLOGY=1 SKIP_BACKTEST=1 SKIP_WEATHER_PREFS=1 npm run validation:all
  */
 
 import { mkdirSync, writeFileSync } from 'node:fs';
@@ -34,6 +34,7 @@ Environment:
   WRITE_FEATURES=1               Actually upsert occurrence_weather_features
   SKIP_SPOT_FEEDBACK=1           Skip spot-feedback calibration
   SKIP_SCORE_CALIBRATION=1       Skip score calibration table
+  SKIP_PHENOLOGY=1               Skip temporal phenology backtest
   SKIP_BACKTEST=1                Skip full-pipeline backtest
   SKIP_OCCURRENCE_WEATHER=1      Skip weather feature build
   SKIP_WEATHER_PREFS=1           Skip weather preference fit
@@ -56,6 +57,16 @@ const tasks = [
     skip: process.env.SKIP_SCORE_CALIBRATION === '1',
     file: `${OUT_DIR}/score-calibration.json`,
     cmd: ['node', '--env-file=.env.local', 'scripts/fit-score-calibration.mjs', '--json']
+  },
+  {
+    name: 'phenology',
+    skip: process.env.SKIP_PHENOLOGY === '1',
+    file: `${OUT_DIR}/phenology.json`,
+    env: {
+      SPLIT_MODE: process.env.PHENOLOGY_SPLIT_MODE || process.env.SPLIT_MODE || 'year',
+      CUTOFF: process.env.PHENOLOGY_CUTOFF || process.env.CUTOFF || '2021-01-01'
+    },
+    cmd: ['node', '--env-file=.env.local', 'scripts/backtest-phenology.mjs', '--json']
   },
   {
     name: 'full-pipeline',
@@ -131,6 +142,7 @@ async function runReport() {
       ...process.env,
       SPOT_FEEDBACK_JSON: `${OUT_DIR}/spot-feedback.json`,
       SCORE_CALIBRATION_JSON: `${OUT_DIR}/score-calibration.json`,
+      PHENOLOGY_JSON: `${OUT_DIR}/phenology.json`,
       FULL_PIPELINE_JSON: `${OUT_DIR}/full-pipeline.json`,
       OCCURRENCE_WEATHER_JSON: `${OUT_DIR}/occurrence-weather.json`,
       WEATHER_PREFERENCES_JSON: `${OUT_DIR}/weather-preferences.json`,

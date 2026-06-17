@@ -7,6 +7,7 @@
  * Expected default files:
  *   .next/validation/spot-feedback.json
  *   .next/validation/score-calibration.json
+ *   .next/validation/phenology.json
  *   .next/validation/full-pipeline.json
  *   .next/validation/occurrence-weather.json
  *   .next/validation/weather-preferences.json
@@ -28,6 +29,7 @@ if ([...args].some((a) => HELP.has(a))) {
 Environment:
   SPOT_FEEDBACK_JSON             Default .next/validation/spot-feedback.json
   SCORE_CALIBRATION_JSON         Default .next/validation/score-calibration.json
+  PHENOLOGY_JSON                 Default .next/validation/phenology.json
   FULL_PIPELINE_JSON             Default .next/validation/full-pipeline.json
   OCCURRENCE_WEATHER_JSON        Default .next/validation/occurrence-weather.json
   WEATHER_PREFERENCES_JSON       Default .next/validation/weather-preferences.json
@@ -39,6 +41,7 @@ Environment:
 const PATHS = {
   spotFeedback: process.env.SPOT_FEEDBACK_JSON || '.next/validation/spot-feedback.json',
   scoreCalibration: process.env.SCORE_CALIBRATION_JSON || '.next/validation/score-calibration.json',
+  phenology: process.env.PHENOLOGY_JSON || '.next/validation/phenology.json',
   fullPipeline: process.env.FULL_PIPELINE_JSON || '.next/validation/full-pipeline.json',
   occurrenceWeather: process.env.OCCURRENCE_WEATHER_JSON || '.next/validation/occurrence-weather.json',
   weatherPreferences: process.env.WEATHER_PREFERENCES_JSON || '.next/validation/weather-preferences.json'
@@ -128,6 +131,43 @@ function summarizeScoreCalibration(file) {
       )
     ],
     gates: [{ key: 'scoreCalibrationUsable', pass: usable, value: s.n, need: `>=${minRows} rows and positive Brier skill` }]
+  };
+}
+
+function summarizePhenology(file) {
+  if (!file.ok) {
+    return {
+      lines: [
+        decision('Temporal phenology backtest', 'mangler data', `Kjør \`npm run backtest:phenology -- --json > ${file.path}\`.`)
+      ],
+      gates: []
+    };
+  }
+  const method = file.data.method ?? {};
+  const auc = file.data.auc ?? {};
+  const splitMode = method.splitMode ?? 'unknown';
+  const empirical = auc.empiricalPhenology;
+  const oldMonth = auc.oldMonthModel;
+  const delta = auc.delta;
+  const temporal = splitMode === 'year';
+  const useful = temporal && empirical != null && oldMonth != null && delta > 0 && empirical >= 0.75;
+  const lines = [
+    decision(
+      'Temporal phenology backtest',
+      useful ? 'sterkt timing-signal' : 'timing må tolkes forsiktig',
+      `split=${splitMode}${method.cutoff ? ` cutoff=${method.cutoff}` : ''}, old=${fixed(oldMonth)}, empirical=${fixed(empirical)}, delta=${fixed(delta)}, testRows=${method.testRows}, curves=${method.curves}.`
+    )
+  ];
+  if (!temporal) {
+    lines.push(decision('Phenology split', 'ikke temporal', 'Hash-holdout måler rad-generaliserering, ikke fremtidig årsdrift.'));
+  }
+  return {
+    lines,
+    gates: [
+      { key: 'phenologyTemporalSplit', pass: temporal, value: temporal ? 1 : 0, need: 'SPLIT_MODE=year' },
+      { key: 'phenologyAuc', pass: empirical != null && empirical >= 0.75, value: empirical, need: '>=0.75' },
+      { key: 'phenologyDelta', pass: delta != null && delta > 0, value: delta, need: '>0 over old month model' }
+    ]
   };
 }
 
@@ -260,6 +300,8 @@ function renderReport(parts) {
   }
   const gate = Object.fromEntries(allGates.map((g) => [g.key, g]));
   if (gate.spotFeedbackN && !gate.spotFeedbackN.pass) lines.push('- Samle mer `spot_feedback` før scorekalibrering wires.');
+  if (gate.phenologyTemporalSplit && !gate.phenologyTemporalSplit.pass) lines.push('- Kjør fenologi med `SPLIT_MODE=year` før timing omtales som temporal validering.');
+  if (gate.phenologyDelta && !gate.phenologyDelta.pass) lines.push('- Ikke forsterk timing-claims før empirisk fenologi slår måned-modellen i temporal split.');
   if (gate.fullCoreDelta && !gate.fullCoreDelta.pass && gate.habitatWithinForest && !gate.habitatWithinForest.pass) {
     lines.push('- Ikke bruk mer tid på håndtuning av habitatregler før SDM/accessibility-modell er vurdert.');
   }
@@ -272,6 +314,7 @@ function renderReport(parts) {
 const files = {
   spotFeedback: readJson(PATHS.spotFeedback),
   scoreCalibration: readJson(PATHS.scoreCalibration),
+  phenology: readJson(PATHS.phenology),
   fullPipeline: readJson(PATHS.fullPipeline),
   occurrenceWeather: readJson(PATHS.occurrenceWeather),
   weatherPreferences: readJson(PATHS.weatherPreferences)
@@ -280,6 +323,7 @@ const files = {
 const parts = [
   summarizeSpotFeedback(files.spotFeedback),
   summarizeScoreCalibration(files.scoreCalibration),
+  summarizePhenology(files.phenology),
   summarizeFullPipeline(files.fullPipeline),
   summarizeOccurrenceWeather(files.occurrenceWeather),
   summarizeWeatherPreferences(files.weatherPreferences)
