@@ -74,6 +74,20 @@ mkdir -p .next/validation
 MAX_TEST=1000 NEG_PER_POS=5 FOREST_CONCURRENCY=4 npm run backtest:full-pipeline -- --json > .next/validation/full-pipeline.json
 ```
 
+Eksporter samme target-group-sample som JSONL for SDM-eksperimenter:
+
+```bash
+EXPORT_SDM_JSONL=.next/validation/sdm-target-group.jsonl MAX_TEST=1000 NEG_PER_POS=5 FOREST_CONCURRENCY=4 npm run backtest:full-pipeline -- --json > .next/validation/full-pipeline.json
+```
+
+Kjør en enkel, regulert logistisk SDM-baseline på eksporten:
+
+```bash
+SDM_JSONL=.next/validation/sdm-target-group.jsonl npm run fit:sdm-logistic
+```
+
+Default `FEATURE_SET=habitat` utelater occurrence-kjernen og koordinater, fordi målet er å teste habitat/skogsignal uten enkel sampling-lekkasje. Bruk `FEATURE_SET=full` bare som sammenligning, ikke som produksjonsmodell.
+
 `backtest:full-pipeline` bruker `.next/backtest-full-pipeline-forest-cache.json` som cache for NIBIO/CORINE-oppslag. Det er med vilje, og filen skal ikke committes.
 
 ## Hvordan lese spot_feedback
@@ -234,6 +248,12 @@ For en større nattkjøring:
 MAX_TEST=1000 NEG_PER_POS=5 FEATURE_LIMIT=200 npm run validation:all
 ```
 
+For nattkjøring som også eksporterer target-group-features og fitter SDM-baseline:
+
+```bash
+EXPORT_SDM_JSONL=.next/validation/sdm-target-group.jsonl MAX_TEST=1000 NEG_PER_POS=5 FEATURE_LIMIT=200 npm run validation:all
+```
+
 For å faktisk skrive historisk værfeatures i samme kjøring:
 
 ```bash
@@ -250,6 +270,7 @@ Etter kveldskjøring, lim disse linjene tilbake til Codex:
 - AUC-tabellen fra `backtest:full-pipeline`.
 - `AUC by presence region`.
 - `Presence forest coverage` og `background forest coverage`.
+- Fra `fit:sdm-logistic`: `featureSet`, `AUC`, `pairedAUC`, `Brier`, `baselineBrier`.
 - Fra `features:occurrence-weather`: `Features ready`, `By region`, og `Skipped/errors not written`.
 
 Da kan neste steg være konkret: kalibrere score, endre habitatregler, eller konkludere med at stor SDM må prioriteres.

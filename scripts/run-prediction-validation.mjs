@@ -28,6 +28,8 @@ Environment:
   MAX_TEST                       Full-pipeline sample size, default 300
   NEG_PER_POS                    Target-group negatives, default 3
   FOREST_CONCURRENCY             Default 4
+  EXPORT_SDM_JSONL               Optional full-pipeline feature export path
+  SDM_FEATURE_SET                habitat (default), no_occurrence, or full
   FEATURE_LIMIT                  Weather-feature rows to inspect, default 25
   FEATURE_REGION                 Optional NO or SE
   FEATURE_OFFSET                 Optional occurrence offset
@@ -36,6 +38,7 @@ Environment:
   SKIP_SCORE_CALIBRATION=1       Skip score calibration table
   SKIP_PHENOLOGY=1               Skip temporal phenology backtest
   SKIP_BACKTEST=1                Skip full-pipeline backtest
+  SKIP_SDM_LOGISTIC=1            Skip SDM logistic fit even when EXPORT_SDM_JSONL is set
   SKIP_OCCURRENCE_WEATHER=1      Skip weather feature build
   SKIP_WEATHER_PREFS=1           Skip weather preference fit
 `);
@@ -78,6 +81,16 @@ const tasks = [
       FOREST_CONCURRENCY: process.env.FOREST_CONCURRENCY || '4'
     },
     cmd: ['node', '--env-file=.env.local', 'scripts/backtest-full-pipeline.mjs', '--json']
+  },
+  {
+    name: 'sdm-logistic',
+    skip: process.env.SKIP_SDM_LOGISTIC === '1' || !process.env.EXPORT_SDM_JSONL || process.env.SKIP_BACKTEST === '1',
+    file: `${OUT_DIR}/sdm-logistic.json`,
+    env: {
+      SDM_JSONL: process.env.EXPORT_SDM_JSONL || '',
+      FEATURE_SET: process.env.SDM_FEATURE_SET || 'habitat'
+    },
+    cmd: ['node', 'scripts/fit-sdm-logistic.mjs', '--json']
   },
   {
     name: 'occurrence-weather',
@@ -144,6 +157,7 @@ async function runReport() {
       SCORE_CALIBRATION_JSON: `${OUT_DIR}/score-calibration.json`,
       PHENOLOGY_JSON: `${OUT_DIR}/phenology.json`,
       FULL_PIPELINE_JSON: `${OUT_DIR}/full-pipeline.json`,
+      SDM_LOGISTIC_JSON: `${OUT_DIR}/sdm-logistic.json`,
       OCCURRENCE_WEATHER_JSON: `${OUT_DIR}/occurrence-weather.json`,
       WEATHER_PREFERENCES_JSON: `${OUT_DIR}/weather-preferences.json`,
       OUT: `${OUT_DIR}/report.md`

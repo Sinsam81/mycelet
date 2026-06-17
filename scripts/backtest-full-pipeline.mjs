@@ -24,6 +24,7 @@
  * Useful knobs:
  *   MAX_TEST=200 NEG_PER_POS=3 FOREST_CONCURRENCY=4 ...
  *   FOREST_CACHE_PATH=.next/backtest-full-pipeline-forest-cache.json ...
+ *   EXPORT_SDM_JSONL=.next/validation/sdm-target-group.jsonl ...
  *   node --env-file=.env.local scripts/backtest-full-pipeline.mjs --json
  *
  * This script may call external public map services. Keep MAX_TEST small while
@@ -48,6 +49,7 @@ Environment:
   NEG_PER_POS                    Target-group negatives per presence, default 3
   FOREST_CONCURRENCY             NIBIO/CORINE fetch concurrency, default 4
   FOREST_CACHE_PATH              Cache file, default .next/backtest-full-pipeline-forest-cache.json
+  EXPORT_SDM_JSONL               Optional JSONL export of target-group feature rows
   SPECIES_ID                     Optional single-species filter
   --json                         Print machine-readable JSON
 `);
@@ -67,6 +69,7 @@ const MAX_TEST = clampInt(Number(process.env.MAX_TEST || 300), 1, Number.MAX_SAF
 const NEG_PER_POS = clampInt(Number(process.env.NEG_PER_POS || 3), 1, 20);
 const FOREST_CONCURRENCY = clampInt(Number(process.env.FOREST_CONCURRENCY || 4), 1, 12);
 const FOREST_CACHE_PATH = process.env.FOREST_CACHE_PATH || '.next/backtest-full-pipeline-forest-cache.json';
+const EXPORT_SDM_JSONL = process.env.EXPORT_SDM_JSONL || null;
 const SPECIES_ID_RAW = process.env.SPECIES_ID ? Number(process.env.SPECIES_ID) : null;
 const SPECIES_ID = Number.isFinite(SPECIES_ID_RAW) ? SPECIES_ID_RAW : null;
 const JSON_OUTPUT = args.has('--json') || process.env.JSON === '1';
@@ -451,12 +454,6 @@ function computeHabitatScore(forest, preferences) {
   };
 }
 
-function habitatMultiplier(forest, prefs) {
-  if (!forest) return null;
-  const habitat = computeHabitatScore(forest, prefs);
-  return (0.5 + habitat.score) * habitat.hostGate;
-}
-
 function loadForestCache() {
   if (!existsSync(FOREST_CACHE_PATH)) return {};
   try {
@@ -526,7 +523,8 @@ function scorePoint({ sid, lat, lng, iso }, forest, speciesById, occurrenceIndex
   const density = kernelDensity(occurrenceIndex, sid, lat, lng);
   const occ = occurrenceBoost(density);
   const phen = phenologyFactor(sid, lat, iso);
-  const hab = habitatMultiplier(forest, prefs);
+  const habitat = forest ? computeHabitatScore(forest, prefs) : null;
+  const hab = habitat ? (0.5 + habitat.score) * habitat.hostGate : null;
 
   return {
     fullCore: hab == null ? 0 : occ * phen * hab,
@@ -535,7 +533,37 @@ function scorePoint({ sid, lat, lng, iso }, forest, speciesById, occurrenceIndex
     habitatWithinForest: hab,
     occurrenceOnly: occ,
     phenologyOnly: phen,
-    forestMask: forest ? 1 : 0
+    forestMask: forest ? 1 : 0,
+    features: {
+      occurrenceDensity: density,
+      occurrenceBoost: occ,
+      phenology: phen,
+      habitatMultiplier: hab,
+      habitatScore: habitat?.score ?? null,
+      hostGate: habitat?.hostGate ?? null,
+      forestPresent: forest ? 1 : 0,
+      forestSource: forest?.source ?? 'none',
+      forestType: forest?.forestType ?? 'none',
+      forestProductivity: forest?.productivity ?? null,
+      forestVolumePerHa: forest?.volumePerHa ?? null
+    }
+  };
+}
+
+function exportSdmRow(pairId, label, role, point, forest, scores, presenceRegion) {
+  return {
+    pairId,
+    label,
+    role,
+    speciesId: point.sid,
+    observedAt: point.iso,
+    latitude: point.lat,
+    longitude: point.lng,
+    region: getRegion(point.lat, point.lng),
+    presenceRegion,
+    scores: Object.fromEntries(VARIANTS.map((v) => [v, scores[v]])),
+    features: scores.features,
+    forest
   };
 }
 
@@ -627,8 +655,10 @@ async function main() {
     presence: {},
     background: {}
   };
+  const sdmRows = [];
 
-  for (const pair of pairs) {
+  for (let pairId = 0; pairId < pairs.length; pairId++) {
+    const pair = pairs[pairId];
     const presenceForest = forestCache[forestCacheKey(pair.presence)] ?? null;
     const bgForest = forestCache[forestCacheKey(pair.background)] ?? null;
     increment(sources.presence, sourceName(presenceForest));
@@ -643,6 +673,11 @@ async function main() {
       const result = compare(ps[v], bs[v]);
       addComparison(overall, v, result);
       addComparison(regionCounter, v, result);
+    }
+
+    if (EXPORT_SDM_JSONL) {
+      sdmRows.push(exportSdmRow(pairId, 1, 'presence', pair.presence, presenceForest, ps, region));
+      sdmRows.push(exportSdmRow(pairId, 0, 'target_group_background', pair.background, bgForest, bs, region));
     }
   }
 
@@ -675,10 +710,23 @@ async function main() {
       concurrency: FOREST_CONCURRENCY,
       sources
     },
+    export: EXPORT_SDM_JSONL
+      ? {
+          path: EXPORT_SDM_JSONL,
+          rows: sdmRows.length,
+          format: 'jsonl',
+          note: 'Target-group feature rows for SDM experiments; not a production model artifact.'
+        }
+      : null,
     auc,
     comparisons: overall.comparisons,
     byRegion
   };
+
+  if (EXPORT_SDM_JSONL) {
+    mkdirSync(dirname(EXPORT_SDM_JSONL), { recursive: true });
+    writeFileSync(EXPORT_SDM_JSONL, `${sdmRows.map((row) => JSON.stringify(row)).join('\n')}\n`);
+  }
 
   if (JSON_OUTPUT) {
     console.log(JSON.stringify(report, null, 2));
@@ -691,6 +739,7 @@ async function main() {
   console.log(`Test presences: ${tests.length}${testAll.length > tests.length ? ` (sample of ${testAll.length})` : ''}`);
   console.log(`Target-group background: ${NEG_PER_POS} per presence (${pairs.length} paired comparisons)`);
   console.log(`Forest points: ${uniquePoints.length} unique, cache hits ${cacheHits}, misses ${cacheMisses}`);
+  if (EXPORT_SDM_JSONL) console.log(`SDM feature export: ${EXPORT_SDM_JSONL} (${sdmRows.length} rows)`);
   console.log(
     `Presence forest coverage: ${pct(1 - (sources.presence.none ?? 0) / pairs.length)}  ` +
       `| background forest coverage: ${pct(1 - (sources.background.none ?? 0) / pairs.length)}`

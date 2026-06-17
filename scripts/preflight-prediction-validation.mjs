@@ -135,6 +135,7 @@ function checkPackageScripts() {
     'backtest:full-pipeline',
     'features:occurrence-weather',
     'fit:weather-preferences',
+    'fit:sdm-logistic',
     'validation:preflight',
     'validation:all',
     'validation:report'
@@ -153,6 +154,7 @@ function checkFiles() {
     'scripts/backtest-full-pipeline.mjs',
     'scripts/build-occurrence-weather-features.mjs',
     'scripts/fit-weather-preferences.mjs',
+    'scripts/fit-sdm-logistic.mjs',
     'scripts/run-prediction-validation.mjs',
     'scripts/summarize-prediction-validation.mjs',
     'supabase/migrations/021_spot_feedback.sql',

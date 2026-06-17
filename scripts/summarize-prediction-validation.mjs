@@ -9,6 +9,7 @@
  *   .next/validation/score-calibration.json
  *   .next/validation/phenology.json
  *   .next/validation/full-pipeline.json
+ *   .next/validation/sdm-logistic.json
  *   .next/validation/occurrence-weather.json
  *   .next/validation/weather-preferences.json
  *
@@ -31,6 +32,7 @@ Environment:
   SCORE_CALIBRATION_JSON         Default .next/validation/score-calibration.json
   PHENOLOGY_JSON                 Default .next/validation/phenology.json
   FULL_PIPELINE_JSON             Default .next/validation/full-pipeline.json
+  SDM_LOGISTIC_JSON              Default .next/validation/sdm-logistic.json
   OCCURRENCE_WEATHER_JSON        Default .next/validation/occurrence-weather.json
   WEATHER_PREFERENCES_JSON       Default .next/validation/weather-preferences.json
   OUT                            Optional markdown output path
@@ -43,6 +45,7 @@ const PATHS = {
   scoreCalibration: process.env.SCORE_CALIBRATION_JSON || '.next/validation/score-calibration.json',
   phenology: process.env.PHENOLOGY_JSON || '.next/validation/phenology.json',
   fullPipeline: process.env.FULL_PIPELINE_JSON || '.next/validation/full-pipeline.json',
+  sdmLogistic: process.env.SDM_LOGISTIC_JSON || '.next/validation/sdm-logistic.json',
   occurrenceWeather: process.env.OCCURRENCE_WEATHER_JSON || '.next/validation/occurrence-weather.json',
   weatherPreferences: process.env.WEATHER_PREFERENCES_JSON || '.next/validation/weather-preferences.json'
 };
@@ -212,6 +215,33 @@ function summarizeFullPipeline(file) {
   };
 }
 
+function summarizeSdmLogistic(file) {
+  if (!file.ok) {
+    return {
+      lines: [
+        decision('SDM logistic baseline', 'ikke kjørt', `Valgfritt: sett \`EXPORT_SDM_JSONL=.next/validation/sdm-target-group.jsonl\` i \`validation:all\`.`)
+      ],
+      gates: []
+    };
+  }
+  const m = file.data.metrics ?? {};
+  const method = file.data.method ?? {};
+  const useful = m.pairedAuc != null && m.pairedAuc >= 0.55 && m.brier != null && m.baselineBrier != null && m.brier < m.baselineBrier;
+  return {
+    lines: [
+      decision(
+        'SDM logistic baseline',
+        useful ? 'habitatmodell har signal' : 'ikke nok modell-signal',
+        `featureSet=${method.featureSet}, rows=${method.rows}, features=${method.features}, AUC=${fixed(m.auc)}, pairedAUC=${fixed(m.pairedAuc)}, Brier=${fixed(m.brier)}, baselineBrier=${fixed(m.baselineBrier)}.`
+      )
+    ],
+    gates: [
+      { key: 'sdmPairedAuc', pass: m.pairedAuc != null && m.pairedAuc >= 0.55, value: m.pairedAuc, need: '>=0.55' },
+      { key: 'sdmBrier', pass: m.brier != null && m.baselineBrier != null && m.brier < m.baselineBrier, value: m.brier, need: '< baselineBrier' }
+    ]
+  };
+}
+
 function summarizeOccurrenceWeather(file) {
   if (!file.ok) {
     return {
@@ -305,6 +335,7 @@ function renderReport(parts) {
   if (gate.fullCoreDelta && !gate.fullCoreDelta.pass && gate.habitatWithinForest && !gate.habitatWithinForest.pass) {
     lines.push('- Ikke bruk mer tid på håndtuning av habitatregler før SDM/accessibility-modell er vurdert.');
   }
+  if (gate.sdmPairedAuc && !gate.sdmPairedAuc.pass) lines.push('- Ikke wire SDM-baseline før den slår target-group bakgrunn med klar margin.');
   if (gate.weatherFeatureRows && !gate.weatherFeatureRows.pass) lines.push('- Fyll flere `occurrence_weather_features`-batcher før værpreferanser tolkes.');
   if (gate.weatherPreferenceUsefulGroups?.pass) lines.push('- Vurder målrettede endringer i `GENUS_PREFERENCES`, men bare for grupper med nok n og AUC-løft.');
   lines.push('');
@@ -316,6 +347,7 @@ const files = {
   scoreCalibration: readJson(PATHS.scoreCalibration),
   phenology: readJson(PATHS.phenology),
   fullPipeline: readJson(PATHS.fullPipeline),
+  sdmLogistic: readJson(PATHS.sdmLogistic),
   occurrenceWeather: readJson(PATHS.occurrenceWeather),
   weatherPreferences: readJson(PATHS.weatherPreferences)
 };
@@ -325,6 +357,7 @@ const parts = [
   summarizeScoreCalibration(files.scoreCalibration),
   summarizePhenology(files.phenology),
   summarizeFullPipeline(files.fullPipeline),
+  summarizeSdmLogistic(files.sdmLogistic),
   summarizeOccurrenceWeather(files.occurrenceWeather),
   summarizeWeatherPreferences(files.weatherPreferences)
 ];

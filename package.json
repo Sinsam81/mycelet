@@ -15,6 +15,7 @@
     "backtest:full-pipeline": "node --env-file=.env.local scripts/backtest-full-pipeline.mjs",
     "features:occurrence-weather": "node --env-file=.env.local scripts/build-occurrence-weather-features.mjs",
     "fit:weather-preferences": "node --env-file=.env.local scripts/fit-weather-preferences.mjs",
+    "fit:sdm-logistic": "node scripts/fit-sdm-logistic.mjs",
     "validation:preflight": "node scripts/preflight-prediction-validation.mjs",
     "validation:all": "node scripts/run-prediction-validation.mjs",
     "validation:report": "node scripts/summarize-prediction-validation.mjs",
