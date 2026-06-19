@@ -6,7 +6,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, ChevronUp, Download, Navigation, Trash2 } from 'lucide-react';
 import { createRoot, Root } from 'react-dom/client';
 import { createClient } from '@/lib/supabase/client';
-import { useGeolocation } from '@/lib/hooks/useGeolocation';
+import { useGeolocation, getCurrentPositionOnce } from '@/lib/hooks/useGeolocation';
+import { getRegion } from '@/lib/utils/region';
 import { usePrediction } from '@/lib/hooks/usePrediction';
 import { useBillingStatus } from '@/lib/hooks/useBilling';
 import { PredictionHotspot, PredictionResponse, PredictionTile } from '@/types/prediction';
@@ -79,6 +80,11 @@ export function MushroomMap() {
   const tripFindsRef = useRef<string[]>([]);
   const speciesSearchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const meMarkerRef = useRef<any>(null);
+  // True once the user manually picks a base layer — stops the region auto-switch.
+  const userPickedBaseLayerRef = useRef(false);
+  // Last known position, so the map can recenter even if geolocation resolves
+  // before the (async) map init finishes.
+  const posRef = useRef<{ lat: number; lng: number } | null>(null);
 
   const supabase = useRef(createClient()).current;
   const { latitude, longitude, loading: geoLoading, error: geoError } = useGeolocation();
@@ -688,22 +694,17 @@ export function MushroomMap() {
         meMarkerRef.current = leaflet.marker([lat, lng], { icon, zIndexOffset: 1000 }).addTo(map);
       }
     };
-    if (!navigator.geolocation) {
-      if (latitude != null && longitude != null) void goTo(latitude, longitude);
-      return;
-    }
     setLocating(true);
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
+    getCurrentPositionOnce()
+      .then(({ latitude: lat, longitude: lng }) => {
         setLocating(false);
-        void goTo(pos.coords.latitude, pos.coords.longitude);
-      },
-      () => {
+        void goTo(lat, lng);
+      })
+      .catch(() => {
         setLocating(false);
+        // Fall back to the last known position from the geolocation hook.
         if (latitude != null && longitude != null) void goTo(latitude, longitude);
-      },
-      { enableHighAccuracy: true, timeout: 8000, maximumAge: 30000 }
-    );
+      });
   }, [latitude, longitude]);
 
   const focusSavedArea = useCallback((area: OfflineArea) => {
@@ -895,7 +896,9 @@ export function MushroomMap() {
       });
 
       const map = L.map(containerRef.current, {
-        center: [latitude ?? 59.91, longitude ?? 10.75],
+        // Oslo as a neutral starting point; the geolocation effect recenters on
+        // the user's real position once it resolves (see posRef + setView below).
+        center: [59.91, 10.75],
         zoom: 11,
         zoomControl: false
       });
@@ -931,6 +934,11 @@ export function MushroomMap() {
         )
         .addTo(map);
 
+      // Once the user manually switches base layer, stop auto-switching by region.
+      map.on('baselayerchange', () => {
+        userPickedBaseLayerRef.current = true;
+      });
+
       const clusters = L.markerClusterGroup({
         chunkedLoading: true,
         maxClusterRadius: 50,
@@ -963,8 +971,28 @@ export function MushroomMap() {
       topLayerRef.current = topLayer;
       speciesLayerRef.current = speciesLayer;
 
+      // If geolocation already resolved before this (async) init finished, the
+      // setView effect couldn't run yet (no map). Recenter on the user now.
+      if (posRef.current) {
+        map.setView([posRef.current.lat, posRef.current.lng], 13);
+      }
+
       const onMoveEnd = () => {
         const center = map.getCenter();
+        // Kartverket "Terreng" has no tiles outside Norway, so auto-switch to OSM
+        // ("Kart") when the view is over Sweden / elsewhere — unless the user has
+        // manually chosen a base layer. This is what makes the Swedish map work.
+        if (!userPickedBaseLayerRef.current) {
+          if (getRegion(center.lat, center.lng) === 'NO') {
+            if (!map.hasLayer(baseTerreng)) {
+              map.removeLayer(baseKart);
+              baseTerreng.addTo(map);
+            }
+          } else if (!map.hasLayer(baseKart)) {
+            map.removeLayer(baseTerreng);
+            baseKart.addTo(map);
+          }
+        }
         setPredictionCoords({
           lat: Number(center.lat.toFixed(6)),
           lon: Number(center.lng.toFixed(6))
@@ -996,7 +1024,10 @@ export function MushroomMap() {
       occClusterRef.current = null;
       meMarkerRef.current = null;
     };
-  }, [latitude, longitude]);
+    // Init the map ONCE. Recentering on the user's position is handled by the
+    // geolocation effect below (setView) + posRef — never rebuild the whole map.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
@@ -1025,8 +1056,11 @@ export function MushroomMap() {
   }, []);
 
   useEffect(() => {
-    if (latitude && longitude && mapRef.current) {
-      mapRef.current.setView([latitude, longitude], 13);
+    if (latitude != null && longitude != null) {
+      posRef.current = { lat: latitude, lng: longitude };
+      if (mapRef.current) {
+        mapRef.current.setView([latitude, longitude], 13);
+      }
     }
   }, [latitude, longitude]);
 

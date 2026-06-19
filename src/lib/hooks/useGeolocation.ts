@@ -16,6 +16,37 @@ const POSITION_OPTIONS = {
   maximumAge: 120_000
 };
 
+/**
+ * One-shot current position that works in BOTH the browser and the native
+ * (Capacitor) shell. iOS WKWebView does not implement `navigator.geolocation`,
+ * so the native shell must go through the Capacitor Geolocation plugin. Use this
+ * everywhere instead of calling `navigator.geolocation` directly (which silently
+ * does nothing in the iOS app).
+ */
+export async function getCurrentPositionOnce(): Promise<{ latitude: number; longitude: number }> {
+  if (isNativePlatform()) {
+    const { Geolocation } = await import('@capacitor/geolocation');
+    const permission = await Geolocation.requestPermissions();
+    if (permission.location === 'denied') {
+      throw new Error('Posisjonstilgang er avslått. Slå den på i Innstillinger for å bruke kartet.');
+    }
+    const position = await Geolocation.getCurrentPosition(POSITION_OPTIONS);
+    return { latitude: position.coords.latitude, longitude: position.coords.longitude };
+  }
+
+  if (!navigator.geolocation) {
+    throw new Error('Geolocation støttes ikke i nettleseren.');
+  }
+
+  return new Promise((resolve, reject) => {
+    navigator.geolocation.getCurrentPosition(
+      (position) => resolve({ latitude: position.coords.latitude, longitude: position.coords.longitude }),
+      (error) => reject(new Error(error.message)),
+      POSITION_OPTIONS
+    );
+  });
+}
+
 export function useGeolocation() {
   const [state, setState] = useState<GeolocationState>({
     latitude: null,
@@ -27,45 +58,20 @@ export function useGeolocation() {
   useEffect(() => {
     let cancelled = false;
 
-    const succeed = (latitude: number, longitude: number) => {
-      if (!cancelled) setState({ latitude, longitude, loading: false, error: null });
-    };
-    const fail = (error: string) => {
-      if (!cancelled) setState({ latitude: null, longitude: null, loading: false, error });
-    };
-
-    async function locate() {
-      // iOS WKWebView does not implement navigator.geolocation, so the native
-      // shell must go through the Capacitor Geolocation plugin instead.
-      if (isNativePlatform()) {
-        try {
-          const { Geolocation } = await import('@capacitor/geolocation');
-          const permission = await Geolocation.requestPermissions();
-          if (permission.location === 'denied') {
-            fail('Posisjonstilgang er avslått. Slå den på i Innstillinger for å bruke kartet.');
-            return;
-          }
-          const position = await Geolocation.getCurrentPosition(POSITION_OPTIONS);
-          succeed(position.coords.latitude, position.coords.longitude);
-        } catch (err) {
-          fail(err instanceof Error ? err.message : 'Kunne ikke hente posisjon.');
+    getCurrentPositionOnce()
+      .then(({ latitude, longitude }) => {
+        if (!cancelled) setState({ latitude, longitude, loading: false, error: null });
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setState({
+            latitude: null,
+            longitude: null,
+            loading: false,
+            error: err instanceof Error ? err.message : 'Kunne ikke hente posisjon.'
+          });
         }
-        return;
-      }
-
-      if (!navigator.geolocation) {
-        fail('Geolocation støttes ikke i nettleseren.');
-        return;
-      }
-
-      navigator.geolocation.getCurrentPosition(
-        (position) => succeed(position.coords.latitude, position.coords.longitude),
-        (error) => fail(error.message),
-        POSITION_OPTIONS
-      );
-    }
-
-    void locate();
+      });
 
     return () => {
       cancelled = true;
