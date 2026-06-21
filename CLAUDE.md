@@ -17,11 +17,27 @@ npm run typecheck   # tsc --noEmit
 npm run lint        # next lint
 npm run test        # vitest (runs all tests)
 npm run test -- src/lib/weather    # filter by path
+
+npm run qa          # full product evaluation (Playwright) vs local dev — the main QA loop
+npm run qa:prod     # read-only smoke + gating vs live mycelet.com (safe against prod)
+npm run qa:setup    # create the dedicated QA test user (run once)
+npm run qa:report   # open the last Playwright HTML report
 ```
 
 Tests use the `@/*` path alias from `tsconfig.json`; vitest mirrors this in `vitest.config.ts`. Add new tests next to source in `__tests__/` folders — they pick the alias up automatically.
 
 There is no Supabase CLI workflow set up; migrations are applied by pasting `supabase/migrations/NNN_*.sql` into the Supabase SQL Editor in dashboard order (001 → 008). They have hard dependencies — running 003 alone fails because it references `mushroom_species` and `update_updated_at()` from 001. Migration 008 (audit log) requires `moderator_roles` from 002.
+
+## QA automation & standing habits
+
+**Full product evaluation loop** — Mycelet's main QA automation. `npm run qa` drives every core flow (map + NO/SE geo-routing, AI identify, prediction, calendar, forum, auth + forgot-password, billing web/native gating, species, /datakilder, /api/health) against the success criteria in `docs/qa-sjekkliste.md` and reports breakage. It **detects + reports + proposes fixes for approval — it must NEVER auto-deploy to the live app.** Run it via the `/loop` skill (the exact prompt is in `docs/qa-sjekkliste.md`).
+- Engine: Playwright, `e2e/*.e2e.ts`, three projects (`setup` → login, `public` → no-auth, `authed` → uses the saved session). Config: `playwright.config.ts`.
+- `npm run qa` targets local dev (auto-starts/reuses the dev server); `npm run qa:prod` runs the read-only subset against live mycelet.com.
+- Needs a dedicated QA user (`npm run qa:setup`, idempotent; writes `QA_TEST_EMAIL`/`QA_TEST_PASSWORD` to `.env.local`). Authed tests skip cleanly if it's missing.
+- Keep authed tests **read-only** — there's one Supabase project (no staging), so writes hit prod. Write flows (post forum, save finding, real AI upload) stay manual (🖐️ in the checklist).
+- **Gotcha:** Next/Turbopack does NOT run middleware in local dev, so middleware-only auth gating (`/profile`, `/map`, `/admin`, `/forum/new`) can't be tested locally — those assertions skip on `npm run qa` and run on `npm run qa:prod` (prod has real middleware). Page-level `redirect()` gating (`/mine-steder`) works in both.
+
+**Recent-feedback sweep (do this every time Sindre reports a bug):** (1) fix the reported bug; (2) audit the WHOLE app for siblings of that bug-class (same wrong assumption/pattern elsewhere); (3) fix the siblings + verify with `npm run build` (delete iCloud `* 2.ts` dupes first — see below); (4) deploy only when Sindre says OK. Proven value: the Swedish-blank-map bug's sibling was the Göteborg region-routing bug — both Norway-centric assumptions.
 
 ## Architecture
 

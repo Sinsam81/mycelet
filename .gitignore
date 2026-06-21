@@ -16,6 +16,7 @@ tsconfig.tsbuildinfo
 /playwright-report
 /playwright/.cache
 /blob-report
+e2e/.auth
 
 # Supabase CLI scratch (contains the project ref) — never commit
 supabase/.temp/

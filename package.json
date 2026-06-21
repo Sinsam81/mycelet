@@ -21,6 +21,10 @@
     "validation:report": "node scripts/summarize-prediction-validation.mjs",
     "test:e2e": "playwright test",
     "test:e2e:report": "playwright show-report",
+    "qa": "PLAYWRIGHT_BASE_URL=http://localhost:3000 node --env-file=.env.local node_modules/@playwright/test/cli.js test",
+    "qa:prod": "playwright test --project=public",
+    "qa:setup": "node --env-file=.env.local scripts/qa-create-test-user.mjs",
+    "qa:report": "playwright show-report",
     "cap:sync": "cap sync",
     "cap:ios": "cap sync ios && cap open ios",
     "cap:android": "cap sync android && cap open android"
