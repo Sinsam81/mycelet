@@ -69,6 +69,8 @@ export function MushroomMap() {
   const popupRootsRef = useRef<Root[]>([]);
   const loadFindingsRef = useRef<() => Promise<void>>(async () => {});
   const loadPredictionTilesRef = useRef<() => Promise<void>>(async () => {});
+  // Monotonic request id so only the latest prediction-tile RPC may write state.
+  const tileReqRef = useRef(0);
   const occClusterRef = useRef<any>(null);
   const loadOccurrencesRef = useRef<() => Promise<void>>(async () => {});
   const showOccurrencesRef = useRef(false);
@@ -170,6 +172,12 @@ export function MushroomMap() {
     const map = mapRef.current;
     if (!map) return;
 
+    // Guard against out-of-order overlapping requests. This runs from the mount
+    // effect, the moveend handler (via ref), AND re-fires on every species-filter
+    // change — so two RPCs can be in flight at once. Without this, a slower older
+    // request could resolve last and overwrite fresher hotspots, showing "Beste
+    // steder" for the wrong species/bounds. Only the latest request may write.
+    const myReq = ++tileReqRef.current;
     const bounds = map.getBounds();
     const { data, error } = await supabase.rpc('get_prediction_tiles_in_bounds', {
       min_lat: bounds.getSouth(),
@@ -178,6 +186,8 @@ export function MushroomMap() {
       max_lng: bounds.getEast(),
       p_species_id: filters.speciesId
     });
+
+    if (myReq !== tileReqRef.current) return; // a newer call superseded this one
 
     if (error) {
       setTileHotspots([]);
@@ -887,6 +897,14 @@ export function MushroomMap() {
 
       const { default: L } = await import('leaflet');
       await import('leaflet.markercluster');
+
+      // Re-check after the async import gap. React StrictMode (dev) mounts this
+      // effect twice in quick succession; without this guard both init() calls
+      // pass the top check while awaiting the dynamic import, then both call
+      // L.map() on the same container → "Map container is already initialized".
+      // The cleanup sets mounted=false between the two mounts, so the stale run
+      // bails here, and a finished run leaves mapRef.current set so the other bails.
+      if (!mounted || mapRef.current || !containerRef.current) return;
 
       delete (L.Icon.Default.prototype as { _getIconUrl?: unknown })._getIconUrl;
       L.Icon.Default.mergeOptions({
