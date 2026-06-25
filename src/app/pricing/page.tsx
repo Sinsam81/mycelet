@@ -26,7 +26,7 @@ type BillingStatusResponse = {
 // Amounts come from BILLING_PLANS (the same source the checkout uses), so the
 // page can never advertise a different price than Stripe charges.
 const PREMIUM_MONTHLY = BILLING_PLANS.premium.monthlyNok ?? 79;
-const SEASON_YEARLY = BILLING_PLANS.season_pass.yearlyNok ?? 199;
+const SEASON_YEARLY = BILLING_PLANS.season_pass.yearlyNok ?? 249;
 const SEASON_PER_MONTH = Math.round(SEASON_YEARLY / 12);
 
 const TIER_LABELS: Record<'free' | 'premium' | 'season_pass', string> = {

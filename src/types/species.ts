@@ -1,4 +1,4 @@
-export type Edibility = 'edible' | 'conditionally_edible' | 'inedible' | 'toxic' | 'deadly';
+export type Edibility = 'edible' | 'conditionally_edible' | 'inedible' | 'toxic' | 'deadly' | 'unknown';
 
 export interface Species {
   id: number;

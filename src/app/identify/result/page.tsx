@@ -9,6 +9,7 @@ import { SafetyWarning } from '@/components/identify/SafetyWarning';
 import { Button } from '@/components/ui/Button';
 import toast from 'react-hot-toast';
 import { createClient } from '@/lib/supabase/client';
+import { isDangerousEdibility } from '@/lib/utils/edibility';
 import { IdentifyResultPayload } from '@/types/identify';
 
 export default function IdentifyResultPage() {
@@ -35,7 +36,10 @@ export default function IdentifyResultPage() {
   }, [router]);
 
   const topSuggestion = payload?.suggestions?.[0];
-  const isDanger = payload?.suggestions?.some((s) => s.edibility === 'toxic' || s.edibility === 'deadly') ?? false;
+  // Treat unknown/unmapped edibility as dangerous too: a Kindwise suggestion
+  // outside our catalog with no mapped edibility must still surface the red
+  // warning + Giftinformasjonen, never a soft "inedible" badge. See edibility.ts.
+  const isDanger = payload?.suggestions?.some((s) => isDangerousEdibility(s.edibility)) ?? false;
 
   const handleSave = async () => {
     if (!payload || !topSuggestion) return;

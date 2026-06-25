@@ -4,6 +4,7 @@ import { PageWrapper } from '@/components/layout/PageWrapper';
 import { EdibilityBadge } from '@/components/ui/EdibilityBadge';
 import { AccountDataActions } from '@/components/profile/AccountDataActions';
 import { LogoutButton } from '@/components/profile/LogoutButton';
+import { NonNativeOnly } from '@/components/native/NonNativeOnly';
 import { createClient } from '@/lib/supabase/server';
 import { getBillingCapabilities, getUserBillingSubscription } from '@/lib/billing/subscription';
 import type { Edibility } from '@/types/species';
@@ -120,9 +121,12 @@ export default async function ProfilePage() {
         <article className="rounded-2xl bg-white p-4 shadow-card">
           <div className="flex items-center justify-between">
             <h2 className="font-semibold">Abonnement</h2>
-            <Link href="/pricing" className="text-xs font-medium text-forest-800 hover:underline">
-              Endre →
-            </Link>
+            {/* Web-only: native must not steer to the external Stripe page (App Store 3.1.1). */}
+            <NonNativeOnly>
+              <Link href="/pricing" className="text-xs font-medium text-forest-800 hover:underline">
+                Endre →
+              </Link>
+            </NonNativeOnly>
           </div>
           <div className="mt-2 flex items-center gap-2 text-sm">
             {TierIcon ? <TierIcon className="h-4 w-4 text-forest-800" /> : null}

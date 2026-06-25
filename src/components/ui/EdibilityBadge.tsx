@@ -10,7 +10,8 @@ const labels: Record<Edibility, string> = {
   conditionally_edible: 'Betinget spiselig',
   inedible: 'Uspiselig',
   toxic: 'Giftig',
-  deadly: 'Dødelig giftig'
+  deadly: 'Dødelig giftig',
+  unknown: 'Ukjent spiselighet'
 };
 
 const classes: Record<Edibility, string> = {
@@ -18,7 +19,8 @@ const classes: Record<Edibility, string> = {
   conditionally_edible: 'bg-amber-500 text-white',
   inedible: 'bg-orange-500 text-white',
   toxic: 'bg-red-600 text-white',
-  deadly: 'bg-red-900 text-white'
+  deadly: 'bg-red-900 text-white',
+  unknown: 'bg-gray-500 text-white'
 };
 
 export function EdibilityBadge({ edibility }: EdibilityBadgeProps) {

@@ -9,7 +9,9 @@ interface SafetyWarningProps {
 }
 
 export function SafetyWarning({ level, edibility }: SafetyWarningProps) {
-  if (level === 'danger' || edibility === 'deadly' || edibility === 'toxic') {
+  // 'unknown' = unproven/unmapped edibility → treat as dangerous (show the red
+  // warning + Giftinformasjonen), never the soft caution banner.
+  if (level === 'danger' || edibility === 'deadly' || edibility === 'toxic' || edibility === 'unknown') {
     return (
       <div className="mb-4 rounded-xl border-2 border-red-500 bg-red-50 p-4">
         <div className="flex items-start gap-3">

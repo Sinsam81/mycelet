@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { EdibilityBadge } from '@/components/ui/EdibilityBadge';
+import { normalizeEdibility } from '@/lib/utils/edibility';
 import { IdentifySuggestion } from '@/types/identify';
 
 interface IdentifyResultProps {
@@ -9,15 +10,6 @@ interface IdentifyResultProps {
   /** When provided, suggestions become selectable (radio-style) for confirming the find. */
   selectedIndex?: number;
   onSelect?: (index: number) => void;
-}
-
-function normalizeEdibility(edibility: string): 'edible' | 'conditionally_edible' | 'inedible' | 'toxic' | 'deadly' {
-  if (edibility === 'edible') return 'edible';
-  if (edibility === 'conditionally_edible') return 'conditionally_edible';
-  if (edibility === 'inedible') return 'inedible';
-  if (edibility === 'toxic') return 'toxic';
-  if (edibility === 'deadly') return 'deadly';
-  return 'inedible';
 }
 
 export function IdentifyResult({ suggestions, selectedIndex, onSelect }: IdentifyResultProps) {
