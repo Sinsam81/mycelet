@@ -1,6 +1,7 @@
 'use client';
 
 import { FormEvent, useMemo, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { Button } from '@/components/ui/Button';
 import { ForumComment, ReportReason } from '@/types/forum';
 import { ReportButton } from '@/components/forum/ReportButton';
@@ -32,7 +33,8 @@ function CommentCard({
   onReportComment?: (commentId: string, payload: { reason: ReportReason; description?: string }) => Promise<void>;
   isReply?: boolean;
 }) {
-  const author = comment.profiles?.display_name || comment.profiles?.username || 'Ukjent bruker';
+  const t = useTranslations('CommentList');
+  const author = comment.profiles?.display_name || comment.profiles?.username || t('unknownUser');
   const badge = getForumBadge(comment.profiles);
   const isOwner = currentUserId === comment.user_id;
 
@@ -54,7 +56,7 @@ function CommentCard({
       setReplyContent('');
       setShowReply(false);
     } catch (err) {
-      setReplyErr(err instanceof Error ? err.message : 'Kunne ikke sende svar.');
+      setReplyErr(err instanceof Error ? err.message : t('replyError'));
     }
   };
 
@@ -67,7 +69,7 @@ function CommentCard({
       await onEditComment(comment.id, editContent.trim());
       setEditing(false);
     } catch (err) {
-      setEditErr(err instanceof Error ? err.message : 'Kunne ikke oppdatere kommentar.');
+      setEditErr(err instanceof Error ? err.message : t('editError'));
     }
   };
 
@@ -84,9 +86,9 @@ function CommentCard({
           {editErr ? <p className="text-xs text-red-600">{editErr}</p> : null}
           <div className="flex gap-2">
             <Button size="sm" type="button" variant="outline" onClick={() => setEditing(false)}>
-              Avbryt
+              {t('cancel')}
             </Button>
-            <Button size="sm" type="submit">Lagre</Button>
+            <Button size="sm" type="submit">{t('save')}</Button>
           </div>
         </form>
       ) : (
@@ -98,26 +100,26 @@ function CommentCard({
       <div className="mt-2 flex flex-wrap items-center gap-2">
         {onReply ? (
           <button type="button" onClick={() => setShowReply((v) => !v)} className="text-xs font-medium text-forest-800 hover:underline">
-            Svar
+            {t('reply')}
           </button>
         ) : null}
 
         {isOwner && onEditComment ? (
           <button type="button" onClick={() => setEditing((v) => !v)} className="text-xs font-medium text-gray-700 hover:underline">
-            Rediger
+            {t('edit')}
           </button>
         ) : null}
 
         {isOwner && onDeleteComment ? (
           <button type="button" onClick={() => onDeleteComment(comment.id)} className="text-xs font-medium text-red-700 hover:underline">
-            Slett
+            {t('delete')}
           </button>
         ) : null}
       </div>
 
       {onReportComment ? (
         <div className="mt-2">
-          <ReportButton label="Rapporter kommentar" onSubmit={(payload) => onReportComment(comment.id, payload)} />
+          <ReportButton label={t('reportComment')} onSubmit={(payload) => onReportComment(comment.id, payload)} />
         </div>
       ) : null}
 
@@ -128,10 +130,10 @@ function CommentCard({
             onChange={(event) => setReplyContent(event.target.value)}
             className="w-full rounded border border-gray-300 px-2 py-1 text-sm"
             rows={2}
-            placeholder="Skriv svar"
+            placeholder={t('replyPlaceholder')}
           />
           {replyErr ? <p className="text-xs text-red-600">{replyErr}</p> : null}
-          <Button size="sm" type="submit">Send svar</Button>
+          <Button size="sm" type="submit">{t('sendReply')}</Button>
         </form>
       ) : null}
     </article>
@@ -139,6 +141,7 @@ function CommentCard({
 }
 
 export function CommentList({ comments, currentUserId, onReply, onEditComment, onDeleteComment, onReportComment }: CommentListProps) {
+  const t = useTranslations('CommentList');
   const topComments = useMemo(() => comments.filter((c) => !c.parent_comment_id), [comments]);
   const repliesByParent = useMemo(() => {
     const map = new Map<string, ForumComment[]>();
@@ -154,7 +157,7 @@ export function CommentList({ comments, currentUserId, onReply, onEditComment, o
   }, [comments]);
 
   if (comments.length === 0) {
-    return <p className="text-sm text-gray-700">Ingen kommentarer ennå.</p>;
+    return <p className="text-sm text-gray-700">{t('noComments')}</p>;
   }
 
   return (

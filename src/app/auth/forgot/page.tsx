@@ -2,10 +2,12 @@
 
 import { FormEvent, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { useTranslations } from 'next-intl';
 import { Button } from '@/components/ui/Button';
 import { createClient } from '@/lib/supabase/client';
 
 export default function ForgotPasswordPage() {
+  const t = useTranslations('AuthForgot');
   const supabase = useMemo(() => createClient(), []);
   const [email, setEmail] = useState('');
   const [sent, setSent] = useState(false);
@@ -27,7 +29,7 @@ export default function ForgotPasswordPage() {
       if (error) throw error;
       setSent(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Kunne ikke sende e-post. Prøv igjen.');
+      setError(err instanceof Error ? err.message : t('sendError'));
     } finally {
       setLoading(false);
     }
@@ -36,25 +38,27 @@ export default function ForgotPasswordPage() {
   return (
     <main className="mx-auto min-h-screen w-full max-w-screen-sm p-6 pt-[calc(1.5rem_+_env(safe-area-inset-top))]">
       <div className="rounded-xl bg-white p-6 shadow-sm">
-        <h1 className="text-2xl font-semibold text-forest-900">Glemt passord?</h1>
+        <h1 className="text-2xl font-semibold text-forest-900">{t('title')}</h1>
         <p className="mt-2 text-sm text-gray-700">
-          Skriv inn e-posten din, så sender vi deg en lenke for å lage nytt passord.
+          {t('intro')}
         </p>
 
         {sent ? (
           <div className="mt-6 space-y-4">
             <p className="rounded-lg border border-forest-200 bg-forest-50 px-3 py-3 text-sm text-forest-900">
-              Hvis det finnes en konto på <span className="font-medium">{email}</span>, har vi sendt en e-post med en
-              lenke for å lage nytt passord. Sjekk innboksen din (og søppelpost-mappen).
+              {t.rich('sentMessage', {
+                email,
+                strong: (chunks) => <span className="font-medium">{chunks}</span>
+              })}
             </p>
             <Link href="/auth/login" className="inline-block text-sm font-semibold text-forest-800 hover:underline">
-              Tilbake til innlogging
+              {t('backToLogin')}
             </Link>
           </div>
         ) : (
           <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
             <label className="block text-sm font-medium text-gray-800">
-              E-post
+              {t('emailLabel')}
               <input
                 type="email"
                 required
@@ -67,12 +71,12 @@ export default function ForgotPasswordPage() {
             {error ? <p className="text-sm text-red-600">{error}</p> : null}
 
             <Button type="submit" className="w-full" loading={loading}>
-              Send lenke
+              {t('sendLink')}
             </Button>
 
             <p className="text-sm text-gray-700">
               <Link href="/auth/login" className="font-semibold text-forest-800 hover:underline">
-                Tilbake til innlogging
+                {t('backToLogin')}
               </Link>
             </p>
           </form>

@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { useTranslations } from 'next-intl';
 import { NonNativeOnly } from '@/components/native/NonNativeOnly';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, ChevronUp, Download, Navigation, Trash2 } from 'lucide-react';
@@ -49,7 +50,8 @@ function bearingLabel(aLat: number, aLng: number, bLat: number, bLng: number): s
     Math.cos((aLat * Math.PI) / 180) * Math.sin((bLat * Math.PI) / 180) -
     Math.sin((aLat * Math.PI) / 180) * Math.cos((bLat * Math.PI) / 180) * Math.cos(dLng);
   const deg = ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
-  const dirs = ['nord', 'nordøst', 'øst', 'sørøst', 'sør', 'sørvest', 'vest', 'nordvest'];
+  // Stable direction keys; translated at the call site via t('dir<Key>').
+  const dirs = ['north', 'northEast', 'east', 'southEast', 'south', 'southWest', 'west', 'northWest'];
   return dirs[Math.round(deg / 45) % 8];
 }
 
@@ -60,6 +62,7 @@ const initialFilters: MapFilterState = {
 };
 
 export function MushroomMap() {
+  const t = useTranslations('MushroomMap');
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<import('leaflet').Map | null>(null);
   const clusterRef = useRef<any>(null);
@@ -232,18 +235,18 @@ export function MushroomMap() {
             })
           });
           if (res.status === 401) {
-            toast('Logg inn for å gi tilbakemelding.');
+            toast(t('loginToGiveFeedback'));
             return;
           }
           if (!res.ok) throw new Error('feedback failed');
           box.innerHTML =
-            '<div style="font-size:12px;font-weight:600;color:#15803d">Takk! Tilbakemeldingen gjør prediksjonene bedre. 🍄</div>';
+            `<div style="font-size:12px;font-weight:600;color:#15803d">${t('feedbackThanks')}</div>`;
         } catch {
-          toast.error('Kunne ikke lagre tilbakemeldingen.');
+          toast.error(t('feedbackSaveError'));
         }
       });
     });
-  }, []);
+  }, [t]);
 
   // "Lovende steder nær meg": numbered pins on promising forest cells within ~5 km.
   const renderTopSpots = useCallback(
@@ -266,38 +269,39 @@ export function MushroomMap() {
           iconAnchor: [14, 14]
         });
         const km = haversineKm(origin.lat, origin.lng, spot.lat, spot.lng);
-        const dir = bearingLabel(origin.lat, origin.lng, spot.lat, spot.lng);
+        const dirKey = bearingLabel(origin.lat, origin.lng, spot.lat, spot.lng);
+        const dir = t(`dir_${dirKey}`);
         const reasonsHtml = (spot.reasons ?? []).map((r) => `<div style="margin-top:3px">${r}</div>`).join('');
         const topSpeciesHtml = (spot.topSpecies ?? []).length
-          ? `<div style="margin-top:6px;font-size:12px;font-weight:600;color:#14532d">🍄 Mest sannsynlig her: ${(spot.topSpecies ?? []).join(', ')}</div>`
+          ? `<div style="margin-top:6px;font-size:12px;font-weight:600;color:#14532d">${t('mostLikelyHere', { species: (spot.topSpecies ?? []).join(', ') })}</div>`
           : '';
         const limitedHtml = opts?.limited
-          ? '<div style="margin-top:6px;font-size:12px;color:#92400e;background:#fef3c7;border-radius:8px;padding:5px 8px">🔒 Premium viser hvorfor dette stedet scorer høyt — og alle 12 steder.</div>'
+          ? `<div style="margin-top:6px;font-size:12px;color:#92400e;background:#fef3c7;border-radius:8px;padding:5px 8px">${t('premiumWhyHigh')}</div>`
           : '';
         const feedbackHtml = `<div data-spot-feedback data-lat="${spot.lat}" data-lng="${spot.lng}" data-score="${spot.score}"${
           opts?.speciesId ? ` data-species="${opts.speciesId}"` : ''
         } style="margin-top:8px;border-top:1px solid #e5e7eb;padding-top:7px">
-          <div style="font-size:12px;font-weight:600;color:#1f2937">Var du her? Fant du sopp?</div>
+          <div style="font-size:12px;font-weight:600;color:#1f2937">${t('wereYouHere')}</div>
           <div style="display:flex;gap:6px;margin-top:5px">
-            <button type="button" data-fb="yes" style="flex:1;background:#15803d;color:#fff;border:none;border-radius:8px;padding:5px 0;font-size:12px;font-weight:600;cursor:pointer">Ja 🍄</button>
-            <button type="button" data-fb="no" style="flex:1;background:#f3f4f6;color:#374151;border:none;border-radius:8px;padding:5px 0;font-size:12px;font-weight:600;cursor:pointer">Nei</button>
+            <button type="button" data-fb="yes" style="flex:1;background:#15803d;color:#fff;border:none;border-radius:8px;padding:5px 0;font-size:12px;font-weight:600;cursor:pointer">${t('feedbackYes')}</button>
+            <button type="button" data-fb="no" style="flex:1;background:#f3f4f6;color:#374151;border:none;border-radius:8px;padding:5px 0;font-size:12px;font-weight:600;cursor:pointer">${t('feedbackNo')}</button>
           </div>
         </div>`;
         const popup = `<div style="min-width:210px;max-width:265px">
-          <div style="font-weight:700;color:#14532d">${spot.verdict ?? `Topp ${rank}`}</div>
+          <div style="font-weight:700;color:#14532d">${spot.verdict ?? t('topRank', { rank })}</div>
           <div style="color:#555;font-size:12px;margin-top:2px">~${km.toFixed(1)} km ${dir} · ${spot.score}/100</div>
           ${topSpeciesHtml}
           <div style="font-size:12px;margin-top:6px;color:#1f2937">${reasonsHtml}</div>
           ${limitedHtml}
-          <a href="https://www.google.com/maps/search/?api=1&query=${spot.lat},${spot.lng}" target="_blank" rel="noreferrer" style="display:block;margin-top:7px;color:#15803d;font-weight:600;font-size:12px;text-decoration:underline">📍 Åpne i kart (naviger hit)</a>
+          <a href="https://www.google.com/maps/search/?api=1&query=${spot.lat},${spot.lng}" target="_blank" rel="noreferrer" style="display:block;margin-top:7px;color:#15803d;font-weight:600;font-size:12px;text-decoration:underline">${t('openInMapNavigate')}</a>
           ${feedbackHtml}
-          <div style="color:#9ca3af;font-size:10px;margin-top:6px">Kilder: MET (vær) · NIBIO/CORINE (skog) · Artsdatabanken (funn)</div>
+          <div style="color:#9ca3af;font-size:10px;margin-top:6px">${t('sourcesCredit')}</div>
         </div>`;
         const marker = leaflet.marker([spot.lat, spot.lng], { icon }).bindPopup(popup).addTo(layer);
         marker.on('popupopen', (event) => bindSpotFeedback(event.popup));
       });
     },
-    [bindSpotFeedback]
+    [bindSpotFeedback, t]
   );
 
   const clearTopSpots = useCallback(() => {
@@ -331,17 +335,17 @@ export function MushroomMap() {
       const res = await fetch(`/api/prediction/grid?${params.toString()}`, { cache: 'no-store' });
       const data = await res.json();
       if (res.status === 403) {
-        setTopMsg('Krever Premium eller Sesongpass.');
+        setTopMsg(t('requiresPremium'));
         return;
       }
       if (!res.ok) {
-        setTopMsg(data?.error ?? 'Kunne ikke finne lovende steder.');
+        setTopMsg(data?.error ?? t('couldNotFindSpots'));
         return;
       }
       const spots = (data.cells ?? []) as { lat: number; lng: number; score: number; forestType: string; productivity: number | null; verdict?: string; reasons?: string[]; topSpecies?: string[] }[];
       if (spots.length === 0) {
         clearTopSpots();
-        setTopMsg('Fant lite skogdata innen 5 km — prøv et område med mer skog.');
+        setTopMsg(t('littleForestData'));
         return;
       }
       const limited = data.access === 'free_limited';
@@ -355,17 +359,17 @@ export function MushroomMap() {
       const sName = sid != null ? speciesNamesRef.current.get(sid) ?? null : null;
       setTopMsg(
         limited
-          ? `Viser de ${spots.length} mest lovende stedene nær deg. Premium viser alle 12 med full begrunnelse.`
+          ? t('topSpotsLimited', { count: spots.length })
           : sName
-            ? `${spots.length} lovende steder for ${sName} innen 5 km. Trykk på en nål.`
-            : `${spots.length} lovende steder innen 5 km. Trykk på en nål for begrunnelse.`
+            ? t('topSpotsForSpecies', { count: spots.length, species: sName })
+            : t('topSpotsGeneric', { count: spots.length })
       );
     } catch {
-      setTopMsg('Kunne ikke finne lovende steder.');
+      setTopMsg(t('couldNotFindSpots'));
     } finally {
       setTopLoading(false);
     }
-  }, [latitude, longitude, filters.speciesId, renderTopSpots, clearTopSpots]);
+  }, [latitude, longitude, filters.speciesId, renderTopSpots, clearTopSpots, t]);
 
   // Prominent "which mushroom do you want?" search: pick a species and we jump
   // straight to the best spots for it (the prediction already re-ranks per
@@ -433,15 +437,15 @@ export function MushroomMap() {
         const popup = `<div style="min-width:210px;max-width:265px">
           <div style="font-weight:700;color:#14532d">${spot.norwegianName}</div>
           <div style="font-style:italic;color:#6b7280;font-size:11px">${spot.latinName}</div>
-          <div style="color:#555;font-size:12px;margin-top:3px">${spot.verdict ?? 'Lovende sted her'} · ${spot.score}/100</div>
+          <div style="color:#555;font-size:12px;margin-top:3px">${spot.verdict ?? t('promisingSpotHere')} · ${spot.score}/100</div>
           <div style="font-size:12px;margin-top:6px;color:#1f2937">${reasonsHtml}</div>
-          <a href="https://www.google.com/maps/search/?api=1&query=${spot.lat},${spot.lng}" target="_blank" rel="noreferrer" style="display:block;margin-top:7px;color:#15803d;font-weight:600;font-size:12px;text-decoration:underline">📍 Åpne i kart (naviger hit)</a>
-          <div style="color:#9ca3af;font-size:10px;margin-top:6px">Kilder: MET (vær) · NIBIO/CORINE (skog) · Artsdatabanken (funn)</div>
+          <a href="https://www.google.com/maps/search/?api=1&query=${spot.lat},${spot.lng}" target="_blank" rel="noreferrer" style="display:block;margin-top:7px;color:#15803d;font-weight:600;font-size:12px;text-decoration:underline">${t('openInMapNavigate')}</a>
+          <div style="color:#9ca3af;font-size:10px;margin-top:6px">${t('sourcesCredit')}</div>
         </div>`;
         leaflet.marker([spot.lat, spot.lng], { icon }).bindPopup(popup).addTo(layer);
       }
     },
-    []
+    [t]
   );
 
   const clearSpeciesSpots = useCallback(() => {
@@ -467,28 +471,28 @@ export function MushroomMap() {
       const res = await fetch(`/api/prediction/species-spots?${params.toString()}`, { cache: 'no-store' });
       const data = await res.json();
       if (res.status === 403) {
-        setSpeciesMsg('Krever Premium eller Sesongpass.');
+        setSpeciesMsg(t('requiresPremium'));
         return;
       }
       if (!res.ok) {
-        setSpeciesMsg(data?.error ?? 'Kunne ikke hente soppbilder.');
+        setSpeciesMsg(data?.error ?? t('couldNotFetchPhotos'));
         return;
       }
       const spots = (data.spots ?? []) as { speciesId: number; norwegianName: string; latinName: string; imageUrl: string; lat: number; lng: number; score: number; verdict?: string; reasons?: string[] }[];
       if (spots.length === 0) {
         clearSpeciesSpots();
-        setSpeciesMsg(data?.message ?? 'Ingen arter i sesong her nå.');
+        setSpeciesMsg(data?.message ?? t('noSpeciesInSeason'));
         return;
       }
       setSpeciesSpots(spots);
       await renderSpeciesSpots(spots);
-      setSpeciesMsg(`${spots.length} arter i sesong — bilde på lovende sted for hver.`);
+      setSpeciesMsg(t('speciesInSeasonCount', { count: spots.length }));
     } catch {
-      setSpeciesMsg('Kunne ikke hente soppbilder.');
+      setSpeciesMsg(t('couldNotFetchPhotos'));
     } finally {
       setSpeciesLoading(false);
     }
-  }, [renderSpeciesSpots, clearSpeciesSpots]);
+  }, [renderSpeciesSpots, clearSpeciesSpots, t]);
 
   // Registered finds (GBIF/Artsdatabanken) as clustered points — the concrete
   // "where mushrooms have actually been found" layer. Free for all.
@@ -521,13 +525,26 @@ export function MushroomMap() {
       deadly: '#7f1d1d'
     };
     const EDIBILITY_LABEL: Record<string, string> = {
-      edible: 'Spiselig',
-      conditionally_edible: 'Betinget spiselig',
-      inedible: 'Uspiselig',
-      toxic: 'Giftig',
-      deadly: 'Dødelig giftig'
+      edible: t('edEdible'),
+      conditionally_edible: t('edConditionallyEdible'),
+      inedible: t('edInedible'),
+      toxic: t('edToxic'),
+      deadly: t('edDeadly')
     };
-    const MONTHS_NO = ['jan.', 'feb.', 'mars', 'apr.', 'mai', 'juni', 'juli', 'aug.', 'sep.', 'okt.', 'nov.', 'des.'];
+    const MONTHS_NO = [
+      t('monthJan'),
+      t('monthFeb'),
+      t('monthMar'),
+      t('monthApr'),
+      t('monthMay'),
+      t('monthJun'),
+      t('monthJul'),
+      t('monthAug'),
+      t('monthSep'),
+      t('monthOct'),
+      t('monthNov'),
+      t('monthDec')
+    ];
     const formatFound = (d?: string | null): string | null => {
       if (!d) return null;
       const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(d);
@@ -559,7 +576,7 @@ export function MushroomMap() {
       return e === 'toxic' || e === 'deadly';
     });
     for (const o of points) {
-      const name = o.species_id != null ? names.get(o.species_id) ?? 'Sopp' : 'Sopp';
+      const name = o.species_id != null ? names.get(o.species_id) ?? t('mushroomFallback') : t('mushroomFallback');
       const edi = o.species_id != null ? edibilities.get(o.species_id) : undefined;
       const color = (edi && EDIBILITY_HEX[edi]) || '#8b5e34';
       const ediLabel = edi ? EDIBILITY_LABEL[edi] : null;
@@ -572,11 +589,11 @@ export function MushroomMap() {
       const ediHtml = ediLabel ? `<br/><span style="color:${color};font-weight:600;font-size:12px">${ediLabel}</span>` : '';
       const found = formatFound(o.observed_at);
       const foundHtml = found ? ` · ${found}` : '';
-      const popup = `<div><b>${name}</b>${ediHtml}<br/><span style="color:#555;font-size:12px">Registrert funn${foundHtml}</span><br/><a href="https://www.google.com/maps/search/?api=1&query=${o.latitude},${o.longitude}" target="_blank" rel="noreferrer" style="color:#15803d;font-weight:600;font-size:12px;text-decoration:underline">📍 Åpne i kart</a><br/><span style="color:#9ca3af;font-size:10px">Artsdatabanken/GBIF</span></div>`;
+      const popup = `<div><b>${name}</b>${ediHtml}<br/><span style="color:#555;font-size:12px">${t('registeredFinding')}${foundHtml}</span><br/><a href="https://www.google.com/maps/search/?api=1&query=${o.latitude},${o.longitude}" target="_blank" rel="noreferrer" style="color:#15803d;font-weight:600;font-size:12px;text-decoration:underline">${t('openInMap')}</a><br/><span style="color:#9ca3af;font-size:10px">Artsdatabanken/GBIF</span></div>`;
       leaflet.marker([o.latitude, o.longitude], { icon }).bindPopup(popup).addTo(cluster);
     }
     setOccCount(points.length);
-  }, [filters.speciesId, supabase]);
+  }, [filters.speciesId, supabase, t]);
 
   useEffect(() => {
     loadOccurrencesRef.current = loadOccurrences;
@@ -637,13 +654,13 @@ export function MushroomMap() {
   }, []);
 
   const addTripFind = useCallback((name?: string) => {
-    const next = [...tripFindsRef.current, name && name.trim() ? name.trim() : 'Sopp'];
+    const next = [...tripFindsRef.current, name && name.trim() ? name.trim() : t('mushroomFallback')];
     tripFindsRef.current = next;
     setTripFinds(next);
     if (typeof window !== 'undefined') {
       window.localStorage.setItem('mycelet:trip-v1', JSON.stringify({ finds: next }));
     }
-  }, []);
+  }, [t]);
 
   const endTrip = useCallback(() => {
     const finds = tripFindsRef.current;
@@ -663,11 +680,15 @@ export function MushroomMap() {
       }
     }
     if (count > 0) {
-      toast.success(`Fin tur! Du registrerte ${count} funn 🍄${unique.length ? ` (${unique.join(', ')})` : ''}`);
+      toast.success(
+        unique.length
+          ? t('tripDoneWithSpecies', { count, species: unique.join(', ') })
+          : t('tripDone', { count })
+      );
     } else {
-      toast('Tur avsluttet — ingen funn denne gangen.');
+      toast(t('tripDoneNoFinds'));
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -786,13 +807,13 @@ export function MushroomMap() {
     setOfflineStatus(null);
 
     if (!hasOfflineAccess) {
-      setOfflineStatus('Offline-kart er tilgjengelig i Premium eller Sesongpass.');
+      setOfflineStatus(t('offlineRequiresPremium'));
       return;
     }
 
     const map = mapRef.current;
     if (!map) {
-      setOfflineStatus('Kartet er ikke klart ennå.');
+      setOfflineStatus(t('mapNotReady'));
       return;
     }
 
@@ -800,10 +821,13 @@ export function MushroomMap() {
     const center = map.getCenter();
     const zoom = map.getZoom();
     const now = new Date();
-    const generatedName = `Område ${now.toLocaleDateString('nb-NO')} ${now.toLocaleTimeString('nb-NO', {
-      hour: '2-digit',
-      minute: '2-digit'
-    })}`;
+    const generatedName = t('generatedAreaName', {
+      date: now.toLocaleDateString('nb-NO'),
+      time: now.toLocaleTimeString('nb-NO', {
+        hour: '2-digit',
+        minute: '2-digit'
+      })
+    });
 
     const area: OfflineArea = {
       id: typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now()}`,
@@ -839,16 +863,16 @@ export function MushroomMap() {
       setOfflineName('');
 
       if (cacheResult.cached === 0 && cacheResult.failed > 0) {
-        setOfflineStatus('Kunne ikke cache kartfliser i nettleseren. Området ble lagret, men uten offline-fliser.');
+        setOfflineStatus(t('offlineCacheFailed'));
       } else {
-        setOfflineStatus(`Område lagret. ${cacheResult.cached} kartfliser klare offline.`);
+        setOfflineStatus(t('offlineSaved', { count: cacheResult.cached }));
       }
     } catch {
-      setOfflineStatus('Feil under lagring av offline-område.');
+      setOfflineStatus(t('offlineSaveError'));
     } finally {
       setOfflineBusy(false);
     }
-  }, [hasOfflineAccess, offlineAreas, offlineName]);
+  }, [hasOfflineAccess, offlineAreas, offlineName, t]);
 
   const passPeriodFilter = (foundAt: string, period: MapFilterState['period']) => {
     if (period === 'all') return true;
@@ -1129,13 +1153,13 @@ export function MushroomMap() {
         const nameMap = new Map<number, string>();
         const ediMap = new Map<number, string>();
         for (const s of data ?? []) {
-          nameMap.set(s.id as number, (s.norwegian_name as string | null) ?? 'Sopp');
+          nameMap.set(s.id as number, (s.norwegian_name as string | null) ?? t('mushroomFallback'));
           if (s.edibility) ediMap.set(s.id as number, s.edibility as string);
         }
         speciesNamesRef.current = nameMap;
         speciesEdibilityRef.current = ediMap;
       });
-  }, [supabase]);
+  }, [supabase, t]);
 
   useEffect(() => {
     setOfflineAreas(readOfflineAreas());
@@ -1268,13 +1292,13 @@ export function MushroomMap() {
         <div className="w-full">
           {selectedSpeciesName ? (
             <div className="flex items-center justify-between gap-2 rounded-full bg-forest-800 px-3 py-2 text-xs font-medium text-white shadow-lg">
-              <span className="truncate">🍄 Lovende steder for {selectedSpeciesName}</span>
+              <span className="truncate">🍄 {t('promisingSpotsFor', { species: selectedSpeciesName })}</span>
               <button
                 type="button"
                 onClick={clearSpeciesSearch}
                 className="shrink-0 rounded-full bg-white/20 px-2 py-0.5 font-semibold hover:bg-white/30"
               >
-                Nullstill
+                {t('reset')}
               </button>
             </div>
           ) : (
@@ -1282,7 +1306,7 @@ export function MushroomMap() {
               <input
                 value={speciesSearch}
                 onChange={(event) => searchSpeciesForSpots(event.target.value)}
-                placeholder="🍄 Hvilken sopp vil du finne i dag?"
+                placeholder={t('whichMushroomToday')}
                 className="w-full rounded-full bg-white/95 px-4 py-2 text-xs text-gray-800 shadow-lg backdrop-blur placeholder:text-gray-500 focus:outline-none"
               />
               {speciesSuggestions.length > 0 ? (
@@ -1310,7 +1334,7 @@ export function MushroomMap() {
               showOccurrences ? 'bg-forest-800 text-white hover:bg-forest-700' : 'bg-white/95 text-gray-800 hover:bg-white'
             }`}
           >
-            {showOccurrences ? `Skjul funn${occCount ? ` (${occCount})` : ''}` : '📍 Funn'}
+            {showOccurrences ? (occCount ? t('hideFindingsCount', { count: occCount }) : t('hideFindings')) : t('findingsButton')}
           </button>
           <button
             type="button"
@@ -1320,7 +1344,7 @@ export function MushroomMap() {
               topSpots ? 'bg-forest-800 text-white hover:bg-forest-700' : 'bg-white/95 text-gray-800 hover:bg-white'
             }`}
           >
-            {topLoading ? 'Søker…' : topSpots ? 'Skjul steder' : '⭐ Lovende steder'}
+            {topLoading ? t('searching') : topSpots ? t('hideSpots') : t('promisingSpotsButton')}
           </button>
           {hasOfflineAccess ? (
             <button
@@ -1331,7 +1355,7 @@ export function MushroomMap() {
                 speciesSpots ? 'bg-forest-800 text-white hover:bg-forest-700' : 'bg-white/95 text-gray-800 hover:bg-white'
               }`}
             >
-              {speciesLoading ? 'Laster…' : speciesSpots ? 'Skjul bilder' : '📸 Bilder'}
+              {speciesLoading ? t('loading') : speciesSpots ? t('hidePhotos') : t('photosButton')}
             </button>
           ) : (
             <NonNativeOnly>
@@ -1339,7 +1363,7 @@ export function MushroomMap() {
                 href="/pricing"
                 className="rounded-full bg-white/95 px-3 py-1.5 text-xs font-medium text-forest-900 shadow-lg backdrop-blur hover:bg-white"
               >
-                ⭐ Premium-verktøy
+                ⭐ {t('premiumTools')}
               </Link>
             </NonNativeOnly>
           )}
@@ -1349,7 +1373,7 @@ export function MushroomMap() {
               onClick={startTrip}
               className="rounded-full bg-white/95 px-3 py-1.5 text-xs font-medium text-gray-800 shadow-lg backdrop-blur hover:bg-white"
             >
-              🎒 Tur
+              🎒 {t('trip')}
             </button>
           ) : null}
         </div>
@@ -1359,19 +1383,19 @@ export function MushroomMap() {
               href="/pricing"
               className="flex items-center gap-1.5 rounded-full bg-amber-500 px-3 py-1.5 text-xs font-semibold text-white shadow-lg hover:bg-amber-600"
             >
-              🔒 Se alle 12 lovende steder med Premium
+              🔒 {t('seeAll12Premium')}
             </Link>
           </NonNativeOnly>
         ) : null}
         {FLAGS.tripMode && tripActive ? (
           <div className="flex items-center gap-2 rounded-full bg-amber-700 px-3 py-1.5 text-xs font-medium text-white shadow-lg">
-            <span>🎒 Sopptur · {tripFinds.length} funn</span>
+            <span>🎒 {t('tripFindsCount', { count: tripFinds.length })}</span>
             <button
               type="button"
               onClick={endTrip}
               className="rounded-full bg-white/20 px-2 py-0.5 font-semibold hover:bg-white/30"
             >
-              Avslutt
+              {t('endTrip')}
             </button>
           </div>
         ) : null}
@@ -1380,9 +1404,9 @@ export function MushroomMap() {
             <div className="flex items-center gap-1 rounded-full bg-white/95 px-2 py-1 text-[11px] shadow-lg backdrop-blur">
               {(
                 [
-                  ['all', 'Alle'],
-                  ['edible', '🟢 Spiselige'],
-                  ['toxic', '🔴 Giftige']
+                  ['all', t('filterAll')],
+                  ['edible', t('filterEdible')],
+                  ['toxic', t('filterToxic')]
                 ] as const
               ).map(([val, label]) => (
                 <button
@@ -1404,7 +1428,7 @@ export function MushroomMap() {
                 occSeason ? 'bg-amber-600 text-white' : 'bg-white/95 text-gray-700 hover:bg-white'
               }`}
             >
-              {occSeason ? '🍂 Kun i sesong nå' : '🍂 Vis alle tider'}
+              {occSeason ? t('onlyInSeasonNow') : t('showAllTimes')}
             </button>
           </div>
         ) : null}
@@ -1416,13 +1440,13 @@ export function MushroomMap() {
 
       <div className={`absolute right-3 top-28 z-[1000] ${offlineOpen ? 'w-72' : 'w-auto'} rounded-xl border border-gray-200 bg-white/95 p-3 shadow-lg backdrop-blur`}>
         <div className="flex items-center justify-between gap-2">
-          <p className="text-sm font-semibold text-gray-900">Offline-kart</p>
+          <p className="text-sm font-semibold text-gray-900">{t('offlineMap')}</p>
           <div className="flex items-center gap-2">
-            {billing.isLoading ? <span className="text-[11px] text-gray-500">Sjekker plan...</span> : null}
+            {billing.isLoading ? <span className="text-[11px] text-gray-500">{t('checkingPlan')}</span> : null}
             <button
               type="button"
               onClick={() => setOfflineOpen((v) => !v)}
-              aria-label={offlineOpen ? 'Skjul offline-kart' : 'Vis offline-kart'}
+              aria-label={offlineOpen ? t('hideOfflineMap') : t('showOfflineMap')}
               className="rounded-full p-1 text-gray-500 hover:bg-gray-100"
             >
               {offlineOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
@@ -1434,22 +1458,22 @@ export function MushroomMap() {
           <>
         {showOfflineUpsell ? (
           <div className="mt-2 rounded border border-amber-300 bg-amber-50 px-2 py-2">
-            <p className="text-xs text-amber-800">Lagring av kartområder offline krever Premium eller Sesongpass.</p>
+            <p className="text-xs text-amber-800">{t('offlineSaveRequiresPremium')}</p>
             <NonNativeOnly>
               <Link href="/pricing" className="text-xs font-medium text-amber-900 underline">
-                Oppgrader plan
+                {t('upgradePlan')}
               </Link>
             </NonNativeOnly>
           </div>
         ) : null}
 
         <label className="mt-2 block text-xs font-medium text-gray-700">
-          Områdenavn
+          {t('areaName')}
           <input
             value={offlineName}
             onChange={(event) => setOfflineName(event.target.value)}
             className="mt-1 w-full rounded-lg border border-gray-300 px-2 py-1.5 text-xs"
-            placeholder="f.eks. Nordmarka øst"
+            placeholder={t('areaNamePlaceholder')}
           />
         </label>
 
@@ -1460,7 +1484,7 @@ export function MushroomMap() {
           className="mt-2 inline-flex w-full items-center justify-center gap-1 rounded-lg bg-forest-800 px-2 py-2 text-xs font-medium text-white hover:bg-forest-700 disabled:cursor-not-allowed disabled:opacity-50"
         >
           <Download className="h-3.5 w-3.5" />
-          {offlineBusy ? 'Lagrer...' : 'Lagre kartområde'}
+          {offlineBusy ? t('saving') : t('saveMapArea')}
         </button>
 
         {offlineStatus ? <p className="mt-2 text-[11px] text-gray-700">{offlineStatus}</p> : null}
@@ -1470,7 +1494,7 @@ export function MushroomMap() {
             <div key={area.id} className="rounded-lg border border-gray-200 bg-white p-2">
               <p className="truncate text-xs font-medium text-gray-900">{area.name}</p>
               <p className="text-[11px] text-gray-600">
-                {area.cachedTiles} fliser • zoom {area.zoom}
+                {t('tilesZoom', { tiles: area.cachedTiles, zoom: area.zoom })}
               </p>
               <div className="mt-1 flex gap-1">
                 <button
@@ -1479,7 +1503,7 @@ export function MushroomMap() {
                   className="inline-flex items-center gap-1 rounded border border-gray-300 px-2 py-1 text-[11px] text-gray-800 hover:bg-gray-50"
                 >
                   <Navigation className="h-3 w-3" />
-                  Gå til
+                  {t('goTo')}
                 </button>
                 <button
                   type="button"
@@ -1487,12 +1511,12 @@ export function MushroomMap() {
                   className="inline-flex items-center gap-1 rounded border border-red-200 px-2 py-1 text-[11px] text-red-700 hover:bg-red-50"
                 >
                   <Trash2 className="h-3 w-3" />
-                  Slett
+                  {t('delete')}
                 </button>
               </div>
             </div>
           ))}
-          {offlineAreas.length === 0 ? <p className="text-[11px] text-gray-600">Ingen lagrede områder ennå.</p> : null}
+          {offlineAreas.length === 0 ? <p className="text-[11px] text-gray-600">{t('noSavedAreas')}</p> : null}
         </div>
           </>
         ) : null}
@@ -1503,8 +1527,8 @@ export function MushroomMap() {
         onClick={locateMe}
         disabled={locating}
         className="absolute bottom-20 right-4 z-[1000] flex h-12 w-12 items-center justify-center rounded-full bg-white/95 text-xl shadow-xl backdrop-blur transition-colors hover:bg-white disabled:opacity-60"
-        aria-label="Finn min posisjon"
-        title="Finn min posisjon"
+        aria-label={t('findMyPosition')}
+        title={t('findMyPosition')}
       >
         {locating ? '…' : '📍'}
       </button>
@@ -1512,7 +1536,7 @@ export function MushroomMap() {
       <button
         onClick={() => setShowAddSheet(true)}
         className="absolute bottom-4 right-4 z-[1000] h-14 w-14 rounded-full bg-forest-800 text-3xl text-white shadow-xl transition-colors hover:bg-forest-700"
-        aria-label="Legg til funn"
+        aria-label={t('addFinding')}
       >
         +
       </button>
@@ -1523,19 +1547,19 @@ export function MushroomMap() {
           onClick={dismissIntro}
         >
           <div className="max-w-sm rounded-2xl bg-white p-5 shadow-2xl" onClick={(event) => event.stopPropagation()}>
-            <p className="text-base font-semibold text-gray-900">👋 Velkommen til soppkartet!</p>
+            <p className="text-base font-semibold text-gray-900">{t('introTitle')}</p>
             <ul className="mt-3 space-y-2 text-sm text-gray-700">
-              <li>📍 <b>Vis registrerte funn</b> — ekte soppfunn, fargekodet etter spiselighet (🟢 spiselig, 🔴 giftig).</li>
-              <li>⭐ <b>Lovende steder</b> — våre beste tips akkurat nå (ut fra forhold + tidligere funn), med begrunnelse.</li>
-              <li>🛰️ Bytt til <b>Satellitt</b> (oppe til høyre) for å se skogen ovenfra.</li>
-              <li>📍-knappen nederst til høyre finner <b>din posisjon</b>.</li>
+              <li>📍 {t.rich('introFindings', { b: (chunks) => <b>{chunks}</b> })}</li>
+              <li>⭐ {t.rich('introSpots', { b: (chunks) => <b>{chunks}</b> })}</li>
+              <li>🛰️ {t.rich('introSatellite', { b: (chunks) => <b>{chunks}</b> })}</li>
+              <li>{t.rich('introLocate', { b: (chunks) => <b>{chunks}</b> })}</li>
             </ul>
             <button
               type="button"
               onClick={dismissIntro}
               className="mt-4 w-full rounded-full bg-forest-800 px-4 py-2 text-sm font-medium text-white hover:bg-forest-700"
             >
-              Skjønner!
+              {t('introGotIt')}
             </button>
           </div>
         </div>
@@ -1562,7 +1586,7 @@ export function MushroomMap() {
         error={prediction.isError && tileHotspots.length === 0}
       />
 
-      {geoLoading ? <div className="absolute bottom-4 left-4 z-[1000] rounded-lg bg-white px-3 py-2 text-xs">Henter GPS...</div> : null}
+      {geoLoading ? <div className="absolute bottom-4 left-4 z-[1000] rounded-lg bg-white px-3 py-2 text-xs">{t('fetchingGps')}</div> : null}
       {geoError ? <div className="absolute bottom-4 left-4 z-[1000] rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">{geoError}</div> : null}
     </div>
   );

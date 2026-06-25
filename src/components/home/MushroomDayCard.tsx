@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { MapPin } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 
 interface DayPoint {
   date: string;
@@ -38,8 +39,9 @@ const FLUSH_TINT: Record<FlushStatus, string> = {
 };
 
 // Default region (Sør-Norge) used until the visitor opts to share their position —
-// we never prompt for location on the landing page.
-const DEFAULT = { lat: 59.91, lon: 10.75, label: 'Sør-Norge' };
+// we never prompt for location on the landing page. The display label is resolved
+// via i18n inside the component.
+const DEFAULT = { lat: 59.91, lon: 10.75 };
 
 function colorFor(score: number): string {
   if (score >= 65) return '#15803d'; // forest green — great
@@ -54,9 +56,12 @@ function colorFor(score: number): string {
  * is already granted (never prompts on load).
  */
 export function MushroomDayCard() {
+  const t = useTranslations('MushroomDayCard');
+  const defaultLabel = t('defaultRegion');
+  const myLocationLabel = t('yourPosition');
   const [data, setData] = useState<Forecast | null>(null);
   const [loading, setLoading] = useState(true);
-  const [areaLabel, setAreaLabel] = useState(DEFAULT.label);
+  const [areaLabel, setAreaLabel] = useState(defaultLabel);
   const [usingDefault, setUsingDefault] = useState(true);
 
   const load = async (lat: number, lon: number, label: string, isDefault: boolean) => {
@@ -86,15 +91,15 @@ export function MushroomDayCard() {
       if (granted && navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(
           (pos) => {
-            if (!cancelled) void load(pos.coords.latitude, pos.coords.longitude, 'din posisjon', false);
+            if (!cancelled) void load(pos.coords.latitude, pos.coords.longitude, myLocationLabel, false);
           },
           () => {
-            if (!cancelled) void load(DEFAULT.lat, DEFAULT.lon, DEFAULT.label, true);
+            if (!cancelled) void load(DEFAULT.lat, DEFAULT.lon, defaultLabel, true);
           },
           { timeout: 6000, maximumAge: 600000 }
         );
       } else if (!cancelled) {
-        void load(DEFAULT.lat, DEFAULT.lon, DEFAULT.label, true);
+        void load(DEFAULT.lat, DEFAULT.lon, defaultLabel, true);
       }
     };
     void start();
@@ -106,7 +111,7 @@ export function MushroomDayCard() {
   const useMyLocation = () => {
     if (!navigator.geolocation) return;
     navigator.geolocation.getCurrentPosition((pos) =>
-      void load(pos.coords.latitude, pos.coords.longitude, 'din posisjon', false)
+      void load(pos.coords.latitude, pos.coords.longitude, myLocationLabel, false)
     );
   };
 
@@ -115,7 +120,7 @@ export function MushroomDayCard() {
     // forecast arrives (was the main layout-shift / CLS source on the home page).
     return (
       <div className="flex min-h-[15rem] items-center justify-center rounded-xl bg-white p-4 text-sm text-gray-500 shadow-sm">
-        Sjekker soppforholdene …
+        {t('checkingConditions')}
       </div>
     );
   }
@@ -149,7 +154,7 @@ export function MushroomDayCard() {
             {today.score}
           </text>
           <text x="55" y="70" textAnchor="middle" fontSize="10" fill="#6b7280">
-            av 100
+            {t('outOf100')}
           </text>
         </svg>
         <div className="min-w-0 flex-1">
@@ -176,7 +181,7 @@ export function MushroomDayCard() {
 
       {data.hasForecast && days.length > 1 ? (
         <div className="mt-3 border-t border-gray-100 pt-3">
-          <p className="mb-1.5 text-xs font-medium text-gray-500">Utsikten fremover</p>
+          <p className="mb-1.5 text-xs font-medium text-gray-500">{t('outlookAhead')}</p>
           <div className="flex h-16 items-end justify-between gap-1.5">
             {days.map((d) => (
               <div key={d.date} className="flex flex-1 flex-col items-center gap-1" title={`${d.score}/100`}>
@@ -204,11 +209,11 @@ export function MushroomDayCard() {
               onClick={useMyLocation}
               className="inline-flex items-center gap-1 font-medium text-forest-800 hover:underline"
             >
-              <MapPin className="h-3 w-3" /> Min posisjon
+              <MapPin className="h-3 w-3" /> {t('myPosition')}
             </button>
           ) : null}
           <Link href="/map" className="font-medium text-forest-800 hover:underline">
-            Se kartet →
+            {t('seeMap')}
           </Link>
         </div>
       </div>

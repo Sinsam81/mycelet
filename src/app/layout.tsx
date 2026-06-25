@@ -1,8 +1,11 @@
 import type { Metadata, Viewport } from 'next';
 import { Fraunces, Inter } from 'next/font/google';
+import { NextIntlClientProvider } from 'next-intl';
+import { getMessages, getTranslations } from 'next-intl/server';
 import './globals.css';
 import { CookieNotice } from '@/components/layout/CookieNotice';
 import { Providers } from '@/components/layout/Providers';
+import { getUserLocale } from '@/i18n/locale';
 
 // Self-hosted via next/font (no external requests, zero CLS). --font-display
 // drives Tailwind's `font-serif` (headings/brand), --font-sans the body.
@@ -18,28 +21,30 @@ const inter = Inter({
   display: 'swap'
 });
 
-export const metadata: Metadata = {
-  title: {
-    default: 'Mycelet — soppkart, soppvarsel og AI-soppidentifikasjon',
-    template: '%s — Mycelet'
-  },
-  description:
-    'Finn mer sopp: live soppvarsel, prediksjonskart med lovende steder, AI-identifikasjon og artsbibliotek for Norge og Sverige.',
-  manifest: '/manifest.json',
-  appleWebApp: {
-    capable: true,
-    title: 'Mycelet',
-    statusBarStyle: 'default'
-  },
-  openGraph: {
-    siteName: 'Mycelet',
-    locale: 'nb_NO',
-    type: 'website',
-    title: 'Mycelet — soppkart, soppvarsel og AI-soppidentifikasjon',
-    description:
-      'Live soppvarsel, prediksjonskart, AI-identifikasjon og artsbibliotek for sopplukkere i Norge og Sverige.'
-  }
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const locale = await getUserLocale();
+  const t = await getTranslations('Metadata');
+  return {
+    title: {
+      default: t('titleDefault'),
+      template: '%s — Mycelet'
+    },
+    description: t('description'),
+    manifest: '/manifest.json',
+    appleWebApp: {
+      capable: true,
+      title: 'Mycelet',
+      statusBarStyle: 'default'
+    },
+    openGraph: {
+      siteName: 'Mycelet',
+      locale: locale === 'sv' ? 'sv_SE' : 'nb_NO',
+      type: 'website',
+      title: t('ogTitle'),
+      description: t('ogDescription')
+    }
+  };
+}
 
 export const viewport: Viewport = {
   themeColor: '#1A3409',
@@ -48,16 +53,20 @@ export const viewport: Viewport = {
   viewportFit: 'cover'
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const locale = await getUserLocale();
+  const messages = await getMessages();
   return (
-    <html lang="nb" className={`${fraunces.variable} ${inter.variable}`}>
+    <html lang={locale} className={`${fraunces.variable} ${inter.variable}`}>
       <body>
-        <Providers>{children}</Providers>
-        <CookieNotice />
+        <NextIntlClientProvider locale={locale} messages={messages}>
+          <Providers>{children}</Providers>
+          <CookieNotice />
+        </NextIntlClientProvider>
       </body>
     </html>
   );

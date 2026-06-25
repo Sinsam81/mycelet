@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 import { PageWrapper } from '@/components/layout/PageWrapper';
 import { IdentifyResult } from '@/components/identify/IdentifyResult';
 import { LookAlikeCheck } from '@/components/identify/LookAlikeCheck';
@@ -13,6 +14,7 @@ import { isDangerousEdibility } from '@/lib/utils/edibility';
 import { IdentifyResultPayload } from '@/types/identify';
 
 export default function IdentifyResultPage() {
+  const t = useTranslations('IdentifyResult');
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
 
@@ -53,11 +55,11 @@ export default function IdentifyResultPage() {
       } = await supabase.auth.getUser();
 
       if (!user) {
-        throw new Error('Du må være logget inn for å lagre funn.');
+        throw new Error(t('errorNotLoggedIn'));
       }
 
       if (payload.location.latitude == null || payload.location.longitude == null) {
-        throw new Error('GPS-posisjon mangler. Ta nytt bilde med lokasjon aktivert.');
+        throw new Error(t('errorMissingGps'));
       }
 
       // The user confirms which suggestion is correct (defaults to the AI's top).
@@ -99,10 +101,10 @@ export default function IdentifyResultPage() {
       });
 
       if (insertError) throw insertError;
-      toast.success('Funn lagret! 🍄');
+      toast.success(t('saveSuccess'));
       router.push('/map');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Kunne ikke lagre funn.');
+      setError(err instanceof Error ? err.message : t('errorSaveFailed'));
     } finally {
       setSaving(false);
     }
@@ -111,7 +113,7 @@ export default function IdentifyResultPage() {
   if (!payload) {
     return (
       <PageWrapper>
-        <p className="text-sm text-gray-700">Laster resultat...</p>
+        <p className="text-sm text-gray-700">{t('loading')}</p>
       </PageWrapper>
     );
   }
@@ -119,15 +121,15 @@ export default function IdentifyResultPage() {
   return (
     <PageWrapper>
       <section className="space-y-4">
-        <h1 className="font-serif text-3xl font-bold tracking-tight text-forest-900">Resultat</h1>
+        <h1 className="font-serif text-3xl font-bold tracking-tight text-forest-900">{t('title')}</h1>
 
         <SafetyWarning level={isDanger ? 'danger' : 'caution'} edibility={topSuggestion?.edibility} />
 
         <div className="overflow-hidden rounded-2xl bg-white shadow-card">
-          <img src={payload.originalImageDataUrl} alt="Opplastet soppbilde" className="h-56 w-full object-cover" />
+          <img src={payload.originalImageDataUrl} alt={t('imageAlt')} className="h-56 w-full object-cover" />
         </div>
 
-        <p className="text-sm text-gray-700">Velg arten som stemmer — vi logger den du velger:</p>
+        <p className="text-sm text-gray-700">{t('chooseSpeciesPrompt')}</p>
         <IdentifyResult
           suggestions={payload.suggestions.slice(0, 3)}
           selectedIndex={selectedIndex}
@@ -140,13 +142,13 @@ export default function IdentifyResultPage() {
 
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
           <Button onClick={handleSave} loading={saving}>
-            Lagre som funn
+            {t('saveAsFinding')}
           </Button>
           <Button variant="outline" onClick={() => router.push('/identify')}>
-            Ta nytt bilde
+            {t('takeNewPhoto')}
           </Button>
           <Button variant="outline" className="w-full" onClick={() => router.push('/forum/new')}>
-            Spør i forumet
+            {t('askInForum')}
           </Button>
         </div>
       </section>

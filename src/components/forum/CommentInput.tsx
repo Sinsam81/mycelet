@@ -1,6 +1,7 @@
 'use client';
 
 import { FormEvent, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { Button } from '@/components/ui/Button';
 
 interface CommentInputProps {
@@ -9,6 +10,7 @@ interface CommentInputProps {
 }
 
 export function CommentInput({ onSubmit, loading }: CommentInputProps) {
+  const t = useTranslations('CommentInput');
   const [content, setContent] = useState('');
   const [error, setError] = useState<string | null>(null);
 
@@ -17,7 +19,7 @@ export function CommentInput({ onSubmit, loading }: CommentInputProps) {
     setError(null);
 
     if (!content.trim()) {
-      setError('Skriv en kommentar.');
+      setError(t('emptyError'));
       return;
     }
 
@@ -25,7 +27,7 @@ export function CommentInput({ onSubmit, loading }: CommentInputProps) {
       await onSubmit(content.trim());
       setContent('');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Kunne ikke sende kommentar.');
+      setError(err instanceof Error ? err.message : t('submitError'));
     }
   };
 
@@ -39,12 +41,12 @@ export function CommentInput({ onSubmit, loading }: CommentInputProps) {
         onChange={(event) => setContent(event.target.value)}
         className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
         rows={3}
-        placeholder="Skriv en kommentar"
+        placeholder={t('placeholder')}
       />
       {error ? <p className="mt-2 text-sm text-red-600">{error}</p> : null}
       <div className="mt-2 flex justify-end">
         <Button type="submit" size="sm" loading={loading}>
-          Send kommentar
+          {t('submit')}
         </Button>
       </div>
     </form>

@@ -1,14 +1,18 @@
 import Link from 'next/link';
+import { getTranslations } from 'next-intl/server';
 import { NonNativeOnly } from '@/components/native/NonNativeOnly';
 import { AlertTriangle, Calendar, Camera, Check, Crown, Database, Lock, Map, MessageSquare, Shield } from 'lucide-react';
 import { PageWrapper } from '@/components/layout/PageWrapper';
 import { EdibilityBadge } from '@/components/ui/EdibilityBadge';
 import { MushroomDayCard } from '@/components/home/MushroomDayCard';
 import { LastTripCard } from '@/components/home/LastTripCard';
+import { LanguageToggle } from '@/components/layout/LanguageToggle';
 import { createClient } from '@/lib/supabase/server';
 import { BILLING_PLANS } from '@/lib/billing/plans';
 import { FLAGS } from '@/lib/flags';
 import type { Edibility } from '@/types/species';
+
+type HomeTranslator = Awaited<ReturnType<typeof getTranslations<'Home'>>>;
 
 interface SpeciesRow {
   id: number;
@@ -32,36 +36,40 @@ interface RecentFindingRow {
   primary_image_url: string | null;
 }
 
-function formatTimeAgo(iso: string) {
+function formatTimeAgo(iso: string, t: HomeTranslator) {
   const diff = Date.now() - new Date(iso).getTime();
   const dayMs = 24 * 60 * 60 * 1000;
   const days = Math.round(diff / dayMs);
-  if (days === 0) return 'i dag';
-  if (days === 1) return 'i går';
-  if (days < 7) return `for ${days} dager siden`;
-  if (days < 30) return `for ${Math.round(days / 7)} uker siden`;
+  if (days === 0) return t('timeAgoToday');
+  if (days === 1) return t('timeAgoYesterday');
+  if (days < 7) return t('timeAgoDays', { days });
+  if (days < 30) return t('timeAgoWeeks', { weeks: Math.round(days / 7) });
   return new Date(iso).toLocaleDateString('nb-NO', { day: '2-digit', month: 'short' });
 }
 
-const MONTH_NAMES = [
-  'januar', 'februar', 'mars', 'april', 'mai', 'juni',
-  'juli', 'august', 'september', 'oktober', 'november', 'desember'
-];
+function getMonthName(month: number, t: HomeTranslator) {
+  const keys = [
+    'monthJanuary', 'monthFebruary', 'monthMarch', 'monthApril', 'monthMay', 'monthJune',
+    'monthJuly', 'monthAugust', 'monthSeptember', 'monthOctober', 'monthNovember', 'monthDecember'
+  ] as const;
+  return t(keys[month - 1]);
+}
 
 function isInMonth(month: number, start: number, end: number) {
   if (start <= end) return month >= start && month <= end;
   return month >= start || month <= end;
 }
 
-function getSeasonHeadline(month: number, edibleCount: number) {
-  if (edibleCount === 0) return 'Få sopp i sesong nå';
-  if (month >= 4 && month <= 5) return 'Vårsoppene er kommet!';
-  if (month >= 6 && month <= 7) return 'Sommer i skogen';
-  if (month >= 8 && month <= 10) return 'Høysesong i skogen';
-  return 'Stille i skogen';
+function getSeasonHeadline(month: number, edibleCount: number, t: HomeTranslator) {
+  if (edibleCount === 0) return t('headlineFewInSeason');
+  if (month >= 4 && month <= 5) return t('headlineSpring');
+  if (month >= 6 && month <= 7) return t('headlineSummer');
+  if (month >= 8 && month <= 10) return t('headlineHighSeason');
+  return t('headlineQuiet');
 }
 
 export default async function HomePage() {
+  const t = await getTranslations('Home');
   const supabase = createClient();
   const month = new Date().getMonth() + 1;
   const {
@@ -108,16 +116,16 @@ export default async function HomePage() {
       <section className="space-y-4">
         <header className="pt-2 text-center">
           <p className="text-xs font-medium uppercase tracking-widest text-forest-700">
-            {MONTH_NAMES[month - 1]} {new Date().getFullYear()}
+            {getMonthName(month, t)} {new Date().getFullYear()}
           </p>
           <h1 className="mt-1 font-serif text-4xl font-bold tracking-tight text-forest-900">
-            {getSeasonHeadline(month, inSeasonEdible.length)}
+            {getSeasonHeadline(month, inSeasonEdible.length, t)}
           </h1>
           {inSeasonEdible.length > 0 ? (
             <p className="mt-1 text-sm text-gray-700">
-              {inSeasonEdible.length} matsopp{inSeasonEdible.length === 1 ? '' : 'er'} i sesong
+              {t('edibleInSeasonCount', { count: inSeasonEdible.length })}
               {dangerousInSeason.length > 0
-                ? ` · ${dangerousInSeason.length} giftig${dangerousInSeason.length === 1 ? '' : 'e'} å passe på`
+                ? ` · ${t('dangerousToWatch', { count: dangerousInSeason.length })}`
                 : ''}
             </p>
           ) : null}
@@ -134,8 +142,8 @@ export default async function HomePage() {
               <Camera className="h-6 w-6" />
             </span>
             <div className="flex-1">
-              <h2 className="font-serif text-xl font-semibold">Identifiser sopp</h2>
-              <p className="text-sm text-white/85">Ta bilde eller søk i databasen</p>
+              <h2 className="font-serif text-xl font-semibold">{t('identifyTitle')}</h2>
+              <p className="text-sm text-white/85">{t('identifySubtitle')}</p>
             </div>
             <span aria-hidden="true" className="text-2xl text-white/70">→</span>
           </div>
@@ -144,19 +152,19 @@ export default async function HomePage() {
         {userStats ? (
           <article className="rounded-xl bg-white p-4 shadow-sm">
             <div className="flex items-center justify-between">
-              <h2 className="font-semibold text-forest-900">🍄 Dine funn</h2>
+              <h2 className="font-semibold text-forest-900">🍄 {t('yourFindings')}</h2>
               <Link href="/profile" className="text-xs font-medium text-forest-800 hover:underline">
-                Se profilen din →
+                {t('seeYourProfile')} →
               </Link>
             </div>
             <div className="mt-3 flex gap-8">
               <div>
                 <p className="text-2xl font-bold text-forest-900">{userStats.total}</p>
-                <p className="text-xs text-gray-600">funn registrert</p>
+                <p className="text-xs text-gray-600">{t('findingsRegistered')}</p>
               </div>
               <div>
                 <p className="text-2xl font-bold text-forest-900">{userStats.species}</p>
-                <p className="text-xs text-gray-600">{userStats.species === 1 ? 'art' : 'arter'}</p>
+                <p className="text-xs text-gray-600">{t('speciesCount', { count: userStats.species })}</p>
               </div>
             </div>
           </article>
@@ -168,15 +176,15 @@ export default async function HomePage() {
           <div className="mb-3 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Calendar className="h-4 w-4 text-forest-800" />
-              <h2 className="font-semibold">I sesong nå ({MONTH_NAMES[month - 1]})</h2>
+              <h2 className="font-semibold">{t('inSeasonNow', { month: getMonthName(month, t) })}</h2>
             </div>
             <Link href="/calendar" className="text-xs font-medium text-forest-800 hover:underline">
-              Se hele kalenderen →
+              {t('seeFullCalendar')} →
             </Link>
           </div>
           {inSeasonEdible.length === 0 ? (
             <p className="text-sm text-gray-700">
-              Ingen av de registrerte matsoppene er i sesong i {MONTH_NAMES[month - 1]}. Se kalenderen for hva som kommer.
+              {t('noneInSeason', { month: getMonthName(month, t) })}
             </p>
           ) : (
             <ul
@@ -212,9 +220,9 @@ export default async function HomePage() {
             </ul>
           )}
           <p className="mt-3 text-xs text-gray-500">
-            Kun et tips om hva som er i sesong — aldri spis sopp basert på appen alene.{' '}
+            {t('seasonSafetyNote')}{' '}
             <Link href="/sikkerhet" className="font-medium text-forest-800 hover:underline">
-              Sjekk med Soppkontrollen
+              {t('checkWithSoppkontrollen')}
             </Link>
             .
           </p>
@@ -224,7 +232,7 @@ export default async function HomePage() {
           <article className="rounded-xl border-2 border-red-300 bg-red-50 p-4">
             <div className="mb-2 flex items-center gap-2">
               <AlertTriangle className="h-4 w-4 text-red-700" />
-              <h2 className="font-semibold text-red-900">Vær obs — giftige arter i sesong nå</h2>
+              <h2 className="font-semibold text-red-900">{t('dangerousWarningTitle')}</h2>
             </div>
             <ul className="space-y-1">
               {dangerousInSeason.map((s) => (
@@ -242,9 +250,9 @@ export default async function HomePage() {
         {findings.length > 0 ? (
           <article className="rounded-xl bg-white p-4 shadow-sm">
             <div className="mb-3 flex items-center justify-between">
-              <h2 className="font-semibold">Siste funn fra fellesskapet</h2>
+              <h2 className="font-semibold">{t('latestFromCommunity')}</h2>
               <Link href="/map" className="text-xs font-medium text-forest-800 hover:underline">
-                Se på kartet →
+                {t('seeOnMap')} →
               </Link>
             </div>
             <ul className="space-y-2">
@@ -256,13 +264,13 @@ export default async function HomePage() {
                   >
                     <div className="h-12 w-12 shrink-0 overflow-hidden rounded bg-gray-100">
                       {f.primary_image_url ? (
-                        <img src={f.primary_image_url} alt={f.norwegian_name ?? 'Sopp'} loading="lazy" decoding="async" className="h-full w-full object-cover" />
+                        <img src={f.primary_image_url} alt={f.norwegian_name ?? t('mushroomAlt')} loading="lazy" decoding="async" className="h-full w-full object-cover" />
                       ) : null}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="truncate font-medium">{f.norwegian_name ?? 'Ukjent art'}</p>
+                      <p className="truncate font-medium">{f.norwegian_name ?? t('unknownSpecies')}</p>
                       <p className="truncate text-xs text-gray-600">
-                        {f.location_name ?? 'Ukjent sted'} · {formatTimeAgo(f.found_at)}
+                        {f.location_name ?? t('unknownLocation')} · {formatTimeAgo(f.found_at, t)}
                       </p>
                     </div>
                     {f.edibility ? <EdibilityBadge edibility={f.edibility} /> : null}
@@ -280,8 +288,8 @@ export default async function HomePage() {
           <div className="flex items-center gap-2">
             <Map className="h-4 w-4 text-forest-800" />
             <div className="flex-1">
-              <h2 className="font-semibold">Soppkart med prediksjon</h2>
-              <p className="text-sm text-gray-700">Se hotspots, dine funn og soppvarsel for området ditt.</p>
+              <h2 className="font-semibold">{t('mapTitle')}</h2>
+              <p className="text-sm text-gray-700">{t('mapSubtitle')}</p>
             </div>
           </div>
         </Link>
@@ -293,28 +301,28 @@ export default async function HomePage() {
           >
             <div className="flex items-center gap-2">
               <Crown className="h-5 w-5 text-amber-400" />
-              <h2 className="font-serif text-xl font-semibold">Finn mer sopp med Premium</h2>
+              <h2 className="font-serif text-xl font-semibold">{t('premiumTitle')}</h2>
             </div>
             <ul className="mt-3 space-y-1.5 text-sm text-white/90">
               <li className="flex items-center gap-2">
-                <Check className="h-4 w-4 shrink-0 text-amber-400" /> Ubegrenset AI-identifikasjon
+                <Check className="h-4 w-4 shrink-0 text-amber-400" /> {t('premiumFeatureUnlimitedAi')}
               </li>
               <li className="flex items-center gap-2">
-                <Check className="h-4 w-4 shrink-0 text-amber-400" /> Full prediksjon — lovende steder nær deg
+                <Check className="h-4 w-4 shrink-0 text-amber-400" /> {t('premiumFeatureFullPrediction')}
               </li>
               <li className="flex items-center gap-2">
-                <Check className="h-4 w-4 shrink-0 text-amber-400" /> Offline-kart for skogsturen
+                <Check className="h-4 w-4 shrink-0 text-amber-400" /> {t('premiumFeatureOfflineMap')}
               </li>
             </ul>
             <div className="mt-4 flex items-center justify-between gap-3">
               <p className="text-sm text-white/80">
-                Fra{' '}
+                {t('premiumPriceFrom')}{' '}
                 <span className="font-serif text-lg font-bold text-amber-300">
-                  {Math.round((BILLING_PLANS.season_pass.yearlyNok ?? 249) / 12)} kr/mnd
+                  {t('premiumPricePerMonth', { price: Math.round((BILLING_PLANS.season_pass.yearlyNok ?? 249) / 12) })}
                 </span>{' '}
-                med Sesongpass
+                {t('premiumPriceWithPass')}
               </p>
-              <span className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-forest-900">Se planer</span>
+              <span className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-forest-900">{t('premiumSeePlans')}</span>
             </div>
           </Link>
         </NonNativeOnly>
@@ -324,11 +332,11 @@ export default async function HomePage() {
             href="/calendar"
             className={`rounded-lg border border-gray-200 bg-white p-3 text-sm font-medium ${FLAGS.forumInNav ? '' : 'col-span-2'}`}
           >
-            <span className="inline-flex items-center gap-2"><Calendar className="h-4 w-4" /> Kalender</span>
+            <span className="inline-flex items-center gap-2"><Calendar className="h-4 w-4" /> {t('navCalendar')}</span>
           </Link>
           {FLAGS.forumInNav ? (
             <Link href="/forum" className="rounded-lg border border-gray-200 bg-white p-3 text-sm font-medium">
-              <span className="inline-flex items-center gap-2"><MessageSquare className="h-4 w-4" /> Forum</span>
+              <span className="inline-flex items-center gap-2"><MessageSquare className="h-4 w-4" /> {t('navForum')}</span>
             </Link>
           ) : null}
         </div>
@@ -338,20 +346,24 @@ export default async function HomePage() {
             href="/sikkerhet"
             className="block rounded-lg border border-gray-200 bg-white p-3 text-sm font-medium text-gray-800 hover:bg-gray-50"
           >
-            <span className="inline-flex items-center gap-2"><Shield className="h-4 w-4 text-forest-800" /> Sikkerhet og soppkontroll</span>
+            <span className="inline-flex items-center gap-2"><Shield className="h-4 w-4 text-forest-800" /> {t('navSafety')}</span>
           </Link>
           <Link
             href="/personvern"
             className="block rounded-lg border border-gray-200 bg-white p-3 text-sm font-medium text-gray-800 hover:bg-gray-50"
           >
-            <span className="inline-flex items-center gap-2"><Lock className="h-4 w-4 text-forest-800" /> Personvern</span>
+            <span className="inline-flex items-center gap-2"><Lock className="h-4 w-4 text-forest-800" /> {t('navPrivacy')}</span>
           </Link>
           <Link
             href="/datakilder"
             className="block rounded-lg border border-gray-200 bg-white p-3 text-sm font-medium text-gray-800 hover:bg-gray-50"
           >
-            <span className="inline-flex items-center gap-2"><Database className="h-4 w-4 text-forest-800" /> Datakilder</span>
+            <span className="inline-flex items-center gap-2"><Database className="h-4 w-4 text-forest-800" /> {t('navDataSources')}</span>
           </Link>
+        </div>
+
+        <div className="flex justify-center pt-1">
+          <LanguageToggle />
         </div>
       </section>
     </PageWrapper>

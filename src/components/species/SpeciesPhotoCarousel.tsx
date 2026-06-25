@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 interface Photo {
@@ -17,13 +18,14 @@ interface SpeciesPhotoCarouselProps {
 }
 
 export function SpeciesPhotoCarousel({ photos, speciesName }: SpeciesPhotoCarouselProps) {
+  const t = useTranslations('SpeciesPhotoCarousel');
   const [index, setIndex] = useState(0);
   const count = photos.length;
 
   if (count === 0) {
     return (
       <div className="flex aspect-square w-full items-center justify-center rounded-2xl border border-gray-200 bg-gray-100 text-sm text-gray-500">
-        Ingen bilder enda
+        {t('noPhotosYet')}
       </div>
     );
   }
@@ -48,7 +50,7 @@ export function SpeciesPhotoCarousel({ photos, speciesName }: SpeciesPhotoCarous
             <button
               type="button"
               onClick={prev}
-              aria-label="Forrige bilde"
+              aria-label={t('previousPhoto')}
               className="absolute left-3 top-1/2 -translate-y-1/2 rounded-full bg-white/90 p-2 shadow-md backdrop-blur-sm transition hover:bg-white"
             >
               <ChevronLeft className="h-5 w-5 text-forest-900" />
@@ -56,7 +58,7 @@ export function SpeciesPhotoCarousel({ photos, speciesName }: SpeciesPhotoCarous
             <button
               type="button"
               onClick={next}
-              aria-label="Neste bilde"
+              aria-label={t('nextPhoto')}
               className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full bg-white/90 p-2 shadow-md backdrop-blur-sm transition hover:bg-white"
             >
               <ChevronRight className="h-5 w-5 text-forest-900" />
@@ -66,7 +68,7 @@ export function SpeciesPhotoCarousel({ photos, speciesName }: SpeciesPhotoCarous
       </div>
 
       <p className="mt-2 text-center text-xs text-gray-600">
-        {count > 1 ? `${index + 1} / ${count} bilder` : '1 bilde'}
+        {count > 1 ? t('counter', { current: index + 1, total: count }) : t('counterSingle')}
       </p>
 
       {photo.caption ? (

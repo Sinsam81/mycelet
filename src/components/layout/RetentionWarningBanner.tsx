@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { AlertTriangle, Loader2, X } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { useTranslations } from 'next-intl';
 
 interface DeletionWarning {
   warnedAt: string;
@@ -24,6 +25,7 @@ interface DeletionWarning {
  * see both at once.
  */
 export function RetentionWarningBanner() {
+  const t = useTranslations('RetentionWarningBanner');
   const [warning, setWarning] = useState<DeletionWarning | null>(null);
   const [loading, setLoading] = useState(false);
   const [dismissed, setDismissed] = useState(false);
@@ -53,12 +55,12 @@ export function RetentionWarningBanner() {
       const response = await fetch('/api/me/extend-retention', { method: 'POST' });
       const data = await response.json();
       if (!response.ok) {
-        throw new Error(data?.error ?? 'Kunne ikke avbryte sletting');
+        throw new Error(data?.error ?? t('cancelError'));
       }
-      toast.success(data?.message ?? 'Sletting av kontoen din er avbrutt.');
+      toast.success(data?.message ?? t('cancelSuccess'));
       setWarning(null);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Kunne ikke avbryte sletting');
+      toast.error(err instanceof Error ? err.message : t('cancelError'));
     } finally {
       setLoading(false);
     }
@@ -85,10 +87,10 @@ export function RetentionWarningBanner() {
 
         <div className="flex-1 space-y-1 text-sm text-amber-900">
           <p className="font-medium">
-            Kontoen din er planlagt slettet {formattedDate} ({daysRemaining} {daysRemaining === 1 ? 'dag' : 'dager'} igjen).
+            {t('scheduledDeletion', { date: formattedDate, count: daysRemaining })}
           </p>
           <p className="text-amber-800">
-            Vi har ikke sett deg på en stund. Klikk &laquo;Behold konto&raquo; så avbryter vi slettingen.
+            {t('inactivityNotice')}
           </p>
         </div>
 
@@ -99,13 +101,13 @@ export function RetentionWarningBanner() {
           className="inline-flex items-center gap-1.5 rounded-md bg-amber-700 px-3 py-1.5 text-sm font-medium text-white hover:bg-amber-800 focus:outline-none focus:ring-2 focus:ring-amber-400 disabled:cursor-not-allowed disabled:opacity-60"
         >
           {loading ? <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin" /> : null}
-          Behold konto
+          {t('keepAccount')}
         </button>
 
         <button
           type="button"
           onClick={() => setDismissed(true)}
-          aria-label="Skjul varsel midlertidig"
+          aria-label={t('dismissAriaLabel')}
           className="rounded-md p-1 text-amber-600 hover:bg-amber-100 hover:text-amber-800"
         >
           <X className="h-4 w-4" />

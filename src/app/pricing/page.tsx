@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 import { Check, Crown, Leaf, Loader2, ShieldCheck, Undo2 } from 'lucide-react';
 import { PageWrapper } from '@/components/layout/PageWrapper';
 import { BILLING_PLANS } from '@/lib/billing/plans';
@@ -29,92 +30,94 @@ const PREMIUM_MONTHLY = BILLING_PLANS.premium.monthlyNok ?? 79;
 const SEASON_YEARLY = BILLING_PLANS.season_pass.yearlyNok ?? 249;
 const SEASON_PER_MONTH = Math.round(SEASON_YEARLY / 12);
 
-const TIER_LABELS: Record<'free' | 'premium' | 'season_pass', string> = {
-  free: 'Gratis',
-  premium: 'Premium',
-  season_pass: 'Sesongpass'
-};
-
-const STATUS_LABELS: Record<string, string> = {
-  active: 'Aktiv',
-  trialing: 'Prøveperiode',
-  past_due: 'Forfalt betaling',
-  canceled: 'Avsluttet',
-  unpaid: 'Ubetalt',
-  incomplete: 'Venter på betaling',
-  incomplete_expired: 'Utløpt',
-  inactive: 'Inaktiv'
-};
-
-const planCards = [
-  {
-    id: 'free',
-    title: 'Gratis',
-    tagline: 'Kom trygt i gang',
-    price: '0 kr',
-    period: '',
-    lead: null,
-    features: [
-      '5 AI-identifikasjoner per døgn',
-      'Artsbibliotek med forvekslingsadvarsler',
-      'Soppkart, soppvarsel, kalender og forum'
-    ],
-    highlight: false
-  },
-  {
-    id: 'premium',
-    title: 'Premium',
-    tagline: 'Fleksibelt måned for måned',
-    price: `${PREMIUM_MONTHLY} kr`,
-    period: '/mnd',
-    lead: 'Alt i Gratis, pluss:',
-    features: [
-      'Ubegrenset AI-identifikasjon',
-      'Full prediksjon — lovende steder nær deg',
-      'Offline-kart (lagre områder lokalt)',
-      'Prioritert eksperthjelp (kommer)'
-    ],
-    highlight: false
-  },
-  {
-    id: 'season_pass',
-    title: 'Sesongpass',
-    tagline: 'Alt i Premium — hele året',
-    price: `${SEASON_YEARLY} kr`,
-    period: '/år',
-    lead: 'Alt i Premium, pluss:',
-    features: [
-      `Tilsvarer ${SEASON_PER_MONTH} kr/mnd`,
-      'Billigere enn én soppsesong med Premium',
-      'Fornyes årlig — avslutt når som helst'
-    ],
-    highlight: true
-  }
-] as const;
-
-const faqItems = [
-  {
-    q: 'Hva er forskjellen på Premium og Sesongpass?',
-    a: `Funksjonene er de samme. Premium betales månedlig og kan stoppes etter en måned. Sesongpass er ett beløp i året (${SEASON_YEARLY} kr) — billigere enn å betale Premium gjennom hele soppsesongen, og du slipper å tenke på det resten av året.`
-  },
-  {
-    q: 'Kan jeg avslutte når som helst?',
-    a: 'Ja. Du administrerer abonnementet selv fra denne siden («Administrer abonnement»). Tilgangen varer ut perioden du allerede har betalt for, og du belastes ikke videre.'
-  },
-  {
-    q: 'Hva får jeg gratis?',
-    a: 'Kjernen i Mycelet er gratis: artsbiblioteket med forvekslingsadvarsler, soppkartet, soppvarselet, kalenderen, forumet — og 5 AI-identifikasjoner per døgn.'
-  },
-  {
-    q: 'Fungerer Mycelet i Sverige?',
-    a: 'Ja. Kart, værdata, funn og prediksjon dekker både Norge og Sverige.'
-  }
-];
-
 // Next 15+ requires useSearchParams() inside a Suspense boundary; default
 // export at the bottom wraps PricingInner.
 function PricingInner() {
+  const t = useTranslations('Pricing');
   const searchParams = useSearchParams();
+
+  const TIER_LABELS: Record<'free' | 'premium' | 'season_pass', string> = {
+    free: t('tierFree'),
+    premium: t('tierPremium'),
+    season_pass: t('tierSeasonPass')
+  };
+
+  const STATUS_LABELS: Record<string, string> = {
+    active: t('statusActive'),
+    trialing: t('statusTrialing'),
+    past_due: t('statusPastDue'),
+    canceled: t('statusCanceled'),
+    unpaid: t('statusUnpaid'),
+    incomplete: t('statusIncomplete'),
+    incomplete_expired: t('statusIncompleteExpired'),
+    inactive: t('statusInactive')
+  };
+
+  const planCards = [
+    {
+      id: 'free',
+      title: t('tierFree'),
+      tagline: t('freeTagline'),
+      price: '0 kr',
+      period: '',
+      lead: null,
+      features: [
+        t('freeFeature1'),
+        t('freeFeature2'),
+        t('freeFeature3')
+      ],
+      highlight: false
+    },
+    {
+      id: 'premium',
+      title: t('tierPremium'),
+      tagline: t('premiumTagline'),
+      price: `${PREMIUM_MONTHLY} kr`,
+      period: t('perMonth'),
+      lead: t('premiumLead'),
+      features: [
+        t('premiumFeature1'),
+        t('premiumFeature2'),
+        t('premiumFeature3'),
+        t('premiumFeature4')
+      ],
+      highlight: false
+    },
+    {
+      id: 'season_pass',
+      title: t('tierSeasonPass'),
+      tagline: t('seasonTagline'),
+      price: `${SEASON_YEARLY} kr`,
+      period: t('perYear'),
+      lead: t('seasonLead'),
+      features: [
+        t('seasonFeature1', { perMonth: SEASON_PER_MONTH }),
+        t('seasonFeature2'),
+        t('seasonFeature3')
+      ],
+      highlight: true
+    }
+  ] as const;
+
+  const faqItems = [
+    {
+      q: t('faq1Q'),
+      a: t('faq1A', { yearly: SEASON_YEARLY })
+    },
+    {
+      q: t('faq2Q'),
+      a: t('faq2A')
+    },
+    {
+      q: t('faq3Q'),
+      a: t('faq3A')
+    },
+    {
+      q: t('faq4Q'),
+      a: t('faq4A')
+    }
+  ];
+
   const [loadingPlan, setLoadingPlan] = useState<'premium' | 'season_pass' | null>(null);
   const [openingPortal, setOpeningPortal] = useState(false);
   const [status, setStatus] = useState<BillingStatusResponse | null>(null);
@@ -126,10 +129,10 @@ function PricingInner() {
 
   const checkoutState = searchParams.get('checkout');
   const infoMessage = useMemo(() => {
-    if (checkoutState === 'success') return 'Betaling fullført. Oppdaterer abonnement...';
-    if (checkoutState === 'cancel') return 'Betalingen ble avbrutt.';
+    if (checkoutState === 'success') return t('checkoutSuccess');
+    if (checkoutState === 'cancel') return t('checkoutCancel');
     return null;
-  }, [checkoutState]);
+  }, [checkoutState, t]);
 
   const loadStatus = async () => {
     setStatusError(null);
@@ -150,7 +153,7 @@ function PricingInner() {
     }
 
     if (!response.ok) {
-      setStatusError(data?.error ?? 'Kunne ikke hente abonnementsstatus');
+      setStatusError(data?.error ?? t('errorLoadStatus'));
       return;
     }
 
@@ -170,10 +173,10 @@ function PricingInner() {
         body: JSON.stringify({ plan })
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data?.error ?? 'Checkout feilet');
+      if (!response.ok) throw new Error(data?.error ?? t('errorCheckout'));
       if (data?.url) window.location.href = data.url;
     } catch (error) {
-      setStatusError(error instanceof Error ? error.message : 'Checkout feilet');
+      setStatusError(error instanceof Error ? error.message : t('errorCheckout'));
     } finally {
       setLoadingPlan(null);
     }
@@ -184,10 +187,10 @@ function PricingInner() {
       setOpeningPortal(true);
       const response = await fetch('/api/billing/portal', { method: 'POST' });
       const data = await response.json();
-      if (!response.ok) throw new Error(data?.error ?? 'Kunne ikke åpne kundeside');
+      if (!response.ok) throw new Error(data?.error ?? t('errorOpenPortal'));
       if (data?.url) window.location.href = data.url;
     } catch (error) {
-      setStatusError(error instanceof Error ? error.message : 'Kunne ikke åpne kundeside');
+      setStatusError(error instanceof Error ? error.message : t('errorOpenPortal'));
     } finally {
       setOpeningPortal(false);
     }
@@ -199,19 +202,19 @@ function PricingInner() {
     <PageWrapper>
       <section className="space-y-5">
         <header className="pt-2 text-center">
-          <p className="text-xs font-medium uppercase tracking-widest text-forest-700">Priser</p>
+          <p className="text-xs font-medium uppercase tracking-widest text-forest-700">{t('eyebrow')}</p>
           <h1 className="mt-1 font-serif text-3xl font-bold tracking-tight text-forest-900">
-            Få mer ut av soppsesongen
+            {t('heading')}
           </h1>
           <p className="mx-auto mt-2 max-w-md text-sm text-gray-700">
-            Ubegrenset AI-identifikasjon, full prediksjon og offline-kart — for mindre enn én kurv kantareller.
+            {t('subheading')}
           </p>
           <div className="mt-3 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs text-gray-600">
             <span className="inline-flex items-center gap-1">
-              <ShieldCheck className="h-3.5 w-3.5 text-forest-700" /> Sikker betaling med Stripe
+              <ShieldCheck className="h-3.5 w-3.5 text-forest-700" /> {t('securePayment')}
             </span>
             <span className="inline-flex items-center gap-1">
-              <Undo2 className="h-3.5 w-3.5 text-forest-700" /> Avslutt når som helst — ingen binding
+              <Undo2 className="h-3.5 w-3.5 text-forest-700" /> {t('cancelAnytimeBadge')}
             </span>
           </div>
         </header>
@@ -220,22 +223,22 @@ function PricingInner() {
         {statusError ? <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{statusError}</p> : null}
         {native ? (
           <p className="rounded-lg bg-forest-50 px-3 py-2 text-sm text-forest-900">
-            Kjøp i appen er ikke tilgjengelig ennå — abonnement kommer snart.
+            {t('nativePurchaseUnavailable')}
           </p>
         ) : null}
 
         {status ? (
           <article className="rounded-2xl border border-gray-200 bg-white p-4 shadow-card">
-            <p className="text-xs uppercase tracking-wide text-gray-500">Din plan</p>
+            <p className="text-xs uppercase tracking-wide text-gray-500">{t('yourPlan')}</p>
             <p className="mt-1 text-lg font-semibold text-forest-900">{TIER_LABELS[status.capabilities.tier]}</p>
             <p className="text-sm text-gray-700">
               {STATUS_LABELS[status.capabilities.status] ?? status.capabilities.status}
               {status.subscription?.current_period_end
-                ? ` • Fornyes/slutter: ${new Date(status.subscription.current_period_end).toLocaleDateString('nb-NO')}`
+                ? ` • ${t('renewsEnds', { date: new Date(status.subscription.current_period_end).toLocaleDateString('nb-NO') })}`
                 : ''}
             </p>
             {!status.capabilities.paid ? (
-              <p className="mt-1 text-sm text-gray-700">AI-kvote: {status.capabilities.aiDailyLimit} per døgn</p>
+              <p className="mt-1 text-sm text-gray-700">{t('aiQuota', { limit: status.capabilities.aiDailyLimit ?? 0 })}</p>
             ) : null}
             {status.capabilities.paid && !native ? (
               <button
@@ -245,12 +248,12 @@ function PricingInner() {
                 className="mt-3 inline-flex items-center gap-2 rounded-lg border border-forest-800 px-3 py-2 text-sm font-medium text-forest-800 hover:bg-forest-50 disabled:opacity-60"
               >
                 {openingPortal ? <Loader2 className="h-4 w-4 animate-spin" /> : <Crown className="h-4 w-4" />}
-                Administrer abonnement
+                {t('manageSubscription')}
               </button>
             ) : null}
           </article>
         ) : (
-          <p className="text-sm text-gray-600">Laster abonnementsstatus...</p>
+          <p className="text-sm text-gray-600">{t('loadingStatus')}</p>
         )}
 
         <div className="grid gap-3 md:grid-cols-3">
@@ -273,7 +276,7 @@ function PricingInner() {
               >
                 {plan.highlight ? (
                   <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-amber-400 px-3 py-0.5 text-[11px] font-bold uppercase tracking-wide text-forest-900 shadow-sm">
-                    Best verdi
+                    {t('bestValue')}
                   </span>
                 ) : null}
                 <div className="flex items-center justify-between">
@@ -297,7 +300,7 @@ function PricingInner() {
                 </ul>
 
                 {isCurrent ? (
-                  <p className="mt-4 rounded-lg bg-forest-100 px-3 py-2 text-center text-sm font-medium text-forest-900">Aktiv plan</p>
+                  <p className="mt-4 rounded-lg bg-forest-100 px-3 py-2 text-center text-sm font-medium text-forest-900">{t('activePlan')}</p>
                 ) : null}
 
                 {!isCurrent && isPaidOption && !native ? (
@@ -314,7 +317,7 @@ function PricingInner() {
                     } disabled:opacity-60`}
                   >
                     {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                    Velg {plan.title}
+                    {t('choosePlan', { plan: plan.title })}
                   </button>
                 ) : null}
               </article>
@@ -323,11 +326,11 @@ function PricingInner() {
         </div>
 
         <p className="text-center text-xs text-gray-500">
-          Prisene er i norske kroner og inkluderer mva. Du kan bytte eller avslutte når som helst.
+          {t('priceNote')}
         </p>
 
         <article className="rounded-2xl bg-white p-4 shadow-card">
-          <h2 className="font-serif text-xl font-semibold text-forest-900">Vanlige spørsmål</h2>
+          <h2 className="font-serif text-xl font-semibold text-forest-900">{t('faqHeading')}</h2>
           <div className="mt-2 divide-y divide-gray-100">
             {faqItems.map((item) => (
               <details key={item.q} className="group py-2.5">
@@ -343,7 +346,7 @@ function PricingInner() {
 
         <p className="text-center text-sm">
           <Link href="/profile" className="font-medium text-forest-800 hover:underline">
-            Gå til profilen din →
+            {t('goToProfile')}
           </Link>
         </p>
       </section>
@@ -351,9 +354,18 @@ function PricingInner() {
   );
 }
 
+function PricingFallback() {
+  const t = useTranslations('Pricing');
+  return (
+    <PageWrapper>
+      <p className="text-sm text-gray-700">{t('loading')}</p>
+    </PageWrapper>
+  );
+}
+
 export default function PricingPage() {
   return (
-    <Suspense fallback={<PageWrapper><p className="text-sm text-gray-700">Laster...</p></PageWrapper>}>
+    <Suspense fallback={<PricingFallback />}>
       <PricingInner />
     </Suspense>
   );

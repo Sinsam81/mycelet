@@ -1,4 +1,7 @@
+'use client';
+
 import Link from 'next/link';
+import { useTranslations } from 'next-intl';
 import { EdibilityBadge } from '@/components/ui/EdibilityBadge';
 import { Species } from '@/types/species';
 
@@ -8,6 +11,7 @@ interface SpeciesCardProps {
 }
 
 export function SpeciesCard({ species, imageUrl }: SpeciesCardProps) {
+  const t = useTranslations('SpeciesCard');
   return (
     <Link
       href={`/species/${species.id}`}
@@ -21,7 +25,7 @@ export function SpeciesCard({ species, imageUrl }: SpeciesCardProps) {
             className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
           />
         ) : (
-          <div className="flex h-full w-full items-center justify-center text-sm text-gray-500">Ingen bilde</div>
+          <div className="flex h-full w-full items-center justify-center text-sm text-gray-500">{t('noImage')}</div>
         )}
         <div className="absolute bottom-2 right-2 drop-shadow-sm">
           <EdibilityBadge edibility={species.edibility} />

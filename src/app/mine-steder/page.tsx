@@ -1,12 +1,16 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
+import { getTranslations } from 'next-intl/server';
 import { Camera, ExternalLink, Lock, Map as MapIcon, MapPin } from 'lucide-react';
 import { PageWrapper } from '@/components/layout/PageWrapper';
 import { createClient } from '@/lib/supabase/server';
 
-export const metadata = {
-  title: 'Mine steder — Mycelet'
-};
+export async function generateMetadata() {
+  const t = await getTranslations('MineSteder');
+  return {
+    title: t('metaTitle')
+  };
+}
 
 /**
  * "Mine steder" — the user's own finds grouped by place. This is the secret-
@@ -43,12 +47,12 @@ interface Spot {
   lng: number;
 }
 
-function speciesName(row: FindingRow): string {
+function speciesName(row: FindingRow, unknownLabel: string): string {
   const ms = Array.isArray(row.mushroom_species) ? row.mushroom_species[0] : row.mushroom_species;
-  return ms?.norwegian_name ?? row.species_name_override ?? 'Ukjent art';
+  return ms?.norwegian_name ?? row.species_name_override ?? unknownLabel;
 }
 
-function groupFindings(rows: FindingRow[]): Spot[] {
+function groupFindings(rows: FindingRow[], labels: { unknownSpecies: string; nearPlace: (lat: string, lng: string) => string }): Spot[] {
   const groups = new Map<string, Spot>();
   for (const row of rows) {
     const named = !!row.location_name?.trim();
@@ -58,7 +62,7 @@ function groupFindings(rows: FindingRow[]): Spot[] {
     let spot = groups.get(key);
     if (!spot) {
       spot = {
-        label: named ? row.location_name!.trim() : `Sted nær ${row.latitude.toFixed(3)}, ${row.longitude.toFixed(3)}`,
+        label: named ? row.location_name!.trim() : labels.nearPlace(row.latitude.toFixed(3), row.longitude.toFixed(3)),
         unnamed: !named,
         count: 0,
         species: new Map(),
@@ -72,7 +76,7 @@ function groupFindings(rows: FindingRow[]): Spot[] {
       groups.set(key, spot);
     }
     spot.count += 1;
-    const name = speciesName(row);
+    const name = speciesName(row, labels.unknownSpecies);
     spot.species.set(name, (spot.species.get(name) ?? 0) + 1);
     if (row.found_at > spot.lastVisit) spot.lastVisit = row.found_at;
     spot.years.add(new Date(row.found_at).getFullYear());
@@ -86,6 +90,7 @@ function groupFindings(rows: FindingRow[]): Spot[] {
 }
 
 export default async function MineStederPage() {
+  const t = await getTranslations('MineSteder');
   const supabase = createClient();
   const {
     data: { user }
@@ -101,39 +106,42 @@ export default async function MineStederPage() {
     .order('found_at', { ascending: false })
     .limit(1000);
 
-  const spots = groupFindings((data ?? []) as unknown as FindingRow[]);
+  const spots = groupFindings((data ?? []) as unknown as FindingRow[], {
+    unknownSpecies: t('unknownSpecies'),
+    nearPlace: (lat, lng) => t('nearPlace', { lat, lng })
+  });
   const totalFinds = spots.reduce((sum, s) => sum + s.count, 0);
 
   return (
     <PageWrapper>
       <section className="space-y-4">
         <header>
-          <p className="text-xs font-semibold uppercase tracking-widest text-forest-700">Bare synlig for deg</p>
-          <h1 className="font-serif text-3xl font-bold tracking-tight text-forest-900">Mine steder</h1>
+          <p className="text-xs font-semibold uppercase tracking-widest text-forest-700">{t('onlyVisibleToYou')}</p>
+          <h1 className="font-serif text-3xl font-bold tracking-tight text-forest-900">{t('heading')}</h1>
           <p className="mt-1 text-sm text-gray-700">
-            Soppstedene dine, samlet på ett sted — også de hemmelige. {totalFinds > 0 ? `${totalFinds} funn fordelt på ${spots.length} steder.` : ''}
+            {t('intro')} {totalFinds > 0 ? t('summary', { finds: totalFinds, places: spots.length }) : ''}
           </p>
         </header>
 
         {spots.length === 0 ? (
           <article className="rounded-2xl bg-white p-6 text-center shadow-card">
             <p className="text-4xl">🍄</p>
-            <h2 className="mt-2 font-serif text-xl font-semibold text-forest-900">Ingen steder ennå</h2>
+            <h2 className="mt-2 font-serif text-xl font-semibold text-forest-900">{t('emptyHeading')}</h2>
             <p className="mx-auto mt-1 max-w-sm text-sm text-gray-700">
-              Når du logger funn, bygger Mycelet automatisk din private oversikt over hvor du finner sopp — år etter år.
+              {t('emptyBody')}
             </p>
             <div className="mt-4 flex flex-wrap justify-center gap-2">
               <Link
                 href="/identify"
                 className="inline-flex items-center gap-1.5 rounded-full bg-forest-800 px-4 py-2 text-sm font-semibold text-white hover:bg-forest-700"
               >
-                <Camera className="h-4 w-4" /> Identifiser et funn
+                <Camera className="h-4 w-4" /> {t('identifyFinding')}
               </Link>
               <Link
                 href="/map"
                 className="inline-flex items-center gap-1.5 rounded-full border border-forest-300 bg-white px-4 py-2 text-sm font-semibold text-forest-900 hover:bg-forest-50"
               >
-                <MapIcon className="h-4 w-4" /> Logg på kartet
+                <MapIcon className="h-4 w-4" /> {t('logOnMap')}
               </Link>
             </div>
           </article>
@@ -159,14 +167,14 @@ export default async function MineStederPage() {
                         </h2>
                         {spot.allPrivate ? (
                           <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-forest-100 px-2 py-0.5 text-[11px] font-semibold text-forest-900">
-                            <Lock className="h-3 w-3" /> Hemmelig sted
+                            <Lock className="h-3 w-3" /> {t('secretPlace')}
                           </span>
                         ) : null}
                       </div>
                       <p className="mt-0.5 text-xs text-gray-600">
-                        {spot.count} funn · {spot.species.size} arter · sist{' '}
+                        {t('cardStats', { finds: spot.count, species: spot.species.size })}{' '}
                         {new Date(spot.lastVisit).toLocaleDateString('nb-NO', { day: 'numeric', month: 'short', year: 'numeric' })}
-                        {years.length > 1 ? ` · ${years.length} sesonger (${years[years.length - 1]}–${years[0]})` : ''}
+                        {years.length > 1 ? t('cardSeasons', { seasons: years.length, first: years[years.length - 1], last: years[0] }) : ''}
                       </p>
                       <div className="mt-2 flex flex-wrap gap-1">
                         {shown.map(([name, n]) => (
@@ -175,7 +183,7 @@ export default async function MineStederPage() {
                             {n > 1 ? ` ×${n}` : ''}
                           </span>
                         ))}
-                        {more > 0 ? <span className="px-1 py-0.5 text-[11px] text-gray-500">+{more} til</span> : null}
+                        {more > 0 ? <span className="px-1 py-0.5 text-[11px] text-gray-500">{t('moreSpecies', { count: more })}</span> : null}
                       </div>
                       <a
                         href={`https://www.google.com/maps/search/?api=1&query=${spot.lat.toFixed(5)},${spot.lng.toFixed(5)}`}
@@ -183,7 +191,7 @@ export default async function MineStederPage() {
                         rel="noreferrer"
                         className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-forest-800 underline"
                       >
-                        <ExternalLink className="h-3 w-3" /> Åpne i kart
+                        <ExternalLink className="h-3 w-3" /> {t('openInMap')}
                       </a>
                     </div>
                   </div>
@@ -194,8 +202,7 @@ export default async function MineStederPage() {
         )}
 
         <p className="text-xs text-gray-500">
-          🔒 Steder der alle funn er private, er merket som hemmelige. Posisjonene her vises aldri til andre — offentlige funn
-          deles kun med den synligheten du valgte da du logget dem.
+          🔒 {t('privacyNote')}
         </p>
       </section>
     </PageWrapper>

@@ -3,12 +3,14 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 import { Button } from '@/components/ui/Button';
 import { createClient } from '@/lib/supabase/client';
 
 type Status = 'verifying' | 'ready' | 'invalid' | 'done';
 
 export default function ResetPasswordPage() {
+  const t = useTranslations('AuthReset');
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
   const [status, setStatus] = useState<Status>('verifying');
@@ -50,11 +52,11 @@ export default function ResetPasswordPage() {
     setError(null);
 
     if (password.length < 8) {
-      setError('Passordet må være minst 8 tegn.');
+      setError(t('errorTooShort'));
       return;
     }
     if (password !== confirm) {
-      setError('Passordene er ikke like.');
+      setError(t('errorMismatch'));
       return;
     }
 
@@ -68,7 +70,7 @@ export default function ResetPasswordPage() {
         router.refresh();
       }, 1500);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Kunne ikke oppdatere passordet.');
+      setError(err instanceof Error ? err.message : t('errorUpdateFailed'));
       setLoading(false);
     }
   };
@@ -76,34 +78,33 @@ export default function ResetPasswordPage() {
   return (
     <main className="mx-auto min-h-screen w-full max-w-screen-sm p-6 pt-[calc(1.5rem_+_env(safe-area-inset-top))]">
       <div className="rounded-xl bg-white p-6 shadow-sm">
-        <h1 className="text-2xl font-semibold text-forest-900">Lag nytt passord</h1>
+        <h1 className="text-2xl font-semibold text-forest-900">{t('title')}</h1>
 
-        {status === 'verifying' ? <p className="mt-4 text-sm text-gray-700">Sjekker lenken…</p> : null}
+        {status === 'verifying' ? <p className="mt-4 text-sm text-gray-700">{t('checkingLink')}</p> : null}
 
         {status === 'invalid' ? (
           <div className="mt-4 space-y-4">
             <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-900">
-              Lenken er ugyldig eller utløpt. Be om en ny lenke for å lage nytt passord. (Husk å åpne lenken i samme
-              nettleser som du ba om den fra.)
+              {t('invalidLink')}
             </p>
             <Link href="/auth/forgot" className="inline-block text-sm font-semibold text-forest-800 hover:underline">
-              Be om ny lenke
+              {t('requestNewLink')}
             </Link>
           </div>
         ) : null}
 
         {status === 'done' ? (
           <p className="mt-4 rounded-lg border border-forest-200 bg-forest-50 px-3 py-3 text-sm text-forest-900">
-            Passordet er oppdatert! Logger deg inn…
+            {t('done')}
           </p>
         ) : null}
 
         {status === 'ready' ? (
           <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
-            <p className="text-sm text-gray-700">Velg et nytt passord (minst 8 tegn).</p>
+            <p className="text-sm text-gray-700">{t('choosePassword')}</p>
 
             <label className="block text-sm font-medium text-gray-800">
-              Nytt passord
+              {t('newPasswordLabel')}
               <input
                 type="password"
                 required
@@ -114,7 +115,7 @@ export default function ResetPasswordPage() {
             </label>
 
             <label className="block text-sm font-medium text-gray-800">
-              Gjenta nytt passord
+              {t('confirmPasswordLabel')}
               <input
                 type="password"
                 required
@@ -127,7 +128,7 @@ export default function ResetPasswordPage() {
             {error ? <p className="text-sm text-red-600">{error}</p> : null}
 
             <Button type="submit" className="w-full" loading={loading}>
-              Lagre nytt passord
+              {t('submit')}
             </Button>
           </form>
         ) : null}

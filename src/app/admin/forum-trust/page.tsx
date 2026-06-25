@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { Loader2, Search } from 'lucide-react';
 import { PageWrapper } from '@/components/layout/PageWrapper';
 import { Button } from '@/components/ui/Button';
@@ -20,11 +21,11 @@ interface UserRow {
   } | null;
 }
 
-const roleOptions: Array<{ value: VerifiedRole; label: string }> = [
-  { value: 'trusted_forager', label: 'Verifisert plukker' },
-  { value: 'expert', label: 'Ekspert' },
-  { value: 'community_verifier', label: 'Fellesskapsverifisert' },
-  { value: 'moderator', label: 'Moderator' }
+const roleOptions: Array<{ value: VerifiedRole; labelKey: string }> = [
+  { value: 'trusted_forager', labelKey: 'roleTrustedForager' },
+  { value: 'expert', labelKey: 'roleExpert' },
+  { value: 'community_verifier', labelKey: 'roleCommunityVerifier' },
+  { value: 'moderator', labelKey: 'roleModerator' }
 ];
 
 function BadgeEditor({
@@ -36,6 +37,7 @@ function BadgeEditor({
   onSaved: () => Promise<void>;
   onRemoved: () => Promise<void>;
 }) {
+  const t = useTranslations('AdminForumTrust');
   const [role, setRole] = useState<VerifiedRole>(row.verified?.role ?? 'trusted_forager');
   const [badgeLabel, setBadgeLabel] = useState(row.verified?.badge_label ?? '');
   const [note, setNote] = useState(row.verified?.note ?? '');
@@ -59,11 +61,11 @@ function BadgeEditor({
       });
       const data = await response.json();
       if (!response.ok) {
-        throw new Error(data?.error ?? 'Kunne ikke lagre');
+        throw new Error(data?.error ?? t('errorSave'));
       }
       await onSaved();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Kunne ikke lagre');
+      setError(err instanceof Error ? err.message : t('errorSave'));
     } finally {
       setSaving(false);
     }
@@ -78,11 +80,11 @@ function BadgeEditor({
       });
       const data = await response.json();
       if (!response.ok) {
-        throw new Error(data?.error ?? 'Kunne ikke fjerne');
+        throw new Error(data?.error ?? t('errorRemove'));
       }
       await onRemoved();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Kunne ikke fjerne');
+      setError(err instanceof Error ? err.message : t('errorRemove'));
     } finally {
       setRemoving(false);
     }
@@ -93,29 +95,29 @@ function BadgeEditor({
       <div className="flex items-center justify-between gap-2">
         <div>
           <p className="text-sm font-medium text-gray-900">{row.displayName || row.username || row.id.slice(0, 8)}</p>
-          <p className="text-xs text-gray-600">@{row.username || 'ukjent'} • {row.id}</p>
+          <p className="text-xs text-gray-600">@{row.username || t('unknownUsername')} • {row.id}</p>
         </div>
-        {row.verified ? <span className="rounded-full bg-forest-50 px-2 py-0.5 text-xs text-forest-900">Aktiv badge</span> : null}
+        {row.verified ? <span className="rounded-full bg-forest-50 px-2 py-0.5 text-xs text-forest-900">{t('activeBadge')}</span> : null}
       </div>
 
       <div className="mt-3 grid gap-2 md:grid-cols-3">
         <label className="text-xs font-medium text-gray-700">
-          Rolle
+          {t('roleLabel')}
           <select value={role} onChange={(e) => setRole(e.target.value as VerifiedRole)} className="mt-1 w-full rounded border border-gray-300 px-2 py-1.5 text-sm">
             {roleOptions.map((option) => (
               <option key={option.value} value={option.value}>
-                {option.label}
+                {t(option.labelKey)}
               </option>
             ))}
           </select>
         </label>
         <label className="text-xs font-medium text-gray-700">
-          Badge label
-          <input value={badgeLabel} onChange={(e) => setBadgeLabel(e.target.value)} className="mt-1 w-full rounded border border-gray-300 px-2 py-1.5 text-sm" placeholder="f.eks. Soppsakkyndig" />
+          {t('badgeLabelLabel')}
+          <input value={badgeLabel} onChange={(e) => setBadgeLabel(e.target.value)} className="mt-1 w-full rounded border border-gray-300 px-2 py-1.5 text-sm" placeholder={t('badgeLabelPlaceholder')} />
         </label>
         <label className="text-xs font-medium text-gray-700">
-          Notat
-          <input value={note} onChange={(e) => setNote(e.target.value)} className="mt-1 w-full rounded border border-gray-300 px-2 py-1.5 text-sm" placeholder="Intern merknad" />
+          {t('noteLabel')}
+          <input value={note} onChange={(e) => setNote(e.target.value)} className="mt-1 w-full rounded border border-gray-300 px-2 py-1.5 text-sm" placeholder={t('notePlaceholder')} />
         </label>
       </div>
 
@@ -123,10 +125,10 @@ function BadgeEditor({
 
       <div className="mt-3 flex gap-2">
         <Button size="sm" onClick={() => void save()} loading={saving}>
-          Lagre badge
+          {t('saveBadge')}
         </Button>
         <Button size="sm" variant="outline" onClick={() => void remove()} loading={removing}>
-          Fjern badge
+          {t('removeBadge')}
         </Button>
       </div>
     </article>
@@ -134,6 +136,7 @@ function BadgeEditor({
 }
 
 export default function ForumTrustAdminPage() {
+  const t = useTranslations('AdminForumTrust');
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -152,11 +155,11 @@ export default function ForumTrustAdminPage() {
       });
       const data = await response.json();
       if (!response.ok) {
-        throw new Error(data?.error ?? 'Kunne ikke hente data');
+        throw new Error(data?.error ?? t('errorLoad'));
       }
       setRows((data?.users ?? []) as UserRow[]);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Kunne ikke hente data');
+      setError(err instanceof Error ? err.message : t('errorLoad'));
     } finally {
       setLoading(false);
     }
@@ -171,15 +174,15 @@ export default function ForumTrustAdminPage() {
       <section className="space-y-3">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h1 className="text-xl font-semibold">Forum trust admin</h1>
-            <p className="text-sm text-gray-700">Tildel eller fjern verifiserte plukker-badges.</p>
+            <h1 className="text-xl font-semibold">{t('title')}</h1>
+            <p className="text-sm text-gray-700">{t('subtitle')}</p>
           </div>
           <div className="flex gap-2">
             <Link href="/forum/moderation" className="text-sm font-medium text-forest-800 hover:underline">
-              Moderasjon
+              {t('moderationLink')}
             </Link>
             <Link href="/forum" className="text-sm font-medium text-forest-800 hover:underline">
-              Forum
+              {t('forumLink')}
             </Link>
           </div>
         </div>
@@ -192,18 +195,18 @@ export default function ForumTrustAdminPage() {
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 className="w-full rounded border border-gray-300 py-2 pl-8 pr-3 text-sm"
-                placeholder="Søk på brukernavn eller visningsnavn (minst 2 tegn)"
+                placeholder={t('searchPlaceholder')}
               />
             </div>
             <Button size="sm" onClick={() => void loadRows()}>
-              Søk
+              {t('searchButton')}
             </Button>
           </div>
         </div>
 
         {loading ? (
           <p className="inline-flex items-center gap-2 text-sm text-gray-700">
-            <Loader2 className="h-4 w-4 animate-spin" /> Laster brukere...
+            <Loader2 className="h-4 w-4 animate-spin" /> {t('loadingUsers')}
           </p>
         ) : null}
         {error ? <p className="rounded bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p> : null}
@@ -214,7 +217,7 @@ export default function ForumTrustAdminPage() {
           ))}
         </div>
 
-        {!loading && rows.length === 0 ? <p className="text-sm text-gray-700">Ingen brukere funnet.</p> : null}
+        {!loading && rows.length === 0 ? <p className="text-sm text-gray-700">{t('noUsers')}</p> : null}
       </section>
     </PageWrapper>
   );

@@ -1,14 +1,18 @@
 import { Database } from 'lucide-react';
+import { getTranslations } from 'next-intl/server';
 import { PageWrapper } from '@/components/layout/PageWrapper';
 
-export const metadata = {
-  title: 'Datakilder — Mycelet',
-  description: 'Åpne datakilder og lisenser som driver Mycelets soppkart og prediksjoner.'
-};
+export async function generateMetadata() {
+  const t = await getTranslations('Datakilder');
+  return {
+    title: t('metaTitle'),
+    description: t('metaDescription')
+  };
+}
 
 interface SourceEntry {
   name: string;
-  what: string;
+  whatKey: string;
   license: string;
   url: string;
 }
@@ -16,72 +20,78 @@ interface SourceEntry {
 const SOURCES: SourceEntry[] = [
   {
     name: 'Artsdatabanken / GBIF',
-    what: 'Registrerte soppfunn («Vis registrerte funn» og funn-signalet i prediksjonen). Vi bruker kun poster publisert under fri lisens (CC0 eller CC BY 4.0).',
+    whatKey: 'sourceGbif',
     license: 'CC0 1.0 / CC BY 4.0',
     url: 'https://www.gbif.org'
   },
   {
     name: 'NIBIO — SR16 skogressurskart',
-    what: 'Skogdata for Norge (treslag, bonitet, volum) — grunnlaget for habitat-vurderingen i prediksjonen.',
+    whatKey: 'sourceNibio',
     license: 'NLOD / CC BY 4.0',
     url: 'https://www.nibio.no'
   },
   {
     name: 'Kartverket',
-    what: 'Topografisk kart (standardlaget), stedsnavnsøk og høydedata.',
+    whatKey: 'sourceKartverket',
     license: 'CC BY 4.0',
     url: 'https://www.kartverket.no'
   },
   {
     name: 'Meteorologisk institutt (MET Norway)',
-    what: 'Værobservasjoner (Frost) og værvarsel (Locationforecast) — fukt-, temperatur- og sesongsignalene i prediksjonen og soppvarselet.',
+    whatKey: 'sourceMet',
     license: 'NLOD / CC BY 4.0',
     url: 'https://www.met.no'
   },
   {
     name: 'SMHI Öppna data',
-    what: 'Værobservasjoner for Sverige.',
+    whatKey: 'sourceSmhi',
     license: 'CC BY 4.0',
     url: 'https://www.smhi.se'
   },
   {
     name: 'Copernicus / EEA — CORINE Land Cover',
-    what: 'Arealdekke (skogtype) for Sverige.',
-    license: 'Copernicus åpne data (med kreditering)',
+    whatKey: 'sourceCorine',
+    license: 'sourceCorineLicense',
     url: 'https://land.copernicus.eu'
   },
   {
     name: 'Esri, Maxar, Earthstar Geographics',
-    what: 'Satellitt-/flyfotolaget på kartet.',
-    license: 'Brukes med kreditering på kartet',
+    whatKey: 'sourceEsri',
+    license: 'sourceEsriLicense',
     url: 'https://www.esri.com'
   },
   {
     name: 'OpenStreetMap-bidragsytere',
-    what: 'Gatekartlaget («Kart») som dekker områder utenfor Kartverkets dekning.',
+    whatKey: 'sourceOsm',
     license: 'ODbL',
     url: 'https://www.openstreetmap.org/copyright'
   },
   {
     name: 'Kindwise (Plant.id)',
-    what: 'AI-bildegjenkjenning i «Identifiser sopp» (kommersiell tjeneste, ikke åpne data).',
-    license: 'Tjenestevilkår',
+    whatKey: 'sourceKindwise',
+    license: 'sourceKindwiseLicense',
     url: 'https://www.kindwise.com'
   }
 ];
 
-export default function DataSourcesPage() {
+const TRANSLATED_LICENSE_KEYS = new Set([
+  'sourceCorineLicense',
+  'sourceEsriLicense',
+  'sourceKindwiseLicense'
+]);
+
+export default async function DataSourcesPage() {
+  const t = await getTranslations('Datakilder');
+
   return (
     <PageWrapper>
       <section className="space-y-4">
         <header className="pt-2">
           <h1 className="flex items-center gap-2 text-2xl font-bold text-forest-900">
-            <Database className="h-6 w-6" /> Datakilder
+            <Database className="h-6 w-6" /> {t('heading')}
           </h1>
           <p className="mt-2 text-sm text-gray-700">
-            Mycelet er bygget på åpne, offentlige data. Soppkartet og prediksjonene hadde ikke vært mulige uten
-            disse kildene — tusen takk til institusjonene og alle som rapporterer funn. Her er hva vi bruker, og
-            under hvilke lisenser.
+            {t('intro')}
           </p>
         </header>
 
@@ -98,18 +108,16 @@ export default function DataSourcesPage() {
                   {source.name}
                 </a>
                 <span className="rounded-full bg-forest-50 px-2.5 py-1 text-xs font-medium text-forest-900">
-                  {source.license}
+                  {TRANSLATED_LICENSE_KEYS.has(source.license) ? t(source.license) : source.license}
                 </span>
               </div>
-              <p className="mt-1 text-sm text-gray-700">{source.what}</p>
+              <p className="mt-1 text-sm text-gray-700">{t(source.whatKey)}</p>
             </li>
           ))}
         </ul>
 
         <p className="text-xs text-gray-600">
-          Funndata fra GBIF importeres utelukkende under CC0 1.0 eller CC BY 4.0, og lisens + datasett lagres per
-          post. Prediksjonene er Mycelets egne beregninger basert på kildene over — feil i vurderingene er våre,
-          ikke kildenes.
+          {t('footnote')}
         </p>
       </section>
     </PageWrapper>

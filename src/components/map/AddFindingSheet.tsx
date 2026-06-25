@@ -1,6 +1,7 @@
 'use client';
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { Camera } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { Button } from '@/components/ui/Button';
@@ -35,6 +36,7 @@ interface SpeciesOption {
 }
 
 export function AddFindingSheet({ latitude, longitude, onClose, onSaved }: AddFindingSheetProps) {
+  const t = useTranslations('AddFindingSheet');
   const supabase = useMemo(() => createClient(), []);
 
   const [findingType, setFindingType] = useState<FindingType>('positive');
@@ -76,7 +78,7 @@ export function AddFindingSheet({ latitude, longitude, onClose, onSaved }: AddFi
       const file = await captureNativePhoto();
       if (file) setImageFromFile(file);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Kunne ikke hente bilde.');
+      setError(err instanceof Error ? err.message : t('errorFetchImage'));
     }
   };
 
@@ -92,7 +94,7 @@ export function AddFindingSheet({ latitude, longitude, onClose, onSaved }: AddFi
     const {
       data: { user }
     } = await supabase.auth.getUser();
-    if (!user) throw new Error('Du må være logget inn');
+    if (!user) throw new Error(t('errorNotLoggedIn'));
 
     // Re-encode via canvas before upload: strips EXIF (incl. GPS), so the
     // photo can't leak the exact spot of an approximate/private find.
@@ -104,7 +106,7 @@ export function AddFindingSheet({ latitude, longitude, onClose, onSaved }: AddFi
       contentType: 'image/jpeg'
     });
 
-    if (uploadError) throw new Error(`Bildeopplasting feilet: ${uploadError.message}`);
+    if (uploadError) throw new Error(t('errorImageUpload', { message: uploadError.message }));
 
     const {
       data: { publicUrl }
@@ -135,7 +137,7 @@ export function AddFindingSheet({ latitude, longitude, onClose, onSaved }: AddFi
     setError(null);
 
     if (!latitude || !longitude) {
-      setError('GPS-posisjon mangler. Tillat lokasjon og prøv igjen.');
+      setError(t('errorGpsMissing'));
       return;
     }
 
@@ -147,7 +149,7 @@ export function AddFindingSheet({ latitude, longitude, onClose, onSaved }: AddFi
       } = await supabase.auth.getUser();
 
       if (!user) {
-        throw new Error('Du må være logget inn');
+        throw new Error(t('errorNotLoggedIn'));
       }
 
       const adjusted = applyOffset(latitude, longitude, positionOffsetMeters);
@@ -158,7 +160,7 @@ export function AddFindingSheet({ latitude, longitude, onClose, onSaved }: AddFi
       const isZoneFinding = sharingMode === 'zone';
 
       if (isZoneFinding && !zoneLabel.trim()) {
-        throw new Error('Legg inn et sonenavn (f.eks. Nordmarka sør).');
+        throw new Error(t('errorZoneLabelRequired'));
       }
 
       const { error: insertError } = await supabase.from('findings').insert({
@@ -179,7 +181,7 @@ export function AddFindingSheet({ latitude, longitude, onClose, onSaved }: AddFi
       if (insertError) throw insertError;
       onSaved(speciesQuery || undefined);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Kunne ikke lagre funn');
+      setError(err instanceof Error ? err.message : t('errorSaveFinding'));
     } finally {
       setLoading(false);
     }
@@ -190,7 +192,7 @@ export function AddFindingSheet({ latitude, longitude, onClose, onSaved }: AddFi
   return (
     <div className="absolute inset-x-0 bottom-0 z-[1100] rounded-t-2xl border border-gray-200 bg-white p-4 shadow-2xl">
       <div className="mb-3 h-1.5 w-12 rounded-full bg-gray-300" />
-      <h3 className="text-lg font-semibold">{isNegative ? 'Logg ingen funn' : 'Legg til funn'}</h3>
+      <h3 className="text-lg font-semibold">{isNegative ? t('logNoFinding') : t('addFinding')}</h3>
 
       <form className="mt-3 space-y-3" onSubmit={handleSubmit}>
         {/* Type-toggle øverst — feedback-loopen trenger negative observasjoner
@@ -203,7 +205,7 @@ export function AddFindingSheet({ latitude, longitude, onClose, onSaved }: AddFi
               !isNegative ? 'bg-white text-forest-900 shadow-sm' : 'text-gray-600 hover:text-gray-800'
             }`}
           >
-            🍄 Funn
+            🍄 {t('finding')}
           </button>
           <button
             type="button"
@@ -212,24 +214,23 @@ export function AddFindingSheet({ latitude, longitude, onClose, onSaved }: AddFi
               isNegative ? 'bg-white text-forest-900 shadow-sm' : 'text-gray-600 hover:text-gray-800'
             }`}
           >
-            🚫 Ingen funn
+            🚫 {t('noFinding')}
           </button>
         </div>
 
         {isNegative ? (
           <p className="rounded-lg bg-forest-50 px-3 py-2 text-xs text-forest-900">
-            Logg at du lette her uten å finne noe — like verdifullt for prediksjonen som å logge funn.
-            Velg evt. art du lette etter.
+            {t('negativeHint')}
           </p>
         ) : null}
 
         <label className="block text-sm font-medium text-gray-800">
-          {isNegative ? 'Hvilken art lette du etter? (valgfritt)' : 'Velg art (valgfritt)'}
+          {isNegative ? t('speciesLabelNegative') : t('speciesLabel')}
           <input
             value={speciesQuery}
             onChange={(event) => searchSpecies(event.target.value)}
             className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2"
-            placeholder="Søk art"
+            placeholder={t('speciesPlaceholder')}
           />
         </label>
 
@@ -254,20 +255,20 @@ export function AddFindingSheet({ latitude, longitude, onClose, onSaved }: AddFi
         ) : null}
 
         <label className="block text-sm font-medium text-gray-800">
-          Notater
+          {t('notesLabel')}
           <textarea
             value={notes}
             onChange={(event) => setNotes(event.target.value)}
             className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2"
             rows={3}
-            placeholder={isNegative ? 'F.eks. "Lette i 1 time, sjekket alle granskogene"' : 'Beskriv funnet'}
+            placeholder={isNegative ? t('notesPlaceholderNegative') : t('notesPlaceholder')}
           />
         </label>
 
         {!isNegative ? (
           <>
             <div className="text-sm font-medium text-gray-800">
-              <span>Bilde (valgfritt)</span>
+              <span>{t('imageLabel')}</span>
               <input
                 ref={fileInputRef}
                 type="file"
@@ -277,9 +278,9 @@ export function AddFindingSheet({ latitude, longitude, onClose, onSaved }: AddFi
               />
               {imagePreview ? (
                 <div className="mt-1 space-y-1">
-                  <img src={imagePreview} alt="Forhåndsvisning" className="h-28 w-full rounded-lg object-cover" />
+                  <img src={imagePreview} alt={t('imagePreviewAlt')} className="h-28 w-full rounded-lg object-cover" />
                   <button type="button" onClick={() => setImageFromFile(null)} className="text-xs font-medium text-red-700 hover:underline">
-                    Fjern bilde
+                    {t('removeImage')}
                   </button>
                 </div>
               ) : (
@@ -288,7 +289,7 @@ export function AddFindingSheet({ latitude, longitude, onClose, onSaved }: AddFi
                   onClick={handleAddPhoto}
                   className="mt-1 flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-gray-300 px-3 py-3 text-sm font-medium text-gray-700 hover:border-forest-600 hover:bg-forest-50"
                 >
-                  <Camera className="h-4 w-4" /> Ta bilde / velg bilde
+                  <Camera className="h-4 w-4" /> {t('addPhoto')}
                 </button>
               )}
             </div>
@@ -296,7 +297,7 @@ export function AddFindingSheet({ latitude, longitude, onClose, onSaved }: AddFi
         ) : null}
 
         <label className="block text-sm font-medium text-gray-800">
-          Juster posisjon (meter)
+          {t('adjustPosition')}
           <input
             type="range"
             min={0}
@@ -306,44 +307,46 @@ export function AddFindingSheet({ latitude, longitude, onClose, onSaved }: AddFi
             onChange={(event) => setPositionOffsetMeters(Number(event.target.value))}
             className="mt-2 w-full"
           />
-          <span className="text-xs text-gray-600">Offset: {positionOffsetMeters}m</span>
+          <span className="text-xs text-gray-600">{t('offset', { meters: positionOffsetMeters })}</span>
         </label>
 
         {latitude && longitude ? (
           <p className="text-xs text-gray-600">
-            Koordinat-preview: {applyOffset(latitude, longitude, positionOffsetMeters).lat.toFixed(5)},{' '}
-            {applyOffset(latitude, longitude, positionOffsetMeters).lng.toFixed(5)}
+            {t('coordinatePreview', {
+              lat: applyOffset(latitude, longitude, positionOffsetMeters).lat.toFixed(5),
+              lng: applyOffset(latitude, longitude, positionOffsetMeters).lng.toFixed(5)
+            })}
           </p>
         ) : null}
 
         <label className="block text-sm font-medium text-gray-800">
-          Delingsnivå
+          {t('sharingLevel')}
           <select
             value={sharingMode}
             onChange={(event) => setSharingMode(event.target.value as SharingMode)}
             className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2"
           >
-            <option value="public">Eksakt punkt (offentlig)</option>
-            <option value="approximate">Omtrentlig (±500m)</option>
-            <option value="zone">Sone-funn (hemmeligsted-vennlig)</option>
-            <option value="private">Privat</option>
+            <option value="public">{t('sharingPublic')}</option>
+            <option value="approximate">{t('sharingApproximate')}</option>
+            <option value="zone">{t('sharingZone')}</option>
+            <option value="private">{t('sharingPrivate')}</option>
           </select>
         </label>
 
         {sharingMode === 'zone' ? (
           <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
-            <p className="text-xs text-amber-800">Sone-funn skjuler nøyaktig punkt og viser kun område.</p>
+            <p className="text-xs text-amber-800">{t('zoneInfo')}</p>
             <label className="mt-2 block text-sm font-medium text-gray-800">
-              Sone-navn
+              {t('zoneName')}
               <input
                 value={zoneLabel}
                 onChange={(event) => setZoneLabel(event.target.value)}
                 className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2"
-                placeholder="f.eks. Nordmarka sør"
+                placeholder={t('zoneNamePlaceholder')}
               />
             </label>
             <label className="mt-2 block text-sm font-medium text-gray-800">
-              Grovhet (km-grid)
+              {t('zoneGranularity')}
               <input
                 type="range"
                 min={1}
@@ -353,7 +356,7 @@ export function AddFindingSheet({ latitude, longitude, onClose, onSaved }: AddFi
                 onChange={(event) => setZonePrecisionKm(Number(event.target.value))}
                 className="mt-1 w-full"
               />
-              <span className="text-xs text-gray-600">{zonePrecisionKm} km</span>
+              <span className="text-xs text-gray-600">{t('zonePrecisionKm', { km: zonePrecisionKm })}</span>
             </label>
           </div>
         ) : null}
@@ -362,10 +365,10 @@ export function AddFindingSheet({ latitude, longitude, onClose, onSaved }: AddFi
 
         <div className="flex gap-2">
           <Button type="button" variant="outline" className="flex-1" onClick={onClose}>
-            Avbryt
+            {t('cancel')}
           </Button>
           <Button type="submit" className="flex-1" loading={loading}>
-            {isNegative ? 'Logg ingen funn' : 'Lagre funn'}
+            {isNegative ? t('logNoFinding') : t('saveFinding')}
           </Button>
         </div>
       </form>

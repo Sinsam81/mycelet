@@ -2,20 +2,22 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 import { Calendar, Home, Library, Map, MessageSquare } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 import { FLAGS } from '@/lib/flags';
 
 const items = [
-  { href: '/', label: 'Hjem', icon: Home },
-  { href: '/species', label: 'Bibliotek', icon: Library },
-  { href: '/map', label: 'Kart', icon: Map },
-  { href: '/calendar', label: 'Kalender', icon: Calendar },
-  ...(FLAGS.forumInNav ? [{ href: '/forum', label: 'Forum', icon: MessageSquare }] : [])
+  { href: '/', labelKey: 'home', icon: Home },
+  { href: '/species', labelKey: 'library', icon: Library },
+  { href: '/map', labelKey: 'map', icon: Map },
+  { href: '/calendar', labelKey: 'calendar', icon: Calendar },
+  ...(FLAGS.forumInNav ? [{ href: '/forum', labelKey: 'forum', icon: MessageSquare }] : [])
 ];
 
 export function BottomNav() {
   const pathname = usePathname();
+  const t = useTranslations('BottomNav');
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-gray-200 bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur">
@@ -41,7 +43,7 @@ export function BottomNav() {
                 >
                   <Icon className="h-5 w-5" />
                 </span>
-                <span>{item.label}</span>
+                <span>{t(item.labelKey)}</span>
               </Link>
             </li>
           );

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useTranslations } from 'next-intl';
 import { MapPin } from 'lucide-react';
 import { EdibilityBadge } from '@/components/ui/EdibilityBadge';
 import { seasonShiftDays, isInSeasonOn, shiftLabel } from '@/lib/utils/season-region';
@@ -19,12 +20,13 @@ export interface CalendarSpecies {
   primary_image_url: string | null;
 }
 
-const MONTH_NAMES = [
-  'januar', 'februar', 'mars', 'april', 'mai', 'juni',
-  'juli', 'august', 'september', 'oktober', 'november', 'desember'
-];
+const MONTH_KEYS = [
+  'monthJanuary', 'monthFebruary', 'monthMarch', 'monthApril', 'monthMay', 'monthJune',
+  'monthJuly', 'monthAugust', 'monthSeptember', 'monthOctober', 'monthNovember', 'monthDecember'
+] as const;
 
 function SpeciesRowLink({ s, peak }: { s: CalendarSpecies; peak?: boolean }) {
+  const t = useTranslations('SeasonNow');
   return (
     <Link
       href={`/species/${s.id}`}
@@ -41,7 +43,7 @@ function SpeciesRowLink({ s, peak }: { s: CalendarSpecies; peak?: boolean }) {
         <div className="mt-1 flex items-center gap-1.5">
           <EdibilityBadge edibility={s.edibility} />
           {peak ? (
-            <span className="rounded-full bg-forest-100 px-2 py-0.5 text-xs font-semibold text-forest-900">Topp-sesong</span>
+            <span className="rounded-full bg-forest-100 px-2 py-0.5 text-xs font-semibold text-forest-900">{t('peakSeason')}</span>
           ) : null}
         </div>
       </div>
@@ -50,6 +52,7 @@ function SpeciesRowLink({ s, peak }: { s: CalendarSpecies; peak?: boolean }) {
 }
 
 export function SeasonNow({ species }: { species: CalendarSpecies[] }) {
+  const t = useTranslations('SeasonNow');
   const [shift, setShift] = useState(0);
   const [personalized, setPersonalized] = useState(false);
   const [canRequest, setCanRequest] = useState(false);
@@ -108,10 +111,10 @@ export function SeasonNow({ species }: { species: CalendarSpecies[] }) {
     <>
       <article className="space-y-3 rounded-2xl bg-white p-4 shadow-card">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="font-serif text-xl font-bold text-forest-900">I sesong nå ({MONTH_NAMES[now.getMonth()]})</h2>
+          <h2 className="font-serif text-xl font-bold text-forest-900">{t('inSeasonNowHeading', { month: t(MONTH_KEYS[now.getMonth()]) })}</h2>
           {personalized && label ? (
             <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-900">
-              <MapPin className="h-3 w-3" /> Tilpasset din posisjon — {label}
+              <MapPin className="h-3 w-3" /> {t('personalizedToPosition', { label })}
             </span>
           ) : canRequest ? (
             <button
@@ -119,13 +122,13 @@ export function SeasonNow({ species }: { species: CalendarSpecies[] }) {
               onClick={requestPosition}
               className="inline-flex items-center gap-1 rounded-full border border-gray-300 px-2.5 py-0.5 text-xs font-medium text-gray-700 transition hover:border-forest-400 hover:text-forest-800"
             >
-              <MapPin className="h-3 w-3" /> Tilpass til min posisjon
+              <MapPin className="h-3 w-3" /> {t('adaptToPosition')}
             </button>
           ) : null}
         </div>
         {inSeason.length === 0 ? (
           <p className="text-sm text-gray-700">
-            Ingen av de registrerte artene er i sesong akkurat nå{personalized ? ' for ditt område' : ''}.
+            {personalized ? t('noneInSeasonForArea') : t('noneInSeason')}
           </p>
         ) : (
           <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -147,7 +150,7 @@ export function SeasonNow({ species }: { species: CalendarSpecies[] }) {
 
       {comingSoon.length > 0 ? (
         <article className="space-y-3 rounded-2xl bg-white p-4 shadow-card">
-          <h2 className="font-serif text-xl font-bold text-forest-900">Kommer snart</h2>
+          <h2 className="font-serif text-xl font-bold text-forest-900">{t('comingSoon')}</h2>
           <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             {comingSoon.map((s) => (
               <li key={s.id}>

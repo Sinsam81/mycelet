@@ -2,6 +2,7 @@
 
 import { ChangeEvent, FormEvent, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 import { Camera, X } from 'lucide-react';
 import { PageWrapper } from '@/components/layout/PageWrapper';
 import { Button } from '@/components/ui/Button';
@@ -13,18 +14,19 @@ import { captureNativePhoto } from '@/lib/native/camera';
 
 type Category = 'find' | 'question' | 'tip' | 'discussion';
 
-const categoryOptions: Array<{ label: string; value: Category }> = [
-  { label: 'Funn', value: 'find' },
-  { label: 'Spørsmål', value: 'question' },
-  { label: 'Tips', value: 'tip' },
-  { label: 'Diskusjon', value: 'discussion' }
-];
-
 // Next 15+ requires useSearchParams() inside a Suspense boundary; default
 // export at the bottom wraps NewForumPostInner.
 function NewForumPostInner() {
+  const t = useTranslations('ForumNew');
   const router = useRouter();
   const searchParams = useSearchParams();
+
+  const categoryOptions: Array<{ label: string; value: Category }> = [
+    { label: t('categoryFind'), value: 'find' },
+    { label: t('categoryQuestion'), value: 'question' },
+    { label: t('categoryTip'), value: 'tip' },
+    { label: t('categoryDiscussion'), value: 'discussion' }
+  ];
   const supabase = useMemo(() => createClient(), []);
   const createPost = useCreatePost();
   const { data: findingOptions } = useMyFindings();
@@ -49,7 +51,7 @@ function NewForumPostInner() {
       data: { user }
     } = await supabase.auth.getUser();
 
-    if (!user) throw new Error('Du må være logget inn');
+    if (!user) throw new Error(t('mustBeLoggedIn'));
 
     // EXIF-stripped re-encode — forum photos must not carry GPS metadata.
     const blob = await reencodeImageForUpload(file);
@@ -89,7 +91,7 @@ function NewForumPostInner() {
       const file = await captureNativePhoto();
       if (file) addFiles([file]);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Kunne ikke hente bilde.');
+      setError(err instanceof Error ? err.message : t('couldNotGetImage'));
     }
   };
 
@@ -104,7 +106,7 @@ function NewForumPostInner() {
     setError(null);
 
     if (!title.trim() || !content.trim()) {
-      setError('Tittel og innhold er påkrevd.');
+      setError(t('titleAndContentRequired'));
       return;
     }
 
@@ -122,7 +124,7 @@ function NewForumPostInner() {
 
       router.push(`/forum/${post.id}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Kunne ikke publisere innlegg.');
+      setError(err instanceof Error ? err.message : t('couldNotPublish'));
     }
   };
 
@@ -130,13 +132,13 @@ function NewForumPostInner() {
     <PageWrapper>
       <section className="space-y-4">
         <header>
-          <p className="text-xs font-medium uppercase tracking-widest text-forest-700">Fellesskap</p>
-          <h1 className="mt-1 font-serif text-3xl font-bold tracking-tight text-forest-900">Nytt innlegg</h1>
+          <p className="text-xs font-medium uppercase tracking-widest text-forest-700">{t('community')}</p>
+          <h1 className="mt-1 font-serif text-3xl font-bold tracking-tight text-forest-900">{t('newPost')}</h1>
         </header>
 
         <form className="space-y-3 rounded-2xl bg-white p-4 shadow-card" onSubmit={handleSubmit}>
           <label className="block text-sm font-medium text-gray-800">
-            Tittel
+            {t('titleLabel')}
             <input
               className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2"
               value={title}
@@ -146,7 +148,7 @@ function NewForumPostInner() {
           </label>
 
           <label className="block text-sm font-medium text-gray-800">
-            Kategori
+            {t('categoryLabel')}
             <select
               className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2"
               value={category}
@@ -161,7 +163,7 @@ function NewForumPostInner() {
           </label>
 
           <label className="block text-sm font-medium text-gray-800">
-            Innhold
+            {t('contentLabel')}
             <textarea
               className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2"
               rows={5}
@@ -172,17 +174,17 @@ function NewForumPostInner() {
           </label>
 
           <div className="text-sm font-medium text-gray-800">
-            <span>Bilder (opptil 4)</span>
+            <span>{t('imagesLabel')}</span>
             <input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden" onChange={onSelectImages} />
             {previews.length > 0 ? (
               <div className="mt-1 grid grid-cols-2 gap-2 sm:grid-cols-4">
                 {previews.map((preview, index) => (
                   <div key={preview} className="relative">
-                    <img src={preview} alt="Valgt bilde" className="h-20 w-full rounded-lg object-cover" />
+                    <img src={preview} alt={t('selectedImageAlt')} className="h-20 w-full rounded-lg object-cover" />
                     <button
                       type="button"
                       onClick={() => removePhoto(index)}
-                      aria-label="Fjern bilde"
+                      aria-label={t('removeImage')}
                       className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full bg-black/60 text-white hover:bg-black/80"
                     >
                       <X className="h-3.5 w-3.5" />
@@ -197,23 +199,23 @@ function NewForumPostInner() {
                 onClick={handleAddPhoto}
                 className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-gray-300 px-3 py-3 text-sm font-medium text-gray-700 hover:border-forest-600 hover:bg-forest-50"
               >
-                <Camera className="h-4 w-4" /> Ta bilde / velg bilde
+                <Camera className="h-4 w-4" /> {t('takeOrPickPhoto')}
               </button>
             ) : null}
           </div>
 
           <label className="block text-sm font-medium text-gray-800">
-            Koble til funn (valgfritt)
+            {t('linkFindingLabel')}
             <select
               className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2"
               value={findingId}
               onChange={(event) => setFindingId(event.target.value)}
             >
-              <option value="">Ingen kobling</option>
+              <option value="">{t('noLink')}</option>
               {(findingOptions ?? []).map((finding) => {
-                const speciesName = finding.mushroom_species?.norwegian_name || finding.species_name_override || 'Ukjent art';
+                const speciesName = finding.mushroom_species?.norwegian_name || finding.species_name_override || t('unknownSpecies');
                 const dateLabel = new Date(finding.found_at).toLocaleDateString('nb-NO');
-                const zoneLabel = finding.is_zone_finding ? ` • Sone: ${finding.zone_label ?? 'Ukjent'} (${finding.zone_precision_km ?? 5} km)` : '';
+                const zoneLabel = finding.is_zone_finding ? ` • ${t('zone')}: ${finding.zone_label ?? t('unknown')} (${finding.zone_precision_km ?? 5} km)` : '';
                 return (
                   <option key={finding.id} value={finding.id}>
                     {speciesName} ({dateLabel}){zoneLabel}
@@ -227,10 +229,10 @@ function NewForumPostInner() {
 
           <div className="flex gap-2">
             <Button type="button" variant="outline" className="flex-1" onClick={() => router.push('/forum')}>
-              Avbryt
+              {t('cancel')}
             </Button>
             <Button type="submit" className="flex-1" loading={createPost.isPending}>
-              Publiser
+              {t('publish')}
             </Button>
           </div>
         </form>
@@ -241,8 +243,9 @@ function NewForumPostInner() {
 
 
 export default function NewForumPostPage() {
+  const t = useTranslations('ForumNew');
   return (
-    <Suspense fallback={<PageWrapper><p className="text-sm text-gray-700">Laster...</p></PageWrapper>}>
+    <Suspense fallback={<PageWrapper><p className="text-sm text-gray-700">{t('loading')}</p></PageWrapper>}>
       <NewForumPostInner />
     </Suspense>
   );

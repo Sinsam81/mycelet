@@ -3,6 +3,7 @@
 import { Camera, Info, Search } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 import { PageWrapper } from '@/components/layout/PageWrapper';
 import { Button } from '@/components/ui/Button';
 import { useGeolocation } from '@/lib/hooks/useGeolocation';
@@ -12,6 +13,7 @@ import { isNativePlatform } from '@/lib/native/platform';
 import { captureNativePhoto } from '@/lib/native/camera';
 
 export default function IdentifyPage() {
+  const t = useTranslations('Identify');
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const router = useRouter();
   const { latitude, longitude } = useGeolocation();
@@ -52,7 +54,7 @@ export default function IdentifyPage() {
       sessionStorage.setItem('identifyResult', JSON.stringify(result));
       router.push('/identify/result');
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Identifikasjon feilet';
+      const message = err instanceof Error ? err.message : t('identifyFailed');
       if (message.toLowerCase().includes('ikke aktivert')) {
         setAiDisabled(true);
       } else {
@@ -71,7 +73,7 @@ export default function IdentifyPage() {
       const file = await captureNativePhoto();
       if (file) await handleFile(file);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Kunne ikke hente bilde.');
+      setError(err instanceof Error ? err.message : t('couldNotGetImage'));
     }
   };
 
@@ -79,8 +81,8 @@ export default function IdentifyPage() {
     <PageWrapper>
       <section className="space-y-4">
         <header>
-          <p className="text-xs font-medium uppercase tracking-widest text-forest-700">AI-hjelp</p>
-          <h1 className="mt-1 font-serif text-3xl font-bold tracking-tight text-forest-900">Identifiser sopp</h1>
+          <p className="text-xs font-medium uppercase tracking-widest text-forest-700">{t('eyebrow')}</p>
+          <h1 className="mt-1 font-serif text-3xl font-bold tracking-tight text-forest-900">{t('title')}</h1>
         </header>
 
         {aiDisabled ? (
@@ -88,24 +90,24 @@ export default function IdentifyPage() {
             <div className="flex items-start gap-3">
               <Info className="h-5 w-5 shrink-0 text-amber-700" />
               <div className="space-y-2">
-                <p className="font-semibold text-amber-900">AI-identifikasjon er under oppsett</p>
+                <p className="font-semibold text-amber-900">{t('disabledHeading')}</p>
                 <p className="text-sm text-amber-900">
-                  Vi venter fortsatt på API-tilgang fra leverandøren. I mellomtiden kan du:
+                  {t('disabledIntro')}
                 </p>
                 <ul className="list-disc pl-5 text-sm text-amber-900">
-                  <li>Søke i soppdatabasen på norsk eller latinsk navn</li>
-                  <li>Bla gjennom artene i sesong via kalenderen</li>
-                  <li>Sende bilde til{' '}
+                  <li>{t('disabledSearchDb')}</li>
+                  <li>{t('disabledBrowseSeason')}</li>
+                  <li>{t('disabledSendImagePrefix')}{' '}
                     <a href="https://soppognyttevekster.no/soppkontroll/" target="_blank" rel="noreferrer" className="underline">
-                      Soppkontrollen
-                    </a>{' '}for ekspertvurdering</li>
+                      {t('soppkontrollen')}
+                    </a>{' '}{t('disabledSendImageSuffix')}</li>
                 </ul>
                 <div className="flex flex-wrap gap-2 pt-2">
                   <Button onClick={() => router.push('/species')} icon={<Search className="h-4 w-4" />}>
-                    Søk i soppdatabasen
+                    {t('searchDb')}
                   </Button>
                   <Button variant="outline" onClick={() => router.push('/calendar')}>
-                    Sesongkalender
+                    {t('seasonCalendar')}
                   </Button>
                 </div>
               </div>
@@ -114,20 +116,19 @@ export default function IdentifyPage() {
         ) : null}
 
         <div className="rounded-xl border-2 border-red-300 bg-red-50 p-4 text-sm text-red-900">
-          <p className="font-semibold">⚠️ Bruk aldri appen til å avgjøre om en sopp er spiselig.</p>
+          <p className="font-semibold">⚠️ {t('safetyHeading')}</p>
           <p className="mt-1">
-            AI-identifikasjon er kun et hjelpemiddel, ikke en fasit. Sikker artsbestemmelse kan kreve lukt,
-            konsistens og voksested — ikke bare et bilde. Er du i tvil: send bilde til{' '}
+            {t('safetyIntro')}{' '}
             <a href="https://soppognyttevekster.no/soppkontroll/" target="_blank" rel="noreferrer" className="underline">
-              Soppkontrollen
+              {t('soppkontrollen')}
             </a>
-            , eller ring Giftinformasjonen <strong>22 59 13 00</strong>.
+            {t('safetyPhonePrefix')} <strong>22 59 13 00</strong>.
           </p>
         </div>
 
         <div className="rounded-2xl bg-white p-4 shadow-card">
           <div className="mb-3 rounded-xl border-2 border-dashed border-gray-300 p-6 text-center">
-            <p className="text-sm text-gray-700">Sentrer soppen i bildet. Ta gjerne flere vinkler.</p>
+            <p className="text-sm text-gray-700">{t('centerHint')}</p>
           </div>
 
           <input
@@ -144,15 +145,15 @@ export default function IdentifyPage() {
 
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             <Button onClick={handleCapture} loading={identify.isPending} icon={<Camera className="h-4 w-4" />}>
-              Ta bilde / velg bilde
+              {t('takeOrChoosePhoto')}
             </Button>
             <Button variant="outline" icon={<Search className="h-4 w-4" />} onClick={() => router.push('/species')}>
-              Søk i soppdatabasen
+              {t('searchDb')}
             </Button>
           </div>
 
           {error ? <p className="mt-3 text-sm text-red-600">{error}</p> : null}
-          {identify.isPending ? <p className="mt-3 text-sm text-gray-700">Analyserer bilde...</p> : null}
+          {identify.isPending ? <p className="mt-3 text-sm text-gray-700">{t('analyzing')}</p> : null}
         </div>
 
       </section>

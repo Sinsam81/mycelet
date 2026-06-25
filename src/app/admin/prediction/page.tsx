@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
+import { getTranslations } from 'next-intl/server';
 import { PageWrapper } from '@/components/layout/PageWrapper';
 import { createClient } from '@/lib/supabase/server';
 
@@ -40,6 +41,7 @@ export default async function PredictionAdminPage({
     limit?: string;
   };
 }) {
+  const t = await getTranslations('AdminPrediction');
   const supabase = createClient();
   const {
     data: { user }
@@ -59,12 +61,12 @@ export default async function PredictionAdminPage({
     return (
       <PageWrapper>
         <section className="space-y-3">
-          <h1 className="text-xl font-semibold">Prediction Tiles (Admin)</h1>
+          <h1 className="text-xl font-semibold">{t('title')}</h1>
           <p className="rounded bg-red-50 px-3 py-2 text-sm text-red-700">
-            Kunne ikke validere tilgang: {roleError.message}
+            {t('accessValidationError', { message: roleError.message })}
           </p>
           <Link href="/map" className="text-sm font-medium text-forest-800 hover:underline">
-            Tilbake til kart
+            {t('backToMap')}
           </Link>
         </section>
       </PageWrapper>
@@ -78,12 +80,12 @@ export default async function PredictionAdminPage({
     return (
       <PageWrapper>
         <section className="space-y-3">
-          <h1 className="text-xl font-semibold">Prediction Tiles (Admin)</h1>
+          <h1 className="text-xl font-semibold">{t('title')}</h1>
           <p className="rounded bg-amber-50 px-3 py-2 text-sm text-amber-800">
-            Du har ikke tilgang til denne siden. Rollen din må være moderator eller admin.
+            {t('noAccess')}
           </p>
           <Link href="/map" className="text-sm font-medium text-forest-800 hover:underline">
-            Tilbake til kart
+            {t('backToMap')}
           </Link>
         </section>
       </PageWrapper>
@@ -132,22 +134,22 @@ export default async function PredictionAdminPage({
       <section className="space-y-4">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <h1 className="text-xl font-semibold">Prediction Tiles (Admin)</h1>
-            <p className="text-sm text-gray-600">Inspeksjon av pregenererte heatmap-data for valgt dato.</p>
-            <p className="text-xs text-gray-500">Innlogget rolle: {userRole}</p>
+            <h1 className="text-xl font-semibold">{t('title')}</h1>
+            <p className="text-sm text-gray-600">{t('subtitle')}</p>
+            <p className="text-xs text-gray-500">{t('loggedInRole', { role: userRole })}</p>
           </div>
           <Link href="/map" className="text-sm font-medium text-forest-800 hover:underline">
-            Til SoppKart
+            {t('toMushroomMap')}
           </Link>
         </div>
 
         <form className="grid gap-2 rounded-lg border border-gray-200 bg-white p-3 md:grid-cols-4">
           <label className="text-xs font-medium text-gray-700">
-            Dato
+            {t('dateLabel')}
             <input type="date" name="date" defaultValue={selectedDate} className="mt-1 w-full rounded border border-gray-300 px-2 py-1.5 text-sm" />
           </label>
           <label className="text-xs font-medium text-gray-700">
-            Region
+            {t('regionLabel')}
             <input
               type="text"
               name="region"
@@ -157,9 +159,9 @@ export default async function PredictionAdminPage({
             />
           </label>
           <label className="text-xs font-medium text-gray-700">
-            Art
+            {t('speciesLabel')}
             <select name="speciesId" defaultValue={selectedSpeciesId > 0 ? String(selectedSpeciesId) : ''} className="mt-1 w-full rounded border border-gray-300 px-2 py-1.5 text-sm">
-              <option value="">Alle arter</option>
+              <option value="">{t('allSpecies')}</option>
               {speciesOptions.map((species) => (
                 <option key={species.id} value={species.id}>
                   {species.norwegian_name} ({species.latin_name})
@@ -168,31 +170,31 @@ export default async function PredictionAdminPage({
             </select>
           </label>
           <label className="text-xs font-medium text-gray-700">
-            Limit
+            {t('limitLabel')}
             <input type="number" name="limit" defaultValue={limit} min={20} max={500} className="mt-1 w-full rounded border border-gray-300 px-2 py-1.5 text-sm" />
           </label>
           <button type="submit" className="md:col-span-4 rounded bg-forest-800 px-3 py-2 text-sm font-medium text-white hover:bg-forest-700">
-            Oppdater
+            {t('update')}
           </button>
         </form>
 
-        {tilesError ? <p className="rounded bg-red-50 px-3 py-2 text-sm text-red-700">Kunne ikke hente prediction_tiles: {tilesError.message}</p> : null}
+        {tilesError ? <p className="rounded bg-red-50 px-3 py-2 text-sm text-red-700">{t('tilesError', { message: tilesError.message })}</p> : null}
 
         <div className="grid gap-2 md:grid-cols-4">
           <article className="rounded-lg border border-gray-200 bg-white p-3">
-            <p className="text-xs text-gray-600">Fliser</p>
+            <p className="text-xs text-gray-600">{t('statTiles')}</p>
             <p className="text-lg font-semibold">{count}</p>
           </article>
           <article className="rounded-lg border border-gray-200 bg-white p-3">
-            <p className="text-xs text-gray-600">Snittscore</p>
+            <p className="text-xs text-gray-600">{t('statAvgScore')}</p>
             <p className="text-lg font-semibold">{avgScore}</p>
           </article>
           <article className="rounded-lg border border-gray-200 bg-white p-3">
-            <p className="text-xs text-gray-600">Score ≥ 70</p>
+            <p className="text-xs text-gray-600">{t('statHighScore')}</p>
             <p className="text-lg font-semibold">{highScoreCount}</p>
           </article>
           <article className="rounded-lg border border-gray-200 bg-white p-3">
-            <p className="text-xs text-gray-600">Snitt confidence</p>
+            <p className="text-xs text-gray-600">{t('statAvgConfidence')}</p>
             <p className="text-lg font-semibold">{avgConfidence}</p>
           </article>
         </div>
@@ -201,12 +203,12 @@ export default async function PredictionAdminPage({
           <table className="min-w-full text-sm">
             <thead className="bg-gray-50 text-left text-xs text-gray-700">
               <tr>
-                <th className="px-3 py-2">Score</th>
-                <th className="px-3 py-2">Confidence</th>
-                <th className="px-3 py-2">Koordinat</th>
-                <th className="px-3 py-2">Region</th>
-                <th className="px-3 py-2">Art ID</th>
-                <th className="px-3 py-2">Kilde</th>
+                <th className="px-3 py-2">{t('colScore')}</th>
+                <th className="px-3 py-2">{t('colConfidence')}</th>
+                <th className="px-3 py-2">{t('colCoordinate')}</th>
+                <th className="px-3 py-2">{t('colRegion')}</th>
+                <th className="px-3 py-2">{t('colSpeciesId')}</th>
+                <th className="px-3 py-2">{t('colSource')}</th>
               </tr>
             </thead>
             <tbody>
@@ -225,7 +227,7 @@ export default async function PredictionAdminPage({
               {tiles.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="px-3 py-6 text-center text-sm text-gray-600">
-                    Ingen prediction tiles for valgt filter.
+                    {t('noTiles')}
                   </td>
                 </tr>
               ) : null}

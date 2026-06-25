@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Cookie, X } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 
 /**
  * Bottom-pinned informational notice about cookies.
@@ -22,6 +23,7 @@ const ONBOARDING_KEY = 'mycelet:onboarding-v1';
 const ONBOARDING_DONE_EVENT = 'mycelet:onboarding-done';
 
 export function CookieNotice() {
+  const t = useTranslations('CookieNotice');
   // Default to true so we don't flash the banner before reading localStorage.
   // SSR will render nothing; client mount checks storage on next paint.
   const [dismissed, setDismissed] = useState(true);
@@ -72,12 +74,12 @@ export function CookieNotice() {
 
         <div className="flex-1 space-y-1 text-sm text-gray-800">
           <p id="cookie-notice-title" className="font-medium text-gray-900">
-            Vi bruker kun nødvendige informasjonskapsler
+            {t('title')}
           </p>
           <p>
-            Mycelet setter cookies for innlogging og betaling. Vi har ingen analyse-, sporings- eller markedsførings-cookies.{' '}
+            {t('description')}{' '}
             <Link href="/personvern" className="font-medium text-forest-700 underline">
-              Les personvernerklæringen
+              {t('privacyLink')}
             </Link>
             .
           </p>
@@ -86,16 +88,16 @@ export function CookieNotice() {
         <button
           type="button"
           onClick={handleDismiss}
-          aria-label="Lukk informasjonsboks"
+          aria-label={t('closeNoticeAria')}
           className="rounded-md bg-forest-700 px-3 py-1.5 text-sm font-medium text-white hover:bg-forest-800 focus:outline-none focus:ring-2 focus:ring-forest-400"
         >
-          Forstått
+          {t('acknowledge')}
         </button>
 
         <button
           type="button"
           onClick={handleDismiss}
-          aria-label="Lukk"
+          aria-label={t('closeAria')}
           className="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600 sm:hidden"
         >
           <X className="h-4 w-4" />

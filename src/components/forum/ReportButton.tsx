@@ -1,6 +1,7 @@
 'use client';
 
 import { FormEvent, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { Button } from '@/components/ui/Button';
 import { ReportReason } from '@/types/forum';
 
@@ -9,16 +10,19 @@ interface ReportButtonProps {
   onSubmit: (payload: { reason: ReportReason; description?: string }) => Promise<void>;
 }
 
-const reasons: Array<{ value: ReportReason; label: string }> = [
-  { value: 'spam', label: 'Spam' },
-  { value: 'inappropriate', label: 'Upassende innhold' },
-  { value: 'misinformation', label: 'Feilinformasjon' },
-  { value: 'dangerous_advice', label: 'Farlige råd' },
-  { value: 'harassment', label: 'Trakassering' },
-  { value: 'other', label: 'Annet' }
-];
+export function ReportButton({ label, onSubmit }: ReportButtonProps) {
+  const t = useTranslations('ReportButton');
+  const resolvedLabel = label ?? t('report');
 
-export function ReportButton({ label = 'Rapporter', onSubmit }: ReportButtonProps) {
+  const reasons: Array<{ value: ReportReason; label: string }> = [
+    { value: 'spam', label: t('reasonSpam') },
+    { value: 'inappropriate', label: t('reasonInappropriate') },
+    { value: 'misinformation', label: t('reasonMisinformation') },
+    { value: 'dangerous_advice', label: t('reasonDangerousAdvice') },
+    { value: 'harassment', label: t('reasonHarassment') },
+    { value: 'other', label: t('reasonOther') }
+  ];
+
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState<ReportReason>('misinformation');
   const [description, setDescription] = useState('');
@@ -38,7 +42,7 @@ export function ReportButton({ label = 'Rapporter', onSubmit }: ReportButtonProp
       setDescription('');
       setOpen(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Kunne ikke sende rapport.');
+      setError(err instanceof Error ? err.message : t('submitError'));
     } finally {
       setLoading(false);
     }
@@ -47,7 +51,7 @@ export function ReportButton({ label = 'Rapporter', onSubmit }: ReportButtonProp
   return (
     <div className="space-y-2">
       <button type="button" onClick={() => setOpen((v) => !v)} className="text-xs font-medium text-red-700 hover:underline">
-        {label}
+        {resolvedLabel}
       </button>
 
       {open ? (
@@ -69,18 +73,18 @@ export function ReportButton({ label = 'Rapporter', onSubmit }: ReportButtonProp
             onChange={(event) => setDescription(event.target.value)}
             rows={2}
             className="w-full rounded border border-red-200 px-2 py-1 text-sm"
-            placeholder="Beskriv problemet (valgfritt)"
+            placeholder={t('descriptionPlaceholder')}
           />
 
           {error ? <p className="text-xs text-red-700">{error}</p> : null}
 
           <Button type="submit" size="sm" variant="danger" loading={loading}>
-            Send rapport
+            {t('submit')}
           </Button>
         </form>
       ) : null}
 
-      {success ? <p className="text-xs text-emerald-700">Rapport sendt.</p> : null}
+      {success ? <p className="text-xs text-emerald-700">{t('success')}</p> : null}
     </div>
   );
 }

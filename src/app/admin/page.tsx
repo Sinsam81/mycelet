@@ -13,6 +13,7 @@ import {
   Sprout,
   Users
 } from 'lucide-react';
+import { getTranslations } from 'next-intl/server';
 import { PageWrapper } from '@/components/layout/PageWrapper';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
@@ -35,30 +36,34 @@ import { createAdminClient } from '@/lib/supabase/admin';
  * recent findings; if findings ever outgrow that it should move to an RPC.
  */
 
-export const metadata = {
-  title: 'Statistikk — Mycelet admin',
-  description: 'Oversikt over brukere, funn, samfunn, moderering og artskatalog.'
-};
+export async function generateMetadata() {
+  const t = await getTranslations('Admin');
+  return {
+    title: t('metaTitle'),
+    description: t('metaDescription')
+  };
+}
 
 // Reads live data + cookies/auth; never prerender at build time.
 export const dynamic = 'force-dynamic';
 
-const EDIBILITY_LABELS: Record<string, string> = {
-  edible: 'Spiselig',
-  conditionally_edible: 'Betinget',
-  inedible: 'Uspiselig',
-  toxic: 'Giftig',
-  deadly: 'Dødelig'
+const EDIBILITY_LABEL_KEYS: Record<string, string> = {
+  edible: 'edibilityEdible',
+  conditionally_edible: 'edibilityConditional',
+  inedible: 'edibilityInedible',
+  toxic: 'edibilityToxic',
+  deadly: 'edibilityDeadly'
 };
 
-const CATEGORY_LABELS: Record<string, string> = {
-  find: 'Funn',
-  question: 'Spørsmål',
-  tip: 'Tips',
-  discussion: 'Diskusjon'
+const CATEGORY_LABEL_KEYS: Record<string, string> = {
+  find: 'categoryFind',
+  question: 'categoryQuestion',
+  tip: 'categoryTip',
+  discussion: 'categoryDiscussion'
 };
 
 export default async function AdminDashboardPage() {
+  const t = await getTranslations('Admin');
   const supabase = createClient();
   const {
     data: { user }
@@ -67,7 +72,7 @@ export default async function AdminDashboardPage() {
   if (!user) {
     return (
       <PageWrapper>
-        <p className="text-sm text-gray-700">Du må være logget inn for å se denne siden.</p>
+        <p className="text-sm text-gray-700">{t('mustBeLoggedIn')}</p>
       </PageWrapper>
     );
   }
@@ -86,10 +91,11 @@ export default async function AdminDashboardPage() {
           <div className="flex items-start gap-3">
             <ShieldAlert className="h-6 w-6 shrink-0 text-amber-700" />
             <div>
-              <p className="text-base font-bold text-amber-900">Ingen tilgang</p>
+              <p className="text-base font-bold text-amber-900">{t('noAccessTitle')}</p>
               <p className="text-sm text-amber-900">
-                Statistikk-dashbordet er kun for moderatorer og administratorer. Trenger du tilgang, må en eksisterende
-                admin legge til en rad i <code>moderator_roles</code>.
+                {t.rich('noAccessBody', {
+                  code: (chunks) => <code>{chunks}</code>
+                })}
               </p>
             </div>
           </div>
@@ -108,9 +114,11 @@ export default async function AdminDashboardPage() {
           <div className="flex items-start gap-3">
             <AlertTriangle className="h-6 w-6 shrink-0 text-red-700" />
             <div>
-              <p className="text-base font-bold text-red-900">Server-konfigurasjonsfeil</p>
+              <p className="text-base font-bold text-red-900">{t('serverConfigErrorTitle')}</p>
               <p className="text-sm text-red-900">
-                <code>SUPABASE_SERVICE_ROLE_KEY</code> mangler i miljøet. Statistikken kan ikke leses uten den.
+                {t.rich('serverConfigErrorBody', {
+                  code: (chunks) => <code>{chunks}</code>
+                })}
               </p>
             </div>
           </div>
@@ -175,7 +183,7 @@ export default async function AdminDashboardPage() {
     for (const r of rows) {
       const name = r.species_id
         ? nameById.get(r.species_id) ?? `#${r.species_id}`
-        : (r.species_name_override as string) ?? 'Uten art';
+        : (r.species_name_override as string) ?? t('withoutSpecies');
       counts.set(name, (counts.get(name) ?? 0) + 1);
     }
     return [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, limit);
@@ -247,50 +255,50 @@ export default async function AdminDashboardPage() {
     <PageWrapper wide>
       <div className="space-y-6">
         <header>
-          <h1 className="text-xl font-semibold text-forest-900">Statistikk</h1>
+          <h1 className="text-xl font-semibold text-forest-900">{t('heading')}</h1>
           <p className="text-sm text-gray-700">
-            Oversikt over hele appen. Kun synlig for moderatorer og administratorer. Tallene er live.
+            {t('subtitle')}
           </p>
         </header>
 
         {/* Admin tools hub */}
         <nav className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-          <AdminLink href="/admin/forum-trust" icon={ShieldCheck} title="Forum & tillit" desc="Moderering og verifiserte plukkere" />
-          <AdminLink href="/admin/audit-log" icon={ScrollText} title="Audit-logg" desc="Sporbare admin-handlinger" />
-          <AdminLink href="/admin/prediction" icon={SlidersHorizontal} title="Prediksjon" desc="Soppvarsel-fliser" />
+          <AdminLink href="/admin/forum-trust" icon={ShieldCheck} title={t('linkForumTrustTitle')} desc={t('linkForumTrustDesc')} />
+          <AdminLink href="/admin/audit-log" icon={ScrollText} title={t('linkAuditLogTitle')} desc={t('linkAuditLogDesc')} />
+          <AdminLink href="/admin/prediction" icon={SlidersHorizontal} title={t('linkPredictionTitle')} desc={t('linkPredictionDesc')} />
         </nav>
 
-        <Section title="Brukere & abonnement" icon={Users}>
+        <Section title={t('sectionUsers')} icon={Users}>
           <Grid>
-            <StatCard label="Brukere totalt" value={usersTotal} />
-            <StatCard label="Nye (7 dager)" value={usersWeek} />
-            <StatCard label="Nye (30 dager)" value={usersMonth} />
-            <StatCard label="Betalende" value={billing.paid} tone={billing.paid > 0 ? 'good' : 'default'} />
+            <StatCard label={t('usersTotal')} value={usersTotal} />
+            <StatCard label={t('newWeek')} value={usersWeek} />
+            <StatCard label={t('newMonth')} value={usersMonth} />
+            <StatCard label={t('paying')} value={billing.paid} tone={billing.paid > 0 ? 'good' : 'default'} />
           </Grid>
           <Grid>
-            <StatCard label="Premium" value={billing.byTier.premium ?? 0} icon={CreditCard} />
-            <StatCard label="Sesongpass" value={billing.byTier.season_pass ?? 0} icon={CreditCard} />
-            <StatCard label="Gratis" value={billing.byTier.free ?? 0} />
-            <StatCard label="Abonnement-rader" value={billing.total} />
+            <StatCard label={t('premium')} value={billing.byTier.premium ?? 0} icon={CreditCard} />
+            <StatCard label={t('seasonPass')} value={billing.byTier.season_pass ?? 0} icon={CreditCard} />
+            <StatCard label={t('free')} value={billing.byTier.free ?? 0} />
+            <StatCard label={t('subscriptionRows')} value={billing.total} />
           </Grid>
         </Section>
 
-        <Section title="Funn" icon={MapPin} hint="Synlighet styrer hvor presis posisjon vises på kartet.">
+        <Section title={t('sectionFindings')} icon={MapPin} hint={t('findingsHint')}>
           <Grid>
-            <StatCard label="Funn totalt" value={findTotal} />
-            <StatCard label="Nye (7 dager)" value={findWeek} />
-            <StatCard label="Nye (30 dager)" value={findMonth} />
-            <StatCard label="Med AI-bestemming" value={findAi} />
+            <StatCard label={t('findingsTotal')} value={findTotal} />
+            <StatCard label={t('newWeek')} value={findWeek} />
+            <StatCard label={t('newMonth')} value={findMonth} />
+            <StatCard label={t('withAiId')} value={findAi} />
           </Grid>
           <Grid>
-            <StatCard label="Offentlige" value={findPublic} />
-            <StatCard label="Omtrentlige" value={findApprox} />
-            <StatCard label="Private" value={findPrivate} />
-            <StatCard label="Negative obs." value={findNegative} />
+            <StatCard label={t('public')} value={findPublic} />
+            <StatCard label={t('approximate')} value={findApprox} />
+            <StatCard label={t('private')} value={findPrivate} />
+            <StatCard label={t('negativeObs')} value={findNegative} />
           </Grid>
           {topSpecies.length > 0 && (
             <div className="rounded-xl bg-white p-3 shadow-sm">
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Mest registrerte arter</p>
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">{t('mostRegisteredSpecies')}</p>
               <ul className="space-y-1">
                 {topSpecies.map(([name, n]) => (
                   <li key={name} className="flex justify-between text-sm">
@@ -303,55 +311,55 @@ export default async function AdminDashboardPage() {
           )}
         </Section>
 
-        <Section title="Samfunn" icon={MessageSquare}>
+        <Section title={t('sectionCommunity')} icon={MessageSquare}>
           <Grid>
-            <StatCard label="Forum-innlegg" value={postsTotal} />
-            <StatCard label="Kommentarer" value={commentsTotal} />
-            <StatCard label="Likes" value={likesTotal} />
-            <StatCard label="Lagrede innlegg" value={savedTotal} />
+            <StatCard label={t('forumPosts')} value={postsTotal} />
+            <StatCard label={t('comments')} value={commentsTotal} />
+            <StatCard label={t('likes')} value={likesTotal} />
+            <StatCard label={t('savedPosts')} value={savedTotal} />
           </Grid>
           <Grid>
-            {Object.keys(CATEGORY_LABELS).map((key) => (
-              <StatCard key={key} label={CATEGORY_LABELS[key]} value={forumCategories[key] ?? 0} />
+            {Object.keys(CATEGORY_LABEL_KEYS).map((key) => (
+              <StatCard key={key} label={t(CATEGORY_LABEL_KEYS[key])} value={forumCategories[key] ?? 0} />
             ))}
           </Grid>
           {postsHidden != null && postsHidden > 0 && (
             <p className="text-xs text-amber-800">
-              {postsHidden} innlegg er skjult av moderator.
+              {t('postsHidden', { count: postsHidden })}
             </p>
           )}
         </Section>
 
-        <Section title="Moderering" icon={ShieldAlert}>
+        <Section title={t('sectionModeration')} icon={ShieldAlert}>
           <Grid>
             <StatCard
-              label="Rapporter — venter"
+              label={t('reportsPending')}
               value={reportsPending}
               tone={reportsPending != null && reportsPending > 0 ? 'warn' : 'default'}
             />
-            <StatCard label="Rapporter totalt" value={reportsTotal} />
-            <StatCard label="Verifiserte plukkere" value={verifiedForagers} />
-            <StatCard label="Moderatorer/admins" value={moderators} />
+            <StatCard label={t('reportsTotal')} value={reportsTotal} />
+            <StatCard label={t('verifiedForagers')} value={verifiedForagers} />
+            <StatCard label={t('moderatorsAdmins')} value={moderators} />
           </Grid>
           {pendingDeletions != null && pendingDeletions > 0 && (
             <p className="text-xs text-amber-800">
-              {pendingDeletions} konto(er) er varslet for sletting (inaktivitet).
+              {t('pendingDeletions', { count: pendingDeletions })}
             </p>
           )}
         </Section>
 
-        <Section title="Artskatalog" icon={Sprout} hint={`${species.verified} av ${species.total} arter er ekspertgodkjent (verified).`}>
+        <Section title={t('sectionSpeciesCatalog')} icon={Sprout} hint={t('speciesCatalogHint', { verified: species.verified, total: species.total })}>
           <Grid>
-            <StatCard label="Arter totalt" value={species.total} icon={Sprout} />
-            <StatCard label="Godkjent" value={species.verified} />
-            <StatCard label="Funnpunkter (GBIF)" value={occurrences} icon={Database} />
-            <StatCard label="Prediksjons-fliser" value={tiles} />
+            <StatCard label={t('speciesTotal')} value={species.total} icon={Sprout} />
+            <StatCard label={t('approved')} value={species.verified} />
+            <StatCard label={t('occurrencePoints')} value={occurrences} icon={Database} />
+            <StatCard label={t('predictionTiles')} value={tiles} />
           </Grid>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
-            {Object.keys(EDIBILITY_LABELS).map((key) => (
+            {Object.keys(EDIBILITY_LABEL_KEYS).map((key) => (
               <StatCard
                 key={key}
-                label={EDIBILITY_LABELS[key]}
+                label={t(EDIBILITY_LABEL_KEYS[key])}
                 value={species.byEdibility[key] ?? 0}
                 tone={key === 'deadly' ? 'danger' : key === 'toxic' ? 'warn' : 'default'}
               />

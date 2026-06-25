@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { getTranslations } from 'next-intl/server';
 import { AlertTriangle, ChevronLeft } from 'lucide-react';
 import { EdibilityBadge } from '@/components/ui/EdibilityBadge';
 import { PageWrapper } from '@/components/layout/PageWrapper';
@@ -10,24 +11,17 @@ interface SpeciesDetailPageProps {
   params: Promise<{ id: string }>;
 }
 
-const MONTH_NAMES = [
-  'jan', 'feb', 'mar', 'apr', 'mai', 'jun',
-  'jul', 'aug', 'sep', 'okt', 'nov', 'des'
-];
-
-function formatSeason(start: number, end: number): string {
-  const s = MONTH_NAMES[start - 1];
-  const e = MONTH_NAMES[end - 1];
-  if (!s || !e) return '—';
+function formatSeason(
+  start: number,
+  end: number,
+  monthNames: string[],
+  emptyLabel: string
+): string {
+  const s = monthNames[start - 1];
+  const e = monthNames[end - 1];
+  if (!s || !e) return emptyLabel;
   return start === end ? s : `${s} – ${e}`;
 }
-
-const DANGER_LABELS: Record<string, string> = {
-  low: 'Lav',
-  medium: 'Middels',
-  high: 'Høy',
-  critical: 'Kritisk'
-};
 
 const DANGER_STYLES: Record<string, string> = {
   low: 'bg-gray-100 text-gray-800',
@@ -37,9 +31,22 @@ const DANGER_STYLES: Record<string, string> = {
 };
 
 export default async function SpeciesDetailPage({ params }: SpeciesDetailPageProps) {
+  const t = await getTranslations('SpeciesDetail');
   const { id: idParam } = await params;
   const id = Number(idParam);
   if (Number.isNaN(id)) notFound();
+
+  const monthNames = [
+    t('monthJan'), t('monthFeb'), t('monthMar'), t('monthApr'), t('monthMay'), t('monthJun'),
+    t('monthJul'), t('monthAug'), t('monthSep'), t('monthOct'), t('monthNov'), t('monthDec')
+  ];
+
+  const dangerLabels: Record<string, string> = {
+    low: t('dangerLow'),
+    medium: t('dangerMedium'),
+    high: t('dangerHigh'),
+    critical: t('dangerCritical')
+  };
 
   const supabase = createClient();
 
@@ -80,7 +87,7 @@ export default async function SpeciesDetailPage({ params }: SpeciesDetailPagePro
           className="inline-flex items-center gap-1 text-sm font-medium text-forest-700 hover:underline"
         >
           <ChevronLeft className="h-4 w-4" />
-          Tilbake til biblioteket
+          {t('backToLibrary')}
         </Link>
 
         <div className="grid gap-6 md:grid-cols-2 md:items-start lg:gap-10">
@@ -117,27 +124,27 @@ export default async function SpeciesDetailPage({ params }: SpeciesDetailPagePro
                   <AlertTriangle className="h-6 w-6 shrink-0" />
                   <div className="space-y-1.5">
                     <p className="text-base font-bold uppercase tracking-wide">
-                      {species.edibility === 'deadly' ? 'Dødelig giftig — ikke spis' : 'Giftig — ikke spis'}
+                      {species.edibility === 'deadly' ? t('deadlyDoNotEat') : t('toxicDoNotEat')}
                     </p>
                     {species.toxin_info ? (
                       <p className="text-sm">
-                        <span className="font-semibold">Toksin:</span> {species.toxin_info}
+                        <span className="font-semibold">{t('toxinLabel')}</span> {species.toxin_info}
                       </p>
                     ) : null}
                     {species.symptoms ? (
                       <p className="text-sm">
-                        <span className="font-semibold">Symptomer:</span> {species.symptoms}
+                        <span className="font-semibold">{t('symptomsLabel')}</span> {species.symptoms}
                       </p>
                     ) : null}
                     <p className="pt-1 text-sm font-medium">
-                      Ved svelging — ring Giftinformasjonen{' '}
+                      {t('poisonCallPrefix')}{' '}
                       <a
                         href="tel:+4722591300"
                         className={`underline ${species.edibility === 'deadly' ? 'text-white' : 'text-red-900'}`}
                       >
                         22 59 13 00
                       </a>{' '}
-                      umiddelbart.
+                      {t('poisonCallSuffix')}
                     </p>
                     <Link
                       href="/sikkerhet"
@@ -145,7 +152,7 @@ export default async function SpeciesDetailPage({ params }: SpeciesDetailPagePro
                         species.edibility === 'deadly' ? 'text-white/90' : 'text-red-800'
                       }`}
                     >
-                      Mer om sikkerhet og soppkontroll →
+                      {t('moreAboutSafety')}
                     </Link>
                   </div>
                 </div>
@@ -157,7 +164,7 @@ export default async function SpeciesDetailPage({ params }: SpeciesDetailPagePro
                 <div className="flex items-start gap-3">
                   <AlertTriangle className="h-5 w-5 shrink-0 text-amber-700" />
                   <div>
-                    <p className="font-semibold text-amber-900">Betinget spiselig — krever tilberedning</p>
+                    <p className="font-semibold text-amber-900">{t('conditionallyEdibleTitle')}</p>
                     <p className="mt-1 text-sm text-amber-900">{species.edibility_notes}</p>
                   </div>
                 </div>
@@ -169,20 +176,20 @@ export default async function SpeciesDetailPage({ params }: SpeciesDetailPagePro
             ) : null}
 
             <dl className="space-y-0 border-t border-gray-200 pt-4 text-sm">
-              <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-forest-700">Detaljer</p>
+              <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-forest-700">{t('detailsHeading')}</p>
               <div className="flex justify-between border-b border-gray-100 py-2">
-                <dt className="text-gray-600">Sesong</dt>
-                <dd className="font-medium text-gray-900">{formatSeason(species.season_start, species.season_end)}</dd>
+                <dt className="text-gray-600">{t('seasonLabel')}</dt>
+                <dd className="font-medium text-gray-900">{formatSeason(species.season_start, species.season_end, monthNames, t('emptyValue'))}</dd>
               </div>
               <div className="flex justify-between border-b border-gray-100 py-2">
-                <dt className="text-gray-600">Habitat</dt>
+                <dt className="text-gray-600">{t('habitatLabel')}</dt>
                 <dd className="font-medium text-gray-900 text-right">
-                  {(species.habitat ?? []).join(', ') || '—'}
+                  {(species.habitat ?? []).join(', ') || t('emptyValue')}
                 </dd>
               </div>
               {species.swedish_name ? (
                 <div className="flex justify-between border-b border-gray-100 py-2">
-                  <dt className="text-gray-600">Svensk navn</dt>
+                  <dt className="text-gray-600">{t('swedishNameLabel')}</dt>
                   <dd className="font-medium text-gray-900">{species.swedish_name}</dd>
                 </div>
               ) : null}
@@ -195,9 +202,9 @@ export default async function SpeciesDetailPage({ params }: SpeciesDetailPagePro
           <article className="space-y-4 rounded-2xl bg-white p-5 shadow-card md:p-6">
             <header>
               <p className="text-xs font-semibold uppercase tracking-widest text-forest-700">
-                Forveksling og nærarter
+                {t('lookAlikesKicker')}
               </p>
-              <h2 className="font-serif text-2xl font-bold text-forest-900">Se også</h2>
+              <h2 className="font-serif text-2xl font-bold text-forest-900">{t('lookAlikesHeading')}</h2>
             </header>
 
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -227,7 +234,7 @@ export default async function SpeciesDetailPage({ params }: SpeciesDetailPagePro
                         />
                       ) : (
                         <div className="flex h-full w-full items-center justify-center text-xs text-gray-400">
-                          Ingen bilde
+                          {t('noImage')}
                         </div>
                       )}
                       <span
@@ -235,7 +242,7 @@ export default async function SpeciesDetailPage({ params }: SpeciesDetailPagePro
                           DANGER_STYLES[danger] ?? DANGER_STYLES.low
                         }`}
                       >
-                        Fare: {DANGER_LABELS[danger] ?? danger}
+                        {t('dangerPrefix')} {dangerLabels[danger] ?? danger}
                       </span>
                     </div>
 
@@ -247,7 +254,7 @@ export default async function SpeciesDetailPage({ params }: SpeciesDetailPagePro
                       <EdibilityBadge edibility={lookAlike.edibility} />
                       {item.difference_description ? (
                         <p className="text-xs text-gray-700">
-                          <span className="font-semibold">Hvordan skille:</span> {item.difference_description}
+                          <span className="font-semibold">{t('howToTellApart')}</span> {item.difference_description}
                         </p>
                       ) : null}
                     </div>

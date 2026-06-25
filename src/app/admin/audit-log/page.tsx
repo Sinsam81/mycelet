@@ -1,3 +1,4 @@
+import { getTranslations } from 'next-intl/server';
 import { AlertTriangle, ShieldAlert } from 'lucide-react';
 import { PageWrapper } from '@/components/layout/PageWrapper';
 import { createClient } from '@/lib/supabase/server';
@@ -24,10 +25,13 @@ import { createAdminClient } from '@/lib/supabase/admin';
  *   - If the user has no moderator_roles row, "no access" message
  */
 
-export const metadata = {
-  title: 'Audit-log — Mycelet admin',
-  description: 'Sporbare admin-handlinger og kontosletteinger.'
-};
+export async function generateMetadata() {
+  const t = await getTranslations('AdminAuditLog');
+  return {
+    title: t('metaTitle'),
+    description: t('metaDescription')
+  };
+}
 
 interface AuditRow {
   id: string;
@@ -47,11 +51,11 @@ interface ProfileLookup {
   display_name: string | null;
 }
 
-const ACTION_LABELS: Record<string, string> = {
-  'verified_forager.upsert': 'Verifisert plukker — opprettet/endret',
-  'verified_forager.delete': 'Verifisert plukker — fjernet',
-  'account.self_delete': 'Bruker slettet egen konto',
-  'account.admin_delete': 'Admin slettet konto'
+const ACTION_LABEL_KEYS: Record<string, string> = {
+  'verified_forager.upsert': 'actionVerifiedForagerUpsert',
+  'verified_forager.delete': 'actionVerifiedForagerDelete',
+  'account.self_delete': 'actionAccountSelfDelete',
+  'account.admin_delete': 'actionAccountAdminDelete'
 };
 
 function formatTimestamp(iso: string) {
@@ -71,7 +75,15 @@ function truncateMiddle(value: string, maxLength = 16) {
   return `${value.slice(0, head)}…${value.slice(value.length - tail)}`;
 }
 
-function UserCell({ id, lookup }: { id: string | null; lookup: Map<string, ProfileLookup> }) {
+function UserCell({
+  id,
+  lookup,
+  deletedLabel
+}: {
+  id: string | null;
+  lookup: Map<string, ProfileLookup>;
+  deletedLabel: string;
+}) {
   if (!id) return <span className="text-gray-400">—</span>;
   const profile = lookup.get(id);
   if (profile) {
@@ -87,12 +99,13 @@ function UserCell({ id, lookup }: { id: string | null; lookup: Map<string, Profi
   // Profile not found — likely a deleted user. Show truncated UUID.
   return (
     <span className="text-gray-500" title={id}>
-      <span className="italic">slettet</span> · {truncateMiddle(id)}
+      <span className="italic">{deletedLabel}</span> · {truncateMiddle(id)}
     </span>
   );
 }
 
 export default async function AuditLogPage() {
+  const t = await getTranslations('AdminAuditLog');
   const supabase = createClient();
   const {
     data: { user }
@@ -102,7 +115,7 @@ export default async function AuditLogPage() {
     // Middleware should already have redirected, but be defensive.
     return (
       <PageWrapper>
-        <p className="text-sm text-gray-700">Du må være logget inn for å se denne siden.</p>
+        <p className="text-sm text-gray-700">{t('mustBeLoggedIn')}</p>
       </PageWrapper>
     );
   }
@@ -121,10 +134,9 @@ export default async function AuditLogPage() {
           <div className="flex items-start gap-3">
             <ShieldAlert className="h-6 w-6 shrink-0 text-amber-700" />
             <div>
-              <p className="text-base font-bold text-amber-900">Ingen tilgang</p>
+              <p className="text-base font-bold text-amber-900">{t('noAccessTitle')}</p>
               <p className="text-sm text-amber-900">
-                Audit-loggen er kun tilgjengelig for moderatorer og administratorer. Hvis du skal ha tilgang, kontakt en
-                eksisterende admin for å få lagt til en rad i <code>moderator_roles</code>.
+                {t('noAccessBodyBefore')} <code>moderator_roles</code>.
               </p>
             </div>
           </div>
@@ -146,9 +158,9 @@ export default async function AuditLogPage() {
           <div className="flex items-start gap-3">
             <AlertTriangle className="h-6 w-6 shrink-0 text-red-700" />
             <div>
-              <p className="text-base font-bold text-red-900">Server-konfigurasjonsfeil</p>
+              <p className="text-base font-bold text-red-900">{t('serverConfigErrorTitle')}</p>
               <p className="text-sm text-red-900">
-                <code>SUPABASE_SERVICE_ROLE_KEY</code> mangler i miljøet. Audit-loggen kan ikke leses uten den.
+                <code>SUPABASE_SERVICE_ROLE_KEY</code> {t('serverConfigErrorBody')}
               </p>
             </div>
           </div>
@@ -170,12 +182,12 @@ export default async function AuditLogPage() {
           <div className="flex items-start gap-3">
             <AlertTriangle className="h-6 w-6 shrink-0 text-amber-700" />
             <div>
-              <p className="text-base font-bold text-amber-900">Kan ikke lese audit-loggen</p>
+              <p className="text-base font-bold text-amber-900">{t('cannotReadTitle')}</p>
               <p className="text-sm text-amber-900">
-                Kanskje migrasjon 008 (<code>admin_audit_log</code>) ikke er påført ennå. Lim inn{' '}
-                <code>supabase/migrations/008_admin_audit_log.sql</code> i Supabase SQL Editor og last siden på nytt.
+                {t('cannotReadBodyBefore')} (<code>admin_audit_log</code>) {t('cannotReadBodyMiddle')}{' '}
+                <code>supabase/migrations/008_admin_audit_log.sql</code> {t('cannotReadBodyAfter')}
               </p>
-              <p className="mt-1 text-xs text-amber-900/80">Detaljer: {auditError.message}</p>
+              <p className="mt-1 text-xs text-amber-900/80">{t('detailsPrefix')} {auditError.message}</p>
             </div>
           </div>
         </article>
@@ -210,28 +222,25 @@ export default async function AuditLogPage() {
     <PageWrapper>
       <section className="space-y-4">
         <div>
-          <h1 className="text-xl font-semibold">Audit-log</h1>
-          <p className="text-sm text-gray-700">
-            Siste 100 sporbare admin-handlinger og kontosletteinger. Tabellen er append-only — ingen kan endre eller fjerne
-            poster i etterkant.
-          </p>
+          <h1 className="text-xl font-semibold">{t('heading')}</h1>
+          <p className="text-sm text-gray-700">{t('intro')}</p>
         </div>
 
         {entries.length === 0 ? (
           <article className="rounded-xl bg-white p-6 text-center text-sm text-gray-700 shadow-sm">
-            <p>Ingen handlinger logget enda. Når en moderator endrer roller eller sletter en konto, dukker det opp her.</p>
+            <p>{t('emptyState')}</p>
           </article>
         ) : (
           <article className="overflow-x-auto rounded-xl bg-white shadow-sm">
             <table className="w-full min-w-[640px] text-left text-sm">
               <thead className="bg-gray-50 text-xs uppercase tracking-wide text-gray-600">
                 <tr>
-                  <th className="px-3 py-2 font-medium">Tid</th>
-                  <th className="px-3 py-2 font-medium">Handling</th>
-                  <th className="px-3 py-2 font-medium">Av</th>
-                  <th className="px-3 py-2 font-medium">Mål</th>
-                  <th className="px-3 py-2 font-medium">Detaljer</th>
-                  <th className="px-3 py-2 font-medium">IP</th>
+                  <th className="px-3 py-2 font-medium">{t('colTime')}</th>
+                  <th className="px-3 py-2 font-medium">{t('colAction')}</th>
+                  <th className="px-3 py-2 font-medium">{t('colBy')}</th>
+                  <th className="px-3 py-2 font-medium">{t('colTarget')}</th>
+                  <th className="px-3 py-2 font-medium">{t('colDetails')}</th>
+                  <th className="px-3 py-2 font-medium">{t('colIp')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -239,14 +248,16 @@ export default async function AuditLogPage() {
                   <tr key={entry.id} className="align-top">
                     <td className="whitespace-nowrap px-3 py-2 text-xs text-gray-700">{formatTimestamp(entry.created_at)}</td>
                     <td className="px-3 py-2">
-                      <span className="font-medium text-forest-900">{ACTION_LABELS[entry.action] ?? entry.action}</span>
+                      <span className="font-medium text-forest-900">
+                        {ACTION_LABEL_KEYS[entry.action] ? t(ACTION_LABEL_KEYS[entry.action]) : entry.action}
+                      </span>
                     </td>
                     <td className="px-3 py-2 text-sm text-gray-800">
-                      <UserCell id={entry.actor_id} lookup={profileMap} />
+                      <UserCell id={entry.actor_id} lookup={profileMap} deletedLabel={t('deletedUser')} />
                     </td>
                     <td className="px-3 py-2 text-sm text-gray-800">
                       {entry.target_user_id ? (
-                        <UserCell id={entry.target_user_id} lookup={profileMap} />
+                        <UserCell id={entry.target_user_id} lookup={profileMap} deletedLabel={t('deletedUser')} />
                       ) : entry.target_resource ? (
                         <span className="text-gray-700">{entry.target_resource}</span>
                       ) : (
@@ -272,9 +283,7 @@ export default async function AuditLogPage() {
           </article>
         )}
 
-        <p className="pt-2 text-xs text-gray-500">
-          Viser maksimalt 100 nyeste poster. For eldre poster, eksporter via Supabase SQL Editor.
-        </p>
+        <p className="pt-2 text-xs text-gray-500">{t('footerNote')}</p>
       </section>
     </PageWrapper>
   );

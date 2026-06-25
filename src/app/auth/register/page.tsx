@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { FormEvent, Suspense, useMemo, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { Button } from '@/components/ui/Button';
 import { useAuth } from '@/lib/hooks/useAuth';
 
@@ -13,7 +14,7 @@ import { useAuth } from '@/lib/hooks/useAuth';
 // instances, so `err instanceof Error` misses them and the user only ever saw a
 // generic fallback. Read `.message` defensively and map the common cases to
 // friendly Norwegian copy.
-function toRegisterErrorMessage(err: unknown): string {
+function toRegisterErrorMessage(err: unknown, t: (key: string) => string): string {
   const raw =
     typeof err === 'object' && err !== null && 'message' in err
       ? String((err as { message: unknown }).message)
@@ -24,18 +25,19 @@ function toRegisterErrorMessage(err: unknown): string {
     lower.includes('profiles_username_key') ||
     (lower.includes('username') && (lower.includes('duplicate') || lower.includes('unique')))
   ) {
-    return 'Brukernavnet er allerede i bruk. Velg et annet.';
+    return t('errorUsernameTaken');
   }
   if (lower.includes('already registered') || lower.includes('already been registered')) {
-    return 'E-posten er allerede registrert. Prøv å logge inn i stedet.';
+    return t('errorEmailRegistered');
   }
   if (lower.includes('password') && (lower.includes('least') || lower.includes('short'))) {
-    return 'Passordet er for kort. Bruk minst 8 tegn.';
+    return t('errorPasswordShort');
   }
-  return raw || 'Kunne ikke registrere konto. Prøv igjen.';
+  return raw || t('errorGeneric');
 }
 
 function RegisterForm() {
+  const t = useTranslations('AuthRegister');
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirectPath = useMemo(() => searchParams.get('next') ?? searchParams.get('redirect') ?? '/', [searchParams]);
@@ -80,7 +82,7 @@ function RegisterForm() {
         router.push(`/auth/login?next=${encodeURIComponent(redirectPath)}&confirm=1`);
       }
     } catch (err) {
-      setError(toRegisterErrorMessage(err));
+      setError(toRegisterErrorMessage(err, t));
     } finally {
       setLoading(false);
     }
@@ -89,12 +91,12 @@ function RegisterForm() {
   return (
     <main className="mx-auto min-h-screen w-full max-w-screen-sm p-6 pt-[calc(1.5rem_+_env(safe-area-inset-top))]">
       <div className="rounded-xl bg-white p-6 shadow-sm">
-        <h1 className="text-2xl font-semibold text-forest-900">Opprett konto</h1>
-        <p className="mt-2 text-sm text-gray-700">Lag profil for å lagre funn og bli med i forumet.</p>
+        <h1 className="text-2xl font-semibold text-forest-900">{t('title')}</h1>
+        <p className="mt-2 text-sm text-gray-700">{t('subtitle')}</p>
 
         <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
           <label className="block text-sm font-medium text-gray-800">
-            Brukernavn
+            {t('usernameLabel')}
             <input
               type="text"
               required
@@ -106,7 +108,7 @@ function RegisterForm() {
           </label>
 
           <label className="block text-sm font-medium text-gray-800">
-            Visningsnavn
+            {t('displayNameLabel')}
             <input
               type="text"
               className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2"
@@ -116,7 +118,7 @@ function RegisterForm() {
           </label>
 
           <label className="block text-sm font-medium text-gray-800">
-            E-post
+            {t('emailLabel')}
             <input
               type="email"
               required
@@ -127,7 +129,7 @@ function RegisterForm() {
           </label>
 
           <label className="block text-sm font-medium text-gray-800">
-            Passord
+            {t('passwordLabel')}
             <input
               type="password"
               required
@@ -141,14 +143,14 @@ function RegisterForm() {
           {error ? <p className="text-sm text-red-600">{error}</p> : null}
 
           <Button type="submit" className="w-full" loading={loading}>
-            Opprett konto
+            {t('submit')}
           </Button>
         </form>
 
         <p className="mt-4 text-sm text-gray-700">
-          Har du allerede konto?{' '}
+          {t('haveAccount')}{' '}
           <Link className="font-semibold text-forest-800" href={`/auth/login?next=${encodeURIComponent(redirectPath)}`}>
-            Logg inn
+            {t('login')}
           </Link>
         </p>
       </div>
@@ -157,8 +159,9 @@ function RegisterForm() {
 }
 
 export default function RegisterPage() {
+  const t = useTranslations('AuthRegister');
   return (
-    <Suspense fallback={<main className="mx-auto min-h-screen w-full max-w-screen-sm p-6 pt-[calc(1.5rem_+_env(safe-area-inset-top))]"><p className="text-sm text-gray-700">Laster...</p></main>}>
+    <Suspense fallback={<main className="mx-auto min-h-screen w-full max-w-screen-sm p-6 pt-[calc(1.5rem_+_env(safe-area-inset-top))]"><p className="text-sm text-gray-700">{t('loading')}</p></main>}>
       <RegisterForm />
     </Suspense>
   );

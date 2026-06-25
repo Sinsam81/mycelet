@@ -2,14 +2,18 @@
 
 import Link from 'next/link';
 import { User } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { useBillingStatus } from '@/lib/hooks/useBilling';
 import { useIsNative } from '@/lib/hooks/useIsNative';
 
-function getTierLabel(tier: 'free' | 'premium' | 'season_pass') {
-  if (tier === 'premium') return 'Premium';
-  if (tier === 'season_pass') return 'Sesongpass';
-  return 'Gratis';
+function getTierLabel(
+  tier: 'free' | 'premium' | 'season_pass',
+  t: ReturnType<typeof useTranslations>,
+) {
+  if (tier === 'premium') return t('tierPremium');
+  if (tier === 'season_pass') return t('tierSeasonPass');
+  return t('tierFree');
 }
 
 function MushroomMark({ className }: { className?: string }) {
@@ -22,6 +26,7 @@ function MushroomMark({ className }: { className?: string }) {
 }
 
 export function Header() {
+  const t = useTranslations('Header');
   const { user, loading } = useAuth();
   const billingQuery = useBillingStatus(Boolean(user));
   const tier = billingQuery.data?.capabilities.tier ?? 'free';
@@ -42,7 +47,7 @@ export function Header() {
                   tier === 'free' ? 'bg-white/15 text-white' : 'bg-amber-400 text-forest-900'
                 }`}
               >
-                {getTierLabel(tier)}
+                {getTierLabel(tier, t)}
               </span>
             ) : (
               <Link
@@ -51,12 +56,12 @@ export function Header() {
                   tier === 'free' ? 'bg-white/15 text-white' : 'bg-amber-400 text-forest-900'
                 }`}
               >
-                {getTierLabel(tier)}
+                {getTierLabel(tier, t)}
               </Link>
             )
           ) : null}
 
-          <Link href="/profile" aria-label="Profil" className="rounded-full p-2 hover:bg-white/10">
+          <Link href="/profile" aria-label={t('profileAriaLabel')} className="rounded-full p-2 hover:bg-white/10">
             <User className="h-5 w-5" />
           </Link>
         </div>

@@ -2,10 +2,12 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 import { LogOut } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 
 export function LogoutButton() {
+  const t = useTranslations('LogoutButton');
   const router = useRouter();
   const [loading, setLoading] = useState(false);
 
@@ -25,7 +27,7 @@ export function LogoutButton() {
       className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-800 hover:bg-gray-50 disabled:opacity-60"
     >
       <LogOut className="h-4 w-4" />
-      {loading ? 'Logger ut...' : 'Logg ut'}
+      {loading ? t('loggingOut') : t('logOut')}
     </button>
   );
 }

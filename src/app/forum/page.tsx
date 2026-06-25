@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { Plus } from 'lucide-react';
 import { PageWrapper } from '@/components/layout/PageWrapper';
 import { CategoryFilter } from '@/components/forum/CategoryFilter';
@@ -10,13 +11,14 @@ import { createClient } from '@/lib/supabase/client';
 import { useForumPostsInfinite } from '@/lib/hooks/useForum';
 import { ForumCategory, ForumSort } from '@/types/forum';
 
-const sortOptions: Array<{ label: string; value: ForumSort }> = [
-  { label: 'Nyeste', value: 'newest' },
-  { label: 'Populære', value: 'popular' },
-  { label: 'Ubesvarte', value: 'unanswered' }
+const sortOptions: Array<{ labelKey: string; value: ForumSort }> = [
+  { labelKey: 'sortNewest', value: 'newest' },
+  { labelKey: 'sortPopular', value: 'popular' },
+  { labelKey: 'sortUnanswered', value: 'unanswered' }
 ];
 
 export default function ForumPage() {
+  const t = useTranslations('Forum');
   const [sort, setSort] = useState<ForumSort>('newest');
   const [category, setCategory] = useState<ForumCategory>(null);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
@@ -61,17 +63,17 @@ export default function ForumPage() {
     <PageWrapper>
       <section className="space-y-4">
         <header>
-          <p className="text-xs font-medium uppercase tracking-widest text-forest-700">Fellesskap</p>
+          <p className="text-xs font-medium uppercase tracking-widest text-forest-700">{t('eyebrow')}</p>
           <div className="mt-1 flex items-center justify-between gap-3">
-            <h1 className="font-serif text-3xl font-bold tracking-tight text-forest-900">Forum</h1>
+            <h1 className="font-serif text-3xl font-bold tracking-tight text-forest-900">{t('title')}</h1>
             <Link
               href="/forum/new"
               className="inline-flex shrink-0 items-center gap-1 rounded-xl bg-forest-800 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-forest-700"
             >
-              <Plus className="h-4 w-4" /> Nytt innlegg
+              <Plus className="h-4 w-4" /> {t('newPost')}
             </Link>
           </div>
-          <p className="mt-1 text-sm text-gray-700">Del funn, still spørsmål og lær av andre sopplukkere.</p>
+          <p className="mt-1 text-sm text-gray-700">{t('intro')}</p>
         </header>
 
         <div className="flex gap-2 overflow-x-auto pb-1">
@@ -86,7 +88,7 @@ export default function ForumPage() {
                   active ? 'bg-forest-800 text-white' : 'border border-gray-300 bg-white text-gray-800 hover:border-forest-400'
                 }`}
               >
-                {option.label}
+                {t(option.labelKey)}
               </button>
             );
           })}
@@ -94,8 +96,8 @@ export default function ForumPage() {
 
         <CategoryFilter value={category} onChange={setCategory} />
 
-        {isLoading ? <p className="text-sm text-gray-700">Laster innlegg...</p> : null}
-        {error ? <p className="text-sm text-red-600">Kunne ikke hente innlegg.</p> : null}
+        {isLoading ? <p className="text-sm text-gray-700">{t('loadingPosts')}</p> : null}
+        {error ? <p className="text-sm text-red-600">{t('loadError')}</p> : null}
 
         <div className="space-y-3">
           {posts.map((post) => (
@@ -104,32 +106,32 @@ export default function ForumPage() {
         </div>
 
         <div ref={sentinelRef} className="h-1" />
-        {isFetchingNextPage ? <p className="text-sm text-gray-700">Laster flere...</p> : null}
+        {isFetchingNextPage ? <p className="text-sm text-gray-700">{t('loadingMore')}</p> : null}
         {hasNextPage ? (
           <button
             type="button"
             onClick={() => void fetchNextPage()}
             className="inline-flex rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-800"
           >
-            Last flere
+            {t('loadMore')}
           </button>
         ) : null}
 
         {!isLoading && posts.length === 0 ? (
           <div className="rounded-2xl bg-white p-6 text-center shadow-card">
-            <p className="text-sm text-gray-700">Ingen innlegg her ennå.</p>
+            <p className="text-sm text-gray-700">{t('emptyState')}</p>
             <Link href="/forum/new" className="mt-2 inline-flex items-center gap-1 text-sm font-semibold text-forest-800 hover:underline">
-              <Plus className="h-4 w-4" /> Bli den første til å dele
+              <Plus className="h-4 w-4" /> {t('beFirst')}
             </Link>
           </div>
         ) : null}
 
         <div className="flex items-center justify-center gap-4 pt-2 text-xs text-gray-500">
           <Link href="/forum/reports" className="hover:text-forest-800 hover:underline">
-            Mine rapporter
+            {t('myReports')}
           </Link>
           <Link href="/forum/moderation" className="hover:text-forest-800 hover:underline">
-            Moderasjon
+            {t('moderation')}
           </Link>
         </div>
       </section>

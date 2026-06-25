@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { use, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 import { useQueryClient } from '@tanstack/react-query';
 import { PageWrapper } from '@/components/layout/PageWrapper';
 import { CommentInput } from '@/components/forum/CommentInput';
@@ -28,6 +29,7 @@ interface ForumPostDetailPageProps {
 
 export default function ForumPostDetailPage({ params }: ForumPostDetailPageProps) {
   const { id: postId } = use(params);
+  const t = useTranslations('ForumThread');
   const router = useRouter();
   const queryClient = useQueryClient();
   const supabase = useMemo(() => createClient(), []);
@@ -91,11 +93,11 @@ export default function ForumPostDetailPage({ params }: ForumPostDetailPageProps
     <PageWrapper>
       <section className="space-y-3">
         <button type="button" onClick={() => router.push('/forum')} className="inline-flex items-center gap-1 text-sm font-medium text-forest-800">
-          <ArrowLeft className="h-4 w-4" /> Tilbake til forum
+          <ArrowLeft className="h-4 w-4" /> {t('backToForum')}
         </button>
 
-        {postLoading ? <p className="text-sm text-gray-700">Laster innlegg...</p> : null}
-        {postError ? <p className="text-sm text-red-600">Kunne ikke hente innlegg.</p> : null}
+        {postLoading ? <p className="text-sm text-gray-700">{t('loadingPost')}</p> : null}
+        {postError ? <p className="text-sm text-red-600">{t('postError')}</p> : null}
 
         {post ? (
           <PostDetail
@@ -118,9 +120,9 @@ export default function ForumPostDetailPage({ params }: ForumPostDetailPageProps
         ) : null}
 
         <div className="rounded-2xl border border-gray-200 bg-cream-dark p-3">
-          <h2 className="mb-2 font-serif text-xl font-bold text-forest-900">Kommentarer</h2>
-          {commentsLoading ? <p className="text-sm text-gray-700">Laster kommentarer...</p> : null}
-          {commentsError ? <p className="text-sm text-red-600">Kunne ikke hente kommentarer.</p> : null}
+          <h2 className="mb-2 font-serif text-xl font-bold text-forest-900">{t('comments')}</h2>
+          {commentsLoading ? <p className="text-sm text-gray-700">{t('loadingComments')}</p> : null}
+          {commentsError ? <p className="text-sm text-red-600">{t('commentsError')}</p> : null}
           {comments.length > 0 ? (
             <CommentList
               comments={comments}
@@ -144,16 +146,16 @@ export default function ForumPostDetailPage({ params }: ForumPostDetailPageProps
               onClick={() => void fetchNextComments()}
               className="mt-3 inline-flex rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-800"
             >
-              Last flere kommentarer
+              {t('loadMoreComments')}
             </button>
           ) : null}
-          {commentsFetchingNext ? <p className="mt-2 text-sm text-gray-700">Laster flere kommentarer...</p> : null}
+          {commentsFetchingNext ? <p className="mt-2 text-sm text-gray-700">{t('loadingMoreComments')}</p> : null}
         </div>
 
         <CommentInput onSubmit={(content) => createComment.mutateAsync({ content })} loading={createComment.isPending} />
 
         <Link href="/forum/new" className="inline-flex text-sm font-medium text-forest-800 hover:underline">
-          Opprett nytt innlegg
+          {t('createNewPost')}
         </Link>
       </section>
     </PageWrapper>

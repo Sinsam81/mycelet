@@ -1,13 +1,14 @@
 import Link from 'next/link';
 import { MessageCircle, Heart } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 import { ForumPost } from '@/types/forum';
 import { forumBadgeClass, getForumBadge } from '@/lib/utils/forumBadge';
 
-const categoryLabel: Record<ForumPost['category'], string> = {
-  find: 'Funn',
-  question: 'Spørsmål',
-  tip: 'Tips',
-  discussion: 'Diskusjon'
+const categoryLabelKey: Record<ForumPost['category'], string> = {
+  find: 'categoryFind',
+  question: 'categoryQuestion',
+  tip: 'categoryTip',
+  discussion: 'categoryDiscussion'
 };
 
 const categoryClass: Record<ForumPost['category'], string> = {
@@ -22,10 +23,11 @@ interface PostCardProps {
 }
 
 export function PostCard({ post }: PostCardProps) {
-  const author = post.profiles?.display_name || post.profiles?.username || 'Ukjent bruker';
+  const t = useTranslations('PostCard');
+  const author = post.profiles?.display_name || post.profiles?.username || t('unknownUser');
   const badge = getForumBadge(post.profiles);
   const image = post.images?.[0]?.url;
-  const findingSpecies = post.finding?.mushroom_species?.norwegian_name || post.finding?.species_name_override || 'Ukjent art';
+  const findingSpecies = post.finding?.mushroom_species?.norwegian_name || post.finding?.species_name_override || t('unknownSpecies');
 
   return (
     <Link
@@ -38,7 +40,7 @@ export function PostCard({ post }: PostCardProps) {
           {badge ? <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${forumBadgeClass(badge.tone)}`}>{badge.label}</span> : null}
         </div>
         <span className={`rounded-full px-2 py-1 text-xs font-medium ${categoryClass[post.category]}`}>
-          {categoryLabel[post.category]}
+          {t(categoryLabelKey[post.category])}
         </span>
       </div>
 
@@ -46,8 +48,8 @@ export function PostCard({ post }: PostCardProps) {
       <p className="mt-1 line-clamp-2 text-sm text-gray-700">{post.content}</p>
       {post.finding ? (
         <p className="mt-1 text-xs text-gray-600">
-          Koblet funn: {findingSpecies}
-          {post.finding.is_zone_finding ? ` • Sone: ${post.finding.zone_label ?? 'Ukjent sone'}` : ''}
+          {t('linkedFinding')}: {findingSpecies}
+          {post.finding.is_zone_finding ? ` • ${t('zone')}: ${post.finding.zone_label ?? t('unknownZone')}` : ''}
         </p>
       ) : null}
 

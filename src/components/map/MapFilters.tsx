@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useRef, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { SlidersHorizontal, X } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 
@@ -23,6 +24,7 @@ interface MapFiltersProps {
 }
 
 export function MapFilters({ filters, onChange, onSelectPlace }: MapFiltersProps) {
+  const t = useTranslations('MapFilters');
   const supabase = useMemo(() => createClient(), []);
   const [query, setQuery] = useState('');
   const [options, setOptions] = useState<SpeciesOption[]>([]);
@@ -91,7 +93,7 @@ export function MapFilters({ filters, onChange, onSelectPlace }: MapFiltersProps
         className="absolute left-3 top-3 z-[1000] inline-flex items-center gap-1.5 rounded-full bg-white/95 px-3 py-1.5 text-sm font-medium text-gray-800 shadow-lg backdrop-blur hover:bg-white"
       >
         <SlidersHorizontal className="h-4 w-4" />
-        Filtre
+        {t('title')}
         {activeCount > 0 ? (
           <span className="rounded-full bg-forest-100 px-1.5 text-xs font-semibold text-forest-900">{activeCount}</span>
         ) : null}
@@ -102,13 +104,13 @@ export function MapFilters({ filters, onChange, onSelectPlace }: MapFiltersProps
   return (
     <div className="absolute left-3 right-3 top-3 z-[1000] space-y-2 rounded-xl bg-white/95 p-3 shadow-lg backdrop-blur">
       <div className="flex items-center justify-between">
-        <p className="text-sm font-semibold text-gray-900">Filtre</p>
+        <p className="text-sm font-semibold text-gray-900">{t('title')}</p>
         <div className="flex items-center gap-2">
-          <span className="rounded-full bg-forest-100 px-2 py-1 text-xs font-medium text-forest-900">{activeCount} aktive</span>
+          <span className="rounded-full bg-forest-100 px-2 py-1 text-xs font-medium text-forest-900">{t('activeCount', { count: activeCount })}</span>
           <button
             type="button"
             onClick={() => setOpen(false)}
-            aria-label="Lukk filtre"
+            aria-label={t('closeFilters')}
             className="rounded-full p-1 text-gray-500 hover:bg-gray-100"
           >
             <X className="h-4 w-4" />
@@ -117,12 +119,12 @@ export function MapFilters({ filters, onChange, onSelectPlace }: MapFiltersProps
       </div>
 
       <div className="space-y-2">
-        <label className="block text-xs font-medium text-gray-700">Søk etter sted</label>
+        <label className="block text-xs font-medium text-gray-700">{t('searchPlace')}</label>
         <input
           value={placeQuery}
           onChange={(event) => searchPlace(event.target.value)}
           className="w-full rounded-lg border border-gray-300 px-2 py-1.5 text-sm"
-          placeholder="Nordmarka, Trondheim …"
+          placeholder={t('searchPlacePlaceholder')}
         />
         {placeResults.length > 0 ? (
           <div className="max-h-36 overflow-auto rounded-lg border border-gray-200">
@@ -147,12 +149,12 @@ export function MapFilters({ filters, onChange, onSelectPlace }: MapFiltersProps
       </div>
 
       <div className="space-y-2">
-        <label className="block text-xs font-medium text-gray-700">Art (søk)</label>
+        <label className="block text-xs font-medium text-gray-700">{t('speciesSearch')}</label>
         <input
           value={query}
           onChange={(event) => searchSpecies(event.target.value)}
           className="w-full rounded-lg border border-gray-300 px-2 py-1.5 text-sm"
-          placeholder="Kantarell"
+          placeholder={t('speciesSearchPlaceholder')}
         />
 
         {options.length > 0 ? (
@@ -177,22 +179,22 @@ export function MapFilters({ filters, onChange, onSelectPlace }: MapFiltersProps
             onClick={() => onChange({ ...filters, speciesId: null })}
             className="text-xs font-medium text-forest-800"
           >
-            Nullstill art
+            {t('resetSpecies')}
           </button>
         ) : null}
       </div>
 
       <label className="block text-xs font-medium text-gray-700">
-        Periode
+        {t('period')}
         <select
           value={filters.period}
           onChange={(event) => onChange({ ...filters, period: event.target.value as MapFilterState['period'] })}
           className="mt-1 w-full rounded-lg border border-gray-300 px-2 py-1.5 text-sm"
         >
-          <option value="month">Denne måneden</option>
-          <option value="3months">Siste 3 mnd</option>
-          <option value="year">I år</option>
-          <option value="all">Alle</option>
+          <option value="month">{t('periodMonth')}</option>
+          <option value="3months">{t('periodThreeMonths')}</option>
+          <option value="year">{t('periodYear')}</option>
+          <option value="all">{t('periodAll')}</option>
         </select>
       </label>
 
@@ -202,7 +204,7 @@ export function MapFilters({ filters, onChange, onSelectPlace }: MapFiltersProps
           checked={filters.onlyMine}
           onChange={(event) => onChange({ ...filters, onlyMine: event.target.checked })}
         />
-        Kun mine funn
+        {t('onlyMine')}
       </label>
     </div>
   );

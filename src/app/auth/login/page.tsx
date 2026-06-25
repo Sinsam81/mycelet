@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { FormEvent, Suspense, useMemo, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { Button } from '@/components/ui/Button';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { NonNativeOnly } from '@/components/native/NonNativeOnly';
@@ -11,6 +12,7 @@ import { NonNativeOnly } from '@/components/native/NonNativeOnly';
 // Inner form rendered by LoginForm; default export wraps it in Suspense.
 
 function LoginForm() {
+  const t = useTranslations('AuthLogin');
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirectPath = useMemo(
@@ -35,7 +37,7 @@ function LoginForm() {
       router.push(redirectPath);
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Kunne ikke logge inn');
+      setError(err instanceof Error ? err.message : t('signInFailed'));
     } finally {
       setLoading(false);
     }
@@ -49,7 +51,7 @@ function LoginForm() {
       const callback = `${window.location.origin}/auth/callback?next=${encodeURIComponent(redirectPath)}`;
       await signInWithGoogle(callback);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Google-innlogging feilet');
+      setError(err instanceof Error ? err.message : t('googleSignInFailed'));
       setLoading(false);
     }
   };
@@ -57,12 +59,12 @@ function LoginForm() {
   return (
     <main className="mx-auto min-h-screen w-full max-w-screen-sm p-6 pt-[calc(1.5rem_+_env(safe-area-inset-top))]">
       <div className="rounded-xl bg-white p-6 shadow-sm">
-        <h1 className="text-2xl font-semibold text-forest-900">Velkommen til Mycelet</h1>
-        <p className="mt-2 text-sm text-gray-700">Logg inn for å lagre funn, poste i forumet og bruke kart fullt ut.</p>
+        <h1 className="text-2xl font-semibold text-forest-900">{t('heading')}</h1>
+        <p className="mt-2 text-sm text-gray-700">{t('subheading')}</p>
 
         <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
           <label className="block text-sm font-medium text-gray-800">
-            E-post
+            {t('emailLabel')}
             <input
               type="email"
               required
@@ -73,7 +75,7 @@ function LoginForm() {
           </label>
 
           <label className="block text-sm font-medium text-gray-800">
-            Passord
+            {t('passwordLabel')}
             <input
               type="password"
               required
@@ -85,27 +87,27 @@ function LoginForm() {
 
           <div className="-mt-1 text-right">
             <Link href="/auth/forgot" className="text-sm font-medium text-forest-800 hover:underline">
-              Glemt passord?
+              {t('forgotPassword')}
             </Link>
           </div>
 
           {error ? <p className="text-sm text-red-600">{error}</p> : null}
 
           <Button type="submit" className="w-full" loading={loading}>
-            Logg inn
+            {t('signInButton')}
           </Button>
         </form>
 
         <NonNativeOnly>
           <Button type="button" variant="outline" className="mt-3 w-full" onClick={handleGoogle} disabled={loading}>
-            Fortsett med Google
+            {t('continueWithGoogle')}
           </Button>
         </NonNativeOnly>
 
         <p className="mt-4 text-sm text-gray-700">
-          Har du ikke konto?{' '}
+          {t('noAccount')}{' '}
           <Link className="font-semibold text-forest-800" href={`/auth/register?next=${encodeURIComponent(redirectPath)}`}>
-            Registrer deg
+            {t('registerLink')}
           </Link>
         </p>
       </div>
@@ -114,8 +116,9 @@ function LoginForm() {
 }
 
 export default function LoginPage() {
+  const t = useTranslations('AuthLogin');
   return (
-    <Suspense fallback={<main className="mx-auto min-h-screen w-full max-w-screen-sm p-6 pt-[calc(1.5rem_+_env(safe-area-inset-top))]"><p className="text-sm text-gray-700">Laster...</p></main>}>
+    <Suspense fallback={<main className="mx-auto min-h-screen w-full max-w-screen-sm p-6 pt-[calc(1.5rem_+_env(safe-area-inset-top))]"><p className="text-sm text-gray-700">{t('loading')}</p></main>}>
       <LoginForm />
     </Suspense>
   );

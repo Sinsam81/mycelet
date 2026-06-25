@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { getTranslations } from 'next-intl/server';
 import { Crown, Leaf, MapPin, ShieldCheck } from 'lucide-react';
 import { PageWrapper } from '@/components/layout/PageWrapper';
 import { EdibilityBadge } from '@/components/ui/EdibilityBadge';
@@ -33,14 +34,17 @@ interface PostRow {
   likes_count: number;
 }
 
-const CATEGORY_LABELS: Record<string, string> = {
-  find: 'Funn',
-  question: 'Spørsmål',
-  tip: 'Tips',
-  discussion: 'Diskusjon'
-};
+function categoryLabels(t: Awaited<ReturnType<typeof getTranslations>>): Record<string, string> {
+  return {
+    find: t('categoryFind'),
+    question: t('categoryQuestion'),
+    tip: t('categoryTip'),
+    discussion: t('categoryDiscussion')
+  };
+}
 
 export default async function ProfilePage() {
+  const t = await getTranslations('Profile');
   const supabase = createClient();
   const {
     data: { user }
@@ -50,7 +54,7 @@ export default async function ProfilePage() {
     // Middleware should redirect, but be safe.
     return (
       <PageWrapper>
-        <p className="text-sm text-gray-700">Du må være logget inn.</p>
+        <p className="text-sm text-gray-700">{t('mustBeLoggedIn')}</p>
       </PageWrapper>
     );
   }
@@ -90,6 +94,7 @@ export default async function ProfilePage() {
     : null;
 
   const TierIcon = billing.tier === 'premium' ? Crown : billing.tier === 'season_pass' ? Leaf : null;
+  const CATEGORY_LABELS = categoryLabels(t);
 
   return (
     <PageWrapper>
@@ -102,29 +107,29 @@ export default async function ProfilePage() {
               </span>
             </div>
             <div className="min-w-0 flex-1">
-              <h1 className="truncate font-serif text-2xl font-bold text-forest-900">{profile?.display_name ?? profile?.username ?? 'Min profil'}</h1>
+              <h1 className="truncate font-serif text-2xl font-bold text-forest-900">{profile?.display_name ?? profile?.username ?? t('myProfile')}</h1>
               {profile?.username ? <p className="text-sm text-gray-600">@{profile.username}</p> : null}
               <p className="truncate text-sm text-gray-700">{user.email}</p>
-              {memberSince ? <p className="mt-1 text-xs text-gray-500">Medlem siden {memberSince}</p> : null}
+              {memberSince ? <p className="mt-1 text-xs text-gray-500">{t('memberSince', { date: memberSince })}</p> : null}
             </div>
           </div>
           {profile?.bio ? <p className="mt-3 text-sm text-gray-800">{profile.bio}</p> : null}
         </article>
 
         <article className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          <StatCard label="Funn" value={Number(stats.total_findings)} />
-          <StatCard label="Arter" value={Number(stats.unique_species)} />
-          <StatCard label="Innlegg" value={Number(stats.total_posts)} />
-          <StatCard label="Likes" value={Number(stats.total_likes_received)} />
+          <StatCard label={t('statFindings')} value={Number(stats.total_findings)} />
+          <StatCard label={t('statSpecies')} value={Number(stats.unique_species)} />
+          <StatCard label={t('statPosts')} value={Number(stats.total_posts)} />
+          <StatCard label={t('statLikes')} value={Number(stats.total_likes_received)} />
         </article>
 
         <article className="rounded-2xl bg-white p-4 shadow-card">
           <div className="flex items-center justify-between">
-            <h2 className="font-semibold">Abonnement</h2>
+            <h2 className="font-semibold">{t('subscription')}</h2>
             {/* Web-only: native must not steer to the external Stripe page (App Store 3.1.1). */}
             <NonNativeOnly>
               <Link href="/pricing" className="text-xs font-medium text-forest-800 hover:underline">
-                Endre →
+                {t('change')} →
               </Link>
             </NonNativeOnly>
           </div>
@@ -135,33 +140,33 @@ export default async function ProfilePage() {
             <span className="text-gray-700">{billing.status}</span>
           </div>
           {!billing.paid && billing.aiDailyLimit !== null ? (
-            <p className="mt-1 text-xs text-gray-600">AI-kvote: {billing.aiDailyLimit} per døgn</p>
+            <p className="mt-1 text-xs text-gray-600">{t('aiQuota', { limit: billing.aiDailyLimit })}</p>
           ) : null}
         </article>
 
         <article className="rounded-2xl bg-white p-4 shadow-card">
           <div className="mb-3 flex items-center justify-between">
-            <h2 className="font-semibold">Mine siste funn</h2>
+            <h2 className="font-semibold">{t('myLatestFindings')}</h2>
             <Link href="/mine-steder" className="text-xs font-medium text-forest-800 hover:underline">
-              📍 Mine steder →
+              📍 {t('myPlaces')} →
             </Link>
           </div>
           {findings.length === 0 ? (
-            <p className="text-sm text-gray-700">Du har ikke registrert funn ennå. Bruk kartet for å legge til ditt første.</p>
+            <p className="text-sm text-gray-700">{t('noFindingsYet')}</p>
           ) : (
             <ul className="space-y-2">
               {findings.map((f) => (
                 <li key={f.id} className="rounded-lg border border-gray-100 p-2">
                   <div className="flex items-center justify-between gap-2">
                     <div className="min-w-0 flex-1">
-                      <p className="truncate font-medium">{f.mushroom_species?.norwegian_name ?? 'Ukjent art'}</p>
+                      <p className="truncate font-medium">{f.mushroom_species?.norwegian_name ?? t('unknownSpecies')}</p>
                       <p className="truncate text-xs italic text-gray-600">{f.mushroom_species?.latin_name}</p>
                     </div>
                     {f.mushroom_species ? <EdibilityBadge edibility={f.mushroom_species.edibility} /> : null}
                   </div>
                   <p className="mt-1 flex items-center gap-1 text-xs text-gray-600">
                     <MapPin className="h-3 w-3" />
-                    {f.location_name ?? 'Ukjent sted'}
+                    {f.location_name ?? t('unknownLocation')}
                     <span>·</span>
                     {new Date(f.found_at).toLocaleDateString('nb-NO')}
                   </p>
@@ -173,9 +178,9 @@ export default async function ProfilePage() {
         </article>
 
         <article className="rounded-2xl bg-white p-4 shadow-card">
-          <h2 className="mb-3 font-semibold">Mine innlegg</h2>
+          <h2 className="mb-3 font-semibold">{t('myPosts')}</h2>
           {posts.length === 0 ? (
-            <p className="text-sm text-gray-700">Du har ikke postet i forumet ennå.</p>
+            <p className="text-sm text-gray-700">{t('noPostsYet')}</p>
           ) : (
             <ul className="space-y-2">
               {posts.map((p) => (
@@ -183,7 +188,7 @@ export default async function ProfilePage() {
                   <Link href={`/forum/${p.id}`} className="block rounded-lg border border-gray-100 p-2 hover:border-forest-700">
                     <p className="truncate font-medium">{p.title}</p>
                     <p className="mt-1 text-xs text-gray-600">
-                      {CATEGORY_LABELS[p.category] ?? p.category} · {new Date(p.created_at).toLocaleDateString('nb-NO')} · {p.comments_count} kommentarer · {p.likes_count} likes
+                      {CATEGORY_LABELS[p.category] ?? p.category} · {new Date(p.created_at).toLocaleDateString('nb-NO')} · {t('commentsCount', { count: p.comments_count })} · {t('likesCount', { count: p.likes_count })}
                     </p>
                   </Link>
                 </li>
@@ -199,14 +204,14 @@ export default async function ProfilePage() {
               className="flex items-center gap-2 rounded-lg border border-forest-600/30 bg-forest-50 px-3 py-2 text-sm font-medium text-forest-900 hover:bg-forest-100"
             >
               <ShieldCheck className="h-4 w-4 shrink-0" />
-              Admin — statistikk &amp; verktøy
+              {t('adminLink')}
             </Link>
           ) : null}
           <Link
             href="/forum/reports"
             className="block rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-800 hover:bg-gray-50"
           >
-            Mine rapporteringer
+            {t('myReports')}
           </Link>
         </article>
 

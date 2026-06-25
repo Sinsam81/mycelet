@@ -1,3 +1,4 @@
+import { useTranslations } from 'next-intl';
 import { cn } from '@/lib/utils/cn';
 import { Edibility } from '@/types/species';
 
@@ -5,13 +6,13 @@ interface EdibilityBadgeProps {
   edibility: Edibility;
 }
 
-const labels: Record<Edibility, string> = {
-  edible: 'Spiselig',
-  conditionally_edible: 'Betinget spiselig',
-  inedible: 'Uspiselig',
-  toxic: 'Giftig',
-  deadly: 'Dødelig giftig',
-  unknown: 'Ukjent spiselighet'
+const labelKeys: Record<Edibility, string> = {
+  edible: 'edible',
+  conditionally_edible: 'conditionallyEdible',
+  inedible: 'inedible',
+  toxic: 'toxic',
+  deadly: 'deadly',
+  unknown: 'unknown'
 };
 
 const classes: Record<Edibility, string> = {
@@ -24,9 +25,10 @@ const classes: Record<Edibility, string> = {
 };
 
 export function EdibilityBadge({ edibility }: EdibilityBadgeProps) {
+  const t = useTranslations('EdibilityBadge');
   return (
     <span className={cn('inline-flex rounded-full px-2.5 py-1 text-xs font-semibold shadow-sm', classes[edibility])}>
-      {labels[edibility]}
+      {t(labelKeys[edibility])}
     </span>
   );
 }

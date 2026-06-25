@@ -1,6 +1,7 @@
 'use client';
 
 import dynamic from 'next/dynamic';
+import { useTranslations } from 'next-intl';
 
 // Next 15+ disallows `ssr: false` on next/dynamic from Server Components
 // (Leaflet has client-only globals so we need ssr:false). Extracting the
@@ -8,7 +9,12 @@ import dynamic from 'next/dynamic';
 // constraint while keeping the map page a Server Component for the rest
 // of its work (auth check, moderator role lookup, etc.).
 
+function MapLoading() {
+  const t = useTranslations('MushroomMapLazy');
+  return <p className="text-sm text-gray-700">{t('loadingMap')}</p>;
+}
+
 export const MushroomMap = dynamic(
   () => import('@/components/map/MushroomMap').then((mod) => mod.MushroomMap),
-  { ssr: false, loading: () => <p className="text-sm text-gray-700">Laster kart...</p> }
+  { ssr: false, loading: () => <MapLoading /> }
 );

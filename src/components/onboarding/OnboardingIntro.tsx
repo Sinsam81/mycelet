@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useTranslations } from 'next-intl';
 
 /**
  * Three-screen first-run intro. Shows once (localStorage-versioned), can be
@@ -12,21 +13,9 @@ const STORAGE_KEY = 'mycelet:onboarding-v1';
 export const ONBOARDING_DONE_EVENT = 'mycelet:onboarding-done';
 
 const STEPS = [
-  {
-    emoji: '🍄',
-    title: 'Velkommen til Mycelet',
-    body: 'Sopplukkerens beste turvenn: et kart med over 300 000 registrerte funn, dagens soppforhold der du er, og en AI-soppkjenner i lomma.'
-  },
-  {
-    emoji: '📍',
-    title: 'Finn lovende steder',
-    body: 'Vi kombinerer ekte skogdata, vær og sesong og peker deg mot lovende steder ut fra dagens forhold og tidligere funn i nærheten — et godt utgangspunkt, ikke en fasit. Sjekk «Soppforhold i dag» på forsiden og «Lovende steder» på kartet.'
-  },
-  {
-    emoji: '🛡️',
-    title: 'Identifiser trygt',
-    body: 'Ta bilde av et funn og få artsforslag med tydelige advarsler om giftige forvekslingsarter. Mycelet sier aldri «spis denne» — Soppkontrollen og Giftinformasjonen er alltid ett trykk unna.'
-  }
+  { emoji: '🍄', titleKey: 'step1Title', bodyKey: 'step1Body' },
+  { emoji: '📍', titleKey: 'step2Title', bodyKey: 'step2Body' },
+  { emoji: '🛡️', titleKey: 'step3Title', bodyKey: 'step3Body' }
 ] as const;
 
 function markDone() {
@@ -39,6 +28,7 @@ function markDone() {
 }
 
 export function OnboardingIntro() {
+  const t = useTranslations('OnboardingIntro');
   const [visible, setVisible] = useState(false);
   const [step, setStep] = useState(0);
 
@@ -71,8 +61,8 @@ export function OnboardingIntro() {
         <div className="text-5xl" aria-hidden="true">
           {current.emoji}
         </div>
-        <h2 className="mt-4 font-serif text-2xl font-semibold text-forest-950">{current.title}</h2>
-        <p className="mt-2 text-sm leading-relaxed text-gray-700">{current.body}</p>
+        <h2 className="mt-4 font-serif text-2xl font-semibold text-forest-950">{t(current.titleKey)}</h2>
+        <p className="mt-2 text-sm leading-relaxed text-gray-700">{t(current.bodyKey)}</p>
 
         <div className="mt-5 flex items-center gap-1.5" aria-hidden="true">
           {STEPS.map((_, i) => (
@@ -89,14 +79,14 @@ export function OnboardingIntro() {
             onClick={finish}
             className="rounded-full px-3 py-2 text-sm font-medium text-gray-500 hover:text-gray-700"
           >
-            Hopp over
+            {t('skip')}
           </button>
           <button
             type="button"
             onClick={() => (last ? finish() : setStep((s) => s + 1))}
             className="rounded-full bg-forest-800 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-forest-700"
           >
-            {last ? 'Kom i gang 🍄' : 'Neste'}
+            {last ? t('getStarted') : t('next')}
           </button>
         </div>
       </div>

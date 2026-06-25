@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { FLAGS } from '@/lib/flags';
 
 interface LastTrip {
@@ -14,6 +15,7 @@ interface LastTrip {
  * they end a trip on the map). Renders nothing until they've finished one.
  */
 export function LastTripCard() {
+  const t = useTranslations('LastTripCard');
   const [trip, setTrip] = useState<LastTrip | null>(null);
 
   useEffect(() => {
@@ -36,9 +38,9 @@ export function LastTripCard() {
 
   return (
     <article className="rounded-xl border border-amber-200 bg-amber-50 p-4">
-      <h2 className="font-semibold text-amber-900">🎒 Din siste sopptur</h2>
+      <h2 className="font-semibold text-amber-900">🎒 {t('title')}</h2>
       <p className="mt-1 text-sm text-amber-900">
-        {trip.count} funn{when ? ` · ${when}` : ''}
+        {t('found', { count: trip.count })}{when ? ` · ${when}` : ''}
       </p>
       {speciesText ? <p className="mt-0.5 truncate text-xs text-amber-800">{speciesText}</p> : null}
     </article>
