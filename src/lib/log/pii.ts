@@ -32,7 +32,7 @@ const REDACT_KEY_PATTERNS = [
   'api_key',
   'authorization',
   'cookie',
-  'serviceroleekey',
+  'servicerolekey',
   'service_role',
   'plantid_api_key',
   'openweather_api_key',

@@ -199,6 +199,8 @@ export default async function HomePage() {
                         <img
                           src={s.primary_image_url}
                           alt={s.norwegian_name}
+                          loading="lazy"
+                          decoding="async"
                           className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
                         />
                       ) : null}
@@ -209,6 +211,13 @@ export default async function HomePage() {
               ))}
             </ul>
           )}
+          <p className="mt-3 text-xs text-gray-500">
+            Kun et tips om hva som er i sesong — aldri spis sopp basert på appen alene.{' '}
+            <Link href="/sikkerhet" className="font-medium text-forest-800 hover:underline">
+              Sjekk med Soppkontrollen
+            </Link>
+            .
+          </p>
         </article>
 
         {dangerousInSeason.length > 0 ? (
@@ -247,7 +256,7 @@ export default async function HomePage() {
                   >
                     <div className="h-12 w-12 shrink-0 overflow-hidden rounded bg-gray-100">
                       {f.primary_image_url ? (
-                        <img src={f.primary_image_url} alt={f.norwegian_name ?? 'Sopp'} className="h-full w-full object-cover" />
+                        <img src={f.primary_image_url} alt={f.norwegian_name ?? 'Sopp'} loading="lazy" decoding="async" className="h-full w-full object-cover" />
                       ) : null}
                     </div>
                     <div className="min-w-0 flex-1">

@@ -61,7 +61,9 @@ export default async function SpeciesDetailPage({ params }: SpeciesDetailPagePro
           'mushroom_species!look_alikes_look_alike_id_fkey(id,norwegian_name,latin_name,edibility,primary_image_url)'
       )
       .eq('species_id', id)
-      .limit(6)
+      // High limit so a critical look-alike can never be truncated away (safety).
+      // Display ordering by danger is applied in JS below.
+      .limit(50)
   ]);
 
   if (speciesError || !species) {
@@ -199,7 +201,13 @@ export default async function SpeciesDetailPage({ params }: SpeciesDetailPagePro
             </header>
 
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {(lookAlikes ?? []).map((item: any) => {
+              {[...(lookAlikes ?? [])]
+                .sort((a: any, b: any) => {
+                  // Most dangerous twins first, so a critical look-alike is never buried.
+                  const rank: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
+                  return (rank[a.danger_level] ?? 3) - (rank[b.danger_level] ?? 3);
+                })
+                .map((item: any) => {
                 const lookAlike = item.mushroom_species;
                 if (!lookAlike) return null;
                 const danger = item.danger_level ?? 'low';

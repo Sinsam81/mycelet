@@ -111,7 +111,13 @@ export function MushroomDayCard() {
   };
 
   if (loading && !data) {
-    return <div className="rounded-xl bg-white p-4 text-sm text-gray-500 shadow-sm">Sjekker soppforholdene …</div>;
+    // Reserve the loaded card's height so content below doesn't jump when the
+    // forecast arrives (was the main layout-shift / CLS source on the home page).
+    return (
+      <div className="flex min-h-[15rem] items-center justify-center rounded-xl bg-white p-4 text-sm text-gray-500 shadow-sm">
+        Sjekker soppforholdene …
+      </div>
+    );
   }
   // Weather unavailable → render nothing rather than a broken card.
   if (!data) return null;
@@ -123,7 +129,7 @@ export function MushroomDayCard() {
   const offset = circumference * (1 - today.score / 100);
 
   return (
-    <article className="rounded-xl bg-white p-4 shadow-sm">
+    <article className="min-h-[15rem] rounded-xl bg-white p-4 shadow-sm">
       <div className="flex items-center gap-4">
         <svg viewBox="0 0 110 110" className="h-24 w-24 shrink-0" aria-hidden>
           <circle cx="55" cy="55" r={r} fill="none" stroke="#e5e7eb" strokeWidth="10" />
