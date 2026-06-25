@@ -6,7 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, ChevronUp, Download, Navigation, Trash2 } from 'lucide-react';
 import { createRoot, Root } from 'react-dom/client';
 import { createClient } from '@/lib/supabase/client';
-import { useGeolocation, getCurrentPositionOnce } from '@/lib/hooks/useGeolocation';
+import { useGeolocation, watchPositionUntilAccurate } from '@/lib/hooks/useGeolocation';
 import { getRegion } from '@/lib/utils/region';
 import { usePrediction } from '@/lib/hooks/usePrediction';
 import { useBillingStatus } from '@/lib/hooks/useBilling';
@@ -82,6 +82,8 @@ export function MushroomMap() {
   const tripFindsRef = useRef<string[]>([]);
   const speciesSearchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const meMarkerRef = useRef<any>(null);
+  const meCircleRef = useRef<any>(null); // GPS accuracy circle around the "me" dot
+  const geoAbortRef = useRef<AbortController | null>(null); // cancels an in-flight locate watch
   // True once the user manually picks a base layer — stops the region auto-switch.
   const userPickedBaseLayerRef = useRef(false);
   // Last known position, so the map can recenter even if geolocation resolves
@@ -689,9 +691,38 @@ export function MushroomMap() {
   const locateMe = useCallback(() => {
     const map = mapRef.current;
     if (!map) return;
-    const goTo = async (lat: number, lng: number) => {
+
+    // Cancel any in-flight locate (double-tap / repeat) and start fresh.
+    geoAbortRef.current?.abort();
+    const controller = new AbortController();
+    geoAbortRef.current = controller;
+
+    // Zoom in proportionally to how sure we are — honest precision, no false zoom.
+    const zoomForAccuracy = (m: number) => (m <= 20 ? 17 : m <= 50 ? 16 : m <= 150 ? 15 : 14);
+    let firstFix = true;
+
+    const render = async (lat: number, lng: number, accuracy: number, isFinal: boolean) => {
+      if (controller.signal.aborted) return;
       const leaflet = (await import('leaflet')).default;
-      map.setView([lat, lng], 14);
+      if (controller.signal.aborted || mapRef.current !== map) return;
+
+      // Accuracy circle (radius in meters) — shrinks as the GPS sharpens.
+      if (meCircleRef.current) {
+        meCircleRef.current.setLatLng([lat, lng]).setRadius(accuracy);
+      } else {
+        meCircleRef.current = leaflet
+          .circle([lat, lng], {
+            radius: accuracy,
+            color: '#2563eb',
+            weight: 1,
+            fillColor: '#2563eb',
+            fillOpacity: 0.12,
+            interactive: false
+          })
+          .addTo(map);
+      }
+
+      // "You are here" dot, kept on top of the circle.
       if (meMarkerRef.current) {
         meMarkerRef.current.setLatLng([lat, lng]);
       } else {
@@ -703,17 +734,39 @@ export function MushroomMap() {
         });
         meMarkerRef.current = leaflet.marker([lat, lng], { icon, zIndexOffset: 1000 }).addTo(map);
       }
+
+      posRef.current = { lat, lng };
+
+      // Recenter on the first fix and do one gentle zoom-refinement on the final
+      // fix; intermediate fixes only move the dot/circle so we never fight the
+      // user panning or pinching while the GPS is still sharpening.
+      if (firstFix || isFinal) {
+        firstFix = false;
+        map.setView([lat, lng], zoomForAccuracy(accuracy));
+      }
     };
+
     setLocating(true);
-    getCurrentPositionOnce()
-      .then(({ latitude: lat, longitude: lng }) => {
-        setLocating(false);
-        void goTo(lat, lng);
+    watchPositionUntilAccurate({
+      targetAccuracyM: 25,
+      timeoutMs: 12_000,
+      signal: controller.signal,
+      onUpdate: ({ latitude: lat, longitude: lng, accuracy }) => {
+        void render(lat, lng, accuracy, false);
+      }
+    })
+      .then(({ latitude: lat, longitude: lng, accuracy }) => {
+        void render(lat, lng, accuracy, true);
       })
       .catch(() => {
+        // Aborted/denied/no-fix → fall back to the hook's last known position.
+        if (!controller.signal.aborted && latitude != null && longitude != null) {
+          void render(latitude, longitude, 100, true);
+        }
+      })
+      .finally(() => {
+        if (geoAbortRef.current === controller) geoAbortRef.current = null;
         setLocating(false);
-        // Fall back to the last known position from the geolocation hook.
-        if (latitude != null && longitude != null) void goTo(latitude, longitude);
       });
   }, [latitude, longitude]);
 
@@ -918,6 +971,10 @@ export function MushroomMap() {
         // the user's real position once it resolves (see posRef + setView below).
         center: [59.91, 10.75],
         zoom: 11,
+        // Shared display ceiling. Without this the map inherits the ACTIVE layer's
+        // max (Terreng = 18), capping zoom there. 20 lets the user zoom much
+        // deeper; layers over-zoom (upscale) past their maxNativeZoom.
+        maxZoom: 20,
         zoomControl: false
       });
 
@@ -926,19 +983,25 @@ export function MushroomMap() {
       // contours, forest shading). Kart (OSM) covers Sweden + the rest of the
       // world where Kartverket is blank. Satellitt (Esri) shows the real forest
       // from above — the most useful view for spotting clearings and tree cover.
+      // maxNativeZoom = deepest REAL tile each provider serves over our coverage
+      // (verified: Kartverket topo tops out at z18); maxZoom = shared over-zoom
+      // ceiling so all layers reach the same depth by upscaling the last tiles.
       const baseTerreng = L.tileLayer('https://cache.kartverket.no/v1/wmts/1.0.0/topo/default/webmercator/{z}/{y}/{x}.png', {
         attribution: '&copy; Kartverket',
-        maxZoom: 18
+        maxNativeZoom: 18,
+        maxZoom: 20
       });
       const baseKart = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '&copy; OpenStreetMap',
-        maxZoom: 19
+        maxNativeZoom: 19,
+        maxZoom: 20
       });
       const baseSatellitt = L.tileLayer(
         'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
         {
           attribution: 'Flyfoto &copy; Esri, Maxar, Earthstar Geographics',
-          maxZoom: 19
+          maxNativeZoom: 19,
+          maxZoom: 20
         }
       );
       baseTerreng.addTo(map);
@@ -1040,7 +1103,12 @@ export function MushroomMap() {
       topLayerRef.current = null;
       speciesLayerRef.current = null;
       occClusterRef.current = null;
+      // Stop any in-flight GPS watch (so it can't keep the radio hot after the
+      // user leaves the map) and drop the accuracy circle.
+      geoAbortRef.current?.abort();
+      geoAbortRef.current = null;
       meMarkerRef.current = null;
+      meCircleRef.current = null;
     };
     // Init the map ONCE. Recentering on the user's position is handled by the
     // geolocation effect below (setView) + posRef — never rebuild the whole map.
