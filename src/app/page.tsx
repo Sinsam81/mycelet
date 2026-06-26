@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { getTranslations } from 'next-intl/server';
 import { NonNativeOnly } from '@/components/native/NonNativeOnly';
-import { AlertTriangle, Calendar, Camera, Check, Crown, Database, Lock, Map, MessageSquare, Shield } from 'lucide-react';
+import { AlertTriangle, Calendar, Camera, Check, Crown, Database, FileText, Lock, Map, MessageSquare, Shield } from 'lucide-react';
 import { PageWrapper } from '@/components/layout/PageWrapper';
 import { EdibilityBadge } from '@/components/ui/EdibilityBadge';
 import { MushroomDayCard } from '@/components/home/MushroomDayCard';
@@ -359,6 +359,18 @@ export default async function HomePage() {
             className="block rounded-lg border border-gray-200 bg-white p-3 text-sm font-medium text-gray-800 hover:bg-gray-50"
           >
             <span className="inline-flex items-center gap-2"><Database className="h-4 w-4 text-forest-800" /> {t('navDataSources')}</span>
+          </Link>
+          <Link
+            href="/vilkar"
+            className="block rounded-lg border border-gray-200 bg-white p-3 text-sm font-medium text-gray-800 hover:bg-gray-50"
+          >
+            <span className="inline-flex items-center gap-2"><FileText className="h-4 w-4 text-forest-800" /> {t('navTerms')}</span>
+          </Link>
+          <Link
+            href="/kjopsvilkar"
+            className="block rounded-lg border border-gray-200 bg-white p-3 text-sm font-medium text-gray-800 hover:bg-gray-50"
+          >
+            <span className="inline-flex items-center gap-2"><FileText className="h-4 w-4 text-forest-800" /> {t('navPurchaseTerms')}</span>
           </Link>
         </div>
 

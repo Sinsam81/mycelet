@@ -49,6 +49,8 @@ function RegisterForm() {
   const [displayName, setDisplayName] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  // Age + terms acceptance gate (legal: provable consent + 18+ requirement).
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -140,9 +142,25 @@ function RegisterForm() {
             />
           </label>
 
+          <label className="flex items-start gap-2 text-sm text-gray-700">
+            <input
+              type="checkbox"
+              required
+              checked={acceptedTerms}
+              onChange={(e) => setAcceptedTerms(e.target.checked)}
+              className="mt-0.5 h-4 w-4 shrink-0"
+            />
+            <span>
+              {t('acceptPrefix')}{' '}
+              <Link href="/vilkar" className="font-medium text-forest-800 underline">{t('acceptTerms')}</Link>{' '}
+              {t('acceptAnd')}{' '}
+              <Link href="/personvern" className="font-medium text-forest-800 underline">{t('acceptPrivacy')}</Link>.
+            </span>
+          </label>
+
           {error ? <p className="text-sm text-red-600">{error}</p> : null}
 
-          <Button type="submit" className="w-full" loading={loading}>
+          <Button type="submit" className="w-full" loading={loading} disabled={!acceptedTerms}>
             {t('submit')}
           </Button>
         </form>

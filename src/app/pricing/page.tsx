@@ -122,6 +122,10 @@ function PricingInner() {
   const [openingPortal, setOpeningPortal] = useState(false);
   const [status, setStatus] = useState<BillingStatusResponse | null>(null);
   const [statusError, setStatusError] = useState<string | null>(null);
+  // Distance-selling consent: the customer must accept immediate delivery + that
+  // the 14-day withdrawal right then lapses, before checkout (angrerettloven /
+  // distansavtalslagen digital-content exception). Without it, the right extends.
+  const [agreedToPurchaseTerms, setAgreedToPurchaseTerms] = useState(false);
   // On iOS, digital subscriptions must go through Apple IAP, not Stripe (App
   // Store rule 3.1.1). Until IAP is wired, hide all purchase/manage actions in
   // the native shell. The web keeps the full Stripe flow.
@@ -256,6 +260,21 @@ function PricingInner() {
           <p className="text-sm text-gray-600">{t('loadingStatus')}</p>
         )}
 
+        {!native ? (
+          <label className="flex items-start gap-2 rounded-lg border border-gray-200 bg-white p-3 text-sm text-gray-700">
+            <input
+              type="checkbox"
+              checked={agreedToPurchaseTerms}
+              onChange={(e) => setAgreedToPurchaseTerms(e.target.checked)}
+              className="mt-0.5 h-4 w-4 shrink-0"
+            />
+            <span>
+              {t('purchaseConsentPrefix')}{' '}
+              <Link href="/kjopsvilkar" className="font-medium text-forest-800 underline">{t('purchaseTermsLink')}</Link>.
+            </span>
+          </label>
+        ) : null}
+
         <div className="grid gap-3 md:grid-cols-3">
           {planCards.map((plan) => {
             const isCurrent = currentTier === plan.id;
@@ -309,7 +328,7 @@ function PricingInner() {
                     onClick={() => {
                       if (checkoutPlan) void startCheckout(checkoutPlan);
                     }}
-                    disabled={isLoading}
+                    disabled={isLoading || !agreedToPurchaseTerms}
                     className={`mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-sm font-semibold transition ${
                       plan.highlight
                         ? 'bg-forest-800 text-white shadow-sm hover:bg-forest-700'
