@@ -1109,9 +1109,9 @@
   },
   "Metadata": {
     "titleDefault": "Mycelet — soppkart, soppvarsel og AI-soppidentifikasjon",
-    "description": "Finn mer sopp: live soppvarsel, prediksjonskart med lovende steder, AI-identifikasjon og artsbibliotek for Norge og Sverige.",
+    "description": "Finn mer sopp: live soppvarsel, prediksjonskart med lovende steder, AI-identifikasjon og artsbibliotek for Norge og Sverige. AI-forslag er kun veiledende — aldri en erstatning for soppkontroll.",
     "ogTitle": "Mycelet — soppkart, soppvarsel og AI-soppidentifikasjon",
-    "ogDescription": "Live soppvarsel, prediksjonskart, AI-identifikasjon og artsbibliotek for sopplukkere i Norge og Sverige."
+    "ogDescription": "Live soppvarsel, prediksjonskart, AI-identifikasjon og artsbibliotek for sopplukkere i Norge og Sverige. AI-forslag er kun veiledende — aldri en erstatning for soppkontroll."
   },
   "ForumThread": {
     "backToForum": "Tilbake til forum",

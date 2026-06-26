@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { Session, User } from '@supabase/supabase-js';
 import { createClient } from '@/lib/supabase/client';
+import { TERMS_VERSION } from '@/lib/legal';
 
 interface SignUpPayload {
   email: string;
@@ -64,7 +65,12 @@ export function useAuth() {
       options: {
         data: {
           username,
-          display_name: displayName
+          display_name: displayName,
+          // Provable consent: the signup form requires accepting the Terms +
+          // age (18+/guardian) before this runs, so record the version + time
+          // on the auth user. No DB migration needed.
+          terms_version: TERMS_VERSION,
+          terms_accepted_at: new Date().toISOString()
         }
       }
     });

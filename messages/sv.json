@@ -1109,9 +1109,9 @@
   },
   "Metadata": {
     "titleDefault": "Mycelet — svampkarta, svampprognos och AI-svampidentifiering",
-    "description": "Hitta mer svamp: live svampprognos, prediktionskarta med lovande platser, AI-identifiering och artbibliotek för Norge och Sverige.",
+    "description": "Hitta mer svamp: live svampprognos, prediktionskarta med lovande platser, AI-identifiering och artbibliotek för Norge och Sverige. AI-förslag är endast vägledande — aldrig en ersättning för svampkontroll.",
     "ogTitle": "Mycelet — svampkarta, svampprognos och AI-svampidentifiering",
-    "ogDescription": "Live svampprognos, prediktionskarta, AI-identifiering och artbibliotek för svampplockare i Norge och Sverige."
+    "ogDescription": "Live svampprognos, prediktionskarta, AI-identifiering och artbibliotek för svampplockare i Norge och Sverige. AI-förslag är endast vägledande — aldrig en ersättning för svampkontroll."
   },
   "ForumThread": {
     "backToForum": "Tillbaka till forum",
