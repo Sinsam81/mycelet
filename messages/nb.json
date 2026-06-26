@@ -440,7 +440,7 @@
     "lastUpdatedIntro": "Sist oppdatert: {date}. Denne erklæringen forklarer hvordan Mycelet behandler personopplysningene dine.",
     "controllerHeading": "1. Behandlingsansvarlig",
     "controllerIntro": "Behandlingsansvarlig for personopplysningene dine er:",
-    "controllerName": "Sindre Øverås, som driver Mycelet som privatperson.",
+    "controllerName": "Sindre Øverås, som driver Mycelet gjennom enkeltpersonforetaket ØVERÅS APPS (org.nr 937 880 871).",
     "controllerContactLabel": "Kontakt for personvern:",
     "collectHeading": "2. Hvilke opplysninger vi samler inn",
     "collectIntro": "Når du bruker Mycelet behandler vi:",
@@ -541,7 +541,10 @@
     "contactEmergencyAfter": "(døgnåpent).",
     "backToHome": "Tilbake til forsiden",
     "metaTitle": "Personvern — Mycelet",
-    "metaDescription": "Hvordan Mycelet samler inn, bruker og beskytter personopplysningene dine. GDPR-rettighetene dine og hvem du kan kontakte."
+    "metaDescription": "Hvordan Mycelet samler inn, bruker og beskytter personopplysningene dine. GDPR-rettighetene dine og hvem du kan kontakte.",
+    "supervisoryAuthorityName": "Datatilsynet",
+    "supervisoryAuthorityUrl": "https://www.datatilsynet.no",
+    "supervisoryAuthorityHost": "datatilsynet.no"
   },
   "Pricing": {
     "tierFree": "Gratis",

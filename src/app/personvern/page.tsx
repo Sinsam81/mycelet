@@ -271,12 +271,12 @@ export default async function PersonvernPage() {
               <p>
                 {t('rightsComplaintDescBefore')}{' '}
                 <a
-                  href="https://www.datatilsynet.no"
+                  href={t('supervisoryAuthorityUrl')}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="font-medium underline"
                 >
-                  datatilsynet.no
+                  {t('supervisoryAuthorityHost')}
                 </a>{' '}
                 {t('rightsComplaintDescAfter')}
               </p>

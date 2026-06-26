@@ -98,7 +98,7 @@ export async function GET(request: NextRequest) {
       coverage:
         'This export contains all rows in our database tied to your user_id. Public reference data (species, look-alikes, prediction tiles) is intentionally not included since it is not personal data about you.',
       dataAboutYouFromOthers:
-        'Reports filed BY OTHER USERS about your content are not in this export to protect the reporter. To request that information, contact privacy@mycelet.no — manual review required.'
+        'Reports filed BY OTHER USERS about your content are not in this export to protect the reporter. To request that information, contact privacy@mycelet.com — manual review required.'
     }
   };
 
