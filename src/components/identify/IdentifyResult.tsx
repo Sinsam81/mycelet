@@ -46,7 +46,7 @@ export function IdentifyResult({ suggestions, selectedIndex, onSelect }: Identif
                   <p className="text-sm italic text-gray-600">{suggestion.name}</p>
                 </div>
               </div>
-              <span className="text-sm font-bold text-forest-800">{suggestion.probability}%</span>
+              <span className="text-sm font-bold text-forest-800">{suggestion.probability}% {t('matchLabel')}</span>
             </div>
 
             <div className="mt-2 flex flex-wrap items-center gap-2">
