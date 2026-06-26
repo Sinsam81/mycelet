@@ -355,7 +355,9 @@
     "outOfSeason": "Utanför säsong",
     "nearbyFindings": "{count} fynd i närheten",
     "lookAlikeWarning": "Kan förväxlas med {names} — kontrollera noga innan du äter.",
-    "viewSpeciesPage": "Se artsida"
+    "viewSpeciesPage": "Se artsida",
+    "notAGuarantee": "Detta är AI-förslag, inte en bekräftelse på att svampen är säker att äta. Få den alltid bedömd av en svampkonsulent eller expert innan du äter.",
+    "acknowledgeLabel": "Jag förstår att detta inte är en ätlighetsgaranti, och jag äter aldrig svamp utan att få den bekräftad av en expert."
   },
   "MineSteder": {
     "metaTitle": "Mina platser — Mycelet",
@@ -838,8 +840,8 @@
     "dangerBody": "Denna svamp kan vara giftig eller dödlig. AI ger endast sannolik art. Ät aldrig utan bekräftelse från kvalificerad expert.",
     "poisonControl": "Giftinformationscentralen: 112 (akut) eller 010-456 67 00",
     "getAssessment": "Få en bedömning hos en svampkonsulent",
-    "cautionHeading": "AI-identifiering är endast vägledande",
-    "cautionBody": "Resultatet är endast vägledande (sannolik art). Ät aldrig svamp du inte är 100% säker på.",
+    "cautionHeading": "AI-resultatet är inte en ätlighetsgaranti",
+    "cautionBody": "Resultatet är bara en sannolik art — inte en bekräftelse på att svampen är säker. Ät aldrig svamp du inte är 100 % säker på, och få den bedömd av en svampkonsulent eller expert först.",
     "checkWithControl": "Kontrollera med en svampkonsulent"
   },
   "CookieNotice": {

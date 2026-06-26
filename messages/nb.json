@@ -355,7 +355,9 @@
     "outOfSeason": "Utenom sesong",
     "nearbyFindings": "{count} funn i nærheten",
     "lookAlikeWarning": "Kan forveksles med {names} — sjekk nøye før du spiser.",
-    "viewSpeciesPage": "Se artside"
+    "viewSpeciesPage": "Se artside",
+    "notAGuarantee": "Dette er AI-forslag, ikke en bekreftelse på at soppen er trygg å spise. Få den alltid vurdert av soppkontroll eller en ekspert før du spiser.",
+    "acknowledgeLabel": "Jeg forstår at dette ikke er en spiselighetsgaranti, og jeg spiser aldri sopp uten å få den bekreftet av en ekspert."
   },
   "MineSteder": {
     "metaTitle": "Mine steder — Mycelet",
@@ -838,8 +840,8 @@
     "dangerBody": "Denne soppen kan være giftig eller dødelig. AI gir kun sannsynlig art. Spis aldri uten bekreftelse fra kvalifisert ekspert.",
     "poisonControl": "Giftinformasjonen: 22 59 13 00",
     "getAssessment": "Få vurdering hos Soppkontrollen",
-    "cautionHeading": "AI-identifikasjon er kun veiledende",
-    "cautionBody": "Resultatet er kun veiledende (sannsynlig art). Spis aldri sopp du ikke er 100% sikker på.",
+    "cautionHeading": "AI-resultatet er ikke en spiselighetsgaranti",
+    "cautionBody": "Resultatet er kun en sannsynlig art — ikke en bekreftelse på at soppen er trygg. Spis aldri sopp du ikke er 100 % sikker på, og få den vurdert av soppkontroll eller ekspert først.",
     "checkWithControl": "Sjekk med Soppkontrollen"
   },
   "CookieNotice": {

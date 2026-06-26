@@ -22,6 +22,10 @@ export default function IdentifyResultPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedIndex, setSelectedIndex] = useState(0);
+  // The user must actively acknowledge that the AI result is not an edibility
+  // guarantee before logging a find — strengthens the duty-of-care posture and
+  // stops the result from reading as an authoritative "this is safe to eat".
+  const [acknowledged, setAcknowledged] = useState(false);
 
   useEffect(() => {
     const raw = sessionStorage.getItem('identifyResult');
@@ -123,6 +127,9 @@ export default function IdentifyResultPage() {
       <section className="space-y-4">
         <h1 className="font-serif text-3xl font-bold tracking-tight text-forest-900">{t('title')}</h1>
 
+        {/* Always-on framing: the result is a suggestion, never an edibility verdict. */}
+        <p className="rounded-lg bg-amber-100 px-3 py-2 text-sm font-medium text-amber-900">{t('notAGuarantee')}</p>
+
         <SafetyWarning level={isDanger ? 'danger' : 'caution'} edibility={topSuggestion?.edibility} />
 
         <div className="overflow-hidden rounded-2xl bg-white shadow-card">
@@ -140,8 +147,18 @@ export default function IdentifyResultPage() {
 
         {error ? <p className="text-sm text-red-600">{error}</p> : null}
 
+        <label className="flex items-start gap-2 rounded-lg border border-gray-200 bg-white p-3 text-sm text-gray-800">
+          <input
+            type="checkbox"
+            checked={acknowledged}
+            onChange={(e) => setAcknowledged(e.target.checked)}
+            className="mt-0.5 h-4 w-4 shrink-0"
+          />
+          <span>{t('acknowledgeLabel')}</span>
+        </label>
+
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-          <Button onClick={handleSave} loading={saving}>
+          <Button onClick={handleSave} loading={saving} disabled={!acknowledged}>
             {t('saveAsFinding')}
           </Button>
           <Button variant="outline" onClick={() => router.push('/identify')}>
