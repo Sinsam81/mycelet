@@ -537,7 +537,9 @@
     "contactDescBefore": "Spørsmål om personvern? Send e-post til",
     "contactEmergencyBefore": "For akutte sikkerhetshendelser, ring",
     "contactEmergencyAfter": "(døgnåpent).",
-    "backToHome": "Tilbake til forsiden"
+    "backToHome": "Tilbake til forsiden",
+    "metaTitle": "Personvern — Mycelet",
+    "metaDescription": "Hvordan Mycelet samler inn, bruker og beskytter personopplysningene dine. GDPR-rettighetene dine og hvem du kan kontakte."
   },
   "Pricing": {
     "tierFree": "Gratis",
@@ -659,7 +661,9 @@
     "limitationBody": "Mycelet er et hjelpemiddel for å lære og dele — ikke en autorisert kilde for matsopp-identifisering. Vi tar ikke ansvar for skade som følge av feilidentifisering. Bruk sunn fornuft, kryss-sjekk mot flere kilder, og bring tvilstilfeller til soppkontroll før du spiser.",
     "seeAlsoPrefix": "Se også:",
     "privacyLinkText": "Personvernerklæringen",
-    "seeAlsoSuffix": "for hvordan vi behandler dataene dine."
+    "seeAlsoSuffix": "for hvordan vi behandler dataene dine.",
+    "metaTitle": "Sikkerhet og ansvar — Mycelet",
+    "metaDescription": "Slik bruker du Mycelet trygt. Kontaktinfo til Soppkontrollen og Giftinformasjonen ved behov."
   },
   "SpeciesDetail": {
     "monthJan": "jan",
@@ -1156,5 +1160,13 @@
   "LastTripCard": {
     "title": "Din siste sopptur",
     "found": "{count} funn"
+  },
+  "Safety": {
+    "poisonTel": "+4722591300",
+    "poisonNumber": "22 59 13 00",
+    "poisonDisplay": "Giftinformasjonen 22 59 13 00",
+    "emergencyTel": "113",
+    "controlUrl": "https://soppognyttevekster.no/soppkontroll/",
+    "controlName": "Soppkontrollen"
   }
 }

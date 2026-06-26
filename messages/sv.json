@@ -331,7 +331,7 @@
     "seasonCalendar": "Säsongskalender",
     "safetyHeading": "Använd aldrig appen för att avgöra om en svamp är ätlig.",
     "safetyIntro": "AI-identifiering är bara ett hjälpmedel, inte ett facit. Säker artbestämning kan kräva lukt, konsistens och växtplats — inte bara en bild. Är du tveksam: skicka bild till",
-    "safetyPhonePrefix": ", eller ring Giftinformasjonen",
+    "safetyPhonePrefix": ", eller ring Giftinformationscentralen",
     "centerHint": "Centrera svampen i bilden. Ta gärna flera vinklar.",
     "takeOrChoosePhoto": "Ta bild / välj bild",
     "analyzing": "Analyserar bild...",
@@ -537,7 +537,9 @@
     "contactDescBefore": "Frågor om integritet? Skicka e-post till",
     "contactEmergencyBefore": "Vid akuta säkerhetshändelser, ring",
     "contactEmergencyAfter": "(dygnet runt).",
-    "backToHome": "Tillbaka till startsidan"
+    "backToHome": "Tillbaka till startsidan",
+    "metaTitle": "Integritet — Mycelet",
+    "metaDescription": "Hur Mycelet samlar in, använder och skyddar dina personuppgifter. Dina GDPR-rättigheter och vem du kan kontakta."
   },
   "Pricing": {
     "tierFree": "Gratis",
@@ -642,9 +644,9 @@
     "rule2Body": "Ingen bildmodell är träffsäker nog att ersätta ett tränat öga, smak och lukt. Använd Mycelet som start för lärande, inte som sista ordet.",
     "rule3Title": "Svampkontrollen är guld värd.",
     "rule3Body": "Erfarna mykologer i din region erbjuder gratis kontroll under säsongen. Om du är osäker — ta med svampen dit.",
-    "controlHeading": "Svampkontroll i Norge",
-    "controlBody": "Norges sopp- og nyttevekstforbund bedriver svampkontroll över hela landet under säsongen. Listan uppdateras årligen med datum och plats för kontroll i din region.",
-    "controlLink": "Hitta svampkontroll i din region →",
+    "controlHeading": "Svampkontroll",
+    "controlBody": "Sveriges Mykologiska Förening och lokala svampföreningar erbjuder svampkontroll och svampkonsulenter under säsongen. Är du osäker — låt en expert titta innan du äter.",
+    "controlLink": "Hitta svampkontroll →",
     "dangersHeading": "Vanliga norska faror",
     "danger1Name": "Spiss giftslørsopp",
     "danger1Body": "förväxlas med traktkantarell — har dödat norska plockare flera gånger. Symtom på njursvikt kan komma 2-3 veckor efter intag.",
@@ -659,7 +661,9 @@
     "limitationBody": "Mycelet är ett hjälpmedel för att lära och dela — inte en auktoriserad källa för identifiering av matsvamp. Vi tar inte ansvar för skada till följd av felidentifiering. Använd sunt förnuft, korskontrollera mot flera källor och ta tveksamma fall till svampkontroll innan du äter.",
     "seeAlsoPrefix": "Se även:",
     "privacyLinkText": "Integritetspolicyn",
-    "seeAlsoSuffix": "för hur vi behandlar dina uppgifter."
+    "seeAlsoSuffix": "för hur vi behandlar dina uppgifter.",
+    "metaTitle": "Säkerhet och ansvar — Mycelet",
+    "metaDescription": "Så använder du Mycelet säkert. Kontaktinfo till Giftinformationscentralen och svampkontroll vid behov."
   },
   "SpeciesDetail": {
     "monthJan": "jan",
@@ -683,7 +687,7 @@
     "toxicDoNotEat": "Giftig — ät inte",
     "toxinLabel": "Toxin:",
     "symptomsLabel": "Symtom:",
-    "poisonCallPrefix": "Vid förtäring — ring Giftinformationen",
+    "poisonCallPrefix": "Vid förtäring — ring Giftinformationscentralen",
     "poisonCallSuffix": "omedelbart.",
     "moreAboutSafety": "Mer om säkerhet och svampkontroll →",
     "conditionallyEdibleTitle": "Villkorligt ätlig — kräver tillagning",
@@ -832,11 +836,11 @@
   "SafetyWarning": {
     "dangerHeading": "VARNING: Möjligen giftig svamp",
     "dangerBody": "Denna svamp kan vara giftig eller dödlig. AI ger endast sannolik art. Ät aldrig utan bekräftelse från kvalificerad expert.",
-    "poisonControl": "Giftinformasjonen: 22 59 13 00",
-    "getAssessment": "Få en bedömning hos Soppkontrollen",
+    "poisonControl": "Giftinformationscentralen: 112 (akut) eller 010-456 67 00",
+    "getAssessment": "Få en bedömning hos en svampkonsulent",
     "cautionHeading": "AI-identifiering är endast vägledande",
     "cautionBody": "Resultatet är endast vägledande (sannolik art). Ät aldrig svamp du inte är 100% säker på.",
-    "checkWithControl": "Kontrollera med Soppkontrollen"
+    "checkWithControl": "Kontrollera med en svampkonsulent"
   },
   "CookieNotice": {
     "title": "Vi använder endast nödvändiga kakor",
@@ -1156,5 +1160,13 @@
   "LastTripCard": {
     "title": "Din senaste svamptur",
     "found": "{count} fynd"
+  },
+  "Safety": {
+    "poisonTel": "112",
+    "poisonNumber": "112 (akut) eller 010-456 67 00",
+    "poisonDisplay": "Giftinformationscentralen: 112 (akut) eller 010-456 67 00",
+    "emergencyTel": "112",
+    "controlUrl": "https://www.svampar.se/",
+    "controlName": "Svampkontrollen"
   }
 }

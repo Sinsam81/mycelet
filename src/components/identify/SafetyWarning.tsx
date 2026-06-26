@@ -11,6 +11,7 @@ interface SafetyWarningProps {
 
 export function SafetyWarning({ level, edibility }: SafetyWarningProps) {
   const t = useTranslations('SafetyWarning');
+  const s = useTranslations('Safety');
   // 'unknown' = unproven/unmapped edibility → treat as dangerous (show the red
   // warning + Giftinformasjonen), never the soft caution banner.
   if (level === 'danger' || edibility === 'deadly' || edibility === 'toxic' || edibility === 'unknown') {
@@ -25,9 +26,9 @@ export function SafetyWarning({ level, edibility }: SafetyWarningProps) {
             </p>
             <div className="mt-3 flex items-center gap-2 text-red-700">
               <Phone className="h-4 w-4" />
-              <span className="text-sm font-medium">{t('poisonControl')}</span>
+              <span className="text-sm font-medium">{s('poisonDisplay')}</span>
             </div>
-            <Link href="https://soppognyttevekster.no/soppkontroll/" target="_blank" rel="noreferrer" className="mt-2 inline-block text-sm font-medium text-red-800 underline">
+            <Link href={s('controlUrl')} target="_blank" rel="noreferrer" className="mt-2 inline-block text-sm font-medium text-red-800 underline">
               {t('getAssessment')}
             </Link>
           </div>
@@ -45,7 +46,7 @@ export function SafetyWarning({ level, edibility }: SafetyWarningProps) {
           <p className="mt-1 text-sm text-amber-700">
             {t('cautionBody')}
           </p>
-          <Link href="https://soppognyttevekster.no/soppkontroll/" target="_blank" rel="noreferrer" className="mt-2 inline-block text-sm font-medium text-amber-800 underline">
+          <Link href={s('controlUrl')} target="_blank" rel="noreferrer" className="mt-2 inline-block text-sm font-medium text-amber-800 underline">
             {t('checkWithControl')}
           </Link>
         </div>

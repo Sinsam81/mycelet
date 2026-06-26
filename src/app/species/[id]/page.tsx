@@ -32,6 +32,7 @@ const DANGER_STYLES: Record<string, string> = {
 
 export default async function SpeciesDetailPage({ params }: SpeciesDetailPageProps) {
   const t = await getTranslations('SpeciesDetail');
+  const s = await getTranslations('Safety');
   const { id: idParam } = await params;
   const id = Number(idParam);
   if (Number.isNaN(id)) notFound();
@@ -139,10 +140,10 @@ export default async function SpeciesDetailPage({ params }: SpeciesDetailPagePro
                     <p className="pt-1 text-sm font-medium">
                       {t('poisonCallPrefix')}{' '}
                       <a
-                        href="tel:+4722591300"
+                        href={`tel:${s('poisonTel')}`}
                         className={`underline ${species.edibility === 'deadly' ? 'text-white' : 'text-red-900'}`}
                       >
-                        22 59 13 00
+                        {s('poisonNumber')}
                       </a>{' '}
                       {t('poisonCallSuffix')}
                     </p>

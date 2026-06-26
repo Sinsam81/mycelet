@@ -1,13 +1,13 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Cookie, Database, FileDown, Lock, Mail, Trash2, Users } from 'lucide-react';
 import { getTranslations } from 'next-intl/server';
 import { PageWrapper } from '@/components/layout/PageWrapper';
 
-export const metadata = {
-  title: 'Personvern — Mycelet',
-  description:
-    'Hvordan Mycelet samler inn, bruker og beskytter personopplysningene dine. GDPR-rettighetene dine og hvem du kan kontakte.'
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations('Personvern');
+  return { title: t('metaTitle'), description: t('metaDescription') };
+}
 
 // === Personvernerklæring — v1 (klar for lansering) ===
 // Behandlingsansvarlig, kontakt-e-post, tredjeparter og datalagring er fylt inn.
@@ -21,6 +21,7 @@ const LAST_UPDATED = '25. mai 2026';
 
 export default async function PersonvernPage() {
   const t = await getTranslations('Personvern');
+  const s = await getTranslations('Safety');
   return (
     <PageWrapper>
       <section className="space-y-6">
@@ -346,8 +347,8 @@ export default async function PersonvernPage() {
           </p>
           <p className="text-sm text-forest-900">
             {t('contactEmergencyBefore')}{' '}
-            <a href="tel:+4722591300" className="font-medium underline">
-              Giftinformasjonen 22 59 13 00
+            <a href={`tel:${s('poisonTel')}`} className="font-medium underline">
+              {s('poisonDisplay')}
             </a>{' '}
             {t('contactEmergencyAfter')}
           </p>

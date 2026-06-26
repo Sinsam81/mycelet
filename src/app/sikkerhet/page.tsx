@@ -1,15 +1,17 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { AlertTriangle, BookOpen, Phone, Shield } from 'lucide-react';
 import { getTranslations } from 'next-intl/server';
 import { PageWrapper } from '@/components/layout/PageWrapper';
 
-export const metadata = {
-  title: 'Sikkerhet og ansvar — Mycelet',
-  description: 'Slik bruker du Mycelet trygt. Kontaktinfo til Soppkontrollen og Giftinformasjonen ved behov.'
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations('Sikkerhet');
+  return { title: t('metaTitle'), description: t('metaDescription') };
+}
 
 export default async function SikkerhetPage() {
   const t = await getTranslations('Sikkerhet');
+  const s = await getTranslations('Safety');
 
   return (
     <PageWrapper>
@@ -26,15 +28,15 @@ export default async function SikkerhetPage() {
               <p className="text-base font-bold text-red-900">{t('emergencyHeading')}</p>
               <p className="text-sm text-red-900">
                 {t('callPrefix')}{' '}
-                <a href="tel:+4722591300" className="font-bold underline">
-                  Giftinformasjonen 22 59 13 00
+                <a href={`tel:${s('poisonTel')}`} className="font-bold underline">
+                  {s('poisonDisplay')}
                 </a>{' '}
                 {t('poisonSuffix')}
               </p>
               <p className="text-sm text-red-900">
                 {t('callPrefix')}{' '}
-                <a href="tel:113" className="font-bold underline">
-                  113
+                <a href={`tel:${s('emergencyTel')}`} className="font-bold underline">
+                  {s('emergencyTel')}
                 </a>{' '}
                 {t('emergency113Suffix')}
               </p>
@@ -72,7 +74,7 @@ export default async function SikkerhetPage() {
             {t('controlBody')}
           </p>
           <a
-            href="https://soppognyttevekster.no/soppkontroll/"
+            href={s('controlUrl')}
             target="_blank"
             rel="noreferrer"
             className="inline-flex items-center gap-2 rounded-lg bg-forest-800 px-3 py-2 text-sm font-medium text-white hover:bg-forest-700"

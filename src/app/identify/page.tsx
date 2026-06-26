@@ -14,6 +14,7 @@ import { captureNativePhoto } from '@/lib/native/camera';
 
 export default function IdentifyPage() {
   const t = useTranslations('Identify');
+  const s = useTranslations('Safety');
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const router = useRouter();
   const { latitude, longitude } = useGeolocation();
@@ -98,7 +99,7 @@ export default function IdentifyPage() {
                   <li>{t('disabledSearchDb')}</li>
                   <li>{t('disabledBrowseSeason')}</li>
                   <li>{t('disabledSendImagePrefix')}{' '}
-                    <a href="https://soppognyttevekster.no/soppkontroll/" target="_blank" rel="noreferrer" className="underline">
+                    <a href={s('controlUrl')} target="_blank" rel="noreferrer" className="underline">
                       {t('soppkontrollen')}
                     </a>{' '}{t('disabledSendImageSuffix')}</li>
                 </ul>
@@ -119,10 +120,10 @@ export default function IdentifyPage() {
           <p className="font-semibold">⚠️ {t('safetyHeading')}</p>
           <p className="mt-1">
             {t('safetyIntro')}{' '}
-            <a href="https://soppognyttevekster.no/soppkontroll/" target="_blank" rel="noreferrer" className="underline">
+            <a href={s('controlUrl')} target="_blank" rel="noreferrer" className="underline">
               {t('soppkontrollen')}
             </a>
-            {t('safetyPhonePrefix')} <strong>22 59 13 00</strong>.
+            {t('safetyPhonePrefix')} <strong>{s('poisonNumber')}</strong>.
           </p>
         </div>
 
