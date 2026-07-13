@@ -1,9 +1,10 @@
 'use client';
 
 import { useMemo, useRef, useState } from 'react';
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import { SlidersHorizontal, X } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
+import { getSpeciesDisplayName } from '@/lib/utils/species-name';
 
 export interface MapFilterState {
   speciesId: number | null;
@@ -14,6 +15,7 @@ export interface MapFilterState {
 interface SpeciesOption {
   id: number;
   norwegian_name: string;
+  swedish_name: string | null;
   latin_name: string;
 }
 
@@ -25,6 +27,7 @@ interface MapFiltersProps {
 
 export function MapFilters({ filters, onChange, onSelectPlace }: MapFiltersProps) {
   const t = useTranslations('MapFilters');
+  const locale = useLocale();
   const supabase = useMemo(() => createClient(), []);
   const [query, setQuery] = useState('');
   const [options, setOptions] = useState<SpeciesOption[]>([]);
@@ -45,8 +48,8 @@ export function MapFilters({ filters, onChange, onSelectPlace }: MapFiltersProps
 
     const { data } = await supabase
       .from('mushroom_species')
-      .select('id,norwegian_name,latin_name')
-      .or(`norwegian_name.ilike.%${value}%,latin_name.ilike.%${value}%`)
+      .select('id,norwegian_name,swedish_name,latin_name')
+      .or(`norwegian_name.ilike.%${value}%,swedish_name.ilike.%${value}%,latin_name.ilike.%${value}%`)
       .order('norwegian_name', { ascending: true })
       .limit(10);
 
@@ -90,19 +93,20 @@ export function MapFilters({ filters, onChange, onSelectPlace }: MapFiltersProps
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="absolute left-3 top-3 z-[1000] inline-flex items-center gap-1.5 rounded-full bg-white/95 px-3 py-1.5 text-sm font-medium text-gray-800 shadow-lg backdrop-blur hover:bg-white"
+        aria-label={t('title')}
+        className="absolute left-3 top-3 z-[1000] inline-flex h-9 w-9 items-center justify-center gap-1.5 rounded-full bg-white/95 p-0 text-sm font-medium text-gray-800 shadow-lg backdrop-blur hover:bg-white sm:w-auto sm:justify-start sm:px-3"
       >
         <SlidersHorizontal className="h-4 w-4" />
-        {t('title')}
+        <span className="hidden sm:inline">{t('title')}</span>
         {activeCount > 0 ? (
-          <span className="rounded-full bg-forest-100 px-1.5 text-xs font-semibold text-forest-900">{activeCount}</span>
+          <span className="absolute -right-1 -top-1 min-w-4 rounded-full bg-forest-100 px-1 text-center text-[10px] font-semibold text-forest-900 sm:static sm:px-1.5 sm:text-xs">{activeCount}</span>
         ) : null}
       </button>
     );
   }
 
   return (
-    <div className="absolute left-3 right-3 top-3 z-[1000] space-y-2 rounded-xl bg-white/95 p-3 shadow-lg backdrop-blur">
+    <div className="absolute inset-x-3 bottom-3 z-[1100] max-h-[calc(100%-1.5rem)] space-y-2 overflow-y-auto overscroll-contain rounded-xl bg-white/95 p-3 shadow-lg backdrop-blur sm:bottom-auto sm:left-3 sm:right-auto sm:top-3 sm:w-80">
       <div className="flex items-center justify-between">
         <p className="text-sm font-semibold text-gray-900">{t('title')}</p>
         <div className="flex items-center gap-2">
@@ -166,7 +170,7 @@ export function MapFilters({ filters, onChange, onSelectPlace }: MapFiltersProps
                 onClick={() => onChange({ ...filters, speciesId: item.id })}
                 className="flex w-full items-center justify-between px-2 py-1.5 text-left text-sm hover:bg-gray-50"
               >
-                <span>{item.norwegian_name}</span>
+                <span>{getSpeciesDisplayName(item, locale)}</span>
                 <span className="text-xs text-gray-500 italic">{item.latin_name}</span>
               </button>
             ))}
