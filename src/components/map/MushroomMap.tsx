@@ -17,7 +17,16 @@ import { FindingPopup } from './FindingPopup';
 import { HotspotPanel } from './HotspotPanel';
 import { MapFilters, MapFilterState } from './MapFilters';
 import { MapFinding } from '@/types/finding';
-import { OfflineArea, cacheMapTilesForArea, readOfflineAreas, removeOfflineAreaById, saveOfflineAreas } from '@/lib/utils/offlineMap';
+import {
+  OfflineArea,
+  OSM_TILE_TEMPLATE,
+  SATELLITE_TILE_TEMPLATE,
+  TERRAIN_TILE_TEMPLATE,
+  cacheMapTilesForArea,
+  readOfflineAreas,
+  removeOfflineAreaById,
+  saveOfflineAreas
+} from '@/lib/utils/offlineMap';
 import { buildExplanation } from '@/lib/utils/prediction-explanation';
 import { FLAGS } from '@/lib/flags';
 import toast from 'react-hot-toast';
@@ -89,6 +98,14 @@ export function MushroomMap() {
   const geoAbortRef = useRef<AbortController | null>(null); // cancels an in-flight locate watch
   // True once the user manually picks a base layer — stops the region auto-switch.
   const userPickedBaseLayerRef = useRef(false);
+  // The three switchable base layers, so the offline-save can cache whichever one
+  // is currently shown (Terreng=Kartverket / Kart=OSM / Satellitt=Esri) instead
+  // of always assuming Kartverket — which is blank outside Norway.
+  const baseLayersRef = useRef<{
+    terreng: import('leaflet').TileLayer;
+    kart: import('leaflet').TileLayer;
+    satellitt: import('leaflet').TileLayer;
+  } | null>(null);
   // Last known position, so the map can recenter even if geolocation resolves
   // before the (async) map init finishes.
   const posRef = useRef<{ lat: number; lng: number } | null>(null);
@@ -846,11 +863,26 @@ export function MushroomMap() {
       createdAt: now.toISOString()
     };
 
+    // Cache whichever base map the user is actually looking at — not a hardcoded
+    // Kartverket layer that's blank outside Norway. Region guard: if Terreng is
+    // active but the area sits outside Norway (e.g. the user manually picked it
+    // over Sweden), fall back to OSM so the saved area isn't a blank cache.
+    const layers = baseLayersRef.current;
+    let tileTemplate = OSM_TILE_TEMPLATE;
+    if (layers) {
+      if (map.hasLayer(layers.satellitt)) tileTemplate = SATELLITE_TILE_TEMPLATE;
+      else if (map.hasLayer(layers.kart)) tileTemplate = OSM_TILE_TEMPLATE;
+      else if (map.hasLayer(layers.terreng)) tileTemplate = TERRAIN_TILE_TEMPLATE;
+    }
+    if (tileTemplate === TERRAIN_TILE_TEMPLATE && getRegion(center.lat, center.lng) !== 'NO') {
+      tileTemplate = OSM_TILE_TEMPLATE;
+    }
+
     setOfflineBusy(true);
 
     try {
       const zoomLevels = Array.from(new Set([Math.max(8, zoom - 1), zoom, Math.min(18, zoom + 1)]));
-      const cacheResult = await cacheMapTilesForArea(area.bounds, zoomLevels);
+      const cacheResult = await cacheMapTilesForArea(area.bounds, zoomLevels, tileTemplate);
       const areaWithTiles: OfflineArea = {
         ...area,
         cachedTiles: cacheResult.cached,
@@ -1010,25 +1042,23 @@ export function MushroomMap() {
       // maxNativeZoom = deepest REAL tile each provider serves over our coverage
       // (verified: Kartverket topo tops out at z18); maxZoom = shared over-zoom
       // ceiling so all layers reach the same depth by upscaling the last tiles.
-      const baseTerreng = L.tileLayer('https://cache.kartverket.no/v1/wmts/1.0.0/topo/default/webmercator/{z}/{y}/{x}.png', {
+      const baseTerreng = L.tileLayer(TERRAIN_TILE_TEMPLATE, {
         attribution: '&copy; Kartverket',
         maxNativeZoom: 18,
         maxZoom: 20
       });
-      const baseKart = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      const baseKart = L.tileLayer(OSM_TILE_TEMPLATE, {
         attribution: '&copy; OpenStreetMap',
         maxNativeZoom: 19,
         maxZoom: 20
       });
-      const baseSatellitt = L.tileLayer(
-        'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-        {
-          attribution: 'Flyfoto &copy; Esri, Maxar, Earthstar Geographics',
-          maxNativeZoom: 19,
-          maxZoom: 20
-        }
-      );
+      const baseSatellitt = L.tileLayer(SATELLITE_TILE_TEMPLATE, {
+        attribution: 'Flyfoto &copy; Esri, Maxar, Earthstar Geographics',
+        maxNativeZoom: 19,
+        maxZoom: 20
+      });
       baseTerreng.addTo(map);
+      baseLayersRef.current = { terreng: baseTerreng, kart: baseKart, satellitt: baseSatellitt };
 
       L.control.zoom({ position: 'topright' }).addTo(map);
       L.control
@@ -1127,6 +1157,7 @@ export function MushroomMap() {
       topLayerRef.current = null;
       speciesLayerRef.current = null;
       occClusterRef.current = null;
+      baseLayersRef.current = null;
       // Stop any in-flight GPS watch (so it can't keep the radio hot after the
       // user leaves the map) and drop the accuracy circle.
       geoAbortRef.current?.abort();

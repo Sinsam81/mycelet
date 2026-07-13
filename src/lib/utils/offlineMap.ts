@@ -23,9 +23,35 @@ export interface CacheAreaResult {
 }
 
 const STORAGE_KEY = 'mycelet.offline-areas.v1';
-const TILE_TEMPLATE = 'https://cache.kartverket.no/v1/wmts/1.0.0/topo/default/webmercator/{z}/{y}/{x}.png';
+
+// The three base-map tile templates, kept in one place so MushroomMap builds its
+// Leaflet layers from the SAME strings the offline cache warms — no drift. The
+// offline cache must follow the ACTIVE base map: Kartverket "Terreng" is blank
+// outside Norway, so saving a Swedish area with it would cache nothing usable.
+export const TERRAIN_TILE_TEMPLATE = 'https://cache.kartverket.no/v1/wmts/1.0.0/topo/default/webmercator/{z}/{y}/{x}.png';
+export const OSM_TILE_TEMPLATE = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+export const SATELLITE_TILE_TEMPLATE = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
+
+const DEFAULT_TILE_TEMPLATE = TERRAIN_TILE_TEMPLATE;
 const CACHE_NAME = 'mycelet-map-tiles-v1';
 const MAX_TILES_PER_SAVE = 550;
+
+// Match Leaflet's own subdomain distribution so the URLs we pre-cache are
+// byte-identical to the ones Leaflet requests when it later renders offline
+// (default subdomains 'abc', index = |x + y| % 3). If these diverge, the {s}
+// tiles Leaflet asks for miss the cache and the map goes blank.
+function subdomainFor(x: number, y: number): string {
+  const subdomains = 'abc';
+  return subdomains[Math.abs(x + y) % subdomains.length];
+}
+
+function buildTileUrl(template: string, x: number, y: number, zoom: number): string {
+  return template
+    .replace('{s}', subdomainFor(x, y))
+    .replace('{z}', String(zoom))
+    .replace('{x}', String(x))
+    .replace('{y}', String(y));
+}
 
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
@@ -51,7 +77,11 @@ export function latLngToTile(lat: number, lng: number, zoom: number) {
   };
 }
 
-export function getTileUrlsForBounds(bounds: OfflineAreaBounds, zoom: number): string[] {
+export function getTileUrlsForBounds(
+  bounds: OfflineAreaBounds,
+  zoom: number,
+  template: string = DEFAULT_TILE_TEMPLATE
+): string[] {
   const northWest = latLngToTile(bounds.north, bounds.west, zoom);
   const southEast = latLngToTile(bounds.south, bounds.east, zoom);
 
@@ -63,7 +93,7 @@ export function getTileUrlsForBounds(bounds: OfflineAreaBounds, zoom: number): s
   const urls: string[] = [];
   for (let x = minX; x <= maxX; x += 1) {
     for (let y = minY; y <= maxY; y += 1) {
-      urls.push(TILE_TEMPLATE.replace('{z}', String(zoom)).replace('{x}', String(x)).replace('{y}', String(y)));
+      urls.push(buildTileUrl(template, x, y, zoom));
     }
   }
 
@@ -95,20 +125,24 @@ export function removeOfflineAreaById(id: string): OfflineArea[] {
   return next;
 }
 
-function uniqueTileUrls(bounds: OfflineAreaBounds, zoomLevels: number[]) {
+function uniqueTileUrls(bounds: OfflineAreaBounds, zoomLevels: number[], template: string) {
   const merged = new Set<string>();
   zoomLevels.forEach((zoom) => {
-    getTileUrlsForBounds(bounds, zoom).forEach((url) => merged.add(url));
+    getTileUrlsForBounds(bounds, zoom, template).forEach((url) => merged.add(url));
   });
   return Array.from(merged).slice(0, MAX_TILES_PER_SAVE);
 }
 
-export async function cacheMapTilesForArea(bounds: OfflineAreaBounds, zoomLevels: number[]): Promise<CacheAreaResult> {
+export async function cacheMapTilesForArea(
+  bounds: OfflineAreaBounds,
+  zoomLevels: number[],
+  template: string = DEFAULT_TILE_TEMPLATE
+): Promise<CacheAreaResult> {
   if (typeof window === 'undefined' || !('caches' in window)) {
     return { cached: 0, failed: 0 };
   }
 
-  const urls = uniqueTileUrls(bounds, zoomLevels);
+  const urls = uniqueTileUrls(bounds, zoomLevels, template);
   if (urls.length === 0) {
     return { cached: 0, failed: 0 };
   }
