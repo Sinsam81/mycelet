@@ -56,16 +56,22 @@ Produce a concrete, ordered list of everything that remains before a confident p
 
 ## 3. Hard boundaries — the only things reserved for the founder
 
-You have authority over all *code*. The **only** actions you must NOT take are the irreversible, real-world ones — because this is a live app with real customers and **one Supabase project (no staging)**, and **pushing to `main` auto-deploys to production on Vercel**:
+You have authority over all *code*, **including deploying it to production** — but under a strict protocol, because this is a live app with real paying customers and **one Supabase project (no staging)**, where **merging to `main` auto-deploys to production on Vercel** within ~1–2 minutes.
 
-1. **Do NOT merge to `main` and do NOT deploy to production.** Open PRs; leave the merge/deploy for the founder on return. (Merging = deploying to live customers.)
-2. **Do NOT apply database migrations to the live Supabase.** If a change needs schema work, write the new numbered migration file (`supabase/migrations/029_*.sql`, `030_*`, …) but **do not run it**. List it in the launch checklist as a founder action. Never edit an already-applied migration (001–028).
+1. **Deployment protocol (auto-deploy allowed, with a safety net).** You MAY merge your own PRs to `main` and let them deploy to production — but ONLY under ALL of these rules:
+   - **Verify first:** never merge a PR unless `npm run typecheck && npm run test && npm run build` all pass on it.
+   - **One at a time:** merge and deploy a single PR, then fully verify production before merging the next. Never batch several changes into one deploy — keep the blast radius to one change.
+   - **Sequence by risk:** ship the safe, isolated fixes first; save the largest/riskiest change (e.g. a big map refactor) for last, after the safe ones are proven live.
+   - **Verify production after each deploy:** wait ~2 minutes for Vercel to build + propagate, then confirm `https://www.mycelet.com/api/health` returns `status: ok` (HTTP 200) and run the read-only prod smoke `npm run qa:prod`. If your change touched a specific asset/route, fetch it to confirm the new version is actually live.
+   - **Roll back on ANY failure:** if the health check or smoke fails, errors spike, or anything looks wrong after a deploy, immediately **`git revert` the merge commit and push to `main`** — this redeploys the last known-good state. (Do this via git; do not rely on a Vercel dashboard you may not have access to.) Then record it in the bug ledger and move on — do not blindly re-deploy the same broken change.
+   - **Log every deploy** in `docs/reports/deploys.md`: what shipped, the commit SHA, the health/smoke result, and any rollback.
+2. **Do NOT apply database migrations to the live Supabase — this stays reserved for the founder.** Schema changes are the one truly irreversible action (no staging, no backup database — a bad migration can destroy real customer data). If a change needs schema work, write the new numbered migration file (`supabase/migrations/029_*.sql`, `030_*`, …) but **do not run it**, and **do not deploy code that depends on it** until it's applied. List it in the launch checklist as a founder action. Never edit an already-applied migration (001–028).
 3. **Keep all authed/e2e tests read-only.** Writes hit the production database. Do not create real findings, forum posts, purchases, or emails against prod.
 4. **Do NOT touch secrets, spend money, send emails, make real Stripe charges, or call external APIs in a way that affects real users/data.**
 5. **Respect the do-not-touch list (handover §14):** coordinate-masking system (trigger + `public_findings` view + RLS), the AI identify safety invariants, `getRegion`, the single `computeCellPrediction` scoring path, the append-only audit log, `billing_subscriptions` as the one entitlement source, and the enforcing CSP/security headers. If you are convinced one of these *should* change, **write a proposal with rationale** — do not just change it.
 6. **Never commit iCloud `"* 2.*"` duplicate files** (delete them before building; see handover §5).
 
-This is not a limit on your thoroughness — do all the engineering and stage it in PRs. It is the single safety rail a live, staging-less app requires. Anything genuinely blocked on the founder goes in a **"needs founder"** list, it does not stop your other work.
+Do all the engineering and ship it under the protocol above. The safety net (verify → one-at-a-time → health-check → revert-on-failure) is what lets you deploy to a staging-less app responsibly. Anything genuinely blocked on the founder (DB migrations, secrets, business/legal calls) goes in a **"needs founder"** list — it does not stop your other work.
 
 ---
 
@@ -83,7 +89,7 @@ This is not a limit on your thoroughness — do all the engineering and stage it
 
 Create a `docs/reports/` folder and write:
 
-1. **`docs/reports/README.md`** — a 5-minute executive summary the founder reads first on return: what you changed, what's in the open PRs, what still needs his decision/action, and your recommended merge order.
+1. **`docs/reports/README.md`** — a 5-minute executive summary the founder reads first on return: what you changed **and deployed live**, what was rolled back and why, what's still pending, and what needs his decision/action. (Plus `docs/reports/deploys.md`, the deploy log from §3.)
 2. **`docs/reports/ux-audit.md`** — map + app UX findings, each with the concrete problem, what you changed (or propose), and before/after notes. Screenshots/GIFs if you can produce them.
 3. **`docs/reports/bug-ledger.md`** — every bug found: description, how to reproduce, severity, root cause, and status (fixed in PR #, or needs-founder + why).
 4. **`docs/reports/core-improvements.md`** — core-feature improvements, prioritized (value ÷ effort), marked implemented vs proposed.
@@ -96,9 +102,9 @@ Record any decision where you picked one option over another (with the alternati
 
 ## 6. Definition of done
 
-- Every PR you open is verified green (`typecheck` + `test` + `build`) and scoped to one theme.
-- The four reports exist and are concrete and honest (no over-claiming — say what's fixed vs proposed vs blocked).
-- The launch checklist is complete and correctly split between code and founder actions.
-- **Nothing is merged to `main`, deployed, or applied to the production database.** The founder can review the PRs + reports and ship on return with confidence.
+- Every PR is verified green (`typecheck` + `test` + `build`) and scoped to one theme.
+- Code changes are **deployed to production under the §3 protocol** (verified → one-at-a-time → health-checked → rolled back on failure) and logged in `docs/reports/deploys.md`. Production is healthy (`/api/health` = ok) at the end.
+- **No database migration has been applied to production** — those are written and left for the founder.
+- The reports are concrete and honest (say what's fixed/deployed vs proposed vs rolled back vs blocked). The launch checklist is complete and split between code and founder actions. The founder can see exactly what is already live, what was rolled back, and what still needs him.
 
 Work through it end to end. Be exhaustive on investigation, decisive on the high-value changes, conservative on the irreversible ones, and clear in your reporting. Good luck.
