@@ -1,11 +1,12 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { getTranslations } from 'next-intl/server';
+import { getLocale, getTranslations } from 'next-intl/server';
 import { AlertTriangle, ChevronLeft } from 'lucide-react';
 import { EdibilityBadge } from '@/components/ui/EdibilityBadge';
 import { PageWrapper } from '@/components/layout/PageWrapper';
 import { SpeciesPhotoCarousel } from '@/components/species/SpeciesPhotoCarousel';
 import { createClient } from '@/lib/supabase/server';
+import { getSpeciesDisplayName } from '@/lib/utils/species-name';
 
 interface SpeciesDetailPageProps {
   params: Promise<{ id: string }>;
@@ -33,6 +34,7 @@ const DANGER_STYLES: Record<string, string> = {
 export default async function SpeciesDetailPage({ params }: SpeciesDetailPageProps) {
   const t = await getTranslations('SpeciesDetail');
   const s = await getTranslations('Safety');
+  const locale = await getLocale();
   const { id: idParam } = await params;
   const id = Number(idParam);
   if (Number.isNaN(id)) notFound();
@@ -66,7 +68,7 @@ export default async function SpeciesDetailPage({ params }: SpeciesDetailPagePro
       .from('look_alikes')
       .select(
         'look_alike_id,danger_level,similarity_description,difference_description,' +
-          'mushroom_species!look_alikes_look_alike_id_fkey(id,norwegian_name,latin_name,edibility,primary_image_url)'
+          'mushroom_species!look_alikes_look_alike_id_fkey(id,norwegian_name,swedish_name,latin_name,edibility,primary_image_url)'
       )
       .eq('species_id', id)
       // High limit so a critical look-alike can never be truncated away (safety).
@@ -79,6 +81,7 @@ export default async function SpeciesDetailPage({ params }: SpeciesDetailPagePro
   }
 
   const isToxic = species.edibility === 'toxic' || species.edibility === 'deadly';
+  const displayName = getSpeciesDisplayName(species, locale);
 
   return (
     <PageWrapper wide>
@@ -93,18 +96,19 @@ export default async function SpeciesDetailPage({ params }: SpeciesDetailPagePro
 
         <div className="grid gap-6 md:grid-cols-2 md:items-start lg:gap-10">
           {/* Left: photo carousel */}
-          <SpeciesPhotoCarousel photos={photos ?? []} speciesName={species.norwegian_name} />
+          <SpeciesPhotoCarousel photos={photos ?? []} speciesName={displayName} />
 
           {/* Right: content */}
           <div className="space-y-5">
             <header className="space-y-2">
               <h1 className="font-serif text-4xl font-bold leading-tight text-forest-900">
-                {species.norwegian_name}
+                {displayName}
               </h1>
               <p className="text-base italic text-gray-600">{species.latin_name}</p>
-              {(species.swedish_name || species.english_name) ? (
+              {(species.norwegian_name || species.swedish_name || species.english_name) ? (
                 <div className="flex flex-wrap gap-x-4 text-xs text-gray-500">
-                  {species.swedish_name ? <span>🇸🇪 {species.swedish_name}</span> : null}
+                  {locale === 'sv' && species.norwegian_name ? <span>🇳🇴 {species.norwegian_name}</span> : null}
+                  {locale !== 'sv' && species.swedish_name ? <span>🇸🇪 {species.swedish_name}</span> : null}
                   {species.english_name ? <span>🇬🇧 {species.english_name}</span> : null}
                 </div>
               ) : null}
@@ -188,7 +192,7 @@ export default async function SpeciesDetailPage({ params }: SpeciesDetailPagePro
                   {(species.habitat ?? []).join(', ') || t('emptyValue')}
                 </dd>
               </div>
-              {species.swedish_name ? (
+              {locale !== 'sv' && species.swedish_name ? (
                 <div className="flex justify-between border-b border-gray-100 py-2">
                   <dt className="text-gray-600">{t('swedishNameLabel')}</dt>
                   <dd className="font-medium text-gray-900">{species.swedish_name}</dd>
@@ -219,6 +223,7 @@ export default async function SpeciesDetailPage({ params }: SpeciesDetailPagePro
                 const lookAlike = item.mushroom_species;
                 if (!lookAlike) return null;
                 const danger = item.danger_level ?? 'low';
+                const lookAlikeName = getSpeciesDisplayName(lookAlike, locale);
 
                 return (
                   <Link
@@ -230,7 +235,7 @@ export default async function SpeciesDetailPage({ params }: SpeciesDetailPagePro
                       {lookAlike.primary_image_url ? (
                         <img
                           src={lookAlike.primary_image_url}
-                          alt={lookAlike.norwegian_name}
+                          alt={lookAlikeName}
                           className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
                         />
                       ) : (
@@ -249,7 +254,7 @@ export default async function SpeciesDetailPage({ params }: SpeciesDetailPagePro
 
                     <div className="space-y-2 p-3">
                       <div>
-                        <p className="font-serif text-base font-bold text-forest-900">{lookAlike.norwegian_name}</p>
+                        <p className="font-serif text-base font-bold text-forest-900">{lookAlikeName}</p>
                         <p className="text-xs italic text-gray-600">{lookAlike.latin_name}</p>
                       </div>
                       <EdibilityBadge edibility={lookAlike.edibility} />

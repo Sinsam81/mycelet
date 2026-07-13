@@ -3,6 +3,7 @@ export type Edibility = 'edible' | 'conditionally_edible' | 'inedible' | 'toxic'
 export interface Species {
   id: number;
   norwegian_name: string;
+  swedish_name: string | null;
   latin_name: string;
   description: string | null;
   habitat: string[] | null;
