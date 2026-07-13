@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { getTranslations } from 'next-intl/server';
+import { getLocale, getTranslations } from 'next-intl/server';
 import { NonNativeOnly } from '@/components/native/NonNativeOnly';
 import { AlertTriangle, Calendar, Camera, Check, Crown, Database, FileText, Lock, Map, MessageSquare, Shield } from 'lucide-react';
 import { PageWrapper } from '@/components/layout/PageWrapper';
@@ -11,12 +11,14 @@ import { createClient } from '@/lib/supabase/server';
 import { BILLING_PLANS } from '@/lib/billing/plans';
 import { FLAGS } from '@/lib/flags';
 import type { Edibility } from '@/types/species';
+import { getSpeciesDisplayName } from '@/lib/utils/species-name';
 
 type HomeTranslator = Awaited<ReturnType<typeof getTranslations<'Home'>>>;
 
 interface SpeciesRow {
   id: number;
   norwegian_name: string;
+  swedish_name: string | null;
   latin_name: string;
   edibility: Edibility;
   season_start: number;
@@ -36,7 +38,7 @@ interface RecentFindingRow {
   primary_image_url: string | null;
 }
 
-function formatTimeAgo(iso: string, t: HomeTranslator) {
+function formatTimeAgo(iso: string, t: HomeTranslator, locale: string) {
   const diff = Date.now() - new Date(iso).getTime();
   const dayMs = 24 * 60 * 60 * 1000;
   const days = Math.round(diff / dayMs);
@@ -44,7 +46,7 @@ function formatTimeAgo(iso: string, t: HomeTranslator) {
   if (days === 1) return t('timeAgoYesterday');
   if (days < 7) return t('timeAgoDays', { days });
   if (days < 30) return t('timeAgoWeeks', { weeks: Math.round(days / 7) });
-  return new Date(iso).toLocaleDateString('nb-NO', { day: '2-digit', month: 'short' });
+  return new Date(iso).toLocaleDateString(locale === 'sv' ? 'sv-SE' : 'nb-NO', { day: '2-digit', month: 'short' });
 }
 
 function getMonthName(month: number, t: HomeTranslator) {
@@ -70,6 +72,7 @@ function getSeasonHeadline(month: number, edibleCount: number, t: HomeTranslator
 
 export default async function HomePage() {
   const t = await getTranslations('Home');
+  const locale = await getLocale();
   const supabase = createClient();
   const month = new Date().getMonth() + 1;
   const {
@@ -79,7 +82,7 @@ export default async function HomePage() {
   const [{ data }, { data: recentFindings }] = await Promise.all([
     supabase
       .from('mushroom_species')
-      .select('id,norwegian_name,latin_name,edibility,season_start,season_end,primary_image_url')
+      .select('id,norwegian_name,swedish_name,latin_name,edibility,season_start,season_end,primary_image_url')
       .order('norwegian_name', { ascending: true }),
     supabase
       .from('public_findings')
@@ -94,6 +97,7 @@ export default async function HomePage() {
     .filter((s) => (s.edibility === 'edible' || s.edibility === 'conditionally_edible') && isInMonth(month, s.season_start, s.season_end))
     .slice(0, 4);
   const dangerousInSeason = species.filter((s) => (s.edibility === 'toxic' || s.edibility === 'deadly') && isInMonth(month, s.season_start, s.season_end));
+  const speciesNames = new globalThis.Map(species.map((item) => [item.id, getSpeciesDisplayName(item, locale)]));
 
   let userStats: { total: number; species: number } | null = null;
   if (user) {
@@ -206,14 +210,14 @@ export default async function HomePage() {
                       {s.primary_image_url ? (
                         <img
                           src={s.primary_image_url}
-                          alt={s.norwegian_name}
+                          alt={getSpeciesDisplayName(s, locale)}
                           loading="lazy"
                           decoding="async"
                           className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
                         />
                       ) : null}
                     </div>
-                    <p className="truncate p-2 text-sm font-medium text-forest-900">{s.norwegian_name}</p>
+                    <p className="truncate p-2 text-sm font-medium text-forest-900">{getSpeciesDisplayName(s, locale)}</p>
                   </Link>
                 </li>
               ))}
@@ -238,7 +242,7 @@ export default async function HomePage() {
               {dangerousInSeason.map((s) => (
                 <li key={s.id} className="flex items-center justify-between gap-2">
                   <Link href={`/species/${s.id}`} className="text-sm text-red-900 hover:underline">
-                    {s.norwegian_name} <span className="italic text-red-700/80">({s.latin_name})</span>
+                    {getSpeciesDisplayName(s, locale)} <span className="italic text-red-700/80">({s.latin_name})</span>
                   </Link>
                   <EdibilityBadge edibility={s.edibility} />
                 </li>
@@ -264,13 +268,13 @@ export default async function HomePage() {
                   >
                     <div className="h-12 w-12 shrink-0 overflow-hidden rounded bg-gray-100">
                       {f.primary_image_url ? (
-                        <img src={f.primary_image_url} alt={f.norwegian_name ?? t('mushroomAlt')} loading="lazy" decoding="async" className="h-full w-full object-cover" />
+                        <img src={f.primary_image_url} alt={(f.species_id ? speciesNames.get(f.species_id) : null) ?? f.norwegian_name ?? t('mushroomAlt')} loading="lazy" decoding="async" className="h-full w-full object-cover" />
                       ) : null}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="truncate font-medium">{f.norwegian_name ?? t('unknownSpecies')}</p>
+                      <p className="truncate font-medium">{(f.species_id ? speciesNames.get(f.species_id) : null) ?? f.norwegian_name ?? t('unknownSpecies')}</p>
                       <p className="truncate text-xs text-gray-600">
-                        {f.location_name ?? t('unknownLocation')} · {formatTimeAgo(f.found_at, t)}
+                        {f.location_name ?? t('unknownLocation')} · {formatTimeAgo(f.found_at, t, locale)}
                       </p>
                     </div>
                     {f.edibility ? <EdibilityBadge edibility={f.edibility} /> : null}
