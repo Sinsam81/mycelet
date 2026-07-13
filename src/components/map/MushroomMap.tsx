@@ -1,10 +1,10 @@
 'use client';
 
 import Link from 'next/link';
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import { NonNativeOnly } from '@/components/native/NonNativeOnly';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronDown, ChevronUp, Download, Navigation, Trash2 } from 'lucide-react';
+import { Download, MoreHorizontal, Navigation, Trash2, X } from 'lucide-react';
 import { createRoot, Root } from 'react-dom/client';
 import { createClient } from '@/lib/supabase/client';
 import { useGeolocation, watchPositionUntilAccurate } from '@/lib/hooks/useGeolocation';
@@ -28,6 +28,7 @@ import {
   saveOfflineAreas
 } from '@/lib/utils/offlineMap';
 import { buildExplanation } from '@/lib/utils/prediction-explanation';
+import { getSpeciesDisplayName } from '@/lib/utils/species-name';
 import { FLAGS } from '@/lib/flags';
 import toast from 'react-hot-toast';
 
@@ -72,6 +73,7 @@ const initialFilters: MapFilterState = {
 
 export function MushroomMap() {
   const t = useTranslations('MushroomMap');
+  const locale = useLocale();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<import('leaflet').Map | null>(null);
   const clusterRef = useRef<any>(null);
@@ -111,7 +113,7 @@ export function MushroomMap() {
   const posRef = useRef<{ lat: number; lng: number } | null>(null);
 
   const supabase = useRef(createClient()).current;
-  const { latitude, longitude, loading: geoLoading, error: geoError } = useGeolocation();
+  const { latitude, longitude, error: geoError } = useGeolocation();
 
   const [filters, setFilters] = useState<MapFilterState>(initialFilters);
   const [showAddSheet, setShowAddSheet] = useState(false);
@@ -137,6 +139,7 @@ export function MushroomMap() {
   const [offlineStatus, setOfflineStatus] = useState<string | null>(null);
   const [offlineBusy, setOfflineBusy] = useState(false);
   const [offlineOpen, setOfflineOpen] = useState(false);
+  const [toolsOpen, setToolsOpen] = useState(false);
   const [topSpots, setTopSpots] = useState<{ lat: number; lng: number; score: number; forestType: string; productivity: number | null; verdict?: string; reasons?: string[]; topSpecies?: string[] }[] | null>(null);
   const [topLoading, setTopLoading] = useState(false);
   const [topMsg, setTopMsg] = useState<string | null>(null);
@@ -402,16 +405,19 @@ export function MushroomMap() {
       speciesSearchTimer.current = setTimeout(async () => {
         const { data } = await supabase
           .from('mushroom_species')
-          .select('id,norwegian_name')
-          .or(`norwegian_name.ilike.%${value}%,latin_name.ilike.%${value}%`)
+          .select('id,norwegian_name,swedish_name')
+          .or(`norwegian_name.ilike.%${value}%,swedish_name.ilike.%${value}%,latin_name.ilike.%${value}%`)
           .order('norwegian_name', { ascending: true })
           .limit(8);
         setSpeciesSuggestions(
-          ((data ?? []) as { id: number; norwegian_name: string }[]).map((d) => ({ id: d.id, name: d.norwegian_name }))
+          ((data ?? []) as { id: number; norwegian_name: string; swedish_name: string | null }[]).map((d) => ({
+            id: d.id,
+            name: getSpeciesDisplayName(d, locale)
+          }))
         );
       }, 250);
     },
-    [supabase]
+    [locale, supabase]
   );
 
   const selectSpeciesForSpots = useCallback(
@@ -1179,18 +1185,21 @@ export function MushroomMap() {
   useEffect(() => {
     supabase
       .from('mushroom_species')
-      .select('id,norwegian_name,edibility')
+      .select('id,norwegian_name,swedish_name,edibility')
       .then(({ data }) => {
         const nameMap = new Map<number, string>();
         const ediMap = new Map<number, string>();
         for (const s of data ?? []) {
-          nameMap.set(s.id as number, (s.norwegian_name as string | null) ?? t('mushroomFallback'));
+          nameMap.set(s.id as number, getSpeciesDisplayName({
+            norwegian_name: s.norwegian_name as string | null,
+            swedish_name: s.swedish_name as string | null
+          }, locale) || t('mushroomFallback'));
           if (s.edibility) ediMap.set(s.id as number, s.edibility as string);
         }
         speciesNamesRef.current = nameMap;
         speciesEdibilityRef.current = ediMap;
       });
-  }, [supabase, t]);
+  }, [locale, supabase, t]);
 
   useEffect(() => {
     setOfflineAreas(readOfflineAreas());
@@ -1309,6 +1318,10 @@ export function MushroomMap() {
     if (speciesMsg) toast(speciesMsg);
   }, [speciesMsg]);
 
+  useEffect(() => {
+    if (geoError) toast.error(t('gpsUnavailable'), { id: 'map-geolocation-error' });
+  }, [geoError, t]);
+
   return (
     <div className="relative h-[calc(100vh-8.5rem)] overflow-hidden rounded-xl border border-gray-200">
       <div ref={containerRef} className="h-full w-full" />
@@ -1357,7 +1370,7 @@ export function MushroomMap() {
             </div>
           )}
         </div>
-        <div className="flex flex-wrap justify-center gap-1.5">
+        <div className="flex justify-center gap-1.5">
           <button
             type="button"
             onClick={toggleOccurrences}
@@ -1377,37 +1390,85 @@ export function MushroomMap() {
           >
             {topLoading ? t('searching') : topSpots ? t('hideSpots') : t('promisingSpotsButton')}
           </button>
-          {hasOfflineAccess ? (
-            <button
-              type="button"
-              onClick={() => (speciesSpots ? clearSpeciesSpots() : void generateSpeciesSpots())}
-              disabled={speciesLoading}
-              className={`rounded-full px-3 py-1.5 text-xs font-medium shadow-lg backdrop-blur disabled:opacity-60 ${
-                speciesSpots ? 'bg-forest-800 text-white hover:bg-forest-700' : 'bg-white/95 text-gray-800 hover:bg-white'
-              }`}
-            >
-              {speciesLoading ? t('loading') : speciesSpots ? t('hidePhotos') : t('photosButton')}
-            </button>
-          ) : (
-            <NonNativeOnly>
-              <Link
-                href="/pricing"
-                className="rounded-full bg-white/95 px-3 py-1.5 text-xs font-medium text-forest-900 shadow-lg backdrop-blur hover:bg-white"
-              >
-                ⭐ {t('premiumTools')}
-              </Link>
-            </NonNativeOnly>
-          )}
-          {FLAGS.tripMode && !tripActive ? (
-            <button
-              type="button"
-              onClick={startTrip}
-              className="rounded-full bg-white/95 px-3 py-1.5 text-xs font-medium text-gray-800 shadow-lg backdrop-blur hover:bg-white"
-            >
-              🎒 {t('trip')}
-            </button>
-          ) : null}
+          <button
+            type="button"
+            onClick={() => {
+              setToolsOpen((open) => !open);
+              setOfflineOpen(false);
+            }}
+            aria-expanded={toolsOpen}
+            aria-controls="map-more-tools"
+            className={`inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-medium shadow-lg backdrop-blur ${
+              toolsOpen || offlineOpen || speciesSpots
+                ? 'bg-forest-800 text-white hover:bg-forest-700'
+                : 'bg-white/95 text-gray-800 hover:bg-white'
+            }`}
+          >
+            <MoreHorizontal className="h-3.5 w-3.5" />
+            {t('moreTools')}
+          </button>
         </div>
+        {toolsOpen ? (
+          <div id="map-more-tools" className="w-full max-w-xs rounded-xl border border-gray-200 bg-white/95 p-2 shadow-xl backdrop-blur">
+            <div className="mb-1 flex items-center justify-between px-1">
+              <p className="text-xs font-semibold text-gray-900">{t('moreToolsHeading')}</p>
+              <button
+                type="button"
+                onClick={() => setToolsOpen(false)}
+                aria-label={t('closeTools')}
+                className="rounded-full p-1 text-gray-500 hover:bg-gray-100"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+            <div className="grid gap-1">
+              {billing.isLoading ? (
+                <p className="px-2 py-1.5 text-xs text-gray-500">{t('checkingPlan')}</p>
+              ) : hasOfflineAccess ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setToolsOpen(false);
+                    if (speciesSpots) clearSpeciesSpots();
+                    else void generateSpeciesSpots();
+                  }}
+                  disabled={speciesLoading}
+                  className="rounded-lg px-2 py-2 text-left text-xs font-medium text-gray-800 hover:bg-gray-100 disabled:opacity-60"
+                >
+                  {speciesLoading ? t('loading') : speciesSpots ? `📸 ${t('hidePhotos')}` : t('photosButton')}
+                </button>
+              ) : (
+                <NonNativeOnly>
+                  <Link href="/pricing" className="rounded-lg px-2 py-2 text-xs font-medium text-forest-900 hover:bg-gray-100">
+                    ⭐ {t('premiumTools')}
+                  </Link>
+                </NonNativeOnly>
+              )}
+              <button
+                type="button"
+                onClick={() => {
+                  setToolsOpen(false);
+                  setOfflineOpen(true);
+                }}
+                className="rounded-lg px-2 py-2 text-left text-xs font-medium text-gray-800 hover:bg-gray-100"
+              >
+                ⬇️ {t('offlineMap')}
+              </button>
+              {FLAGS.tripMode && !tripActive ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setToolsOpen(false);
+                    startTrip();
+                  }}
+                  className="rounded-lg px-2 py-2 text-left text-xs font-medium text-gray-800 hover:bg-gray-100"
+                >
+                  🎒 {t('trip')}
+                </button>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
         {topAccess === 'free_limited' && topSpots ? (
           <NonNativeOnly>
             <Link
@@ -1469,24 +1530,23 @@ export function MushroomMap() {
           consolidated HotspotPanel below — shown for every query, not just when
           a species is selected. */}
 
-      <div className={`absolute right-3 top-28 z-[1000] ${offlineOpen ? 'w-72' : 'w-auto'} rounded-xl border border-gray-200 bg-white/95 p-3 shadow-lg backdrop-blur`}>
+      {offlineOpen ? (
+      <div className="absolute left-3 right-3 top-28 z-[1050] max-h-[calc(100%-8rem)] overflow-y-auto overscroll-contain rounded-xl border border-gray-200 bg-white/95 p-3 shadow-lg backdrop-blur sm:left-auto sm:w-72">
         <div className="flex items-center justify-between gap-2">
           <p className="text-sm font-semibold text-gray-900">{t('offlineMap')}</p>
           <div className="flex items-center gap-2">
             {billing.isLoading ? <span className="text-[11px] text-gray-500">{t('checkingPlan')}</span> : null}
             <button
               type="button"
-              onClick={() => setOfflineOpen((v) => !v)}
-              aria-label={offlineOpen ? t('hideOfflineMap') : t('showOfflineMap')}
+              onClick={() => setOfflineOpen(false)}
+              aria-label={t('hideOfflineMap')}
               className="rounded-full p-1 text-gray-500 hover:bg-gray-100"
             >
-              {offlineOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+              <X className="h-4 w-4" />
             </button>
           </div>
         </div>
 
-        {offlineOpen ? (
-          <>
         {showOfflineUpsell ? (
           <div className="mt-2 rounded border border-amber-300 bg-amber-50 px-2 py-2">
             <p className="text-xs text-amber-800">{t('offlineSaveRequiresPremium')}</p>
@@ -1549,9 +1609,8 @@ export function MushroomMap() {
           ))}
           {offlineAreas.length === 0 ? <p className="text-[11px] text-gray-600">{t('noSavedAreas')}</p> : null}
         </div>
-          </>
-        ) : null}
       </div>
+      ) : null}
 
       <button
         type="button"
@@ -1617,8 +1676,6 @@ export function MushroomMap() {
         error={prediction.isError && tileHotspots.length === 0}
       />
 
-      {geoLoading ? <div className="absolute bottom-4 left-4 z-[1000] rounded-lg bg-white px-3 py-2 text-xs">{t('fetchingGps')}</div> : null}
-      {geoError ? <div className="absolute bottom-4 left-4 z-[1000] rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">{geoError}</div> : null}
     </div>
   );
 }
