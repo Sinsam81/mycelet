@@ -15,6 +15,8 @@
  *   REGION=NO MIN_N=50 GROUP_BY=species node --env-file=.env.local scripts/fit-weather-preferences.mjs
  */
 
+import { nullableNumber } from './lib/weather-features.mjs';
+
 const HELP = new Set(['-h', '--help']);
 const args = new Set(process.argv.slice(2));
 
@@ -209,7 +211,9 @@ async function fetchFeatures() {
         region: r.region,
         provider: r.provider,
         temperatureC: num(r.temperature_c),
-        humidityPct: num(r.humidity_pct),
+        // Older Frost cache rows used exactly 75 as a neutral stand-in when
+        // humidity was missing. Exclude that ambiguous sentinel from fitting.
+        humidityPct: r.provider === 'met_frost' && Number(r.humidity_pct) === 75 ? null : num(r.humidity_pct),
         rain3dMm: num(r.rain_3d_mm),
         rain7dMm: num(r.rain_7d_mm),
         rain14dMm: num(r.rain_14d_mm),
@@ -222,10 +226,7 @@ async function fetchFeatures() {
   return rows;
 }
 
-function num(value) {
-  const n = Number(value);
-  return Number.isFinite(n) ? n : null;
-}
+const num = nullableNumber;
 
 function targetGroupPairs(groupRows, allRows, group, speciesById, rng) {
   const idx = indexTargetGroup(allRows, speciesById);
