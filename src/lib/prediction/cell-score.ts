@@ -101,7 +101,7 @@ export function computeCellPrediction(input: CellPredictionInput): CellPredictio
 
   const factors = computeAdvancedFactors({ latitude: lat, longitude: lon, month, weather });
 
-  // Real NIBIO signal replaces the pseudo-noise soil/vegetation proxies.
+  // Real forest signal replaces the neutral unknown soil/vegetation values.
   if (forest) {
     if (forest.productivity != null) factors.soil = bonitetToSoilScore(forest.productivity);
     if (forest.volumePerHa != null) factors.vegetation = volumeToVegetationScore(forest.volumePerHa);
@@ -132,20 +132,14 @@ export function computeCellPrediction(input: CellPredictionInput): CellPredictio
 
   const baseSpeciesScore = speciesFit !== null ? baseScore * speciesFit : baseScore;
 
-  // "Observasjoner nær her" (GBIF) — a recurrence/"where people have found
-  // before" hint, NOT validated habitat suitability. The spatial backtest
-  // (scripts/backtest-spatial.mjs) puts this at ~0.52 AUC against a target-group
-  // background — near chance once accessibility/sampling bias is removed. Keep
-  // it as a soft historical prior, and don't surface it to users as proof of a
-  // good spot (see prediction-explanation.ts; the validated signal is TEMPORAL).
-  // Boost-only: real prior finds raise the score, but absence never lowers it
-  // (presence-only data is sampling-biased, so 0 records ≠ no mushrooms).
-  // `nearbyOccurrences` is now a DISTANCE-DECAYED density (Gaussian kernel,
-  // weightedOccurrenceDensity) rather than a hard-radius count — a find on the
-  // cell weighs ~1, one ~3 km away ~0.02 — so hotspots sharpen on the cells
-  // that actually have close finds. Still capped so it complements, not dominates.
+  // Historical GBIF/Artsdatabanken occurrences remain an informational map
+  // layer, but no longer change the score. Leakage-resistant validation against
+  // local, seasonal target-group backgrounds measured occurrence-only AUC 0.472
+  // (chance = 0.5). A multiplicative boost therefore made the product more
+  // confident without measured predictive value. Keep the density in the
+  // response for transparent provenance and future re-validation.
   const nearbyOccurrences = input.nearbyOccurrences ?? 0;
-  const occurrenceBoost = 1 + Math.min(0.6, nearbyOccurrences * 0.05);
+  const occurrenceBoost = 1;
 
   // Host gate: hard suppressor for a forest species in open landscape (1.0 =
   // no gate). Unlike habitatFit (boost-leaning, floor 0.7), this can push the

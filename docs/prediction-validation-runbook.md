@@ -150,10 +150,10 @@ Tolkning:
 
 Viktigste varianter:
 
-- `occurrenceOnly`: avstandsvektet historisk funn-gjentakelse.
+- `occurrenceOnly`: avstandsvektet historisk funn-tetthet, kun som audit-signal.
 - `habitatWithinForest`: habitat/vertstre blant punkter der begge sider har skogdata.
 - `habitatCandidate`: produksjonens kandidatmask + habitat. Ingen skogdata blir ingen lovende-sted-kandidat.
-- `fullCore`: kandidatmask + habitat + occurrence + fenologi.
+- `fullCore`: kandidatmask + habitat + fenologi. Historiske GBIF-funn endrer ikke lenger produksjonsskåren.
 - `forestMask`: om grid-ruten i det hele tatt kan score punktet som skogcelle.
 
 Tolkning av target-group AUC:

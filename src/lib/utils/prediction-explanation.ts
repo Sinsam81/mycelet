@@ -200,15 +200,13 @@ export function buildExplanation(input: ExplanationInput): Explanation[] {
   }
 
   // ── Prior finds nearby (GBIF / Artsdatabanken) ──────────────────────
-  // A historical "where people have found before" hint (recurrence), not proof
-  // of good habitat — it's ~0.52 AUC vs a target-group background (near chance
-  // once accessibility bias is removed). The user-facing line below is worded
-  // honestly as "tidligere funn registrert i nærheten", which is exactly that.
-  if (input.nearbyOccurrences && input.nearbyOccurrences > 0) {
+  // Informational provenance only. Corrected local/seasonal validation measured
+  // recurrence below chance, so it does not increase the score or confidence.
+  if (input.nearbyOccurrences && input.nearbyOccurrences >= 0.05) {
     lines.push({
-      level: 'positive',
+      level: 'neutral',
       category: 'occurrence',
-      text: `${input.nearbyOccurrences} tidligere funn registrert i nærheten (Artsdatabanken/GBIF)`
+      text: 'Historiske funn er registrert i nærheten (Artsdatabanken/GBIF)'
     });
   }
 

@@ -170,6 +170,22 @@ describe('buildExplanation — generic fallback (no species)', () => {
   });
 });
 
+describe('buildExplanation — historical occurrences', () => {
+  it('shows recurrence as neutral provenance rather than positive evidence', () => {
+    const lines = buildExplanation({
+      species: KANTARELL,
+      month: 8,
+      weather: PERFECT_KANTARELL_WEATHER,
+      nearbyOccurrences: 2.437
+    });
+    const occurrence = lines.find((line) => line.category === 'occurrence');
+
+    expect(occurrence?.level).toBe('neutral');
+    expect(occurrence?.text).toContain('Historiske funn');
+    expect(occurrence?.text).not.toContain('2.437');
+  });
+});
+
 describe('buildExplanation — habitat + mycorrhizal lines', () => {
   it('includes habitat line when species has habitat tags', () => {
     const lines = buildExplanation({
