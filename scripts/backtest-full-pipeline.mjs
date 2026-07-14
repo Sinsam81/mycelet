@@ -7,8 +7,9 @@
  *
  * What this covers:
  *   - Temporal holdout: train occurrences before CUTOFF, test after CUTOFF.
- *   - Target-group background: negatives are old occurrence locations from any
- *     species, scored for the SAME species and date as the presence.
+ *   - Target-group background: negatives are old occurrence locations from a
+ *     DIFFERENT species in the same country, preferably within 150 km and the
+ *     same +/-1-month season window, scored for the presence species/date.
  *   - Production-shaped recurrence signal: distance-decayed occurrence kernel.
  *   - Production-shaped habitat signal: NIBIO SR16 in Norway, CORINE in Sweden,
  *     buildSpeciesHabitatPreferences, computeHabitatScore, habitatFit, hostGate.
@@ -34,6 +35,11 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { curveLookup, latBand, weekIndexFromISO } from './phenology-core.mjs';
+import {
+  buildTargetGroupIndex,
+  chooseTargetGroupBackgrounds,
+  spatialBlock
+} from './lib/spatial-validation.mjs';
 
 const HELP = new Set(['-h', '--help']);
 const args = new Set(process.argv.slice(2));
@@ -47,10 +53,12 @@ Environment:
   CUTOFF                         Temporal split, default 2021-01-01
   MAX_TEST                       Test presences to sample, default 300
   NEG_PER_POS                    Target-group negatives per presence, default 3
+  BG_RADIUS_KM                   Preferred local-background radius, default 150
+  BG_MONTH_WINDOW                Allowed calendar-month distance, default 1
   FOREST_CONCURRENCY             NIBIO/CORINE fetch concurrency, default 4
   FOREST_CACHE_PATH              Cache file, default .next/backtest-full-pipeline-forest-cache.json
   EXPORT_SDM_JSONL               Optional JSONL export of target-group feature rows
-  SPECIES_ID                     Optional single-species filter
+  SPECIES_ID                     Optional filter for held-out test presences
   --json                         Print machine-readable JSON
 `);
   process.exit(0);
@@ -67,6 +75,8 @@ const PAGE = clampInt(Number(process.env.PAGE || 1000), 1, 5000);
 const HOLDOUT_CUTOFF = process.env.CUTOFF || '2021-01-01';
 const MAX_TEST = clampInt(Number(process.env.MAX_TEST || 300), 1, Number.MAX_SAFE_INTEGER);
 const NEG_PER_POS = clampInt(Number(process.env.NEG_PER_POS || 3), 1, 20);
+const BG_RADIUS_KM = clampInt(Number(process.env.BG_RADIUS_KM || 150), 10, 1000);
+const BG_MONTH_WINDOW = clampInt(Number(process.env.BG_MONTH_WINDOW || 1), 0, 6);
 const FOREST_CONCURRENCY = clampInt(Number(process.env.FOREST_CONCURRENCY || 4), 1, 12);
 const FOREST_CACHE_PATH = process.env.FOREST_CACHE_PATH || '.next/backtest-full-pipeline-forest-cache.json';
 const EXPORT_SDM_JSONL = process.env.EXPORT_SDM_JSONL || null;
@@ -487,15 +497,15 @@ async function mapLimit(items, limit, fn) {
 }
 
 async function fetchAllOccurrences() {
-  const where = SPECIES_ID == null ? '' : `&species_id=eq.${SPECIES_ID}`;
   const rows = [];
   for (let from = 0; ; ) {
     const page = await rest(
-      `species_occurrences?select=species_id,latitude,longitude,observed_at&species_id=not.is.null&observed_at=not.is.null${where}&order=id&offset=${from}&limit=${PAGE}`
+      `species_occurrences?select=id,species_id,latitude,longitude,observed_at&species_id=not.is.null&observed_at=not.is.null&order=id&offset=${from}&limit=${PAGE}`
     );
     rows.push(
       ...page
         .map((r) => ({
+          id: String(r.id),
           sid: Number(r.species_id),
           lat: Number(r.latitude),
           lng: Number(r.longitude),
@@ -550,9 +560,11 @@ function scorePoint({ sid, lat, lng, iso }, forest, speciesById, occurrenceIndex
   };
 }
 
-function exportSdmRow(pairId, label, role, point, forest, scores, presenceRegion) {
+function exportSdmRow(pairId, label, role, point, forest, scores, presence, matchTier) {
   return {
     pairId,
+    presenceId: presence.id,
+    cvGroup: spatialBlock(presence.lat, presence.lng),
     label,
     role,
     speciesId: point.sid,
@@ -560,7 +572,9 @@ function exportSdmRow(pairId, label, role, point, forest, scores, presenceRegion
     latitude: point.lat,
     longitude: point.lng,
     region: getRegion(point.lat, point.lng),
-    presenceRegion,
+    presenceRegion: getRegion(presence.lat, presence.lng),
+    targetGroupSourceSpeciesId: point.sourceSid ?? point.sid,
+    backgroundMatch: matchTier,
     scores: Object.fromEntries(VARIANTS.map((v) => [v, scores[v]])),
     features: scores.features,
     forest
@@ -606,24 +620,47 @@ async function main() {
   const speciesById = await fetchSpecies();
   const occurrences = await fetchAllOccurrences();
   const train = occurrences.filter((r) => r.iso < HOLDOUT_CUTOFF);
-  const testAll = occurrences.filter((r) => r.iso >= HOLDOUT_CUTOFF && speciesById.has(r.sid));
+  const testAll = occurrences.filter(
+    (r) => r.iso >= HOLDOUT_CUTOFF && speciesById.has(r.sid) && (SPECIES_ID == null || r.sid === SPECIES_ID)
+  );
   const tests = sampleLimit(testAll, MAX_TEST, rng);
   const occurrenceIndex = buildOccurrenceIndex(train);
+  const backgroundIndex = buildTargetGroupIndex(train, getRegion);
 
   if (train.length === 0 || tests.length === 0) {
     throw new Error(`Not enough data after split. train=${train.length}, test=${tests.length}`);
   }
 
   const pairs = [];
+  const backgroundMatchCounts = {};
   for (const presence of tests) {
-    for (let k = 0; k < NEG_PER_POS; k++) {
-      const bg = train[Math.floor(rng() * train.length)];
+    const matched = chooseTargetGroupBackgrounds({
+      presence,
+      index: backgroundIndex,
+      count: NEG_PER_POS,
+      rng,
+      regionOf: getRegion,
+      distanceKm: haversineKm,
+      radiusKm: BG_RADIUS_KM,
+      monthWindow: BG_MONTH_WINDOW
+    });
+    increment(backgroundMatchCounts, matched.tier);
+    for (const bg of matched.rows) {
       pairs.push({
         presence,
-        background: { sid: presence.sid, lat: bg.lat, lng: bg.lng, iso: presence.iso }
+        background: {
+          id: bg.id,
+          sid: presence.sid,
+          sourceSid: bg.sid,
+          lat: bg.lat,
+          lng: bg.lng,
+          iso: presence.iso
+        },
+        matchTier: matched.tier
       });
     }
   }
+  if (pairs.length === 0) throw new Error('No matched target-group backgrounds.');
 
   const pointByKey = new Map();
   for (const pair of pairs) {
@@ -676,8 +713,19 @@ async function main() {
     }
 
     if (EXPORT_SDM_JSONL) {
-      sdmRows.push(exportSdmRow(pairId, 1, 'presence', pair.presence, presenceForest, ps, region));
-      sdmRows.push(exportSdmRow(pairId, 0, 'target_group_background', pair.background, bgForest, bs, region));
+      sdmRows.push(exportSdmRow(pairId, 1, 'presence', pair.presence, presenceForest, ps, pair.presence, pair.matchTier));
+      sdmRows.push(
+        exportSdmRow(
+          pairId,
+          0,
+          'target_group_background',
+          pair.background,
+          bgForest,
+          bs,
+          pair.presence,
+          pair.matchTier
+        )
+      );
     }
   }
 
@@ -698,6 +746,13 @@ async function main() {
       testPresencesAvailable: testAll.length,
       testPresencesSampled: tests.length,
       targetGroupNegativesPerPresence: NEG_PER_POS,
+      targetGroupBackground: {
+        sameRegion: true,
+        excludesTargetSpecies: true,
+        preferredRadiusKm: BG_RADIUS_KM,
+        monthWindow: BG_MONTH_WINDOW,
+        matchCounts: backgroundMatchCounts
+      },
       pairs: pairs.length,
       speciesId: SPECIES_ID,
       weather: 'not_included_historical_weather_required'
@@ -738,6 +793,9 @@ async function main() {
   console.log(`Train occurrences: ${train.length}`);
   console.log(`Test presences: ${tests.length}${testAll.length > tests.length ? ` (sample of ${testAll.length})` : ''}`);
   console.log(`Target-group background: ${NEG_PER_POS} per presence (${pairs.length} paired comparisons)`);
+  console.log(
+    `Background matching: same region, other species, preferred <=${BG_RADIUS_KM} km / +/-${BG_MONTH_WINDOW} month | ${JSON.stringify(backgroundMatchCounts)}`
+  );
   console.log(`Forest points: ${uniquePoints.length} unique, cache hits ${cacheHits}, misses ${cacheMisses}`);
   if (EXPORT_SDM_JSONL) console.log(`SDM feature export: ${EXPORT_SDM_JSONL} (${sdmRows.length} rows)`);
   console.log(
