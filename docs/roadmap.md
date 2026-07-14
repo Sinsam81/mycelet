@@ -95,7 +95,7 @@ Gjenstår av dette: 7-dagers værtrend-graf (MET Locationforecast 2.0 — gratis
 
 Dette er det strategiske kjernearbeidet — det som gjør Mycelet unik. Alt under er nytt fra plan-økten 6. mai 2026.
 
-> **Statusoppdatering 14. juli 2026:** Kjernen i Fase 2 henter skogdata **live per punkt** (NIBIO WMS for Norge, CORINE for Sverige) og kombinerer med vær + habitat-scoring i sanntid (`v4_computed_habitat`). Koordinatbasert pseudo-støy er erstattet med nøytrale fallback-verdier, og historisk GBIF-tetthet vises kun som datakilde fordi korrigert target-group-validering ikke viste positivt løft. Planen under er fortsatt nyttig for daglig `prediction_tiles`-cron og videre bias-korrigert modellering.
+> **Statusoppdatering 14. juli 2026:** Kjernen i Fase 2 henter skogdata **live per punkt** (NIBIO WMS for Norge, CORINE for Sverige) og kombinerer med vær + habitat-scoring i sanntid (`v4_computed_habitat`). Koordinatbasert pseudo-støy er erstattet med nøytrale fallback-verdier, og historisk GBIF-tetthet vises kun som datakilde fordi korrigert target-group-validering ikke viste positivt løft. Daglig `prediction_tiles`-generering er registrert i `vercel.json` (01:15 UTC) og overvåkes separat på `/api/health/predictions`.
 
 ### Hva vi har bygget grunnmur for
 
