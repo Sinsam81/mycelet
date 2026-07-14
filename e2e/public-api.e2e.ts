@@ -20,6 +20,16 @@ test.describe('Helse', () => {
     const res = await request.get('/api/health?fast=1');
     expect(res.status()).toBe(200);
   });
+
+  test('GET /api/health/predictions rapporterer flisferskhet per region', async ({ request }) => {
+    const res = await request.get('/api/health/predictions');
+    expect([200, 503]).toContain(res.status());
+    const body = await res.json();
+    expect(body.status === 'ok' || body.status === 'degraded').toBeTruthy();
+    expect(body.expectedDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(body.regions).toHaveLength(5);
+    expect(body.regions.every((region: { fresh?: unknown }) => typeof region.fresh === 'boolean')).toBe(true);
+  });
 });
 
 test.describe('Prediksjon / Lovende steder', () => {

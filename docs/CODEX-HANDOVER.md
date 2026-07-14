@@ -360,7 +360,8 @@ All routes under `src/app/api/*/route.ts`, Node runtime. Standard error contract
 | `/api/me/deletion-warning` | GET | authed | none | → `{warning: null | {warnedAt, scheduledDeletionAt}}`. |
 | `/api/me/extend-retention` | POST | authed | 10 | Clears the user's `account_deletion_warnings` row. |
 | `/api/admin/verified-foragers` | GET/POST/DELETE | moderator/admin | 60/30/30 | Manage forum trust badges. Audit-logs `verified_forager.upsert/delete`. Service-role. |
-| `/api/cron/generate-tiles` | POST/GET | `CRON_SECRET` bearer | none | Regenerates `prediction_tiles` per region. `?region=Oslo|Trondheim|Bergen|Stavanger|Innlandet`. Service-role. |
+| `/api/cron/generate-tiles` | POST/GET | `CRON_SECRET` bearer | none | Regenerates `prediction_tiles`; Vercel runs the full batch daily at 01:15 UTC. `?region=Oslo|Trondheim|Bergen|Stavanger|Innlandet` remains available for targeted recovery. Service-role. |
+| `/api/health/predictions` | GET | public | none | Returns 200 only when all configured regions have hybrid tiles for the current UTC date; otherwise 503 with per-region freshness, without exposing tile coordinates. |
 
 **Service-role client** is used in: admin/verified-foragers, billing/checkout, identify (counter), me/delete, cron/generate-tiles, stripe/webhook. **Audit logging** fires in: admin/verified-foragers (POST/DELETE), me/delete.
 

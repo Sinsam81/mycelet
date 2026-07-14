@@ -4,7 +4,10 @@ import { fetchWeatherSummary } from '@/lib/weather';
 import { getForestProperties, buildSpeciesHabitatPreferences } from '@/lib/forest';
 import { computeCellPrediction } from '@/lib/prediction/cell-score';
 import { dayOfYearOf } from '@/lib/prediction/phenology';
-import { weightedOccurrenceDensity } from '@/lib/prediction/occurrences';
+import {
+  PREDICTION_TILE_REGIONS,
+  predictionTileGridCells
+} from '@/lib/prediction/tile-regions';
 import type { SpeciesContext } from '@/lib/utils/species-scoring';
 import { createRequestLogger } from '@/lib/log/request';
 
@@ -16,29 +19,12 @@ import { createRequestLogger } from '@/lib/log/request';
  * prediction_tiles. The live /api/prediction route then serves these
  * precomputed scores instead of recomputing per request.
  *
- * Secured with CRON_SECRET (same pattern as the retention Edge Functions),
- * intended to be triggered daily by cron-job.org. Generate one region at a
- * time with ?region=Oslo to stay within serverless time limits.
+ * Secured with CRON_SECRET (same pattern as the retention Edge Functions).
+ * Vercel invokes the full batch daily from vercel.json. A single region can
+ * still be regenerated manually with ?region=Oslo.
  */
 
 export const maxDuration = 300; // seconds (Vercel Pro); localhost is unbounded
-
-interface Region {
-  name: string;
-  minLat: number;
-  maxLat: number;
-  minLng: number;
-  maxLng: number;
-  step: number;
-}
-
-const REGIONS: Region[] = [
-  { name: 'Oslo', minLat: 59.72, maxLat: 60.05, minLng: 10.35, maxLng: 11.15, step: 0.06 },
-  { name: 'Trondheim', minLat: 63.28, maxLat: 63.52, minLng: 10.2, maxLng: 10.65, step: 0.07 },
-  { name: 'Bergen', minLat: 60.2, maxLat: 60.52, minLng: 5.05, maxLng: 5.6, step: 0.07 },
-  { name: 'Stavanger', minLat: 58.85, maxLat: 59.05, minLng: 5.6, maxLng: 6.1, step: 0.07 },
-  { name: 'Innlandet', minLat: 60.7, maxLat: 61.0, minLng: 11.0, maxLng: 11.6, step: 0.07 }
-];
 
 // Prediction species, looked up by latin name (so we don't depend on row ids
 // being stable). Five autumn v1 species + two spring morels — together they
@@ -63,16 +49,6 @@ interface SpeciesRow {
   peak_season_end: number | null;
   habitat: string[] | null;
   mycorrhizal_partners: string[] | null;
-}
-
-function gridCells(region: Region): Array<{ lat: number; lng: number }> {
-  const cells: Array<{ lat: number; lng: number }> = [];
-  for (let lat = region.minLat; lat <= region.maxLat; lat += region.step) {
-    for (let lng = region.minLng; lng <= region.maxLng; lng += region.step) {
-      cells.push({ lat: Number(lat.toFixed(5)), lng: Number(lng.toFixed(5)) });
-    }
-  }
-  return cells;
 }
 
 /** Run an async fn over items with bounded concurrency (gentle on NIBIO). */
@@ -100,8 +76,8 @@ export async function POST(request: NextRequest) {
 
   const regionFilter = new URL(request.url).searchParams.get('region');
   const regions = regionFilter
-    ? REGIONS.filter((r) => r.name.toLowerCase() === regionFilter.toLowerCase())
-    : REGIONS;
+    ? PREDICTION_TILE_REGIONS.filter((r) => r.name.toLowerCase() === regionFilter.toLowerCase())
+    : PREDICTION_TILE_REGIONS;
   if (regions.length === 0) {
     return NextResponse.json({ error: `Ukjent region: ${regionFilter}` }, { status: 400 });
   }
@@ -144,41 +120,15 @@ export async function POST(request: NextRequest) {
       soilMoistureIndex: weather.soilMoistureIndex
     };
 
-    // Real prior finds (GBIF) in the region → "observasjoner nær her" boost.
-    // This is a weak recurrence prior, not a validated habitat model. Fetch ALL
-    // species' occurrences in one RPC per region (gentle on the DB), group by
-    // species_id, and reuse the grouped points across every cell — same signal
-    // the live recompute paths (/api/prediction, /grid, /species-spots) apply,
-    // so precomputed tiles no longer drift below on-demand scores near known finds.
-    const { data: occRows, error: occErr } = await supabase.rpc('get_occurrences_in_bounds', {
-      min_lat: region.minLat,
-      min_lng: region.minLng,
-      max_lat: region.maxLat,
-      max_lng: region.maxLng,
-      p_species_id: null,
-      p_limit: 4000
-    });
-    if (occErr) {
-      // Non-fatal: a missing occurrence boost is better than no tiles at all.
-      log.warn('generate_tiles.occurrences_failed', { region: region.name, error: occErr.message });
-    }
-    const occBySpecies = new Map<number, { latitude: number; longitude: number }[]>();
-    for (const o of (occRows ?? []) as { latitude: number; longitude: number; species_id: number | null }[]) {
-      if (o.species_id == null) continue;
-      const arr = occBySpecies.get(o.species_id);
-      if (arr) arr.push(o);
-      else occBySpecies.set(o.species_id, [o]);
-    }
-
-    const cells = gridCells(region);
+    const cells = predictionTileGridCells(region);
     // Forest is per cell but species-agnostic — fetch once per cell.
     const forests = await mapLimit(cells, 5, (c) => getForestProperties({ lat: c.lat, lon: c.lng }));
 
     const rows = cells.flatMap((cell, ci) => {
       const forest = forests[ci];
       // No real forest signal → skip the whole cell, matching the live grid
-      // route (grid/route.ts). Never store pseudo-scored no-forest cells as
-      // hotspot tiles (their vegetation/soil would be Math.sin proxy noise).
+      // route (grid/route.ts). Neutral fallback values are appropriate for an
+      // on-demand summary, but not enough evidence to publish a hotspot tile.
       if (!forest) return [];
       return species.map((sp) => {
         const speciesCtx: SpeciesContext = {
@@ -190,11 +140,6 @@ export async function POST(request: NextRequest) {
           peakSeasonStart: sp.peak_season_start,
           peakSeasonEnd: sp.peak_season_end
         };
-        const nearbyOccurrences = weightedOccurrenceDensity(
-          occBySpecies.get(sp.id) ?? [],
-          cell.lat,
-          cell.lng
-        );
         const prediction = computeCellPrediction({
           lat: cell.lat,
           lon: cell.lng,
@@ -206,8 +151,7 @@ export async function POST(request: NextRequest) {
           speciesHabitat: buildSpeciesHabitatPreferences({
             mycorrhizalPartners: sp.mycorrhizal_partners,
             habitat: sp.habitat
-          }),
-          nearbyOccurrences
+          })
         });
         return {
           tile_date: tileDate,
@@ -244,6 +188,12 @@ export async function POST(request: NextRequest) {
       });
     });
 
+    if (rows.length === 0) {
+      generated[region.name] = 0;
+      log.warn('generate_tiles.no_forest_cells', { region: region.name, cells: cells.length });
+      continue;
+    }
+
     // Replace today's hybrid tiles for this region (idempotent re-runs).
     const { error: delErr } = await supabase
       .from('prediction_tiles')
@@ -267,7 +217,6 @@ export async function POST(request: NextRequest) {
       region: region.name,
       tiles: rows.length,
       cells: cells.length,
-      occurrences: occRows?.length ?? 0,
       weatherSource: weather.source
     });
   }
