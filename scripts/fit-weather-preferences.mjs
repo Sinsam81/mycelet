@@ -16,6 +16,7 @@
  */
 
 import { nullableNumber } from './lib/weather-features.mjs';
+import { chooseWeatherBackgrounds, splitTemporalRows } from './lib/weather-validation.mjs';
 
 const HELP = new Set(['-h', '--help']);
 const args = new Set(process.argv.slice(2));
@@ -102,14 +103,6 @@ function round(value, digits) {
   return Math.round(value * scale) / scale;
 }
 
-function makeRng(seed) {
-  let s = seed >>> 0;
-  return () => {
-    s = (Math.imul(s, 1103515245) + 12345) & 0x7fffffff;
-    return s / 0x7fffffff;
-  };
-}
-
 function groupKey(row, speciesById) {
   const sp = speciesById.get(row.speciesId);
   if (!sp) return null;
@@ -192,7 +185,7 @@ async function fetchFeatures() {
   for (let from = 0; rows.length < MAX_ROWS; ) {
     const params = new URLSearchParams({
       select:
-        'occurrence_id,species_id,observed_at,region,provider,temperature_c,humidity_pct,rain_3d_mm,rain_7d_mm,rain_14d_mm,soil_moisture_index',
+        'occurrence_id,species_id,observed_at,latitude,longitude,region,provider,temperature_c,humidity_pct,rain_3d_mm,rain_7d_mm,rain_14d_mm,soil_moisture_index',
       provider: 'neq.unavailable',
       temperature_c: 'not.is.null',
       species_id: 'not.is.null',
@@ -207,6 +200,8 @@ async function fetchFeatures() {
         occurrenceId: Number(r.occurrence_id),
         speciesId: Number(r.species_id),
         observedAt: r.observed_at,
+        latitude: num(r.latitude),
+        longitude: num(r.longitude),
         month: monthFromISO(r.observed_at),
         region: r.region,
         provider: r.provider,
@@ -228,22 +223,23 @@ async function fetchFeatures() {
 
 const num = nullableNumber;
 
-function targetGroupPairs(groupRows, allRows, group, speciesById, rng) {
+function targetGroupPairs(groupRows, allRows, group, speciesById) {
   const idx = indexTargetGroup(allRows, speciesById);
   const pairs = [];
+  const tiers = {};
   for (const pos of groupRows) {
     const candidates = (idx.get(`${pos.region}:${pos.month}`) ?? []).filter((r) => r.groupKey !== group);
     if (!candidates.length) continue;
-    for (let i = 0; i < NEG_PER_POS; i++) {
-      const bg = candidates[Math.floor(rng() * candidates.length)];
-      pairs.push([pos, bg]);
+    for (const match of chooseWeatherBackgrounds(pos, candidates, NEG_PER_POS)) {
+      pairs.push([pos, match.row]);
+      tiers[match.tier] = (tiers[match.tier] ?? 0) + 1;
     }
   }
-  return pairs;
+  return { pairs, tiers };
 }
 
-function analyzeGroup(group, rows, allRows, speciesById, rng) {
-  const stats = {
+function weatherStats(rows) {
+  return {
     temperatureC: summarizeFeature(rows, 'temperatureC'),
     humidityPct: summarizeFeature(rows, 'humidityPct'),
     rain3dMm: summarizeFeature(rows, 'rain3dMm'),
@@ -251,8 +247,14 @@ function analyzeGroup(group, rows, allRows, speciesById, rng) {
     rain14dMm: summarizeFeature(rows, 'rain14dMm'),
     soilMoistureIndex: summarizeFeature(rows, 'soilMoistureIndex')
   };
-  const suggested = suggestedPreference(stats);
-  const pairs = targetGroupPairs(rows, allRows, group, speciesById, rng);
+}
+
+function analyzeGroup(group, rows, allRows, speciesById) {
+  const stats = weatherStats(rows);
+  const split = splitTemporalRows(rows);
+  const suggested = suggestedPreference(weatherStats(split.train));
+  const matched = targetGroupPairs(split.test, allRows, group, speciesById);
+  const pairs = matched.pairs;
   const tempAuc = aucFromPairs(pairs, (row) =>
     triangularScore(row.temperatureC, suggested.tempCFloor, suggested.tempCMin, suggested.tempCMax, suggested.tempCCeil)
   );
@@ -274,6 +276,12 @@ function analyzeGroup(group, rows, allRows, speciesById, rng) {
     providers: counts(rows.map((r) => r.provider)),
     stats,
     suggested,
+    validation: {
+      trainN: split.train.length,
+      testN: split.test.length,
+      trainThrough: split.trainThrough,
+      backgroundTiers: matched.tiers
+    },
     targetGroup: {
       matchedPairs: pairs.length,
       tempWindowAuc: tempAuc.auc,
@@ -297,7 +305,10 @@ function printText(report) {
   console.log('Target-group contrast = other fungi rows in same region + month.\n');
 
   for (const g of report.groups) {
-    console.log(`${g.label}  n=${g.n}  regions=${JSON.stringify(g.regions)}`);
+    console.log(
+      `${g.label}  n=${g.n}  train/test=${g.validation.trainN}/${g.validation.testN}` +
+        `  regions=${JSON.stringify(g.regions)}`
+    );
     console.log(
       `  temp p25-p75 ${fixed(g.stats.temperatureC.p25, 1)}-${fixed(g.stats.temperatureC.p75, 1)} C` +
         `  | rain3d p50/p75 ${fixed(g.stats.rain3dMm.p50, 1)}/${fixed(g.stats.rain3dMm.p75, 1)} mm` +
@@ -309,14 +320,14 @@ function printText(report) {
         `  rainOpt ${fixed(g.suggested.rainOptMm, 1)} mm`
     );
     console.log(
-      `  AUC vs target-group: temp=${fixed(g.targetGroup.tempWindowAuc)} rain=${fixed(g.targetGroup.rain3dAuc)} humidity=${fixed(g.targetGroup.humidityAuc)} soil=${fixed(g.targetGroup.soilMoistureAuc)} pairs=${g.targetGroup.matchedPairs}\n`
+      `  AUC vs target-group: temp=${fixed(g.targetGroup.tempWindowAuc)} rain=${fixed(g.targetGroup.rain3dAuc)} humidity=${fixed(g.targetGroup.humidityAuc)} soil=${fixed(g.targetGroup.soilMoistureAuc)} pairs=${g.targetGroup.matchedPairs}` +
+        ` tiers=${JSON.stringify(g.validation.backgroundTiers)}\n`
     );
   }
   console.log('Do not wire suggested values blindly. Use them to update GENUS_PREFERENCES only after reviewing AUC, n, and NO/SE split.');
 }
 
 async function main() {
-  const rng = makeRng(13579);
   const speciesById = await fetchSpecies();
   const rows = await fetchFeatures();
   const grouped = new Map();
@@ -329,7 +340,7 @@ async function main() {
   }
   const groups = [...grouped.entries()]
     .filter(([, rs]) => rs.length >= MIN_N)
-    .map(([key, rs]) => analyzeGroup(key, rs, rows, speciesById, rng))
+    .map(([key, rs]) => analyzeGroup(key, rs, rows, speciesById))
     .sort((a, b) => b.n - a.n);
 
   const report = {
