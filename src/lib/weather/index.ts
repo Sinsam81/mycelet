@@ -275,13 +275,50 @@ interface SmhiDataPoint {
   quality?: string;
 }
 
+const SMHI_STATION_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+const smhiStationMemoryCache = new Map<
+  number,
+  { expiresAt: number; stations: SmhiStation[] }
+>();
+
 async function smhiFetchStations(parameterId: number): Promise<SmhiStation[] | null> {
+  const cached = smhiStationMemoryCache.get(parameterId);
+  if (process.env.NODE_ENV !== 'test' && cached && cached.expiresAt > Date.now()) {
+    return cached.stations;
+  }
+
   const res = await fetch(`${SMHI_BASE}/parameter/${parameterId}.json`, {
-    next: { revalidate: 86400 }
+    // Some parameter responses now exceed Next's 2 MB data-cache limit.
+    // Cache only the compact active-station projection in warm server memory
+    // so cold starts fetch once without emitting a failed-cache warning.
+    cache: 'no-store'
   });
-  if (!res.ok) return null;
+  if (!res.ok) return cached?.stations ?? null;
   const data = await res.json();
-  return Array.isArray(data?.station) ? data.station : null;
+  if (!Array.isArray(data?.station)) return cached?.stations ?? null;
+  const stations = data.station
+    .filter(
+      (station: SmhiStation) =>
+        station.active === true &&
+        typeof station.latitude === 'number' &&
+        typeof station.longitude === 'number' &&
+        (station.key !== undefined || station.id !== undefined)
+    )
+    .map((station: SmhiStation) => ({
+      key: station.key,
+      id: station.id,
+      name: station.name,
+      active: true,
+      latitude: station.latitude,
+      longitude: station.longitude
+    }));
+  if (process.env.NODE_ENV !== 'test') {
+    smhiStationMemoryCache.set(parameterId, {
+      expiresAt: Date.now() + SMHI_STATION_CACHE_TTL_MS,
+      stations
+    });
+  }
+  return stations;
 }
 
 async function smhiFetchData(
