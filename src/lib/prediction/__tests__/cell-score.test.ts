@@ -130,7 +130,7 @@ describe('computeCellPrediction', () => {
     expect(cell.score).toBe(cell.baseScore);
   });
 
-  it('leaves soil/vegetation as proxies when no forest data', () => {
+  it('uses neutral spatial factors when no real forest/elevation data exists', () => {
     const cell = computeCellPrediction({
       lat: 60,
       lon: 10.7,
@@ -143,5 +143,35 @@ describe('computeCellPrediction', () => {
     // No forest → habitat fit neutral (1), score still computed from climate.
     expect(cell.habitatFit).toBe(1);
     expect(cell.habitat).toBeNull();
+    expect(cell.factors.vegetation).toBe(50);
+    expect(cell.factors.soil).toBe(50);
+    expect(cell.factors.terrain).toBe(50);
+  });
+
+  it('keeps historical occurrence density informational instead of boosting the score', () => {
+    const baseline = computeCellPrediction({
+      lat: 60,
+      lon: 10.7,
+      month: 8,
+      weather: GOOD_WEATHER,
+      forest: GRAN_FOREST,
+      species: KANTARELL,
+      speciesHabitat: KANTARELL_HABITAT,
+      nearbyOccurrences: 0
+    });
+    const occurrenceHeavy = computeCellPrediction({
+      lat: 60,
+      lon: 10.7,
+      month: 8,
+      weather: GOOD_WEATHER,
+      forest: GRAN_FOREST,
+      species: KANTARELL,
+      speciesHabitat: KANTARELL_HABITAT,
+      nearbyOccurrences: 100
+    });
+
+    expect(occurrenceHeavy.nearbyOccurrences).toBe(100);
+    expect(occurrenceHeavy.occurrenceBoost).toBe(1);
+    expect(occurrenceHeavy.score).toBe(baseline.score);
   });
 });

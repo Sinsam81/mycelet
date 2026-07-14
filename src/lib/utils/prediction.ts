@@ -65,22 +65,6 @@ export function computeSeasonalScore(month: number): number {
   return 2;
 }
 
-export function computeVegetationProxyScore(latitude: number, longitude: number, month: number): number {
-  const seasonalBoost = month >= 7 && month <= 10 ? 12 : month >= 5 && month <= 11 ? 7 : 2;
-  const geoNoise = Math.round(pseudoNoise(latitude, longitude, 17) * 25);
-  return clamp(50 + seasonalBoost + geoNoise, 0, 100);
-}
-
-export function computeTerrainProxyScore(latitude: number, longitude: number): number {
-  const slopeNoise = Math.round(pseudoNoise(latitude, longitude, 31) * 60);
-  return clamp(25 + slopeNoise, 0, 100);
-}
-
-export function computeSoilProxyScore(latitude: number, longitude: number): number {
-  const calcNoise = Math.round(pseudoNoise(latitude, longitude, 71) * 70);
-  return clamp(20 + calcNoise, 0, 100);
-}
-
 export function computeWeatherTrendScore(input: WeatherInput): number {
   let score = 0;
 
@@ -98,9 +82,12 @@ export function computeWeatherTrendScore(input: WeatherInput): number {
 }
 
 export function computeAdvancedFactors(input: AdvancedPredictionInput): AdvancedPredictionFactors {
-  const vegetation = computeVegetationProxyScore(input.latitude, input.longitude, input.month);
-  const terrain = computeTerrainProxyScore(input.latitude, input.longitude);
-  const soil = computeSoilProxyScore(input.latitude, input.longitude);
+  // Unknown spatial factors must be neutral, not coordinate-seeded pseudo-data.
+  // computeCellPrediction replaces these values with real forest/elevation data
+  // when available. Keeping 50 here makes missing coverage explicit and stable.
+  const vegetation = 50;
+  const terrain = 50;
+  const soil = 50;
   const weatherTrend = computeWeatherTrendScore(input.weather);
   // Soil-water balance is the better moisture proxy (it decays through dry
   // spells, unlike a raw rain sum) — prefer it, blended with humidity. Fall
@@ -146,9 +133,4 @@ export function scoreToCondition(score: number): 'poor' | 'moderate' | 'good' | 
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, Math.round(value)));
-}
-
-function pseudoNoise(lat: number, lng: number, seed: number): number {
-  const raw = Math.sin(lat * 12.9898 + lng * 78.233 + seed) * 43758.5453;
-  return raw - Math.floor(raw);
 }

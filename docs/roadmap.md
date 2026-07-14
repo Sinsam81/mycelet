@@ -56,7 +56,7 @@ Gjenstår av dette: 7-dagers værtrend-graf (MET Locationforecast 2.0 — gratis
 | Fase B sikkerhet (audit-log, rate limiting, Næ 16-oppgradering) | ✅ De fleste stegene shippet |
 | Logger + observability (struktet logging, PII-redaksjon, /api/health) | ✅ Ferdig |
 | `fetchFrost()` — norsk vær | ✅ Kode ferdig (`src/lib/weather/index.ts`) — aktiveres automatisk når `MET_FROST_CLIENT_ID` settes (Sindres oppgave) |
-| Live skogdata i prediksjon: NIBIO SR16 (NO) + CORINE (SE) | ✅ Implementert og live-verifisert (`/api/prediction`, modell `v3_computed_nibio_habitat`) |
+| Live skogdata i prediksjon: NIBIO SR16 (NO) + CORINE (SE) | ✅ Implementert og live-verifisert (`/api/prediction`, modell `v4_computed_habitat`) |
 | **Fase 2 prediksjon** (habitat + vær + per-art kombinert) | 🟡 Kjernen bygget via live-API-kall (ikke raster-pipeline som opprinnelig planlagt). Gjenstår: GBIF-kalibrering + daglig tile-cron i skala |
 | Lansering på Vercel | ⏳ Du har Vercel-konto, ingen prosjekt opprettet ennå |
 
@@ -95,7 +95,7 @@ Gjenstår av dette: 7-dagers værtrend-graf (MET Locationforecast 2.0 — gratis
 
 Dette er det strategiske kjernearbeidet — det som gjør Mycelet unik. Alt under er nytt fra plan-økten 6. mai 2026.
 
-> **Statusoppdatering 29. mai 2026:** Kjernen i Fase 2 er nå bygget — men med en enklere arkitektur enn planen under beskriver. I stedet for å laste ned hele NIBIO SR16-datasettet og bygge en raster-pipeline, henter `/api/prediction` skogdata **live per punkt** (NIBIO WMS for Norge, CORINE for Sverige) og kombinerer med vær + habitat-scoring i sanntid (modellversjon `v3_computed_nibio_habitat`). Planen under er fortsatt nyttig for det som gjenstår: GBIF-backfill for kalibrering, og en daglig `prediction_tiles`-cron hvis live-kallene blir for trege i skala. Les den med det i mente.
+> **Statusoppdatering 14. juli 2026:** Kjernen i Fase 2 henter skogdata **live per punkt** (NIBIO WMS for Norge, CORINE for Sverige) og kombinerer med vær + habitat-scoring i sanntid (`v4_computed_habitat`). Koordinatbasert pseudo-støy er erstattet med nøytrale fallback-verdier, og historisk GBIF-tetthet vises kun som datakilde fordi korrigert target-group-validering ikke viste positivt løft. Planen under er fortsatt nyttig for daglig `prediction_tiles`-cron og videre bias-korrigert modellering.
 
 ### Hva vi har bygget grunnmur for
 

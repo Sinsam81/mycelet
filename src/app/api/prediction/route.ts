@@ -247,7 +247,7 @@ export async function GET(request: NextRequest) {
         condition,
         weatherSource: weather?.source ?? null,
         model: {
-          version: 'v2_tiles_weighted',
+          version: 'v4_tiles_honest_occurrence',
           factors: modelFactors
         },
         components: {
@@ -430,11 +430,7 @@ export async function GET(request: NextRequest) {
       weatherSource: weather.source,
       nearbyOccurrences,
       model: {
-        version: forest
-          ? 'v3_computed_nibio_habitat'
-          : speciesFit !== null
-            ? 'v2_computed_proxy_with_species'
-            : 'v2_computed_proxy',
+        version: forest ? 'v4_computed_habitat' : 'v4_computed_neutral_fallback',
         factors: modelFactors
       },
       components: {

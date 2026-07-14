@@ -275,7 +275,9 @@ function kernelDensity(index, sid, lat, lng) {
 }
 
 function occurrenceBoost(density) {
-  return 1 + Math.min(0.6, density * 0.05);
+  // Production keeps occurrence density informational until it demonstrates
+  // positive lift under matched target-group validation.
+  return 1;
 }
 
 function inBox(lat, lon, box) {
@@ -537,11 +539,11 @@ function scorePoint({ sid, lat, lng, iso }, forest, speciesById, occurrenceIndex
   const hab = habitat ? (0.5 + habitat.score) * habitat.hostGate : null;
 
   return {
-    fullCore: hab == null ? 0 : occ * phen * hab,
-    fullWithinForest: hab == null ? null : occ * phen * hab,
+    fullCore: hab == null ? 0 : phen * hab,
+    fullWithinForest: hab == null ? null : phen * hab,
     habitatCandidate: hab == null ? 0 : hab,
     habitatWithinForest: hab,
-    occurrenceOnly: occ,
+    occurrenceOnly: density,
     phenologyOnly: phen,
     forestMask: forest ? 1 : 0,
     features: {
@@ -805,11 +807,11 @@ async function main() {
   console.log(`Presence sources: ${JSON.stringify(sources.presence)}  | background sources: ${JSON.stringify(sources.background)}\n`);
 
   const label = {
-    fullCore: 'fullCore: forest mask + habitat + recurrence + phenology',
-    fullWithinForest: 'fullWithinForest: habitat + recurrence + phenology only when both are forest',
+    fullCore: 'fullCore: forest mask + habitat + phenology',
+    fullWithinForest: 'fullWithinForest: habitat + phenology only when both are forest',
     habitatCandidate: 'habitatCandidate: forest mask + habitat multiplier',
     habitatWithinForest: 'habitatWithinForest: habitat multiplier only when both are forest',
-    occurrenceOnly: 'occurrenceOnly: distance-decayed recurrence kernel',
+    occurrenceOnly: 'occurrenceOnly: informational distance-decayed recurrence density',
     phenologyOnly: 'phenologyOnly: date/species/lat-band timing',
     forestMask: 'forestMask: can the grid even score this point'
   };
