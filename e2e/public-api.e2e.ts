@@ -63,3 +63,18 @@ test.describe('Prediksjon / Lovende steder', () => {
     }
   });
 });
+
+test.describe('Feltfeedback', () => {
+  test('funn og hotspot-feedback krever innlogging', async ({ request }) => {
+    const payload = { latitude: OSLO.lat, longitude: OSLO.lon, visibility: 'private' };
+    const [finding, feedback] = await Promise.all([
+      request.post('/api/findings', { data: payload }),
+      request.post('/api/spot-feedback', {
+        data: { lat: OSLO.lat, lng: OSLO.lon, found: false }
+      })
+    ]);
+
+    expect(finding.status()).toBe(401);
+    expect(feedback.status()).toBe(401);
+  });
+});

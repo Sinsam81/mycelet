@@ -105,6 +105,7 @@ export default async function HomePage() {
       .from('findings')
       .select('species_id')
       .eq('user_id', user.id)
+      .eq('is_negative_observation', false)
       .limit(1000);
     const rows = (myFindings ?? []) as { species_id: number | null }[];
     if (rows.length > 0) {

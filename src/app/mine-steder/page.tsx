@@ -103,6 +103,7 @@ export default async function MineStederPage() {
       'id, location_name, latitude, longitude, found_at, image_url, visibility, species_name_override, mushroom_species(norwegian_name)'
     )
     .eq('user_id', user.id)
+    .eq('is_negative_observation', false)
     .order('found_at', { ascending: false })
     .limit(1000);
 

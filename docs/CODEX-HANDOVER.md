@@ -307,7 +307,7 @@ PostGIS + pgcrypto (migration 001). RLS is ON for every `public` table. Integer 
 ### Prediction / data tables
 - **`prediction_tiles`** (003) — precomputed raster. `tile_date`, `species_id`, `center_lat/lng`, `score` (0–100), `confidence`, `components` (JSONB), `source` (`mvp_baseline`/`sentinel_batch`/`hybrid`). GIST index. Read only via the `SECURITY DEFINER` RPC (public SELECT dropped in 015).
 - **`species_occurrences`** (013) — GBIF/Artsdatabanken points. `gbif_key` (unique, idempotent import), `latitude`/`longitude`, `observed_at` (added to RPC in 014), `license`/`dataset_key` (016 — only CC0/CC-BY kept). GIST index.
-- **`spot_feedback`** (021) — "Var du her? Fant du sopp?" ground truth for calibration. `found` bool, `score_shown`.
+- **`spot_feedback`** (021 + 029) — explicit post-visit ground truth for calibration. Stores `found`, `score_shown`, `visited_at`, model/source identifiers, and non-sensitive weather/forest score context. Migration 029 also keeps negative observations out of `public_findings` and positive-finding stats.
 - **`occurrence_weather_features`** (022) — weather-at-find-time cache for honest ML (service-role only). Temp/humidity/rain windows/soil-moisture per occurrence.
 - **`ai_identifications`** (020) — durable per-call AI counter (enforces free daily cap; counts *calls* not saved finds). RLS on with **zero policies** → service-role only (users can't reset their quota).
 
@@ -350,7 +350,8 @@ All routes under `src/app/api/*/route.ts`, Node runtime. Standard error contract
 | `/api/prediction/species-spots` | GET | authed | 10 | Premium-only (403 free). Returns `spots[]` (species photos on best ground). |
 | `/api/mushroom-day` | GET | public | 30 | `lat,lon` → `assessMushroomDay` result + `weatherSource`. 502 if no weather. 30-min cache. |
 | `/api/mushroom-forecast` | GET | public | 20 | `lat,lon` → `{today, days[≤7], flush, weatherSource}`. 502 if no weather. |
-| `/api/spot-feedback` | POST | authed | 30 | `{lat,lng,found,scoreShown?,speciesId?}` → insert into `spot_feedback`. |
+| `/api/spot-feedback` | POST | authed | 30 | `{lat,lng,found,scoreShown?,speciesId?,visitedAt?,modelVersion?,predictionSource?}` → insert calibrated field context into `spot_feedback`. |
+| `/api/findings` | POST | authed | 20 | Owner-scoped positive/negative finding insert. Captures best-effort weather snapshot + derived habitat tags before inserting through user RLS. |
 | `/api/billing/checkout` | POST | authed | 5 | `{plan:'premium'|'season_pass'}` → `{url}` (Stripe Checkout). 409 if already on that tier. Service-role upsert `billing_subscriptions` (incomplete). |
 | `/api/billing/portal` | POST | authed | 10 | → `{url}` (Stripe Billing Portal). 400 if no `stripe_customer_id`. |
 | `/api/billing/status` | GET | authed | 120 | → `{subscription, capabilities, plans}`. Drives all premium gating. |

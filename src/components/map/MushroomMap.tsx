@@ -251,7 +251,10 @@ export function MushroomMap() {
               lng: Number(box.dataset.lng),
               found,
               scoreShown: box.dataset.score ? Number(box.dataset.score) : null,
-              speciesId: box.dataset.species ? Number(box.dataset.species) : null
+              speciesId: box.dataset.species ? Number(box.dataset.species) : null,
+              visitedAt: new Date().toISOString(),
+              modelVersion: box.dataset.model,
+              predictionSource: box.dataset.source
             })
           });
           if (res.status === 401) {
@@ -300,7 +303,7 @@ export function MushroomMap() {
           : '';
         const feedbackHtml = `<div data-spot-feedback data-lat="${spot.lat}" data-lng="${spot.lng}" data-score="${spot.score}"${
           opts?.speciesId ? ` data-species="${opts.speciesId}"` : ''
-        } style="margin-top:8px;border-top:1px solid #e5e7eb;padding-top:7px">
+        } data-model="v4_species_spots_habitat" data-source="computed_top_spots" style="margin-top:8px;border-top:1px solid #e5e7eb;padding-top:7px">
           <div style="font-size:12px;font-weight:600;color:#1f2937">${t('wereYouHere')}</div>
           <div style="display:flex;gap:6px;margin-top:5px">
             <button type="button" data-fb="yes" style="flex:1;background:#15803d;color:#fff;border:none;border-radius:8px;padding:5px 0;font-size:12px;font-weight:600;cursor:pointer">${t('feedbackYes')}</button>
