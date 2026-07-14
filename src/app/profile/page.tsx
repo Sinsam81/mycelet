@@ -66,6 +66,7 @@ export default async function ProfilePage() {
       .from('findings')
       .select('id,found_at,location_name,notes,mushroom_species(norwegian_name,latin_name,edibility)')
       .eq('user_id', user.id)
+      .eq('is_negative_observation', false)
       .order('found_at', { ascending: false })
       .limit(5),
     supabase

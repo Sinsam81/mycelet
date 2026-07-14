@@ -4,7 +4,7 @@
 >
 > **Authority order when facts conflict:** (1) the code, (2) `supabase/migrations/*`, (3) this document, (4) `CLAUDE.md`, (5) the planning docs under `docs/`. Several `docs/*.md` predate the current live state — treat them as the last-written *planning* record, not current truth. Where a discrepancy is known, it is called out inline.
 >
-> **Last compiled:** 2026-07-13, from a full read of the code, all 28 migrations, all 18 API routes, `src/lib/**`, the frontend, and every file in `docs/`.
+> **Last compiled:** 2026-07-14, from a full read of the code, all 29 migrations, all API routes, `src/lib/**`, the frontend, and every file in `docs/`.
 
 ---
 
@@ -77,7 +77,7 @@ Recreational mushroom foragers in **Norway and Sweden** (the product deliberatel
 ├── public/                  # sw.js (service worker), manifest.json, icons, images
 ├── scripts/                 # prediction pipeline, calibration, backtests, setup (.mjs)
 ├── supabase/
-│   ├── migrations/          # 001..028 SQL (applied via dashboard SQL editor)
+│   ├── migrations/          # 001..029 SQL (001–028 dashboard; 029 Management API)
 │   └── functions/           # Deno Edge Functions (retention crons — planned/built)
 └── src/
     ├── app/                 # App Router: pages + api/*/route.ts
@@ -307,7 +307,7 @@ PostGIS + pgcrypto (migration 001). RLS is ON for every `public` table. Integer 
 ### Prediction / data tables
 - **`prediction_tiles`** (003) — precomputed raster. `tile_date`, `species_id`, `center_lat/lng`, `score` (0–100), `confidence`, `components` (JSONB), `source` (`mvp_baseline`/`sentinel_batch`/`hybrid`). GIST index. Read only via the `SECURITY DEFINER` RPC (public SELECT dropped in 015).
 - **`species_occurrences`** (013) — GBIF/Artsdatabanken points. `gbif_key` (unique, idempotent import), `latitude`/`longitude`, `observed_at` (added to RPC in 014), `license`/`dataset_key` (016 — only CC0/CC-BY kept). GIST index.
-- **`spot_feedback`** (021) — "Var du her? Fant du sopp?" ground truth for calibration. `found` bool, `score_shown`.
+- **`spot_feedback`** (021 + 029) — explicit post-visit ground truth for calibration. Stores `found`, `score_shown`, `visited_at`, model/source identifiers, and non-sensitive weather/forest score context. Migration 029 also keeps negative observations out of `public_findings` and positive-finding stats.
 - **`occurrence_weather_features`** (022) — weather-at-find-time cache for honest ML (service-role only). Temp/humidity/rain windows/soil-moisture per occurrence.
 - **`ai_identifications`** (020) — durable per-call AI counter (enforces free daily cap; counts *calls* not saved finds). RLS on with **zero policies** → service-role only (users can't reset their quota).
 
@@ -350,7 +350,8 @@ All routes under `src/app/api/*/route.ts`, Node runtime. Standard error contract
 | `/api/prediction/species-spots` | GET | authed | 10 | Premium-only (403 free). Returns `spots[]` (species photos on best ground). |
 | `/api/mushroom-day` | GET | public | 30 | `lat,lon` → `assessMushroomDay` result + `weatherSource`. 502 if no weather. 30-min cache. |
 | `/api/mushroom-forecast` | GET | public | 20 | `lat,lon` → `{today, days[≤7], flush, weatherSource}`. 502 if no weather. |
-| `/api/spot-feedback` | POST | authed | 30 | `{lat,lng,found,scoreShown?,speciesId?}` → insert into `spot_feedback`. |
+| `/api/spot-feedback` | POST | authed | 30 | `{lat,lng,found,scoreShown?,speciesId?,visitedAt?,modelVersion?,predictionSource?}` → insert calibrated field context into `spot_feedback`. |
+| `/api/findings` | POST | authed | 20 | Owner-scoped positive/negative finding insert. Captures best-effort weather snapshot + derived habitat tags before inserting through user RLS. |
 | `/api/billing/checkout` | POST | authed | 5 | `{plan:'premium'|'season_pass'}` → `{url}` (Stripe Checkout). 409 if already on that tier. Service-role upsert `billing_subscriptions` (incomplete). |
 | `/api/billing/portal` | POST | authed | 10 | → `{url}` (Stripe Billing Portal). 400 if no `stripe_customer_id`. |
 | `/api/billing/status` | GET | authed | 120 | → `{subscription, capabilities, plans}`. Drives all premium gating. |
@@ -454,7 +455,7 @@ Before each: run `npm run typecheck && npm run test && npm run build`; delete iC
 - **The append-only audit log.** Don't add UPDATE/DELETE paths; the DB trigger blocks them by design.
 - **The Stripe webhook idempotency + `billing_subscriptions` as the entitlement source.** IAP must upsert the same table with the same `hasPaidAccess` logic — don't create a parallel entitlement system.
 - **Security headers / enforcing CSP.** Don't loosen CSP or drop headers; add allowlist hosts narrowly if a new external resource is needed.
-- **Migration ordering / never rewrite an applied migration.** Migrations are applied by hand in the dashboard and already ran in prod. Add new numbered migrations; never edit 001–028.
+- **Migration ordering / never rewrite an applied migration.** Migrations already ran in prod. Add new numbered migrations; never edit 001–029. Remote migration history is empty because 001–028 were applied by hand, so `db push` would wrongly try the full chain; 029 was applied as one transaction through the authenticated Supabase Management API after a rollback rehearsal.
 - **Don't commit iCloud `"* 2.*"` duplicate files.** Don't auto-deploy — the QA loop detects+proposes but never deploys.
 - **`security_invoker=false` on `public_findings`.** It intentionally runs with definer privileges; that's the masking boundary.
 
@@ -509,7 +510,7 @@ Before each: run `npm run typecheck && npm run test && npm run build`; delete iC
 
 **Architecture spine.** UI + API live under `src/app/` (pages + `api/*/route.ts`). All business logic is in `src/lib/`. Three files matter most: **`src/lib/prediction/cell-score.ts`** (`computeCellPrediction` — the ONE scoring function shared by live `/api/prediction` and the tile-generation cron, so they never drift), **`src/lib/weather/index.ts`** (`fetchWeatherSummary` — region-routed weather, returns null if no provider), and **`src/lib/utils/region.ts`** (`getRegion(lat,lon)` → NO/SE/other — the shared router for weather, forest source, and basemap; all country-specific behavior MUST go through it). Supabase clients are split: `client.ts` (browser/anon), `server.ts` (cookie session), `admin.ts` (service role, server-only), `middleware.ts` (session refresh + auth gating). Billing derives everything from `getBillingCapabilities(subscription).paid`, populated by the idempotent Stripe webhook into `billing_subscriptions`.
 
-**Data model.** Postgres + PostGIS, RLS on every table, 28 migrations (`supabase/migrations/001..028`) applied BY HAND in the dashboard in order (hard dependencies; never edit an applied migration, add new numbered ones). Central table `findings` has raw `latitude/longitude` (owner-only via RLS) and trigger-computed `display_latitude/longitude`. The **`set_display_location` trigger** + the **`public_findings` view** (runs `security_invoker=false`) + owner-only findings RLS form the **coordinate-masking system**: public = exact, approximate = ±500 m jitter, zone = grid-snapped, private = NULL. This is a safety/trust feature — changing one piece without the others leaks locations. Other key tables: `mushroom_species` (catalog; **⚠ schema drift:** `primary_image_url` + `swedish_name` are used by migrations 015/017/023/027 but never created in 001–028 — they exist in prod out-of-band, so a clean replay FAILS without adding them first), `prediction_tiles` (precomputed scores, read via a SECURITY DEFINER RPC), `species_occurrences` (186k GBIF points, CC0/CC-BY only), `billing_subscriptions`, append-only `admin_audit_log`, `ai_identifications` (free daily-cap counter, service-role only).
+**Data model.** Postgres + PostGIS, RLS on every table, 29 migrations (`supabase/migrations/001..029`) applied in production (001–028 by hand in the dashboard; 029 through one Management API transaction; hard dependencies; never edit an applied migration, add new numbered ones). Central table `findings` has raw `latitude/longitude` (owner-only via RLS) and trigger-computed `display_latitude/longitude`. The **`set_display_location` trigger** + the **`public_findings` view** (runs `security_invoker=false`) + owner-only findings RLS form the **coordinate-masking system**: public = exact, approximate = ±500 m jitter, zone = grid-snapped, private = NULL. This is a safety/trust feature — changing one piece without the others leaks locations. Other key tables: `mushroom_species` (catalog; **⚠ schema drift:** `primary_image_url` + `swedish_name` are used by migrations 015/017/023/027 but never created in 001–028 — they exist in prod out-of-band, so a clean replay FAILS without adding them first), `prediction_tiles` (precomputed scores, read via a SECURITY DEFINER RPC), `species_occurrences` (333k+ GBIF points, CC0/CC-BY only), `billing_subscriptions`, append-only `admin_audit_log`, `ai_identifications` (free daily-cap counter, service-role only).
 
 **API contract.** ~18 routes, Node runtime. Auth = `supabase.auth.getUser()`. Errors: 400 validation / 401 unauth / 403 gated / 429 rate-limited / 500 internal / 502 upstream weather-or-Kindwise / 503 disabled. Rate limiting is **in-memory, per serverless instance** (effective limit ≈ N × configured — swap for Redis/KV before scale) on 14 route groups. Billing gates: free users get coarsened prediction + 5 AI identifications/day; paid get full detail + unlimited AI + offline maps + "promising spots."
 
@@ -519,7 +520,7 @@ Before each: run `npm run typecheck && npm run test && npm run build`; delete iC
 
 **Security.** Enforcing CSP + strict headers (HSTS, `X-Frame-Options: DENY`, tight `Permissions-Policy`) on every route. RLS is the authz boundary; `PROTECTED_PATHS` in middleware redirects unauthed users. Logger redacts PII (emails + secret-pattern keys). Append-only audit log for admin actions. Full GDPR: `/api/me/export` (Art. 15), `/api/me/delete` (Art. 17), retention warnings + `/api/me/extend-retention`.
 
-**Known footguns.** (1) **Middleware doesn't run in Turbopack dev** → auth gating only testable via `npm run qa:prod`. (2) The project is in an **iCloud folder** that spawns `"* 2.ts"` duplicate files — never commit them; delete before `npm run build`; iOS CLI codesign fails (use Xcode GUI). (3) The dev server runs in the main dir; **git-worktree edits don't reach it**. (4) **`CLAUDE.md` is stale** on four points — CSP is now enforcing (not report-only), `X-Frame-Options` is DENY (not SAMEORIGIN), rate limiting covers 14 routes (not 5), migrations run to 028 (not 021); trust the code. (5) `zustand` is a dependency but **UNUSED** (no `src/store/`). (6) The offline tile templates in `offlineMap.ts` ↔ `isMapTileRequest` in `public/sw.js` are a **hardcoded coupling that must move together** (a Sweden-offline bug from this exact mismatch was fixed 2026-07-13, commit 4f51dbb).
+**Known footguns.** (1) **Middleware doesn't run in Turbopack dev** → auth gating only testable via `npm run qa:prod`. (2) The project is in an **iCloud folder** that spawns `"* 2.ts"` duplicate files — never commit them; delete before `npm run build`; iOS CLI codesign fails (use Xcode GUI). (3) The dev server runs in the main dir; **git-worktree edits don't reach it**. (4) **`CLAUDE.md` is stale** on four points — CSP is now enforcing (not report-only), `X-Frame-Options` is DENY (not SAMEORIGIN), rate limiting covers 14+ routes (not 5), migrations run to 029 (not 021); trust the code. (5) `zustand` is a dependency but **UNUSED** (no `src/store/`). (6) The offline tile templates in `offlineMap.ts` ↔ `isMapTileRequest` in `public/sw.js` are a **hardcoded coupling that must move together** (a Sweden-offline bug from this exact mismatch was fixed 2026-07-13, commit 4f51dbb).
 
 **Workflow.** `npm run dev` (localhost:3000), `npm run typecheck`, `npm run test` (Vitest, ~262 tests in `__tests__/`), `npm run build` (runs tsc), `npm run qa`/`qa:prod` (Playwright product-eval loop — detects+proposes but NEVER auto-deploys). Commit style: short imperative English subject; branch before committing on `main`; deploy (push to `main`) **only when the founder says OK**. Standing habit: when a bug is reported, fix it, then audit the whole app for siblings of that bug-class (Sweden/Norway-centric assumptions have bitten repeatedly).
 
