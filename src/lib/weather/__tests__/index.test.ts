@@ -109,7 +109,7 @@ describe('fetchSmhi (via Sweden coords)', () => {
     const near = smhiStation('100', 59.34, 18.05);
     const far = smhiStation('200', 65.0, 25.0);
 
-    const fetchSpy = vi.fn(async (url: unknown) => {
+    const fetchSpy = vi.fn(async (url: unknown, _init?: RequestInit) => {
       const u = String(url);
 
       // Station list endpoints
@@ -171,6 +171,15 @@ describe('fetchSmhi (via Sweden coords)', () => {
     expect(result?.minTemp7dC).toBe(7);
     // max over last 7d: should be 24
     expect(result?.maxTemp7dC).toBe(24);
+
+    const stationCalls = fetchSpy.mock.calls.filter(([url]) => {
+      const value = String(url);
+      return value.endsWith('.json') && value.includes('/parameter/') && !value.includes('/station/');
+    });
+    expect(stationCalls).toHaveLength(5);
+    for (const [, init] of stationCalls) {
+      expect(init).toMatchObject({ cache: 'no-store' });
+    }
   });
 
   it('uses nearest active station by approximate distance', async () => {
