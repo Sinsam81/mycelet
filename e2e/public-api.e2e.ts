@@ -77,4 +77,9 @@ test.describe('Feltfeedback', () => {
     expect(finding.status()).toBe(401);
     expect(feedback.status()).toBe(401);
   });
+
+  test('historisk vær-backfill krever cron-hemmelighet', async ({ request }) => {
+    const response = await request.get('/api/cron/backfill-occurrence-weather?speciesId=1&limit=1');
+    expect(response.status()).toBe(401);
+  });
 });
