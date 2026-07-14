@@ -15,6 +15,7 @@
 | B11 | Middels drift | Gjentatt værimport kunne stoppe på allerede eksisterende førsteside | Eksisterende rader ble filtrert etter at LIMIT var fylt | Fikset i PR #79; skanner videre til manglende rader |
 | B12 | Høy modell | Norsk lokal kjøring kunne ikke bygge historikk uten å kopiere produksjonshemmelighet | Frost krever klient-ID | Fikset sikkert i PR #80: avgrenset CRON_SECRET-rute i produksjon |
 | B13 | Kritisk analyse | Værvindu ble lært og evaluert på samme rader; bakgrunn kunne være annet år/sted | Ingen holdout og for grov matching | Fikset i PR #81 med 70/30 temporal holdout og lokal/samme-år-prioritet |
+| B14 | Middels drift | Göteborg-prediksjon ga Next.js-varsel om mislykket datacache og gjentok kaldt stasjonsarbeid | SMHIs parameter 5-stasjonsliste hadde vokst over Next.js' grense på 2 MB per cacheelement | Fikset live i PR #83 med `no-store`, kompakt 24-timers minnecache og stale fallback |
 
 ## Åpne begrensninger
 
@@ -22,4 +23,3 @@
 - Svensk produksjon bruker fortsatt CORINE. Skogsstyrelsens rikere rastertjenester krever konto for REST/WMS; ingen utestet adapter ble aktivert.
 - In-memory rate limiting er per Vercel-instans og blir upresis under skalering.
 - Supabase viste ingen synlig logisk backup og PITR var av. Dette er en driftsrisiko som krever plan-/kostnadsvalg fra grunnlegger.
-

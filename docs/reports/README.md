@@ -19,8 +19,9 @@ Produktet er ikke ferdig med å bevise presis *stedsprediksjon*. Det sterke, val
 - Positive, negative og AI-bekreftede felthendelser lagrer modell-, vær- og habitatkontekst for senere kalibrering. Negative observasjoner vises ikke offentlig.
 - Historisk værgrunnlag er utvidet til 1 664 rader: 1 000 svenske kjerneartsprofiler, 125 norske kjerneartsprofiler og 539 eksisterende norske profiler.
 - Værvalideringen bruker nå eldre 70 % til trening, nyeste 30 % til test og bakgrunner fra samme år/nærområde når mulig.
+- SMHIs store stasjonslister går utenom Next.js' 2 MB datacache og holdes som en kompakt, feilrobust minnecache per varm serverinstans.
 
-PR-er: [#71](https://github.com/Sinsam81/mycelet/pull/71), [#72](https://github.com/Sinsam81/mycelet/pull/72), [#73](https://github.com/Sinsam81/mycelet/pull/73), [#75](https://github.com/Sinsam81/mycelet/pull/75), [#76](https://github.com/Sinsam81/mycelet/pull/76), [#77](https://github.com/Sinsam81/mycelet/pull/77), [#78](https://github.com/Sinsam81/mycelet/pull/78), [#79](https://github.com/Sinsam81/mycelet/pull/79), [#80](https://github.com/Sinsam81/mycelet/pull/80) og [#81](https://github.com/Sinsam81/mycelet/pull/81).
+PR-er: [#71](https://github.com/Sinsam81/mycelet/pull/71), [#72](https://github.com/Sinsam81/mycelet/pull/72), [#73](https://github.com/Sinsam81/mycelet/pull/73), [#75](https://github.com/Sinsam81/mycelet/pull/75), [#76](https://github.com/Sinsam81/mycelet/pull/76), [#77](https://github.com/Sinsam81/mycelet/pull/77), [#78](https://github.com/Sinsam81/mycelet/pull/78), [#79](https://github.com/Sinsam81/mycelet/pull/79), [#80](https://github.com/Sinsam81/mycelet/pull/80), [#81](https://github.com/Sinsam81/mycelet/pull/81), [#82](https://github.com/Sinsam81/mycelet/pull/82) og [#83](https://github.com/Sinsam81/mycelet/pull/83).
 
 ## Database
 
@@ -49,4 +50,3 @@ Ingen nye værvekter er satt live. De fleste andre arts-/værsignalene var nær 
 6. Modellen trenger ekte feltfeedback, særlig «letet, fant ikke», før sannsynligheter kan kalibreres.
 
 Detaljer: [deploylogg](deploys.md), [UX-audit](ux-audit.md), [buglogg](bug-ledger.md), [kjerneforbedringer](core-improvements.md), [modellrapport](prediction-model.md) og [lanseringssjekkliste](launch-checklist.md).
-

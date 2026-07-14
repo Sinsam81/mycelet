@@ -14,6 +14,8 @@ Alle kodeendringer ble verifisert med typecheck, full Vitest-suite og produksjon
 | [#79 Værimport](https://github.com/Sinsam81/mycelet/pull/79) | `76cd5a7` | Helse/ferskhet ok; 28/28 prod-QA; 1 000 komplette SE-profiler |
 | [#80 Norsk backfill](https://github.com/Sinsam81/mycelet/pull/80) | `75585d5` | Helse/ferskhet ok; 29/29 prod-QA; uautorisert = 401; 125 NO-profiler kontrollert innlest |
 | [#81 Værvalidering](https://github.com/Sinsam81/mycelet/pull/81) | `fc8ef83` | Helse/ferskhet ok; 29/29 prod-QA; 1 664-raders holdout-audit fullført |
+| [#82 Sluttrapporter](https://github.com/Sinsam81/mycelet/pull/82) | `19873cd` | Helse/ferskhet ok; fem regioner ferske; 29/29 prod-QA; produksjonsforside uten konsollfeil |
+| [#83 SMHI-stasjonscache](https://github.com/Sinsam81/mycelet/pull/83) | `9bc1830` | Helse/ferskhet ok; fem regioner ferske; Göteborg bruker SMHI; 29/29 prod-QA |
 
 ## Databaseendring
 
@@ -26,4 +28,3 @@ Alle kodeendringer ble verifisert med typecheck, full Vitest-suite og produksjon
 5. Etterkontroll: seks nye feedbackkolonner, `visited_at`-krav/default, indeks, offentlig negativfilter og korrigert statistikkfunksjon.
 
 Ingen rollback av kode eller database var nødvendig.
-
