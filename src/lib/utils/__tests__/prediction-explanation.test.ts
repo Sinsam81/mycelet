@@ -181,7 +181,10 @@ describe('buildExplanation — historical occurrences', () => {
     const occurrence = lines.find((line) => line.category === 'occurrence');
 
     expect(occurrence?.level).toBe('neutral');
-    expect(occurrence?.text).toContain('Historiske funn');
+    // Framed as a hint, explicitly caveated with the accessibility-bias reason —
+    // not "evidence of presence".
+    expect(occurrence?.text).toContain('registrert funn i nærheten');
+    expect(occurrence?.text.toLowerCase()).toContain('hint');
     expect(occurrence?.text).not.toContain('2.437');
   });
 });
