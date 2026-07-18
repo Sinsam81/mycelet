@@ -13,6 +13,28 @@ import { weightedOccurrenceDensity } from '@/lib/prediction/occurrences';
 import { getElevation } from '@/lib/terrain';
 import { createRequestLogger } from '@/lib/log/request';
 
+// This route calls two slow, no-SLA external providers (weather + NIBIO forest)
+// in series. Pin the runtime and give it real headroom so a slow provider ends
+// in a clean JSON error rather than the plan-default (~10-15s) bare 504.
+export const runtime = 'nodejs';
+export const maxDuration = 30;
+
+/** Resolve to null if the promise doesn't settle within `ms` (or rejects). */
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(null), ms);
+    promise
+      .then((value) => {
+        clearTimeout(timer);
+        resolve(value);
+      })
+      .catch(() => {
+        clearTimeout(timer);
+        resolve(null);
+      });
+  });
+}
+
 interface FindingRow {
   id: string;
   species_id: number | null;
@@ -54,7 +76,9 @@ export async function GET(request: NextRequest) {
   const url = new URL(request.url);
   const lat = Number(url.searchParams.get('lat'));
   const lon = Number(url.searchParams.get('lon'));
-  const radiusKm = Number(url.searchParams.get('radiusKm') ?? '15');
+  // Clamp: an unbounded/NaN radius would build a country-sized (or NaN) bounding
+  // box that the RPCs then scan. 1-50 km covers every legitimate use.
+  const radiusKm = Math.min(50, Math.max(1, Number(url.searchParams.get('radiusKm')) || 15));
   const speciesIdParam = url.searchParams.get('speciesId');
   const speciesId = speciesIdParam ? Number(speciesIdParam) : null;
 
@@ -304,7 +328,10 @@ export async function GET(request: NextRequest) {
         month_filter: null
       }),
       // Real forest/soil signal: NIBIO SR16 (NO), CORINE forest type (SE), null elsewhere.
-      getForestProperties({ lat, lon }),
+      // Timeout-guarded like grid/species-spots: SR16's own 8s timeout could
+      // otherwise stall the whole point prediction. Forest is best-effort here
+      // (null → v4_computed_neutral_fallback), so a 3s cap degrades gracefully.
+      withTimeout(getForestProperties({ lat, lon }), 3000),
       // Real prior finds (GBIF) near the point → "observasjoner nær her" boost.
       supabase.rpc('get_occurrences_in_bounds', {
         min_lat: minLat,

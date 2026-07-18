@@ -2,7 +2,7 @@ import { getRegion } from '@/lib/utils/region';
 import { computeSoilMoistureIndex } from '@/lib/weather/soil-moisture';
 
 export interface WeatherSummary {
-  source: 'met_frost' | 'smhi' | 'openweather' | 'unavailable';
+  source: 'met_frost' | 'smhi' | 'openweather' | 'open_meteo' | 'unavailable';
   temperatureC: number;
   humidityPct: number;
   rain3dMm: number;
@@ -29,6 +29,15 @@ const PLACEHOLDER = 'your-api-key-here';
 function isRealKey(value: string | undefined) {
   return Boolean(value && value !== PLACEHOLDER && value.length >= 10);
 }
+
+// Every upstream weather provider here is a free endpoint with no SLA (MET
+// Frost/Locationforecast, SMHI, OpenWeather). Frost in particular has stalled
+// for minutes historically. Without a per-request deadline a single slow
+// provider hangs the whole prediction hot path until the platform kills the
+// function → spinner-of-death on the app's main screen. Cap each fetch and
+// degrade to null (the caller already handles null gracefully). Matches the
+// SR16 (8s) / terrain (3s) / forecast (5s) timeout pattern already in the code.
+const WEATHER_TIMEOUT_MS = 6000;
 
 /**
  * Fallback humidity when the nearest station reports no relative-humidity
@@ -59,19 +68,24 @@ const NEUTRAL_HUMIDITY_PCT = 75;
 export async function fetchWeatherSummary({ lat, lon }: WeatherFetchOptions): Promise<WeatherSummary | null> {
   const region = getRegion(lat, lon);
 
+  // Region's primary provider first.
   if (region === 'NO' && isRealKey(process.env.MET_FROST_CLIENT_ID)) {
-    return fetchFrost({ lat, lon });
+    const frost = await fetchFrost({ lat, lon });
+    if (frost) return frost;
+  } else if (region === 'SE') {
+    const smhi = await fetchSmhi({ lat, lon });
+    if (smhi) return smhi;
   }
 
-  if (region === 'SE') {
-    return fetchSmhi({ lat, lon });
-  }
-
+  // OpenWeather if a key is configured (also the primary for 'other' regions).
   if (isRealKey(process.env.OPENWEATHER_API_KEY)) {
-    return fetchOpenWeather({ lat, lon });
+    const ow = await fetchOpenWeather({ lat, lon });
+    if (ow) return ow;
   }
 
-  return null;
+  // Keyless last resort so a missing/expired Frost or OpenWeather key (or a
+  // provider outage) degrades to real weather instead of a hard 502.
+  return fetchOpenMeteo({ lat, lon });
 }
 
 // --- MET Frost (Norway) -------------------------------------------------
@@ -113,12 +127,18 @@ async function frostGet(
   params: Record<string, string>,
   auth: string
 ): Promise<{ data?: FrostDataItem[] } | null> {
-  const res = await fetch(`${FROST_BASE}${path}?${new URLSearchParams(params).toString()}`, {
-    headers: { Authorization: auth, Accept: 'application/json' },
-    next: { revalidate: 900 }
-  });
-  if (!res.ok) return null;
-  return res.json();
+  try {
+    const res = await fetch(`${FROST_BASE}${path}?${new URLSearchParams(params).toString()}`, {
+      headers: { Authorization: auth, Accept: 'application/json' },
+      next: { revalidate: 900 },
+      signal: AbortSignal.timeout(WEATHER_TIMEOUT_MS)
+    });
+    if (!res.ok) return null;
+    return res.json();
+  } catch {
+    // Timeout or network error → treat as no data (caller falls back).
+    return null;
+  }
 }
 
 /** Nearest weather stations to the point, ordered by distance (closest first). */
@@ -287,14 +307,21 @@ async function smhiFetchStations(parameterId: number): Promise<SmhiStation[] | n
     return cached.stations;
   }
 
-  const res = await fetch(`${SMHI_BASE}/parameter/${parameterId}.json`, {
-    // Some parameter responses now exceed Next's 2 MB data-cache limit.
-    // Cache only the compact active-station projection in warm server memory
-    // so cold starts fetch once without emitting a failed-cache warning.
-    cache: 'no-store'
-  });
-  if (!res.ok) return cached?.stations ?? null;
-  const data = await res.json();
+  let data: { station?: SmhiStation[] } | null;
+  try {
+    const res = await fetch(`${SMHI_BASE}/parameter/${parameterId}.json`, {
+      // Some parameter responses now exceed Next's 2 MB data-cache limit.
+      // Cache only the compact active-station projection in warm server memory
+      // so cold starts fetch once without emitting a failed-cache warning.
+      cache: 'no-store',
+      signal: AbortSignal.timeout(WEATHER_TIMEOUT_MS)
+    });
+    if (!res.ok) return cached?.stations ?? null;
+    data = await res.json();
+  } catch {
+    // Timeout or network error → serve stale cache if we have it, else null.
+    return cached?.stations ?? null;
+  }
   if (!Array.isArray(data?.station)) return cached?.stations ?? null;
   const stations = data.station
     .filter(
@@ -326,13 +353,17 @@ async function smhiFetchData(
   stationKey: string | number,
   period: 'latest-hour' | 'latest-day' | 'latest-months'
 ): Promise<SmhiDataPoint[] | null> {
-  const res = await fetch(
-    `${SMHI_BASE}/parameter/${parameterId}/station/${stationKey}/period/${period}/data.json`,
-    { next: { revalidate: 900 } }
-  );
-  if (!res.ok) return null;
-  const data = await res.json();
-  return Array.isArray(data?.value) ? data.value : null;
+  try {
+    const res = await fetch(
+      `${SMHI_BASE}/parameter/${parameterId}/station/${stationKey}/period/${period}/data.json`,
+      { next: { revalidate: 900 }, signal: AbortSignal.timeout(WEATHER_TIMEOUT_MS) }
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+    return Array.isArray(data?.value) ? data.value : null;
+  } catch {
+    return null;
+  }
 }
 
 function approxDistanceSq(stationLat: number, stationLon: number, lat: number, lon: number) {
@@ -464,26 +495,93 @@ async function fetchOpenWeather({ lat, lon }: WeatherFetchOptions): Promise<Weat
   const apiKey = process.env.OPENWEATHER_API_KEY;
   if (!isRealKey(apiKey)) return null;
 
-  const res = await fetch(
-    `https://api.openweathermap.org/data/2.5/forecast?lat=${lat}&lon=${lon}&units=metric&lang=no&appid=${apiKey}`,
-    { next: { revalidate: 900 } }
-  );
-  if (!res.ok) return null;
+  try {
+    const res = await fetch(
+      `https://api.openweathermap.org/data/2.5/forecast?lat=${lat}&lon=${lon}&units=metric&lang=no&appid=${apiKey}`,
+      { next: { revalidate: 900 }, signal: AbortSignal.timeout(WEATHER_TIMEOUT_MS) }
+    );
+    if (!res.ok) return null;
 
-  const data = await res.json();
-  const list = data?.list ?? [];
-  const first = list[0];
+    const data = await res.json();
+    const list = data?.list ?? [];
+    const first = list[0];
 
-  return {
-    source: 'openweather',
-    temperatureC: Number(first?.main?.temp ?? 0),
-    humidityPct: Number(first?.main?.humidity ?? NEUTRAL_HUMIDITY_PCT),
-    rain3dMm: list.slice(0, 24).reduce((sum: number, item: any) => sum + Number(item?.rain?.['3h'] ?? 0), 0),
-    rain7dMm: list.slice(0, 56).reduce((sum: number, item: any) => sum + Number(item?.rain?.['3h'] ?? 0), 0),
-    rain14dMm: null,
-    minTemp7dC: null,
-    maxTemp7dC: null,
-    // OpenWeather here is a short forecast, not daily precip history → no bucket.
-    soilMoistureIndex: null
-  };
+    return {
+      source: 'openweather',
+      temperatureC: Number(first?.main?.temp ?? 0),
+      humidityPct: Number(first?.main?.humidity ?? NEUTRAL_HUMIDITY_PCT),
+      rain3dMm: list.slice(0, 24).reduce((sum: number, item: any) => sum + Number(item?.rain?.['3h'] ?? 0), 0),
+      rain7dMm: list.slice(0, 56).reduce((sum: number, item: any) => sum + Number(item?.rain?.['3h'] ?? 0), 0),
+      rain14dMm: null,
+      minTemp7dC: null,
+      maxTemp7dC: null,
+      // OpenWeather here is a short forecast, not daily precip history → no bucket.
+      soilMoistureIndex: null
+    };
+  } catch {
+    return null;
+  }
+}
+
+// --- Open-Meteo (keyless global fallback) ------------------------------
+//
+// Last-resort provider used ONLY when the region's primary adapter returns
+// null (e.g. a mis-set/expired MET_FROST_CLIENT_ID would otherwise 502 every
+// Norwegian prediction). Open-Meteo is free, keyless, global, and — unlike the
+// OpenWeather short-forecast — exposes DAILY precip/temperature history, so it
+// can fill rain windows, 7-day extremes, and the soil-moisture bucket properly.
+// Purely additive: it never runs on the healthy Frost/SMHI path, so it can't
+// change scores when the primary providers are up.
+const OPEN_METEO_URL = 'https://api.open-meteo.com/v1/forecast';
+
+function sumLastN(values: number[], n: number): number {
+  return values.slice(-n).reduce((total, v) => total + (Number.isFinite(v) ? v : 0), 0);
+}
+
+async function fetchOpenMeteo({ lat, lon }: WeatherFetchOptions): Promise<WeatherSummary | null> {
+  try {
+    const params = new URLSearchParams({
+      latitude: lat.toFixed(4),
+      longitude: lon.toFixed(4),
+      daily: 'temperature_2m_mean,temperature_2m_min,temperature_2m_max,precipitation_sum',
+      current: 'temperature_2m,relative_humidity_2m',
+      past_days: '14',
+      forecast_days: '1',
+      timezone: 'UTC'
+    });
+    const res = await fetch(`${OPEN_METEO_URL}?${params.toString()}`, {
+      next: { revalidate: 900 },
+      signal: AbortSignal.timeout(WEATHER_TIMEOUT_MS)
+    });
+    if (!res.ok) return null;
+
+    const data = await res.json();
+    const precip: number[] = (data?.daily?.precipitation_sum ?? []).map((v: unknown) => Number(v ?? 0));
+    const means: number[] = (data?.daily?.temperature_2m_mean ?? []).map((v: unknown) => Number(v ?? 0));
+    const mins: number[] = (data?.daily?.temperature_2m_min ?? []).map((v: unknown) => Number(v)).filter(Number.isFinite);
+    const maxs: number[] = (data?.daily?.temperature_2m_max ?? []).map((v: unknown) => Number(v)).filter(Number.isFinite);
+    if (precip.length === 0 && means.length === 0) return null;
+
+    const currentTemp = Number(data?.current?.temperature_2m);
+    const meanTemp = means.length ? means[means.length - 1] : currentTemp;
+    const temperatureC = Number.isFinite(currentTemp) ? currentTemp : meanTemp;
+    const currentHumidity = Number(data?.current?.relative_humidity_2m);
+    const last7Min = mins.slice(-7);
+    const last7Max = maxs.slice(-7);
+
+    return {
+      source: 'open_meteo',
+      temperatureC: Number.isFinite(temperatureC) ? temperatureC : 0,
+      humidityPct: Number.isFinite(currentHumidity) ? currentHumidity : NEUTRAL_HUMIDITY_PCT,
+      rain3dMm: sumLastN(precip, 3),
+      rain7dMm: sumLastN(precip, 7),
+      rain14dMm: precip.length ? sumLastN(precip, 14) : null,
+      minTemp7dC: last7Min.length ? Math.min(...last7Min) : null,
+      maxTemp7dC: last7Max.length ? Math.max(...last7Max) : null,
+      soilMoistureIndex:
+        precip.length && Number.isFinite(meanTemp) ? computeSoilMoistureIndex(precip, meanTemp) : null
+    };
+  } catch {
+    return null;
+  }
 }
