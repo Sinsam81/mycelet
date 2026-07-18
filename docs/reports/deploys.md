@@ -50,3 +50,10 @@ Ingen rollback av kode eller database var nødvendig.
 - **Verify post-deploy:** `/api/health` → ok; `/api/prediction` (Oslo) → 200 stable; radiusKm=abc → 200 (clamp live, new code confirmed); `qa:prod` 29/29 incl. NO-Frost + SE-SMHI prediction routing.
 - **Rollback:** none needed.
 - **Source:** driven by the `prediction-launch-audit` workflow (4-dimension audit + synthesis). Full findings archived in the session; punch-list items A–H documented there.
+
+## 2026-07-19 — PR #89: Prediction copy-honesty pass (place-claims → condition-claims)
+- **What:** Copy-only, no model change. Reframed spatial-precision overclaims to condition-claims (validated temporal ~0.89 vs near-chance spatial ~0.52): `verdictText` "Svært lovende sted…her"→"Svært gode forhold nå"; condition labels "…sjanse"→"…forhold" (the /100 now reads as a conditions index, not a probability); `mostLikelyHere` "Mest sannsynlig her"→"Riktig skog + sesong for X"; `promisingSpotHere`→"Gode forhold her"; occurrence reason line now caveated as a trail/road-biased hint; `introSpots` gained the "ikke en fasit" hedge. NO+SE in lockstep (identical key sets verified). "Lovende steder" feature name retained.
+- **Founder decision:** approved ("Ja kjør på med dette") after the deferred-item recommendation.
+- **Verify pre-merge:** typecheck, 300/300 vitest (occurrence assertion updated), build green; nb/sv key parity checked programmatically.
+- **Verify post-deploy:** `/api/health` → ok; browser-confirmed live — conditions pill renders "4/100 Svake forhold" (old "sjanse" wording gone); `qa:prod` 29/29.
+- **Rollback:** none needed.
