@@ -344,34 +344,69 @@ export function MushroomMap() {
       const center = map.getCenter();
       const originLat = latitude ?? center.lat;
       const originLng = longitude ?? center.lng;
-      const latDelta = 5 / 111;
-      const lngDelta = 5 / (111 * Math.cos((originLat * Math.PI) / 180));
-      const params = new URLSearchParams({
-        minLat: String(originLat - latDelta),
-        maxLat: String(originLat + latDelta),
-        minLng: String(originLng - lngDelta),
-        maxLng: String(originLng + lngDelta),
-        n: '7',
-        top: '12'
-      });
-      if (sid) params.set('speciesId', String(sid));
-      const res = await fetch(`/api/prediction/grid?${params.toString()}`, { cache: 'no-store' });
-      const data = await res.json();
-      if (res.status === 403) {
-        setTopMsg(t('requiresPremium'));
-        return;
+
+      type Spot = { lat: number; lng: number; score: number; forestType: string; productivity: number | null; verdict?: string; reasons?: string[]; topSpecies?: string[] };
+
+      // Start local (5 km) and widen only when the near area has no promising
+      // forest, so users in fields/towns still get pointed at the nearest good
+      // ground instead of a dead-end message. 35 km stays inside the grid
+      // route's bounds cap (2·35/111≈0.63° lat, ≤1.76° lng even at 69°N).
+      const RADII_KM = [5, 10, 20, 35];
+      let spots: Spot[] = [];
+      let usedRadius = RADII_KM[0];
+      let limited = false;
+
+      for (let i = 0; i < RADII_KM.length; i++) {
+        const radiusKm = RADII_KM[i];
+        const latDelta = radiusKm / 111;
+        const lngDelta = radiusKm / (111 * Math.cos((originLat * Math.PI) / 180));
+        const params = new URLSearchParams({
+          minLat: String(originLat - latDelta),
+          maxLat: String(originLat + latDelta),
+          minLng: String(originLng - lngDelta),
+          maxLng: String(originLng + lngDelta),
+          n: '7',
+          top: '12'
+        });
+        if (sid) params.set('speciesId', String(sid));
+
+        const res = await fetch(`/api/prediction/grid?${params.toString()}`, { cache: 'no-store' });
+        const data = await res.json();
+        if (res.status === 403) {
+          setTopMsg(t('requiresPremium'));
+          return;
+        }
+        if (res.status === 429) {
+          // Rate limited mid-expansion: stop widening, keep whatever the
+          // server told us rather than masking it with a generic error.
+          setTopMsg(data?.error ?? t('couldNotFindSpots'));
+          return;
+        }
+        if (!res.ok) {
+          setTopMsg(data?.error ?? t('couldNotFindSpots'));
+          return;
+        }
+
+        const found = (data.cells ?? []) as Spot[];
+        if (found.length > 0) {
+          spots = found;
+          usedRadius = radiusKm;
+          limited = data.access === 'free_limited';
+          break;
+        }
+
+        // Nothing here — tell the user we're widening before the next attempt.
+        if (i < RADII_KM.length - 1) {
+          setTopMsg(t('expandingSearch', { km: radiusKm }));
+        }
       }
-      if (!res.ok) {
-        setTopMsg(data?.error ?? t('couldNotFindSpots'));
-        return;
-      }
-      const spots = (data.cells ?? []) as { lat: number; lng: number; score: number; forestType: string; productivity: number | null; verdict?: string; reasons?: string[]; topSpecies?: string[] }[];
+
       if (spots.length === 0) {
         clearTopSpots();
-        setTopMsg(t('littleForestData'));
+        setTopMsg(t('littleForestData', { km: RADII_KM[RADII_KM.length - 1] }));
         return;
       }
-      const limited = data.access === 'free_limited';
+
       setTopAccess(limited ? 'free_limited' : 'premium_full');
       setTopSpots(spots);
       await renderTopSpots(spots, { lat: originLat, lng: originLng }, { limited, speciesId: sid ?? null });
@@ -384,8 +419,8 @@ export function MushroomMap() {
         limited
           ? t('topSpotsLimited', { count: spots.length })
           : sName
-            ? t('topSpotsForSpecies', { count: spots.length, species: sName })
-            : t('topSpotsGeneric', { count: spots.length })
+            ? t('topSpotsForSpecies', { count: spots.length, species: sName, km: usedRadius })
+            : t('topSpotsGeneric', { count: spots.length, km: usedRadius })
       );
     } catch {
       setTopMsg(t('couldNotFindSpots'));

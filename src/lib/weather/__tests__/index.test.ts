@@ -14,6 +14,19 @@ function mockJson(body: unknown, ok = true): Response {
   } as unknown as Response;
 }
 
+// Minimal Open-Meteo daily+current payload (the keyless last-resort provider).
+function openMeteoBody() {
+  return {
+    daily: {
+      precipitation_sum: [2, 0, 5, 1, 0, 3, 4, 0, 1, 6, 2, 0, 3, 1],
+      temperature_2m_mean: [14, 15, 13, 16, 15, 14, 17, 16, 15, 14, 13, 15, 16, 15],
+      temperature_2m_min: [9, 10, 8, 11, 10, 9, 12, 11, 10, 9, 8, 10, 11, 10],
+      temperature_2m_max: [19, 20, 18, 21, 20, 19, 22, 21, 20, 19, 18, 20, 21, 20]
+    },
+    current: { temperature_2m: 15.2, relative_humidity_2m: 74 }
+  };
+}
+
 describe('fetchWeatherSummary — region routing', () => {
   beforeEach(() => {
     vi.unstubAllEnvs();
@@ -28,20 +41,30 @@ describe('fetchWeatherSummary — region routing', () => {
     vi.unstubAllGlobals();
   });
 
-  it('returns null for non-Nordic coords when no OpenWeather key configured', async () => {
+  it('falls back to keyless Open-Meteo for non-Nordic coords when no OpenWeather key configured', async () => {
     vi.stubEnv('OPENWEATHER_API_KEY', '');
     vi.stubEnv('MET_FROST_CLIENT_ID', '');
+    const fetchSpy = vi.fn().mockResolvedValue(mockJson(openMeteoBody()));
+    vi.stubGlobal('fetch', fetchSpy);
+
     const result = await fetchWeatherSummary(LONDON);
-    expect(result).toBeNull();
+    // Previously a hard null (→ 502). Now degrades to real keyless weather.
+    expect(result?.source).toBe('open_meteo');
+    expect(String(fetchSpy.mock.calls[0]?.[0] ?? '')).toContain('open-meteo.com');
   });
 
-  it('returns null for Norway coords when MET_FROST_CLIENT_ID is the placeholder', async () => {
-    // Placeholder key → Frost is skipped (isRealKey false); routing falls
-    // through to OpenWeather, which has no key set here.
+  it('falls back to Open-Meteo for Norway coords when MET_FROST_CLIENT_ID is the placeholder', async () => {
+    // Placeholder key → Frost is skipped (isRealKey false); OpenWeather has no
+    // key either, so the keyless last-resort provider catches it instead of 502.
     vi.stubEnv('MET_FROST_CLIENT_ID', 'your-api-key-here');
     vi.stubEnv('OPENWEATHER_API_KEY', '');
+    const fetchSpy = vi.fn().mockResolvedValue(mockJson(openMeteoBody()));
+    vi.stubGlobal('fetch', fetchSpy);
+
     const result = await fetchWeatherSummary(OSLO);
-    expect(result).toBeNull();
+    expect(result?.source).toBe('open_meteo');
+    // Never attempted Frost (no real key) — first call is Open-Meteo.
+    expect(String(fetchSpy.mock.calls[0]?.[0] ?? '')).toContain('open-meteo.com');
   });
 
   it('routes Sweden coords to SMHI even without any API key configured', async () => {
@@ -287,17 +310,91 @@ describe('fetchOpenWeather (via non-Nordic coords with key)', () => {
     expect(result).toBeNull();
   });
 
-  it('does NOT call OpenWeather for Sweden coords (uses SMHI instead)', async () => {
-    const fetchSpy = vi.fn().mockResolvedValue(mockJson({ station: [] }));
+  it('prefers SMHI over OpenWeather for Sweden coords when SMHI has data', async () => {
+    // SMHI returns real temp + rain → its summary wins and we must NOT fall
+    // through to OpenWeather (a worse provider) even though a key is present.
+    const station = { key: '100', name: 'S', latitude: 59.34, longitude: 18.05, active: true };
+    const point = (daysAgo: number, value: number) => ({
+      date: Date.now() - daysAgo * 24 * 60 * 60 * 1000,
+      value: String(value),
+      quality: 'G'
+    });
+    const fetchSpy = vi.fn(async (url: unknown) => {
+      const u = String(url);
+      if (u.endsWith('.json') && u.includes('/parameter/') && u.includes('/period/') === false) {
+        return mockJson({ station: [station] }); // any parameter station list
+      }
+      if (u.includes('parameter/1/station/100/period/latest-hour')) return mockJson({ value: [point(0, 16.5)] });
+      if (u.includes('parameter/5/station/100/period/latest-months')) {
+        return mockJson({ value: [point(2, 4.0), point(1, 6.0)] });
+      }
+      if (u.includes('parameter/6/station/100/period/latest-hour')) return mockJson({ value: [point(0, 78)] });
+      if (u.includes('period/latest-months')) return mockJson({ value: [point(2, 10)] });
+      return mockJson({ value: [] });
+    });
     vi.stubGlobal('fetch', fetchSpy);
 
-    await fetchWeatherSummary(STOCKHOLM);
-
-    // Verify no openweather URL was hit
+    const result = await fetchWeatherSummary(STOCKHOLM);
+    expect(result?.source).toBe('smhi');
     const calls = fetchSpy.mock.calls.map((c) => String(c[0]));
     for (const url of calls) {
       expect(url).not.toContain('openweathermap.org');
+      expect(url).not.toContain('open-meteo.com');
     }
+  });
+});
+
+describe('fetchOpenMeteo (keyless last-resort fallback)', () => {
+  beforeEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-08-15T12:00:00Z'));
+    // No provider keys → Open-Meteo is the only path.
+    vi.stubEnv('MET_FROST_CLIENT_ID', '');
+    vi.stubEnv('OPENWEATHER_API_KEY', '');
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  });
+
+  it('builds a full summary from Open-Meteo daily history (rain windows, extremes, soil bucket)', async () => {
+    const fetchSpy = vi.fn().mockResolvedValue(mockJson(openMeteoBody()));
+    vi.stubGlobal('fetch', fetchSpy);
+
+    const result = await fetchWeatherSummary(LONDON);
+    expect(result?.source).toBe('open_meteo');
+    expect(result?.temperatureC).toBe(15.2); // current reading preferred
+    expect(result?.humidityPct).toBe(74);
+    // rain3d = last 3 daily sums (2 + 0 + 3 + 1 → last three are 3,1... check window)
+    // precip tail is [...,3,1]; last 3 = [0,3,1] = 4
+    expect(result?.rain3dMm).toBeCloseTo(4, 5);
+    // rain14d = sum of all 14 daily values
+    expect(result?.rain14dMm).toBeCloseTo(28, 5);
+    // 7-day extremes from the daily min/max arrays
+    expect(result?.minTemp7dC).not.toBeNull();
+    expect(result?.maxTemp7dC).not.toBeNull();
+    // Soil-moisture bucket is computed from the daily precip series (not null).
+    expect(result?.soilMoistureIndex).not.toBeNull();
+  });
+
+  it('returns null (not a fabricated summary) when Open-Meteo has no daily data', async () => {
+    const fetchSpy = vi.fn().mockResolvedValue(mockJson({ daily: {}, current: {} }));
+    vi.stubGlobal('fetch', fetchSpy);
+
+    const result = await fetchWeatherSummary(LONDON);
+    expect(result).toBeNull();
+  });
+
+  it('returns null when Open-Meteo responds non-OK', async () => {
+    const fetchSpy = vi.fn().mockResolvedValue({ ok: false, json: async () => ({}) } as unknown as Response);
+    vi.stubGlobal('fetch', fetchSpy);
+
+    const result = await fetchWeatherSummary(LONDON);
+    expect(result).toBeNull();
   });
 });
 
