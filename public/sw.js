@@ -1,5 +1,10 @@
-const STATIC_CACHE = 'mycelet-static-v1';
-const TILE_CACHE = 'mycelet-map-tiles-v1';
+// v2 (2026-07-19): byte-bump to force reinstall on every client. A service
+// worker runs under the CSP captured when its script was fetched, so widening
+// the header (PR #85, OSM/Esri in connect-src) never reached already-installed
+// workers — an unchanged script skips reinstall. Any byte change here re-runs
+// install; skipWaiting/clients.claim swap the new worker in immediately.
+const STATIC_CACHE = 'mycelet-static-v2';
+const TILE_CACHE = 'mycelet-map-tiles-v1'; // unchanged: users' saved offline tiles live here
 const STATIC_ASSETS = ['/', '/map', '/pricing', '/manifest.json', '/icons/icon.svg', '/icons/icon-maskable.svg'];
 
 self.addEventListener('install', (event) => {
