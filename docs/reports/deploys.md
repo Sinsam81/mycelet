@@ -36,3 +36,9 @@ Ingen rollback av kode eller database var nødvendig.
 - **Verify post-deploy:** `/api/health` → ok; live probe Strömstad (58.9366, 11.1706) flipped `weatherSource: met_frost` → `smhi`; `qa:prod` 29/29 passed.
 - **Rollback:** none needed.
 - **Note:** PR #85 (WebKit Swedish-tile CSP fix, 2026-07-18) shipped after the previous log entry and is not logged above — noted here for a complete audit trail.
+
+## 2026-07-19 — PR #87: sw.js byte-bump to force reinstall (stale-CSP service workers)
+- **What:** Version comment + `STATIC_CACHE` v1→v2 in `public/sw.js`. Root cause: a service worker runs under the CSP captured when its script was fetched; PR #85 widened the header but `sw.js` bytes were unchanged since 07-13, so devices that installed during 07-13→07-18 kept the narrow snapshot → their SW fetch of OSM tiles still threw → grey Swedish map even after #85. Founder confirmed grey map persisting on Mac Chrome + iPhone Safari.
+- **Verify pre-merge:** typecheck, 297/297 tests, build green.
+- **Verify post-deploy:** live sw.js serves v2; browser test confirmed new worker installed + activated (`mycelet-static-v1` cleaned up, `mycelet-map-tiles-v1` preserved); Strömstad renders 12/12 OSM tiles under the new worker; `/api/health` ok.
+- **Rollback:** none needed.
