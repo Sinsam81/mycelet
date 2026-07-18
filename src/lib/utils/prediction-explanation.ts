@@ -206,7 +206,10 @@ export function buildExplanation(input: ExplanationInput): Explanation[] {
     lines.push({
       level: 'neutral',
       category: 'occurrence',
-      text: 'Historiske funn er registrert i nærheten (Artsdatabanken/GBIF)'
+      // Explicitly framed as an observation-density hint, not evidence of
+      // presence: registrations cluster on trails/roads (accessibility bias),
+      // so this signal is near-chance and deliberately does NOT raise the score.
+      text: 'Andre har registrert funn i nærheten før — men registreringer følger stier og veier, så bruk det som et hint'
     });
   }
 
@@ -346,12 +349,17 @@ export function buildExplanation(input: ExplanationInput): Explanation[] {
 
 const LEVEL_MARK: Record<ExplanationLevel, string> = { positive: '✓', neutral: '•', negative: '✕' };
 
+// Verdicts describe CONDITIONS (season + weather + forest type), NOT the odds
+// of a find at this exact pixel. The temporal signal is validated (~0.89 AUC);
+// spot-level spatial ranking is near-chance (~0.52, accessibility bias), so the
+// old "lovende sted … her" wording overclaimed. "Gode forhold nå" is what we can
+// honestly stand behind. See docs/reports/prediction-model.md.
 function verdictText(score: number, speciesName?: string): string {
   const who = speciesName ? ` for ${speciesName.toLowerCase()}` : '';
-  if (score >= 75) return `Svært lovende sted${who} akkurat nå`;
-  if (score >= 55) return `God sjanse${who} her`;
-  if (score >= 35) return `Brukbar sjanse${who} her`;
-  return `Lav sjanse${who} akkurat nå`;
+  if (score >= 75) return `Svært gode forhold${who} nå`;
+  if (score >= 55) return `Gode forhold${who} nå`;
+  if (score >= 35) return `Brukbare forhold${who} nå`;
+  return `Svake forhold${who} nå`;
 }
 
 export interface SpotSummary {
