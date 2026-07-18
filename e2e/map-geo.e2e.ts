@@ -27,6 +27,24 @@ async function clickFindMe(page: Page) {
   await button.click();
 }
 
+async function expectDecodedTiles(page: Page, urlFragment: string) {
+  await expect
+    .poll(
+      () =>
+        page.locator(`img.leaflet-tile[src*="${urlFragment}"]`).evaluateAll((tiles) =>
+          tiles.some((tile) => {
+            const image = tile as HTMLImageElement;
+            return image.complete && image.naturalWidth > 0 && image.naturalHeight > 0;
+          })
+        ),
+      {
+        message: `forventet ferdig dekodede kartfliser fra ${urlFragment}`,
+        timeout: 25_000
+      }
+    )
+    .toBe(true);
+}
+
 test.describe('Norsk posisjon (Oslo)', () => {
   test.use({ geolocation: OSLO, permissions: ['geolocation'] });
 
@@ -34,10 +52,7 @@ test.describe('Norsk posisjon (Oslo)', () => {
     await openMap(page);
     await clickFindMe(page);
     // I Norge skal Kartverket «Terreng» være aktivt.
-    await expect(
-      page.locator('img.leaflet-tile[src*="kartverket"]').first(),
-      'forventet Kartverket-tiler i Norge'
-    ).toBeAttached({ timeout: 20_000 });
+    await expectDecodedTiles(page, 'kartverket');
   });
 });
 
@@ -48,10 +63,8 @@ test.describe('Svensk posisjon (Göteborg)', () => {
     await openMap(page);
     await clickFindMe(page);
     // Kartverket har ingen tiler i Sverige → kartet MÅ bytte til OSM, ellers blankt.
-    // At OSM-tiler dukker opp beviser både recenter OG region-bytte.
-    await expect(
-      page.locator('img.leaflet-tile[src*="openstreetmap.org"]').first(),
-      'forventet OSM-tiler i Sverige (regresjon: blankt svensk kart)'
-    ).toBeAttached({ timeout: 25_000 });
+    // Krev et faktisk dekodet bilde. En ødelagt <img>-tagg er fortsatt "attached"
+    // og gjorde at den gamle regresjonstesten var grønn mens WebKit viste grått.
+    await expectDecodedTiles(page, 'openstreetmap.org');
   });
 });
