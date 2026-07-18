@@ -42,3 +42,11 @@ Ingen rollback av kode eller database var nødvendig.
 - **Verify pre-merge:** typecheck, 297/297 tests, build green.
 - **Verify post-deploy:** live sw.js serves v2; browser test confirmed new worker installed + activated (`mycelet-static-v1` cleaned up, `mycelet-map-tiles-v1` preserved); Strömstad renders 12/12 OSM tiles under the new worker; `/api/health` ok.
 - **Rollback:** none needed.
+
+## 2026-07-19 — PR #88: Auto-expanding spot radius + prediction hot-path robustness
+- **What:** (1) `generateTopSpots` now widens 5→10→20→35 km until it finds promising forest instead of dead-ending at 5 km (stop-on-hit, abort on 429, km-parameterised messages). (2) Robustness: `AbortSignal.timeout(6000)` on all weather fetches (Frost/SMHI/OpenWeather) — closes the spinner-of-death path; keyless Open-Meteo last-resort fallback so a missing/expired Frost key degrades to real weather instead of a hard 502 (purely additive, `open_meteo` source); point route gets `withTimeout(3000)` on the forest lookup + `maxDuration=30` + `runtime='nodejs'`; `radiusKm` clamped to 1–50.
+- **Founder decision:** approved "Robusthet + radius" via AskUserQuestion; copy/positioning honesty changes (verdict wording, per-pin /100, "mest sannsynlig her") deliberately DEFERRED for a separate pass.
+- **Verify pre-merge:** typecheck, 300/300 vitest (3 new Open-Meteo cases), production build — all green.
+- **Verify post-deploy:** `/api/health` → ok; `/api/prediction` (Oslo) → 200 stable; radiusKm=abc → 200 (clamp live, new code confirmed); `qa:prod` 29/29 incl. NO-Frost + SE-SMHI prediction routing.
+- **Rollback:** none needed.
+- **Source:** driven by the `prediction-launch-audit` workflow (4-dimension audit + synthesis). Full findings archived in the session; punch-list items A–H documented there.
