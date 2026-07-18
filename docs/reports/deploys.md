@@ -28,3 +28,11 @@ Alle kodeendringer ble verifisert med typecheck, full Vitest-suite og produksjon
 5. Etterkontroll: seks nye feedbackkolonner, `visited_at`-krav/default, indeks, offentlig negativfilter og korrigert statistikkfunksjon.
 
 Ingen rollback av kode eller database var nødvendig.
+
+## 2026-07-19 — PR #86: Fix NO/SE border misclassifying the Swedish Bohuslän coast
+- **Commit:** squash-merge of `fix/bohuslan-border-strip` (post-merge main HEAD).
+- **What:** `noSeBorderLon` refined — 11.0°E south of Iddefjorden (58.9°N), steep rise to 11.48°E by 59.1°N. Strömstad/Grebbestad/Fjällbacka/Koster now → SE (OSM basemap + SMHI weather); Halden/Tistedal/Fredrikstad/Sarpsborg verified still NO. Found while live-debugging the founder's grey-map report from Sweden.
+- **Verify pre-merge:** 297/297 vitest, typecheck, production build green.
+- **Verify post-deploy:** `/api/health` → ok; live probe Strömstad (58.9366, 11.1706) flipped `weatherSource: met_frost` → `smhi`; `qa:prod` 29/29 passed.
+- **Rollback:** none needed.
+- **Note:** PR #85 (WebKit Swedish-tile CSP fix, 2026-07-18) shipped after the previous log entry and is not logged above — noted here for a complete audit trail.
