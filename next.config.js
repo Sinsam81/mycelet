@@ -32,9 +32,10 @@ const cspDirectives = [
   // data: for base64-inlined fonts in CSS.
   "font-src 'self' data:",
   // XHR/fetch/WebSocket destinations. wss://*.supabase.co is for Realtime.
-  // cache.kartverket.no: the premium offline-map feature fetches tiles with
-  // fetch() (not <img>) to put them in the Cache API.
-  "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.openweathermap.org https://opendata-download-metobs.smhi.se https://frost.met.no https://api.stripe.com https://*.kindwise.com https://ws.geonorge.no https://cache.kartverket.no",
+  // The premium offline-map feature and public/sw.js fetch map tiles before
+  // putting them in the Cache API. WebKit enforces this directive for service
+  // worker fetches too, so every provider in offlineMap.ts must be listed here.
+  "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.openweathermap.org https://opendata-download-metobs.smhi.se https://frost.met.no https://api.stripe.com https://*.kindwise.com https://ws.geonorge.no https://cache.kartverket.no https://tile.openstreetmap.org https://*.tile.openstreetmap.org https://server.arcgisonline.com",
   // We embed Stripe Checkout / Elements in iframes.
   "frame-src https://js.stripe.com https://hooks.stripe.com https://checkout.stripe.com",
   // Service worker (next-pwa) + blob: for any dynamically created workers.
