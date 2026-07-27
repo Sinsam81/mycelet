@@ -57,3 +57,11 @@ Ingen rollback av kode eller database var nødvendig.
 - **Verify pre-merge:** typecheck, 300/300 vitest (occurrence assertion updated), build green; nb/sv key parity checked programmatically.
 - **Verify post-deploy:** `/api/health` → ok; browser-confirmed live — conditions pill renders "4/100 Svake forhold" (old "sjanse" wording gone); `qa:prod` 29/29.
 - **Rollback:** none needed.
+
+## 2026-07-27 — PR #90: RevenueCat IAP (native purchase flow + webhook)
+- **What:** Full Apple IAP integration per docs/launch-critical-path.md Spor 2. Pure event mapping (grant/modify/revoke; CANCELLATION≠EXPIRATION, refund-revoke, grace periods, trials) + `/api/revenuecat/webhook` (SHA-256 timing-safe auth, event-id dedup, sandbox gate, provider-of-record ownership via metadata.provider + rc_event_timestamp_ms ordering guard) + symmetric guard in the Stripe webhook + native purchase UI on /pricing (per-plan buttons, Apple's localized price, «Gjenopprett kjøp», login prompt, unmount-safe polling; Stripe badge hidden in shell). Plugin pinned 13.2.4 + cap sync ios.
+- **Review:** 8-angle adversarial review; all 10 verified findings fixed pre-merge (cross-provider clobbering both directions, ordering, guard-read errors → 5xx for retry, auth length oracle, silent no-op buttons, price display, poll dead-end, cancellation misclassification, tier-heuristic unification into plans.guessTierFromProductId).
+- **Verify pre-merge:** 332/332 tests (32 new), typecheck, build, nb/sv key parity.
+- **Verify post-deploy:** `POST /api/revenuecat/webhook` → 503 (correctly inert until REVENUECAT_WEBHOOK_AUTH is set); `/api/health` ok; `qa:prod` see below.
+- **Awaiting founder (Spor 1):** RevenueCat keys → Vercel env (`NEXT_PUBLIC_REVENUECAT_APPLE_KEY`, `REVENUECAT_WEBHOOK_AUTH`, `REVENUECAT_ALLOW_SANDBOX=1` through App Review), App Store Connect products `no.mycelet.premium.monthly` / `no.mycelet.seasonpass.yearly`, entitlement `premium`, offering `$rc_monthly`/`$rc_annual`.
+- **Rollback:** none needed.
