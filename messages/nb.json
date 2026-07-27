@@ -607,6 +607,8 @@
     "iapRestoreSuccess": "Kjøp gjenopprettet! Aktiverer abonnementet ditt …",
     "iapRestoreNone": "Fant ingen tidligere kjøp å gjenopprette.",
     "iapManageOnApple": "Administrer abonnement (App Store)",
+    "iapActivationDelayed": "Kjøpet er registrert hos Apple — tilgangen aktiveres om kort tid. Prøv «Gjenopprett kjøp» om den ikke dukker opp.",
+    "iapLoginToBuy": "Logg inn for å kjøpe abonnement",
     "yourPlan": "Din plan",
     "renewsEnds": "Fornyes/slutter: {date}",
     "aiQuota": "AI-kvote: {limit} per døgn",

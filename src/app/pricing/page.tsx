@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useEffect, useMemo, useState } from 'react';
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
@@ -142,59 +142,63 @@ function PricingInner() {
   // informational message instead of broken buttons.
   const native = useIsNative();
   const [iapOffers, setIapOffers] = useState<IapOffer[] | null>(null);
-  const [iapReady, setIapReady] = useState(false);
+  const [iapNeedsLogin, setIapNeedsLogin] = useState(false);
   const [iapBusy, setIapBusy] = useState<'purchase' | 'restore' | null>(null);
   const [iapNotice, setIapNotice] = useState<string | null>(null);
+  // Unmount guard shared by the IAP effect and the post-purchase poll, so no
+  // fetch/setState survives navigation away from the page.
+  const unmountedRef = useRef(false);
+  useEffect(() => {
+    unmountedRef.current = false;
+    return () => {
+      unmountedRef.current = true;
+    };
+  }, []);
+
+  const iapReady = (iapOffers?.length ?? 0) > 0;
 
   useEffect(() => {
     if (!native || !isIapAvailable()) return;
-    let cancelled = false;
     (async () => {
       try {
         const supabase = createClient();
         const {
           data: { user }
         } = await supabase.auth.getUser();
-        if (!user || cancelled) return;
+        if (unmountedRef.current) return;
+        if (!user) {
+          // Logged-out native user: point at login instead of the misleading
+          // "kommer snart" message.
+          setIapNeedsLogin(true);
+          return;
+        }
         const ok = await configurePurchases(user.id);
-        if (!ok || cancelled) return;
+        if (!ok || unmountedRef.current) return;
         const offers = await getIapOffers();
-        if (cancelled) return;
+        if (unmountedRef.current) return;
         setIapOffers(offers);
-        setIapReady(offers.length > 0);
       } catch {
         // Old shell build without the plugin, or store unreachable — fall back
         // to the informational message below.
-        if (!cancelled) setIapReady(false);
       }
     })();
-    return () => {
-      cancelled = true;
-    };
   }, [native]);
 
   // The webhook needs a few seconds to land after Apple confirms the purchase;
   // poll billing status so the page flips to "aktiv plan" without a manual
-  // reload.
+  // reload. If it never flips (slow webhook), leave an honest "aktiveres
+  // snart" message instead of an eternal "aktiverer …".
   const refreshStatusUntilPaid = async () => {
     for (let attempt = 0; attempt < 6; attempt++) {
       await new Promise((resolve) => setTimeout(resolve, attempt === 0 ? 2000 : 5000));
-      try {
-        const response = await fetch('/api/billing/status', { cache: 'no-store' });
-        if (response.ok) {
-          const data = (await response.json()) as BillingStatusResponse;
-          setStatus(data);
-          if (data.capabilities.paid) return;
-        }
-      } catch {
-        // transient — keep polling
-      }
+      if (unmountedRef.current) return;
+      const data = await loadStatus();
+      if (data?.capabilities.paid) return;
     }
+    if (!unmountedRef.current) setIapNotice(t('iapActivationDelayed'));
   };
 
-  const startIapPurchase = async (plan: 'premium' | 'season_pass') => {
-    const offer = iapOffers?.find((o) => o.plan === plan);
-    if (!offer) return;
+  const startIapPurchase = async (offer: IapOffer) => {
     try {
       setIapBusy('purchase');
       setIapNotice(null);
@@ -203,8 +207,9 @@ function PricingInner() {
         setIapNotice(t('iapPurchaseSuccess'));
         void refreshStatusUntilPaid();
       }
-    } catch (error) {
-      setStatusError(error instanceof Error ? error.message : t('iapPurchaseError'));
+    } catch {
+      // Raw plugin error messages are untranslated/technical — show ours.
+      setStatusError(t('iapPurchaseError'));
     } finally {
       setIapBusy(null);
     }
@@ -221,8 +226,8 @@ function PricingInner() {
       } else {
         setIapNotice(t('iapRestoreNone'));
       }
-    } catch (error) {
-      setStatusError(error instanceof Error ? error.message : t('iapPurchaseError'));
+    } catch {
+      setStatusError(t('iapPurchaseError'));
     } finally {
       setIapBusy(null);
     }
@@ -235,30 +240,38 @@ function PricingInner() {
     return null;
   }, [checkoutState, t]);
 
-  const loadStatus = async () => {
-    setStatusError(null);
-    const response = await fetch('/api/billing/status', { cache: 'no-store' });
-    const data = await response.json();
+  const loadStatus = async (): Promise<BillingStatusResponse | null> => {
+    try {
+      setStatusError(null);
+      const response = await fetch('/api/billing/status', { cache: 'no-store' });
+      const data = await response.json();
 
-    if (response.status === 401) {
-      setStatus({
-        subscription: null,
-        capabilities: {
-          tier: 'free',
-          status: 'inactive',
-          paid: false,
-          aiDailyLimit: 5
-        }
-      });
-      return;
+      if (response.status === 401) {
+        const anonymous: BillingStatusResponse = {
+          subscription: null,
+          capabilities: {
+            tier: 'free',
+            status: 'inactive',
+            paid: false,
+            aiDailyLimit: 5
+          }
+        };
+        setStatus(anonymous);
+        return anonymous;
+      }
+
+      if (!response.ok) {
+        setStatusError(data?.error ?? t('errorLoadStatus'));
+        return null;
+      }
+
+      const parsed = data as BillingStatusResponse;
+      setStatus(parsed);
+      return parsed;
+    } catch {
+      // Transient network error (e.g. mid-poll on mobile) — leave state as-is.
+      return null;
     }
-
-    if (!response.ok) {
-      setStatusError(data?.error ?? t('errorLoadStatus'));
-      return;
-    }
-
-    setStatus(data as BillingStatusResponse);
   };
 
   useEffect(() => {
@@ -311,9 +324,13 @@ function PricingInner() {
             {t('subheading')}
           </p>
           <div className="mt-3 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs text-gray-600">
-            <span className="inline-flex items-center gap-1">
-              <ShieldCheck className="h-3.5 w-3.5 text-forest-700" /> {t('securePayment')}
-            </span>
+            {/* "Sikker betaling med Stripe" må ikke vises i den native appen —
+                der går kjøp via Apple (3.1.1), og Stripe-omtale kan flagges i review. */}
+            {!native ? (
+              <span className="inline-flex items-center gap-1">
+                <ShieldCheck className="h-3.5 w-3.5 text-forest-700" /> {t('securePayment')}
+              </span>
+            ) : null}
             <span className="inline-flex items-center gap-1">
               <Undo2 className="h-3.5 w-3.5 text-forest-700" /> {t('cancelAnytimeBadge')}
             </span>
@@ -322,7 +339,14 @@ function PricingInner() {
 
         {infoMessage ? <p className="rounded-lg bg-forest-50 px-3 py-2 text-sm text-forest-900">{infoMessage}</p> : null}
         {statusError ? <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{statusError}</p> : null}
-        {native && !iapReady ? (
+        {native && iapNeedsLogin ? (
+          <p className="rounded-lg bg-forest-50 px-3 py-2 text-sm text-forest-900">
+            <Link href="/auth/login?redirect=/pricing" className="font-semibold underline">
+              {t('iapLoginToBuy')}
+            </Link>
+          </p>
+        ) : null}
+        {native && !iapReady && !iapNeedsLogin ? (
           <p className="rounded-lg bg-forest-50 px-3 py-2 text-sm text-forest-900">
             {t('nativePurchaseUnavailable')}
           </p>
@@ -379,6 +403,14 @@ function PricingInner() {
             const checkoutPlan = plan.id === 'premium' || plan.id === 'season_pass' ? plan.id : null;
             const isPaidOption = checkoutPlan !== null;
             const isLoading = loadingPlan === plan.id;
+            // Per-plan IAP offer: the buy button renders ONLY when this plan's
+            // package actually exists in the RevenueCat offering (a global
+            // "some offer exists" check would give the other card a dead button).
+            const planOffer = native ? iapOffers?.find((offer) => offer.plan === plan.id) ?? null : null;
+            // In the native shell the App Store price is what Apple charges —
+            // show it instead of the Stripe NOK constant when they differ.
+            const displayPrice = planOffer ? planOffer.priceString : plan.price;
+            const displayPeriod = planOffer ? (plan.id === 'premium' ? t('perMonth') : t('perYear')) : plan.period;
 
             return (
               <article
@@ -403,8 +435,8 @@ function PricingInner() {
                 </div>
                 <p className="text-xs text-gray-600">{plan.tagline}</p>
                 <p className="mt-3 text-3xl font-bold tracking-tight text-forest-900">
-                  {plan.price}
-                  <span className="text-sm font-medium text-gray-600">{plan.period}</span>
+                  {displayPrice}
+                  <span className="text-sm font-medium text-gray-600">{displayPeriod}</span>
                 </p>
                 {plan.lead ? <p className="mt-3 text-xs font-semibold uppercase tracking-wide text-gray-500">{plan.lead}</p> : null}
                 <ul className={`${plan.lead ? 'mt-1.5' : 'mt-3'} flex-1 space-y-1.5 text-sm text-gray-700`}>
@@ -420,38 +452,23 @@ function PricingInner() {
                   <p className="mt-4 rounded-lg bg-forest-100 px-3 py-2 text-center text-sm font-medium text-forest-900">{t('activePlan')}</p>
                 ) : null}
 
-                {!isCurrent && isPaidOption && !native ? (
+                {/* One shared CTA: web → Stripe checkout (consent-gated),
+                    native → Apple IAP for THIS plan's package (if offered). */}
+                {!isCurrent && isPaidOption && (!native ? true : planOffer !== null) ? (
                   <button
                     type="button"
                     onClick={() => {
-                      if (checkoutPlan) void startCheckout(checkoutPlan);
+                      if (native && planOffer) void startIapPurchase(planOffer);
+                      else if (!native && checkoutPlan) void startCheckout(checkoutPlan);
                     }}
-                    disabled={isLoading || !agreedToPurchaseTerms}
+                    disabled={native ? iapBusy !== null : isLoading || !agreedToPurchaseTerms}
                     className={`mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-sm font-semibold transition ${
                       plan.highlight
                         ? 'bg-forest-800 text-white shadow-sm hover:bg-forest-700'
                         : 'border border-forest-800 text-forest-800 hover:bg-forest-50'
                     } disabled:opacity-60`}
                   >
-                    {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                    {t('choosePlan', { plan: plan.title })}
-                  </button>
-                ) : null}
-
-                {!isCurrent && isPaidOption && native && iapReady ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (checkoutPlan) void startIapPurchase(checkoutPlan);
-                    }}
-                    disabled={iapBusy !== null}
-                    className={`mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-sm font-semibold transition ${
-                      plan.highlight
-                        ? 'bg-forest-800 text-white shadow-sm hover:bg-forest-700'
-                        : 'border border-forest-800 text-forest-800 hover:bg-forest-50'
-                    } disabled:opacity-60`}
-                  >
-                    {iapBusy === 'purchase' ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                    {(native ? iapBusy === 'purchase' : isLoading) ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
                     {t('choosePlan', { plan: plan.title })}
                   </button>
                 ) : null}
@@ -480,6 +497,9 @@ function PricingInner() {
             >
               {t('iapManageOnApple')}
             </a>
+            <Link href="/kjopsvilkar" className="text-xs text-gray-600 underline">
+              {t('purchaseTermsLink')}
+            </Link>
           </div>
         ) : null}
 

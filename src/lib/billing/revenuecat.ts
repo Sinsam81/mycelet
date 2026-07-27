@@ -1,4 +1,4 @@
-import { BillingTier } from './plans';
+import { BillingTier, guessTierFromProductId } from './plans';
 
 /**
  * RevenueCat webhook event mapping — pure logic, no I/O.
@@ -13,10 +13,18 @@ import { BillingTier } from './plans';
  *   period ends. EXPIRATION is the event that actually removes access. The one
  *   exception: cancel_reason CUSTOMER_SUPPORT is a refund → revoke immediately.
  * - RevenueCat retries deliveries (at-least-once); `event.id` is the official
- *   dedup key.
+ *   dedup key, and deliveries can arrive OUT OF ORDER — the route enforces
+ *   ordering via the stored rc_event_timestamp_ms.
  * - `environment: 'SANDBOX'` events come from sandbox/TestFlight purchases —
- *   only honored when REVENUECAT_ALLOW_SANDBOX=1 (on during pre-launch
- *   testing, OFF after launch so sandbox buys can't grant free premium).
+ *   only honored when REVENUECAT_ALLOW_SANDBOX=1 (keep ON through App Review,
+ *   turn OFF after launch so sandbox buys can't grant free premium).
+ *
+ * Decision kinds drive the route's cross-provider ownership rules:
+ * - 'grant'  = new money/entitlement → always applies (takes ownership).
+ * - 'modify' = changes renewal state of an EXISTING Apple sub → only applies
+ *              when the row is RevenueCat-owned (or unpaid).
+ * - 'revoke' = removes access → same ownership requirement, so an old Apple
+ *              event can never kill a subscription the user pays via Stripe.
  */
 
 export interface RevenueCatEvent {
@@ -54,7 +62,7 @@ export interface BillingUpdate {
 }
 
 export type RevenueCatDecision =
-  | { action: 'apply'; update: BillingUpdate; revokes: boolean }
+  | { action: 'apply'; kind: 'grant' | 'modify' | 'revoke'; update: BillingUpdate }
   | { action: 'ack'; reason: string };
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -76,7 +84,8 @@ export function resolveSupabaseUserId(event: RevenueCatEvent): string | null {
 /**
  * Product-id → tier, mirroring `resolveTierByPriceId` for Stripe. The ids are
  * env-configurable so App Store Connect naming can change without a deploy;
- * the substring fallback keeps an unmapped-but-obvious id working.
+ * the shared substring fallback keeps an unmapped-but-obvious id working (and
+ * keeps client + server interpreting the catalog identically).
  */
 export function resolveTierByRcProductId(productId: string | null | undefined): BillingTier {
   if (!productId) return 'free';
@@ -86,10 +95,7 @@ export function resolveTierByRcProductId(productId: string | null | undefined): 
   if (productId === (process.env.REVENUECAT_PRODUCT_SEASON_PASS ?? 'no.mycelet.seasonpass.yearly')) {
     return 'season_pass';
   }
-  const normalized = productId.toLowerCase();
-  if (normalized.includes('season') || normalized.includes('sesong')) return 'season_pass';
-  if (normalized.includes('premium') || normalized.includes('month')) return 'premium';
-  return 'free';
+  return guessTierFromProductId(productId);
 }
 
 function toIsoFromMs(ms: number | null | undefined): string | null {
@@ -106,6 +112,9 @@ const GRANT_TYPES = new Set([
   'REFUND_REVERSED'
 ]);
 
+/** Event types this integration acts on; everything else is ACKed untouched. */
+const HANDLED_TYPES = new Set([...GRANT_TYPES, 'CANCELLATION', 'EXPIRATION', 'BILLING_ISSUE']);
+
 /**
  * Map one webhook event to a billing decision. Everything unknown or
  * informational is ACKed (RevenueCat retries non-200s up to 5 times — an
@@ -114,37 +123,44 @@ const GRANT_TYPES = new Set([
 export function mapRevenueCatEvent(event: RevenueCatEvent): RevenueCatDecision {
   const type = event.type ?? 'UNKNOWN';
 
-  if (type === 'TEST') return { action: 'ack', reason: 'test_event' };
+  if (!HANDLED_TYPES.has(type)) {
+    // TEST, PRODUCT_CHANGE (real switch arrives as RENEWAL/INITIAL_PURCHASE),
+    // TRANSFER (route logs loudly for manual follow-up), SUBSCRIBER_ALIAS,
+    // SUBSCRIPTION_PAUSED, PAYWALL_*, future types.
+    return { action: 'ack', reason: type === 'TEST' ? 'test_event' : `unhandled_type:${type}` };
+  }
+
+  const tier = resolveTierByRcProductId(event.product_id);
+  if (tier === 'free') return { action: 'ack', reason: 'unknown_product' };
+
+  const periodStart = toIsoFromMs(event.purchased_at_ms);
+  const periodEnd = toIsoFromMs(event.expiration_at_ms);
 
   if (GRANT_TYPES.has(type)) {
-    const tier = resolveTierByRcProductId(event.product_id);
-    if (tier === 'free') return { action: 'ack', reason: 'unknown_product' };
     return {
       action: 'apply',
-      revokes: false,
+      kind: 'grant',
       update: {
         tier,
         status: event.period_type === 'TRIAL' ? 'trialing' : 'active',
-        currentPeriodStart: toIsoFromMs(event.purchased_at_ms),
-        currentPeriodEnd: toIsoFromMs(event.expiration_at_ms),
+        currentPeriodStart: periodStart,
+        currentPeriodEnd: periodEnd,
         cancelAtPeriodEnd: false
       }
     };
   }
 
   if (type === 'CANCELLATION') {
-    const tier = resolveTierByRcProductId(event.product_id);
-    if (tier === 'free') return { action: 'ack', reason: 'unknown_product' };
     if (event.cancel_reason === 'CUSTOMER_SUPPORT') {
       // Refund → access off now (an EXPIRATION usually follows; this is the
       // belt-and-braces path so a refunded user never keeps premium).
       return {
         action: 'apply',
-        revokes: true,
+        kind: 'revoke',
         update: {
           tier,
           status: 'canceled',
-          currentPeriodStart: toIsoFromMs(event.purchased_at_ms),
+          currentPeriodStart: periodStart,
           currentPeriodEnd: toIsoFromMs(event.event_timestamp_ms),
           cancelAtPeriodEnd: true
         }
@@ -154,68 +170,57 @@ export function mapRevenueCatEvent(event: RevenueCatEvent): RevenueCatDecision {
     // status stays active + cancel_at_period_end).
     return {
       action: 'apply',
-      revokes: false,
+      kind: 'modify',
       update: {
         tier,
         status: 'active',
-        currentPeriodStart: toIsoFromMs(event.purchased_at_ms),
-        currentPeriodEnd: toIsoFromMs(event.expiration_at_ms),
+        currentPeriodStart: periodStart,
+        currentPeriodEnd: periodEnd,
         cancelAtPeriodEnd: true
       }
     };
   }
 
   if (type === 'EXPIRATION') {
-    const tier = resolveTierByRcProductId(event.product_id);
-    if (tier === 'free') return { action: 'ack', reason: 'unknown_product' };
     return {
       action: 'apply',
-      revokes: true,
+      kind: 'revoke',
       update: {
         tier,
         status: 'canceled',
-        currentPeriodStart: toIsoFromMs(event.purchased_at_ms),
-        currentPeriodEnd: toIsoFromMs(event.expiration_at_ms),
+        currentPeriodStart: periodStart,
+        currentPeriodEnd: periodEnd,
         cancelAtPeriodEnd: true
       }
     };
   }
 
-  if (type === 'BILLING_ISSUE') {
-    const tier = resolveTierByRcProductId(event.product_id);
-    if (tier === 'free') return { action: 'ack', reason: 'unknown_product' };
-    const graceEnd = toIsoFromMs(event.grace_period_expiration_at_ms);
-    if (graceEnd) {
-      // Store grace period keeps access alive; extend to its end. RENEWAL
-      // (recovered) or EXPIRATION (lost) arrives later and settles it.
-      return {
-        action: 'apply',
-        revokes: false,
-        update: {
-          tier,
-          status: 'active',
-          currentPeriodStart: toIsoFromMs(event.purchased_at_ms),
-          currentPeriodEnd: graceEnd,
-          cancelAtPeriodEnd: true
-        }
-      };
-    }
+  // BILLING_ISSUE
+  const graceEnd = toIsoFromMs(event.grace_period_expiration_at_ms);
+  if (graceEnd) {
+    // Store grace period keeps access alive; extend to its end. RENEWAL
+    // (recovered) or EXPIRATION (lost) arrives later and settles it.
     return {
       action: 'apply',
-      revokes: true,
+      kind: 'modify',
       update: {
         tier,
-        status: 'past_due',
-        currentPeriodStart: toIsoFromMs(event.purchased_at_ms),
-        currentPeriodEnd: toIsoFromMs(event.expiration_at_ms),
+        status: 'active',
+        currentPeriodStart: periodStart,
+        currentPeriodEnd: graceEnd,
         cancelAtPeriodEnd: true
       }
     };
   }
-
-  // PRODUCT_CHANGE: the real switch arrives as RENEWAL/INITIAL_PURCHASE.
-  // TRANSFER: rare cross-account move — ack + rely on the follow-up events for
-  // the destination user (the route logs it loudly for manual follow-up).
-  // SUBSCRIBER_ALIAS, SUBSCRIPTION_PAUSED, PAYWALL_*, etc.: informational.
-  return { action: 'ack', reason: `unhandled_type:${type}` };
+  return {
+    action: 'apply',
+    kind: 'revoke',
+    update: {
+      tier,
+      status: 'past_due',
+      currentPeriodStart: periodStart,
+      currentPeriodEnd: periodEnd,
+      cancelAtPeriodEnd: true
+    }
+  };
 }

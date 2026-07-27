@@ -37,7 +37,7 @@ Disse blokkerer alt annet og tar tid å få gjennom. Gjør i denne rekkefølgen:
   - **Entitlement** med id **`premium`** — koble BEGGE produktene til den.
   - **Offering** (default) med pakkene **`$rc_monthly`** (79 kr-produktet) og **`$rc_annual`** (249 kr-produktet).
   - **Webhook**: URL `https://www.mycelet.com/api/revenuecat/webhook`, og sett en «Authorization header value» (lang tilfeldig streng).
-  - Gi Claude: **Public Apple API Key** (SDK-nøkkelen) + **webhook-Authorization-strengen** → legges i Vercel som `NEXT_PUBLIC_REVENUECAT_APPLE_KEY` og `REVENUECAT_WEBHOOK_AUTH` (+ `REVENUECAT_ALLOW_SANDBOX=1` under testing, fjernes før lansering).
+  - Gi Claude: **Public Apple API Key** (SDK-nøkkelen) + **webhook-Authorization-strengen** → legges i Vercel som `NEXT_PUBLIC_REVENUECAT_APPLE_KEY` og `REVENUECAT_WEBHOOK_AUTH` (+ `REVENUECAT_ALLOW_SANDBOX=1` — må stå PÅ gjennom sandbox-testing OG Apple-review (reviewere kjøper i sandbox!); fjernes først etter godkjenning).
 - [ ] **5. Opprett app-oppføringen** i App Store Connect: navn `Mycelet`, bundle `no.mycelet.app`, SKU `mycelet-ios-001` (alt annet er ferdig i `docs/app-store-metadata.md`).
 - [ ] **6. Opprett IAP-produktene** i App Store Connect med NØYAKTIG disse ID-ene (koden forventer dem; kan overstyres med env om nødvendig):
   - `no.mycelet.premium.monthly` — auto-fornybart abonnement, 79 kr/mnd

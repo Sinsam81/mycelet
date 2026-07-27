@@ -1,4 +1,5 @@
 import { isNativePlatform } from './platform';
+import { IapPlan, guessTierFromProductId } from '@/lib/billing/plans';
 
 /**
  * RevenueCat IAP wrapper for the native shells (Apple App Store rule 3.1.1
@@ -17,20 +18,21 @@ import { isNativePlatform } from './platform';
  * together with an app-binary release, or the two sides can drift.
  */
 
-export type IapPlan = 'premium' | 'season_pass';
-
 export interface IapOffer {
   plan: IapPlan;
   productId: string;
-  /** Localized, store-formatted price, e.g. "kr 79,00". */
+  /** Localized, store-formatted price, e.g. "kr 79,00". SHOW this in the UI —
+   * the App Store price tier can differ from the Stripe NOK price. */
   priceString: string;
   packageIdentifier: string;
+  /** The raw RevenueCat package, passed back on purchase. */
+  rcPackage: PurchasesPackageLike;
 }
 
 export type IapPurchaseOutcome = 'success' | 'cancelled';
 
 // The plugin type surface we rely on (subset of @revenuecat/purchases-capacitor).
-interface PurchasesPackageLike {
+export interface PurchasesPackageLike {
   identifier: string;
   packageType: string;
   product: { identifier: string; priceString: string };
@@ -48,7 +50,6 @@ interface PurchasesPluginLike {
 }
 
 let configuredForUser: string | null = null;
-const packageCache = new Map<string, PurchasesPackageLike>();
 
 async function loadPlugin(): Promise<PurchasesPluginLike> {
   const mod = await import('@revenuecat/purchases-capacitor');
@@ -66,10 +67,10 @@ export function isIapAvailable(): boolean {
  */
 export async function configurePurchases(userId: string): Promise<boolean> {
   if (!isIapAvailable()) return false;
+  if (configuredForUser === userId) return true;
+
   const apiKey = process.env.NEXT_PUBLIC_REVENUECAT_APPLE_KEY as string;
   const purchases = await loadPlugin();
-
-  if (configuredForUser === userId) return true;
   const { isConfigured } = await purchases.isConfigured();
   if (isConfigured) {
     await purchases.logIn({ appUserID: userId });
@@ -84,11 +85,10 @@ function packageToPlan(pkg: PurchasesPackageLike): IapPlan | null {
   // Primary: the standard RevenueCat package identifiers ($rc_monthly/$rc_annual).
   if (pkg.packageType === 'MONTHLY') return 'premium';
   if (pkg.packageType === 'ANNUAL') return 'season_pass';
-  // Fallback: recognizable product ids (mirrors resolveTierByRcProductId server-side).
-  const id = pkg.product.identifier.toLowerCase();
-  if (id.includes('season') || id.includes('sesong')) return 'season_pass';
-  if (id.includes('premium') || id.includes('month')) return 'premium';
-  return null;
+  // Fallback: the SAME shared heuristic the webhook uses server-side, so the
+  // app can never sell a package the webhook then fails to map.
+  const tier = guessTierFromProductId(pkg.product.identifier);
+  return tier === 'free' ? null : tier;
 }
 
 /** Load the current offering's packages mapped to Mycelet plans. */
@@ -102,12 +102,12 @@ export async function getIapOffers(): Promise<IapOffer[]> {
   for (const pkg of packages) {
     const plan = packageToPlan(pkg);
     if (!plan) continue;
-    packageCache.set(pkg.identifier, pkg);
     offers.push({
       plan,
       productId: pkg.product.identifier,
       priceString: pkg.product.priceString,
-      packageIdentifier: pkg.identifier
+      packageIdentifier: pkg.identifier,
+      rcPackage: pkg
     });
   }
   return offers;
@@ -115,14 +115,13 @@ export async function getIapOffers(): Promise<IapOffer[]> {
 
 /**
  * Run the native purchase flow for an offer. Resolves 'cancelled' when the
- * user backs out of Apple's sheet; throws on real errors.
+ * user backs out of Apple's sheet; throws on real errors (caller shows a
+ * translated error message).
  */
 export async function purchaseIapOffer(offer: IapOffer): Promise<IapPurchaseOutcome> {
   const purchases = await loadPlugin();
-  const pkg = packageCache.get(offer.packageIdentifier);
-  if (!pkg) throw new Error('Ukjent produktpakke — last siden på nytt.');
   try {
-    await purchases.purchasePackage({ aPackage: pkg });
+    await purchases.purchasePackage({ aPackage: offer.rcPackage });
     return 'success';
   } catch (error) {
     if (isUserCancellation(error)) return 'cancelled';
@@ -143,8 +142,11 @@ export async function restoreIapPurchases(): Promise<boolean> {
 function isUserCancellation(error: unknown): boolean {
   if (!error || typeof error !== 'object') return false;
   const code = (error as { code?: unknown }).code;
-  const message = String((error as { message?: unknown }).message ?? '');
   // PURCHASES_ERROR_CODE.PURCHASE_CANCELLED_ERROR — code "1" in the hybrid
-  // SDKs; match message too for robustness across plugin versions.
-  return code === '1' || code === 1 || /cancel/i.test(message);
+  // SDKs. Deliberately narrow: an interrupted/failed transaction whose message
+  // merely CONTAINS "cancelled" must surface as an error, not be swallowed as
+  // a user cancellation.
+  if (code === '1' || code === 1) return true;
+  const message = String((error as { message?: unknown }).message ?? '');
+  return /(purchase|user)\s*(was\s*)?cancell?ed/i.test(message);
 }

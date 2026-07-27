@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { timingSafeEqual } from 'crypto';
+import { timingSafeEqual, createHash } from 'crypto';
 import { createAdminClient } from '@/lib/supabase/admin';
 import {
   RevenueCatWebhookBody,
   mapRevenueCatEvent,
   resolveSupabaseUserId
 } from '@/lib/billing/revenuecat';
-import { hasPaidAccess } from '@/lib/billing/plans';
+import { hasPaidAccess, BillingStatus, BillingTier } from '@/lib/billing/plans';
 import { createRequestLogger } from '@/lib/log/request';
 
 /**
@@ -14,14 +14,25 @@ import { createRequestLogger } from '@/lib/log/request';
  * SAME `billing_subscriptions` row Stripe writes, so paid access is identical
  * regardless of store. See src/lib/billing/revenuecat.ts for event semantics.
  *
+ * Cross-provider ownership: the row's metadata.provider records who wrote it
+ * last ('revenuecat' | Stripe's writes). Grants always apply (new money takes
+ * ownership); modify/revoke decisions only apply when the row is
+ * RevenueCat-owned or not currently paid — an old Apple expiry/refund can
+ * never clobber a subscription the user actively pays via Stripe. The Stripe
+ * webhook enforces the mirror-image rule.
+ *
+ * Ordering: RevenueCat delivers at-least-once WITHOUT ordering. Every applied
+ * event stores its event_timestamp_ms in metadata; an older event arriving
+ * late (retry after a failure) is skipped instead of clobbering newer state.
+ *
  * Auth: RevenueCat sends the dashboard-configured string verbatim in the
- * `Authorization` header on every delivery (no signature scheme). We compare
- * timing-safe against REVENUECAT_WEBHOOK_AUTH.
+ * `Authorization` header (no signature scheme). Compared timing-safe via
+ * SHA-256 digests (uniform length — no length oracle).
  *
  * Contract: respond 200 for everything we accept OR deliberately ignore —
- * RevenueCat retries non-200s up to 5 times with backoff, so only genuine
- * server faults may 5xx. Dedup on event.id via billing_webhook_events
- * (prefixed `rc_` to share the table with Stripe event ids).
+ * RevenueCat retries non-200s up to 5 times, so only genuine server faults
+ * (where a retry can succeed) may 5xx. Dedup on event.id via
+ * billing_webhook_events (`rc_` prefix, shared table with Stripe).
  */
 
 export const runtime = 'nodejs';
@@ -30,10 +41,18 @@ function authorized(request: NextRequest): boolean {
   const expected = process.env.REVENUECAT_WEBHOOK_AUTH;
   if (!expected) return false;
   const received = request.headers.get('authorization') ?? '';
-  const a = Buffer.from(received);
-  const b = Buffer.from(expected);
-  if (a.length !== b.length) return false;
+  // Hash both sides: constant compare length regardless of input length.
+  const a = createHash('sha256').update(received).digest();
+  const b = createHash('sha256').update(expected).digest();
   return timingSafeEqual(a, b);
+}
+
+interface ExistingBillingRow {
+  user_id: string;
+  tier: string;
+  status: string;
+  current_period_end: string | null;
+  metadata: Record<string, unknown> | null;
 }
 
 export async function POST(request: NextRequest) {
@@ -109,14 +128,18 @@ export async function POST(request: NextRequest) {
         .update({ status: 'processed', processed_at: new Date().toISOString(), error_message: note ?? null })
         .eq('event_id', eventId);
     };
+    const ackIgnored = async (reason: string) => {
+      log.info('revenuecat.webhook.acked', { eventType, reason });
+      await markProcessed(reason);
+      return NextResponse.json({ received: true, ignored: reason });
+    };
 
     // ── Sandbox gate ──────────────────────────────────────────────────
-    // Sandbox/TestFlight purchases must not grant real premium in prod.
-    // Enable REVENUECAT_ALLOW_SANDBOX=1 during pre-launch testing only.
+    // Sandbox/TestFlight purchases must not grant real premium after launch.
+    // Keep REVENUECAT_ALLOW_SANDBOX=1 through sandbox testing AND App Review
+    // (reviewers buy in sandbox!); remove it once the app is approved.
     if (event.environment === 'SANDBOX' && process.env.REVENUECAT_ALLOW_SANDBOX !== '1') {
-      log.info('revenuecat.webhook.ignored_sandbox', { eventType });
-      await markProcessed('ignored_sandbox');
-      return NextResponse.json({ received: true, ignored: 'sandbox' });
+      return await ackIgnored('sandbox');
     }
 
     // ── Map + apply ───────────────────────────────────────────────────
@@ -124,12 +147,11 @@ export async function POST(request: NextRequest) {
 
     if (decision.action === 'ack') {
       if (eventType === 'TRANSFER') {
-        // Cross-account entitlement move — rare; needs manual follow-up.
+        // Cross-account entitlement move — rare; needs manual follow-up so
+        // the ORIGIN account doesn't keep a stale paid row.
         log.warn('revenuecat.webhook.transfer_needs_review', { eventId });
       }
-      log.info('revenuecat.webhook.acked', { eventType, reason: decision.reason });
-      await markProcessed(decision.reason);
-      return NextResponse.json({ received: true, ignored: decision.reason });
+      return await ackIgnored(decision.reason);
     }
 
     const userId = resolveSupabaseUserId(event);
@@ -138,35 +160,46 @@ export async function POST(request: NextRequest) {
       // it to. ACK (retrying won't help); RC re-sends future events with the
       // alias once the user logs in and the SDK links the ids.
       log.warn('revenuecat.webhook.no_user_id', { eventType, appUserId: event.app_user_id ?? null });
-      await markProcessed('no_user_id');
-      return NextResponse.json({ received: true, ignored: 'no_user_id' });
+      return await ackIgnored('no_user_id');
     }
 
-    // ── Cross-provider guard ──────────────────────────────────────────
-    // Never let an Apple revoke-event (expiry/refund of an old IAP) clobber a
-    // subscription the user actively pays for via Stripe on web.
-    const { data: existing } = await admin
+    // ── Ownership + ordering guards ───────────────────────────────────
+    // Error here must 5xx (NOT ack): the guard protects paying customers, and
+    // a RevenueCat retry gives the read another chance.
+    const { data: existing, error: existingError } = await admin
       .from('billing_subscriptions')
-      .select('user_id,tier,status,current_period_end,stripe_subscription_id')
+      .select('user_id,tier,status,current_period_end,metadata')
       .eq('user_id', userId)
-      .maybeSingle();
-
-    const hasActiveStripe = Boolean(
-      existing?.stripe_subscription_id &&
-        hasPaidAccess(
-          existing.status as Parameters<typeof hasPaidAccess>[0],
-          existing.tier as Parameters<typeof hasPaidAccess>[1],
-          existing.current_period_end
-        )
-    );
-    if (decision.revokes && hasActiveStripe) {
-      log.info('revenuecat.webhook.skipped_stripe_active', { eventType, userId });
-      await markProcessed('skipped_stripe_active');
-      return NextResponse.json({ received: true, ignored: 'stripe_active' });
+      .maybeSingle<ExistingBillingRow>();
+    if (existingError) {
+      log.error('revenuecat.webhook.guard_read_failed', existingError, { eventType, userId });
+      return NextResponse.json({ error: existingError.message }, { status: 500 });
     }
 
-    // Upsert ONLY the shared billing columns — the stripe_* columns are left
-    // untouched so a web subscription's identifiers survive IAP events.
+    const existingMeta = existing?.metadata ?? null;
+    const rowIsPaid = Boolean(
+      existing &&
+        hasPaidAccess(existing.status as BillingStatus, existing.tier as BillingTier, existing.current_period_end)
+    );
+    const rowOwnedByRevenueCat = existingMeta?.provider === 'revenuecat';
+
+    // Ordering: skip events older than the last RC event we applied.
+    const lastAppliedTs = typeof existingMeta?.rc_event_timestamp_ms === 'number' ? existingMeta.rc_event_timestamp_ms : null;
+    const eventTs = typeof event.event_timestamp_ms === 'number' ? event.event_timestamp_ms : null;
+    if (rowOwnedByRevenueCat && lastAppliedTs !== null && eventTs !== null && eventTs < lastAppliedTs) {
+      return await ackIgnored('stale_event');
+    }
+
+    // Ownership: modify/revoke only touch rows RevenueCat owns (or unpaid
+    // rows). A paid row written by Stripe (subscription OR one-time season
+    // pass) is off-limits for anything except a fresh grant.
+    if (decision.kind !== 'grant' && rowIsPaid && !rowOwnedByRevenueCat) {
+      log.info('revenuecat.webhook.skipped_foreign_provider', { eventType, userId, kind: decision.kind });
+      return await ackIgnored('foreign_provider_active');
+    }
+
+    // Upsert ONLY the shared billing columns — the stripe_* identifier
+    // columns are left untouched so a web subscription's ids survive.
     const { error: upsertError } = await admin.from('billing_subscriptions').upsert(
       {
         user_id: userId,
@@ -180,6 +213,7 @@ export async function POST(request: NextRequest) {
           store: event.store ?? null,
           rc_product_id: event.product_id ?? null,
           rc_event_type: eventType,
+          rc_event_timestamp_ms: eventTs,
           rc_environment: event.environment ?? null
         }
       },
@@ -196,7 +230,7 @@ export async function POST(request: NextRequest) {
       userId,
       tier: decision.update.tier,
       status: decision.update.status,
-      revokes: decision.revokes
+      kind: decision.kind
     });
     return NextResponse.json({ received: true });
   } catch (error) {

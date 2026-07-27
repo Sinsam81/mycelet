@@ -82,7 +82,7 @@ describe('mapRevenueCatEvent — grants', () => {
       const decision = mapRevenueCatEvent(baseEvent({ type }));
       expect(decision.action).toBe('apply');
       if (decision.action !== 'apply') return;
-      expect(decision.revokes).toBe(false);
+      expect(decision.kind).toBe('grant');
       expect(decision.update.status).toBe('active');
       expect(decision.update.tier).toBe('premium');
       expect(decision.update.currentPeriodEnd).toBe(new Date(EXPIRES_MS).toISOString());
@@ -117,7 +117,7 @@ describe('mapRevenueCatEvent — cancellation vs expiration (the critical distin
     expect(decision.action).toBe('apply');
     if (decision.action !== 'apply') return;
     // Access must CONTINUE: status active + period end untouched.
-    expect(decision.revokes).toBe(false);
+    expect(decision.kind).toBe('modify');
     expect(decision.update.status).toBe('active');
     expect(decision.update.cancelAtPeriodEnd).toBe(true);
     expect(decision.update.currentPeriodEnd).toBe(new Date(EXPIRES_MS).toISOString());
@@ -130,7 +130,7 @@ describe('mapRevenueCatEvent — cancellation vs expiration (the critical distin
     );
     expect(decision.action).toBe('apply');
     if (decision.action !== 'apply') return;
-    expect(decision.revokes).toBe(true);
+    expect(decision.kind).toBe('revoke');
     expect(decision.update.status).toBe('canceled');
     expect(decision.update.currentPeriodEnd).toBe(new Date(now).toISOString());
   });
@@ -139,7 +139,7 @@ describe('mapRevenueCatEvent — cancellation vs expiration (the critical distin
     const decision = mapRevenueCatEvent(baseEvent({ type: 'EXPIRATION', expiration_reason: 'UNSUBSCRIBE' }));
     expect(decision.action).toBe('apply');
     if (decision.action !== 'apply') return;
-    expect(decision.revokes).toBe(true);
+    expect(decision.kind).toBe('revoke');
     expect(decision.update.status).toBe('canceled');
   });
 });
@@ -152,7 +152,7 @@ describe('mapRevenueCatEvent — billing issues', () => {
     );
     expect(decision.action).toBe('apply');
     if (decision.action !== 'apply') return;
-    expect(decision.revokes).toBe(false);
+    expect(decision.kind).toBe('modify');
     expect(decision.update.status).toBe('active');
     expect(decision.update.currentPeriodEnd).toBe(new Date(graceEnd).toISOString());
   });
@@ -161,8 +161,19 @@ describe('mapRevenueCatEvent — billing issues', () => {
     const decision = mapRevenueCatEvent(baseEvent({ type: 'BILLING_ISSUE' }));
     expect(decision.action).toBe('apply');
     if (decision.action !== 'apply') return;
-    expect(decision.revokes).toBe(true);
+    expect(decision.kind).toBe('revoke');
     expect(decision.update.status).toBe('past_due');
+  });
+});
+
+describe('guessTierFromProductId — shared client/server heuristic', () => {
+  it('season wins when an id contains both season and month words', async () => {
+    const { guessTierFromProductId } = await import('../plans');
+    // "seasonal intro on the monthly plan" must resolve to the LONGER
+    // entitlement deterministically, not depend on branch order drift.
+    expect(guessTierFromProductId('no.mycelet.premium.monthly.season2027intro')).toBe('season_pass');
+    expect(guessTierFromProductId('no.mycelet.sasong.arlig')).toBe('free'); // 'sasong' without ä/e is unknown → free
+    expect(guessTierFromProductId('no.mycelet.säsong.årlig')).toBe('season_pass');
   });
 });
 
