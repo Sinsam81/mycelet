@@ -31,20 +31,30 @@ Disse blokkerer alt annet og tar tid å få gjennom. Gjør i denne rekkefølgen:
 - [ ] **1. Godta oppdatert Program License Agreement** — App Store Connect → som Account Holder. (5 min, men sperrer alt til det er gjort.)
 - [ ] **2. EU «trader»-status (DSA)** ⏳ — App Store Connect → Business. **Påkrevd** ellers fjernes appen fra EU/EØS (også Norge/Sverige). Verifisering kan ta dager. **Gjør dette først.**
 - [ ] **3. Agreements / Tax / Banking** ⏳ — «Paid Apps»-avtalen aktiv + bankkonto + skatteinfo (ØVERÅS APPS, org 937 880 871). Kreves for å selge IAP.
-- [ ] **4. RevenueCat-konto** (gratis) — revenuecat.com → nytt prosjekt «Mycelet» → koble til App Store Connect (App-Specific Shared Secret). Gi Claude: **RevenueCat Public SDK Key** + **Webhook-secret**.
+- [ ] **4. RevenueCat-konto** (gratis) — revenuecat.com → nytt prosjekt «Mycelet», legg til iOS-app med bundle `no.mycelet.app`. Oppsett i RevenueCat-dashboardet (koden er allerede bygget mot dette):
+  - **In-App Purchase Key** fra App Store Connect lastes opp til RevenueCat (kreves av StoreKit 2 — dashbordet forklarer hvor).
+  - **Products**: legg inn de to produkt-ID-ene fra punkt 6.
+  - **Entitlement** med id **`premium`** — koble BEGGE produktene til den.
+  - **Offering** (default) med pakkene **`$rc_monthly`** (79 kr-produktet) og **`$rc_annual`** (249 kr-produktet).
+  - **Webhook**: URL `https://www.mycelet.com/api/revenuecat/webhook`, og sett en «Authorization header value» (lang tilfeldig streng).
+  - Gi Claude: **Public Apple API Key** (SDK-nøkkelen) + **webhook-Authorization-strengen** → legges i Vercel som `NEXT_PUBLIC_REVENUECAT_APPLE_KEY` og `REVENUECAT_WEBHOOK_AUTH` (+ `REVENUECAT_ALLOW_SANDBOX=1` under testing, fjernes før lansering).
 - [ ] **5. Opprett app-oppføringen** i App Store Connect: navn `Mycelet`, bundle `no.mycelet.app`, SKU `mycelet-ios-001` (alt annet er ferdig i `docs/app-store-metadata.md`).
-- [ ] **6. Opprett IAP-produktene** i App Store Connect: `Premium månedlig` 79 kr + `Sesongpass årlig` 249 kr. Skriv ned **produkt-ID-ene** (f.eks. `no.mycelet.premium.monthly` / `no.mycelet.seasonpass.yearly`) → gi til Claude så de matcher koden.
+- [ ] **6. Opprett IAP-produktene** i App Store Connect med NØYAKTIG disse ID-ene (koden forventer dem; kan overstyres med env om nødvendig):
+  - `no.mycelet.premium.monthly` — auto-fornybart abonnement, 79 kr/mnd
+  - `no.mycelet.seasonpass.yearly` — auto-fornybart abonnement, 249 kr/år
+- [ ] **7. Sandbox-tester** — App Store Connect → Users and Access → Sandbox Testers: opprett én testbruker (ekte e-post du kan bekrefte, ALDRI din ekte Apple-ID). Brukes på fysisk iPhone: Innstillinger → Utvikler → Sandbox Apple Account.
+- [ ] **8. Xcode (ved arkivering):** slå på **In-App Purchase**-capability på App-targetet (Signing & Capabilities → + Capability). Claude guider når vi er der.
 
 ---
 
-## SPOR 2 — 💻 RevenueCat IAP (Claude koder, parallelt med Spor 1)
+## SPOR 2 — 💻 RevenueCat IAP (✅ KODET 2026-07-27 — venter på nøklene fra Spor 1)
 
-Bygges nå mot konfigurerbare produkt-ID-er; aktiveres når nøklene fra Spor 1 lander.
-
-- [ ] Legg til `@revenuecat/purchases-capacitor`, init med Public SDK Key
-- [ ] Native kjøps-UI på `/pricing` (erstatt «nativePurchaseUnavailable») — kjøpsknapp + **«Gjenopprett kjøp»** (Apple-krav)
-- [ ] `/api/revenuecat/webhook` — verifiser signatur → oppsert `billing_subscriptions` (Apple-kjøp gir SAMME entitlement som Stripe; `getBillingCapabilities` uendret)
-- [ ] Enhetstester (webhook-parsing, entitlement-mapping) + typecheck/build
+- [x] `@revenuecat/purchases-capacitor@13.2.4` (pinnet — hosted-shell-regel: bump kun sammen med ny app-binær) + `cap sync ios`
+- [x] Klientlib `src/lib/native/purchases.ts` — configure med Supabase-UUID som app-user-id, offerings→planer, kjøp, gjenopprett; alle kall guardet (web-plattformen kaster)
+- [x] Native kjøps-UI på `/pricing` — kjøpsknapper + **«Gjenopprett kjøp»** (Apple-krav) + «Administrer abonnement (App Store)»-lenke; degraderer pent til infomelding uten nøkkel/gammelt skall
+- [x] `/api/revenuecat/webhook` — timing-safe auth, dedup på event-id, CANCELLATION≠EXPIRATION-semantikk, refund-revoke, grace-period, sandbox-gate (`REVENUECAT_ALLOW_SANDBOX`), Stripe-vern (Apple-utløp kan aldri overstyre aktivt Stripe-abonnement) → samme `billing_subscriptions`-rad som Stripe
+- [x] 31 enhetstester på event-mappingen + typecheck/build grønt
+- [ ] Env i Vercel når Sindre har nøklene: `NEXT_PUBLIC_REVENUECAT_APPLE_KEY`, `REVENUECAT_WEBHOOK_AUTH`, `REVENUECAT_ALLOW_SANDBOX=1` (test-fase)
 - [ ] Sandbox-test på ekte iPhone (👤 Sindre + Claude)
 
 ---

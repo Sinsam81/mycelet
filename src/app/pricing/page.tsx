@@ -8,6 +8,15 @@ import { Check, Crown, Leaf, Loader2, ShieldCheck, Undo2 } from 'lucide-react';
 import { PageWrapper } from '@/components/layout/PageWrapper';
 import { BILLING_PLANS } from '@/lib/billing/plans';
 import { useIsNative } from '@/lib/hooks/useIsNative';
+import { createClient } from '@/lib/supabase/client';
+import {
+  IapOffer,
+  configurePurchases,
+  getIapOffers,
+  isIapAvailable,
+  purchaseIapOffer,
+  restoreIapPurchases
+} from '@/lib/native/purchases';
 
 type BillingStatusResponse = {
   subscription: {
@@ -127,9 +136,97 @@ function PricingInner() {
   // distansavtalslagen digital-content exception). Without it, the right extends.
   const [agreedToPurchaseTerms, setAgreedToPurchaseTerms] = useState(false);
   // On iOS, digital subscriptions must go through Apple IAP, not Stripe (App
-  // Store rule 3.1.1). Until IAP is wired, hide all purchase/manage actions in
-  // the native shell. The web keeps the full Stripe flow.
+  // Store rule 3.1.1). The native shell buys via RevenueCat; the web keeps the
+  // full Stripe flow. If the RevenueCat key isn't configured (or the shell is
+  // an old build without the plugin), the purchase section degrades to an
+  // informational message instead of broken buttons.
   const native = useIsNative();
+  const [iapOffers, setIapOffers] = useState<IapOffer[] | null>(null);
+  const [iapReady, setIapReady] = useState(false);
+  const [iapBusy, setIapBusy] = useState<'purchase' | 'restore' | null>(null);
+  const [iapNotice, setIapNotice] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!native || !isIapAvailable()) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const supabase = createClient();
+        const {
+          data: { user }
+        } = await supabase.auth.getUser();
+        if (!user || cancelled) return;
+        const ok = await configurePurchases(user.id);
+        if (!ok || cancelled) return;
+        const offers = await getIapOffers();
+        if (cancelled) return;
+        setIapOffers(offers);
+        setIapReady(offers.length > 0);
+      } catch {
+        // Old shell build without the plugin, or store unreachable — fall back
+        // to the informational message below.
+        if (!cancelled) setIapReady(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [native]);
+
+  // The webhook needs a few seconds to land after Apple confirms the purchase;
+  // poll billing status so the page flips to "aktiv plan" without a manual
+  // reload.
+  const refreshStatusUntilPaid = async () => {
+    for (let attempt = 0; attempt < 6; attempt++) {
+      await new Promise((resolve) => setTimeout(resolve, attempt === 0 ? 2000 : 5000));
+      try {
+        const response = await fetch('/api/billing/status', { cache: 'no-store' });
+        if (response.ok) {
+          const data = (await response.json()) as BillingStatusResponse;
+          setStatus(data);
+          if (data.capabilities.paid) return;
+        }
+      } catch {
+        // transient — keep polling
+      }
+    }
+  };
+
+  const startIapPurchase = async (plan: 'premium' | 'season_pass') => {
+    const offer = iapOffers?.find((o) => o.plan === plan);
+    if (!offer) return;
+    try {
+      setIapBusy('purchase');
+      setIapNotice(null);
+      const outcome = await purchaseIapOffer(offer);
+      if (outcome === 'success') {
+        setIapNotice(t('iapPurchaseSuccess'));
+        void refreshStatusUntilPaid();
+      }
+    } catch (error) {
+      setStatusError(error instanceof Error ? error.message : t('iapPurchaseError'));
+    } finally {
+      setIapBusy(null);
+    }
+  };
+
+  const startIapRestore = async () => {
+    try {
+      setIapBusy('restore');
+      setIapNotice(null);
+      const restored = await restoreIapPurchases();
+      if (restored) {
+        setIapNotice(t('iapRestoreSuccess'));
+        void refreshStatusUntilPaid();
+      } else {
+        setIapNotice(t('iapRestoreNone'));
+      }
+    } catch (error) {
+      setStatusError(error instanceof Error ? error.message : t('iapPurchaseError'));
+    } finally {
+      setIapBusy(null);
+    }
+  };
 
   const checkoutState = searchParams.get('checkout');
   const infoMessage = useMemo(() => {
@@ -225,11 +322,12 @@ function PricingInner() {
 
         {infoMessage ? <p className="rounded-lg bg-forest-50 px-3 py-2 text-sm text-forest-900">{infoMessage}</p> : null}
         {statusError ? <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{statusError}</p> : null}
-        {native ? (
+        {native && !iapReady ? (
           <p className="rounded-lg bg-forest-50 px-3 py-2 text-sm text-forest-900">
             {t('nativePurchaseUnavailable')}
           </p>
         ) : null}
+        {iapNotice ? <p className="rounded-lg bg-forest-50 px-3 py-2 text-sm text-forest-900">{iapNotice}</p> : null}
 
         {status ? (
           <article className="rounded-2xl border border-gray-200 bg-white p-4 shadow-card">
@@ -339,10 +437,51 @@ function PricingInner() {
                     {t('choosePlan', { plan: plan.title })}
                   </button>
                 ) : null}
+
+                {!isCurrent && isPaidOption && native && iapReady ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (checkoutPlan) void startIapPurchase(checkoutPlan);
+                    }}
+                    disabled={iapBusy !== null}
+                    className={`mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-sm font-semibold transition ${
+                      plan.highlight
+                        ? 'bg-forest-800 text-white shadow-sm hover:bg-forest-700'
+                        : 'border border-forest-800 text-forest-800 hover:bg-forest-50'
+                    } disabled:opacity-60`}
+                  >
+                    {iapBusy === 'purchase' ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                    {t('choosePlan', { plan: plan.title })}
+                  </button>
+                ) : null}
               </article>
             );
           })}
         </div>
+
+        {native && iapReady ? (
+          <div className="flex flex-col items-center gap-2">
+            {/* Apple-krav: «Gjenopprett kjøp» må være tilgjengelig i appen. */}
+            <button
+              type="button"
+              onClick={() => void startIapRestore()}
+              disabled={iapBusy !== null}
+              className="inline-flex items-center gap-2 rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+            >
+              {iapBusy === 'restore' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Undo2 className="h-4 w-4" />}
+              {t('iapRestore')}
+            </button>
+            <a
+              href="https://apps.apple.com/account/subscriptions"
+              target="_blank"
+              rel="noreferrer"
+              className="text-xs font-medium text-forest-800 underline"
+            >
+              {t('iapManageOnApple')}
+            </a>
+          </div>
+        ) : null}
 
         <p className="text-center text-xs text-gray-500">
           {t('priceNote')}
