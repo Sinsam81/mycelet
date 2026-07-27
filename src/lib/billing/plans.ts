@@ -1,4 +1,6 @@
 export type BillingTier = 'free' | 'premium' | 'season_pass';
+/** The purchasable tiers (IAP + Stripe both sell exactly these two). */
+export type IapPlan = Exclude<BillingTier, 'free'>;
 export type BillingStatus = 'inactive' | 'trialing' | 'active' | 'past_due' | 'canceled' | 'unpaid' | 'incomplete' | 'incomplete_expired';
 
 export const FREE_DAILY_AI_LIMIT = 5;
@@ -45,6 +47,24 @@ export function resolveTierByPriceId(priceId: string | null | undefined): Billin
   if (!priceId) return 'free';
   if (priceId === process.env.STRIPE_PRICE_PREMIUM_MONTHLY) return 'premium';
   if (priceId === process.env.STRIPE_PRICE_SEASON_PASS) return 'season_pass';
+  return 'free';
+}
+
+/**
+ * Substring fallback for IAP product ids that aren't in the exact env map.
+ * Shared by the RevenueCat webhook (server) and the native purchase UI
+ * (client) — ONE copy, so the app can never sell a package the webhook then
+ * fails to recognize. Env-free and pure by design (client-safe).
+ * Season is checked first: an id containing both words is priced as the
+ * yearly pass, the safer (longer-entitlement) interpretation.
+ */
+export function guessTierFromProductId(productId: string | null | undefined): BillingTier {
+  if (!productId) return 'free';
+  const normalized = productId.toLowerCase();
+  if (normalized.includes('season') || normalized.includes('sesong') || normalized.includes('säsong')) {
+    return 'season_pass';
+  }
+  if (normalized.includes('premium') || normalized.includes('month')) return 'premium';
   return 'free';
 }
 

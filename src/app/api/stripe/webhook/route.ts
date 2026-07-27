@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Stripe from 'stripe';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { BillingTier, resolveTierByPriceId } from '@/lib/billing/plans';
+import { BillingStatus, BillingTier, hasPaidAccess, resolveTierByPriceId } from '@/lib/billing/plans';
 import { getStripeServerClient } from '@/lib/stripe/server';
 import { createRequestLogger } from '@/lib/log/request';
 
@@ -76,6 +76,35 @@ async function resolveUserIdFromCustomer(customerId: string) {
     .maybeSingle();
 
   return data?.user_id ?? null;
+}
+
+/**
+ * Cross-provider guard (mirror of the RevenueCat webhook's rule): the row is
+ * dual-provider, and metadata.provider records who wrote it last. A Stripe
+ * REVOKE (canceled/deleted/unpaid on an old web subscription) must not clobber
+ * a row RevenueCat owns while the user actively pays via Apple/Google. Grants
+ * always apply — new money takes ownership.
+ */
+async function isRowOwnedByActiveIap(userId: string): Promise<boolean> {
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from('billing_subscriptions')
+    .select('tier,status,current_period_end,metadata')
+    .eq('user_id', userId)
+    .maybeSingle<{ tier: string; status: string; current_period_end: string | null; metadata: Record<string, unknown> | null }>();
+
+  // On read failure, err on the side of NOT writing (throw → 400/500 →
+  // Stripe retries the event) rather than risking a wrongful downgrade.
+  if (error) throw new Error(error.message);
+  if (!data) return false;
+  return (
+    data.metadata?.provider === 'revenuecat' &&
+    hasPaidAccess(data.status as BillingStatus, data.tier as BillingTier, data.current_period_end)
+  );
+}
+
+function isPaidStatus(status: string) {
+  return status === 'active' || status === 'trialing';
 }
 
 export async function POST(request: NextRequest) {
@@ -179,7 +208,7 @@ export async function POST(request: NextRequest) {
             currentPeriodStart: toIso(subscription.current_period_start),
             currentPeriodEnd: toIso(subscription.current_period_end),
             cancelAtPeriodEnd: subscription.cancel_at_period_end,
-            metadata: { source: 'checkout.session.completed' }
+            metadata: { provider: 'stripe', source: 'checkout.session.completed' }
           });
         }
       }
@@ -197,7 +226,7 @@ export async function POST(request: NextRequest) {
             currentPeriodStart: new Date().toISOString(),
             currentPeriodEnd: computeSeasonPassEndDateIso(),
             cancelAtPeriodEnd: true,
-            metadata: { source: 'checkout.session.completed_payment' }
+            metadata: { provider: 'stripe', source: 'checkout.session.completed_payment' }
           });
         }
       }
@@ -216,18 +245,25 @@ export async function POST(request: NextRequest) {
 
       const userId = subscription.metadata?.user_id ?? (customerId ? await resolveUserIdFromCustomer(customerId) : null);
       if (userId) {
-        await upsertBillingByUserId({
-          userId,
-          tier,
-          status: mapStripeStatus(subscription.status),
-          stripeCustomerId: customerId,
-          stripeSubscriptionId: subscription.id,
-          stripePriceId: priceId,
-          currentPeriodStart: toIso(subscription.current_period_start),
-          currentPeriodEnd: toIso(subscription.current_period_end),
-          cancelAtPeriodEnd: subscription.cancel_at_period_end,
-          metadata: { source: event.type }
-        });
+        const mappedStatus = mapStripeStatus(subscription.status);
+        // Revoking updates from an old Stripe sub must not clobber an active
+        // IAP subscription (user moved from web to App Store billing).
+        if (!isPaidStatus(mappedStatus) && (await isRowOwnedByActiveIap(userId))) {
+          log.info('stripe.webhook.skipped_iap_active', { eventType: event.type, userId });
+        } else {
+          await upsertBillingByUserId({
+            userId,
+            tier,
+            status: mappedStatus,
+            stripeCustomerId: customerId,
+            stripeSubscriptionId: subscription.id,
+            stripePriceId: priceId,
+            currentPeriodStart: toIso(subscription.current_period_start),
+            currentPeriodEnd: toIso(subscription.current_period_end),
+            cancelAtPeriodEnd: subscription.cancel_at_period_end,
+            metadata: { provider: 'stripe', source: event.type }
+          });
+        }
       }
     }
 
