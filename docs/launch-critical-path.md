@@ -28,9 +28,11 @@ Legend: 👤 = Sindres lekse (kan ikke kodes) · 💻 = Claude koder · ⏳ = la
 
 Disse blokkerer alt annet og tar tid å få gjennom. Gjør i denne rekkefølgen:
 
-- [ ] **1. Godta oppdatert Program License Agreement** — App Store Connect → som Account Holder. (5 min, men sperrer alt til det er gjort.)
-- [ ] **2. EU «trader»-status (DSA)** ⏳ — App Store Connect → Business. **Påkrevd** ellers fjernes appen fra EU/EØS (også Norge/Sverige). Verifisering kan ta dager. **Gjør dette først.**
-- [ ] **3. Agreements / Tax / Banking** ⏳ — «Paid Apps»-avtalen aktiv + bankkonto + skatteinfo (ØVERÅS APPS, org 937 880 871). Kreves for å selge IAP.
+- [x] ~~EU «trader»-status (DSA)~~ — **Active** (gjort 2026-06-26)
+- [x] ~~Skatteskjemaer (W-8BEN + Certificate)~~ — **Active** (gjort 2026-06-26)
+- [x] ~~App-oppføring~~ — **finnes allerede**: ASC app-id 6784672944, bundle `no.mycelet.app`, SKU `mycelet-ios`, status «Prepare for Submission»
+- [ ] **1. Sjekk «Paid Apps»-status** ⏳ — bankkontoen (Mycelet 2345, DNB) sto som «Processing» 26. juni. Sjekk App Store Connect → Agreements: hvis Paid Apps ≠ Active fortsatt → kontakt Apple Support. **Dette er den ene gjenværende Apple-sperren for å selge IAP.**
+- [ ] **2. Re-godta Program License Agreement** hvis banneret fortsatt vises (Apple re-utstedte den i juni).
 - [ ] **4. RevenueCat-konto** (gratis) — revenuecat.com → nytt prosjekt «Mycelet», legg til iOS-app med bundle `no.mycelet.app`. Oppsett i RevenueCat-dashboardet (koden er allerede bygget mot dette):
   - **In-App Purchase Key** fra App Store Connect lastes opp til RevenueCat (kreves av StoreKit 2 — dashbordet forklarer hvor).
   - **Products**: legg inn de to produkt-ID-ene fra punkt 6.
