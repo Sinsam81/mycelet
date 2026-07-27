@@ -65,3 +65,8 @@ Ingen rollback av kode eller database var nødvendig.
 - **Verify post-deploy:** `POST /api/revenuecat/webhook` → 503 (correctly inert until REVENUECAT_WEBHOOK_AUTH is set); `/api/health` ok; `qa:prod` see below.
 - **Awaiting founder (Spor 1):** RevenueCat keys → Vercel env (`NEXT_PUBLIC_REVENUECAT_APPLE_KEY`, `REVENUECAT_WEBHOOK_AUTH`, `REVENUECAT_ALLOW_SANDBOX=1` through App Review), App Store Connect products `no.mycelet.premium.monthly` / `no.mycelet.seasonpass.yearly`, entitlement `premium`, offering `$rc_monthly`/`$rc_annual`.
 - **Rollback:** none needed.
+
+## 2026-07-27 — RevenueCat-konfigurasjon aktivert (env, ingen kodeendring)
+- **What:** Sindre fullførte hele oppsettet (walked through): ASC-abonnementer (gruppe «Mycelet Premium»: no.mycelet.premium.monthly 79kr + no.mycelet.seasonpass.yearly 249kr, priser/availability/localization), RevenueCat-prosjekt med App Store-app + .p8 IAP-key («Valid credentials»), produkter + entitlement `premium` + default offering ($rc_monthly/$rc_annual → App Store-produktene), webhook «Mycelet backend». Claude la inn NEXT_PUBLIC_REVENUECAT_APPLE_KEY + REVENUECAT_WEBHOOK_AUTH + REVENUECAT_ALLOW_SANDBOX=1 i Vercel (Production) via CLI og trigget redeploy.
+- **Verify post-deploy:** POST /api/revenuecat/webhook med riktig auth + TEST-event → 200 {received, ignored:test_event}; feil auth → 401. Paid Apps Agreement/bank/tax alle Active i ASC.
+- **Next:** sandbox-tester i ASC (Users and Access → Sandbox Testers), dev-bygg på fysisk iPhone, sandbox-kjøp E2E, skjermbilder, arkiv + innsending.
