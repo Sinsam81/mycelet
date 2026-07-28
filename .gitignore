@@ -27,3 +27,5 @@ supabase/.temp/
 
 # Unrelated local folder living inside the project dir
 Rørlegger.no/
+.vercel
+.env*
