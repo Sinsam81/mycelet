@@ -81,3 +81,10 @@ Ingen rollback av kode eller database var nødvendig.
 - **What:** Anon `/` now serves the approved Claude Design page verbatim: extracted from the design-tool bundle, lucide icons baked as inline SVG (zero JS), images 8.4 MB→~600 KB JPEG, 8 self-hosted woff2, CTAs → /auth/register (plan buttons ?redirect=/pricing), dead newsletter form removed, canonical+favicon added. Middleware rewrite `/` → `/landing/index.html` for !user; logged-in unchanged. React landing kept as Turbopack-dev fallback.
 - **Verify:** 332 tests; local next start (pixel-identical, rewrite header confirmed); live title + assets 200; qa:prod 29/29; health ok.
 - **Rollback:** none needed.
+
+## 2026-07-29 — PR #95: Three researched Sanketips articles (+ landing cards wired)
+- **What:** `/sanketips/les-terrenget`, `/fem-forvekslinger`, `/sopp-etter-regn` — ~2000 ord hver, skrevet fra bunnen for Mycelet. Kilde-research mot NSNF/Artsdatabanken/NIBIO/Giftinformasjonen/SLU + primærlitteratur, deretter TO uavhengige adversarielle gjennomganger (mykologisk faktasjekk + sikkerhet/tone) og en redigeringsrunde. Faktasjekken fanget bl.a. en FABRIKERT kildehenvisning og upresis morfologi. Landingssidens tre kort (tidligere `href="#"`) peker nå hit.
+- **Mekanikk:** `content/sanketips/*.md` → `scripts/build-articles.mjs` → statisk HTML som løfter landingssidens egne @font-face/header/footer (kan ikke drifte fra designet). Null JS. Rene URL-er via next.config-rewrite.
+- **Sikkerhet verifisert:** dødelige forvekslingsarter navngitt m/ latenstid (orellanin), Galerina-advarsel på stubbesopp, «la den stå» + soppkontroll i alle tre; ingen artikkel påstår at appen vet HVOR soppen står.
+- **Verify:** 332 tests, typecheck, build; live 200 på alle tre + kortlenker på forsiden; qa:prod 29/29; health ok.
+- **Rollback:** none needed.
