@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
+import { useAuth } from '@/lib/hooks/useAuth';
 
 /**
  * Three-screen first-run intro. Shows once (localStorage-versioned), can be
@@ -29,21 +30,26 @@ function markDone() {
 
 export function OnboardingIntro() {
   const t = useTranslations('OnboardingIntro');
+  const { user, loading } = useAuth();
   const [visible, setVisible] = useState(false);
   const [step, setStep] = useState(0);
 
   useEffect(() => {
+    if (loading) return;
     try {
-      if (window.localStorage.getItem(STORAGE_KEY) !== '1') {
+      // The app-intro is for USERS: logged-out visitors land on the marketing
+      // page, where a "welcome to the app" modal on top of the hero is noise.
+      // New registrants see it on their first logged-in visit instead.
+      if (user && window.localStorage.getItem(STORAGE_KEY) !== '1') {
         setVisible(true);
       } else {
-        // Already onboarded — let listeners (cookie notice) proceed at once.
+        // Anon or already onboarded — let listeners (cookie notice) proceed.
         window.dispatchEvent(new Event(ONBOARDING_DONE_EVENT));
       }
     } catch {
       window.dispatchEvent(new Event(ONBOARDING_DONE_EVENT));
     }
-  }, []);
+  }, [user, loading]);
 
   if (!visible) return null;
 

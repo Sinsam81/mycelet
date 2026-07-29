@@ -3,6 +3,7 @@ import { getLocale, getTranslations } from 'next-intl/server';
 import { NonNativeOnly } from '@/components/native/NonNativeOnly';
 import { AlertTriangle, Calendar, Camera, Check, Crown, Database, FileText, Lock, Map, MessageSquare, Shield } from 'lucide-react';
 import { PageWrapper } from '@/components/layout/PageWrapper';
+import { LandingPage } from '@/components/landing/LandingPage';
 import { EdibilityBadge } from '@/components/ui/EdibilityBadge';
 import { MushroomDayCard } from '@/components/home/MushroomDayCard';
 import { LastTripCard } from '@/components/home/LastTripCard';
@@ -78,6 +79,12 @@ export default async function HomePage() {
   const {
     data: { user }
   } = await supabase.auth.getUser();
+
+  // Logged-out visitors get the marketing landing page; logged-in users (web
+  // AND the native shell, whose sessions persist) go straight to the app home.
+  if (!user) {
+    return <LandingPage />;
+  }
 
   const [{ data }, { data: recentFindings }] = await Promise.all([
     supabase
