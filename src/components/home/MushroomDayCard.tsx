@@ -7,7 +7,9 @@ import { useTranslations } from 'next-intl';
 
 interface DayPoint {
   date: string;
+  /** Short weekday label, already in the reader's language (see /api/mushroom-forecast). */
   label: string;
+  isToday?: boolean;
   score: number;
   optimal: boolean;
 }
@@ -191,7 +193,7 @@ export function MushroomDayCard() {
                     style={{ height: `${Math.max(10, d.score)}%`, backgroundColor: colorFor(d.score) }}
                   />
                 </div>
-                <span className={`text-[9px] ${d.label === 'I dag' ? 'font-semibold text-forest-900' : 'text-gray-500'}`}>
+                <span className={`text-[9px] ${d.isToday ? 'font-semibold text-forest-900' : 'text-gray-500'}`}>
                   {d.label}
                 </span>
               </div>

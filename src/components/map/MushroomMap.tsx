@@ -144,7 +144,7 @@ export function MushroomMap() {
   const [topLoading, setTopLoading] = useState(false);
   const [topMsg, setTopMsg] = useState<string | null>(null);
   const [topAccess, setTopAccess] = useState<'premium_full' | 'free_limited' | null>(null);
-  const [speciesSpots, setSpeciesSpots] = useState<{ speciesId: number; norwegianName: string; latinName: string; imageUrl: string; lat: number; lng: number; score: number; verdict?: string; reasons?: string[] }[] | null>(null);
+  const [speciesSpots, setSpeciesSpots] = useState<{ speciesId: number; norwegianName: string; displayName?: string; latinName: string; imageUrl: string; lat: number; lng: number; score: number; verdict?: string; reasons?: string[] }[] | null>(null);
   const [speciesLoading, setSpeciesLoading] = useState(false);
   const [speciesMsg, setSpeciesMsg] = useState<string | null>(null);
 
@@ -480,7 +480,7 @@ export function MushroomMap() {
   // "Soppbilder på kartet": round species photos on each species' best ground.
   const renderSpeciesSpots = useCallback(
     async (
-      spots: { speciesId: number; norwegianName: string; latinName: string; imageUrl: string; lat: number; lng: number; score: number; verdict?: string; reasons?: string[] }[]
+      spots: { speciesId: number; norwegianName: string; displayName?: string; latinName: string; imageUrl: string; lat: number; lng: number; score: number; verdict?: string; reasons?: string[] }[]
     ) => {
       const layer = speciesLayerRef.current;
       if (!mapRef.current || !layer) return;
@@ -496,7 +496,7 @@ export function MushroomMap() {
         });
         const reasonsHtml = (spot.reasons ?? []).map((r) => `<div style="margin-top:3px">${r}</div>`).join('');
         const popup = `<div style="min-width:210px;max-width:265px">
-          <div style="font-weight:700;color:#14532d">${spot.norwegianName}</div>
+          <div style="font-weight:700;color:#14532d">${spot.displayName || spot.norwegianName}</div>
           <div style="font-style:italic;color:#6b7280;font-size:11px">${spot.latinName}</div>
           <div style="color:#555;font-size:12px;margin-top:3px">${spot.verdict ?? t('promisingSpotHere')} · ${spot.score}/100</div>
           <div style="font-size:12px;margin-top:6px;color:#1f2937">${reasonsHtml}</div>
@@ -539,7 +539,7 @@ export function MushroomMap() {
         setSpeciesMsg(data?.error ?? t('couldNotFetchPhotos'));
         return;
       }
-      const spots = (data.spots ?? []) as { speciesId: number; norwegianName: string; latinName: string; imageUrl: string; lat: number; lng: number; score: number; verdict?: string; reasons?: string[] }[];
+      const spots = (data.spots ?? []) as { speciesId: number; norwegianName: string; displayName?: string; latinName: string; imageUrl: string; lat: number; lng: number; score: number; verdict?: string; reasons?: string[] }[];
       if (spots.length === 0) {
         clearSpeciesSpots();
         setSpeciesMsg(data?.message ?? t('noSpeciesInSeason'));
@@ -1341,9 +1341,10 @@ export function MushroomMap() {
           }
         : null,
       nearbyOccurrences: data.nearbyOccurrences,
-      month: new Date().getMonth() + 1
+      month: new Date().getMonth() + 1,
+      locale: locale === 'sv' ? 'sv' : 'nb'
     });
-  }, [prediction.data]);
+  }, [prediction.data, locale]);
 
   // Status messages surface as transient toasts (no permanent boxes cluttering
   // the map). topMsg/speciesMsg are still the single source; we just render

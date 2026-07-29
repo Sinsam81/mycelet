@@ -99,6 +99,15 @@ See `docs/logging.md` for the full conceptual model + the documented Next 14+ qu
 
 **Toaster** (`react-hot-toast`) is mounted in `src/components/layout/Providers.tsx` — `toast.success` / `toast.error` work app-wide.
 
+**i18n** (`src/i18n/`, next-intl, no URL prefixes). Locale comes from the `MYCELET_LOCALE` cookie, falling back to `Accept-Language` and then `nb`. Client components use `useTranslations()` / `useLocale()` against `messages/{nb,sv}.json`; server code calls `getUserLocale()` from `src/i18n/locale.ts`.
+
+Two gotchas that produced real Swedish-user bugs:
+
+- **Text generated server-side is not covered by next-intl.** Anything an API route returns as prose — prediction verdicts, flush banners, habitat reasons, weekday labels, "nothing found" messages — needs the locale threaded in explicitly. The pure prediction libs (`src/lib/prediction/mushroom-day.ts`, `flush.ts`, `src/lib/utils/prediction-explanation.ts`, `src/lib/nibio/habitat.ts`) each take an optional `locale` and hold a per-language `COPY` table next to the logic; they default to `nb` so tests and pre-generated tiles are unaffected. **If a route caches its response, the locale must be part of the cache key** — otherwise the first caller's language is served to everyone.
+- **Species names come from the database, not the message catalog.** Use `getSpeciesDisplayName(species, locale)` from `src/lib/utils/species-name.ts` and select `swedish_name` alongside `norwegian_name`. It falls back to Norwegian silently, so a missing `swedish_name` shows as Norwegian text rather than an error — verify new species rows have both. Source Swedish names from SLU Artdatabanken (artfakta.se / Dyntaxa, which GBIF exposes with a `preferred` flag), never by translating the Norwegian name: several Swedish mushroom names differ by only a word from a *different* species' name.
+
+Pre-generated `prediction_tiles` store their habitat reasons in Norwegian (they're computed once for all readers), so the tile path of `/api/prediction` still returns Norwegian reason lines. Live-computed paths (grid, species-spots, the weather fallback) are localized.
+
 ## Database notes
 
 PostGIS is required (extension created in 001). Geo queries on `findings` and `prediction_tiles` use GIST indexes on `ST_SetSRID(ST_MakePoint(lng, lat), 4326)`.

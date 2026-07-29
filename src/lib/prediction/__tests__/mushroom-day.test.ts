@@ -50,3 +50,23 @@ describe('assessMushroomDay', () => {
     expect(july.score).toBeLessThan(assessMushroomDay(base, 9).score);
   });
 });
+
+describe('assessMushroomDay — language', () => {
+  it('returns Swedish copy for a Swedish reader', () => {
+    const result = assessMushroomDay(base, 9, 'sv');
+    expect(result.title).toContain('Perfekt svampdag');
+    expect(result.message).toContain('Förhållandena');
+    // The data-backed reasons must be translated too — they render on the same card.
+    expect(result.reasons.join(' ')).not.toMatch(/regn siste|luftfuktighet — høyt/);
+  });
+
+  it('says "Svampförhållanden i dag" in Swedish when the day is not optimal', () => {
+    const result = assessMushroomDay(base, 1, 'sv');
+    expect(result.title).toBe('Svampförhållanden i dag');
+    expect(result.message).toContain('Kolla kartan');
+  });
+
+  it('defaults to Norwegian when no locale is given', () => {
+    expect(assessMushroomDay(base, 1).title).toBe('Soppforhold i dag');
+  });
+});

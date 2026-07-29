@@ -1,13 +1,14 @@
 'use client';
 
 import { useState } from 'react';
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import Link from 'next/link';
 import { ChevronDown, ChevronUp, X } from 'lucide-react';
 import { PredictionResponse } from '@/types/prediction';
 import type { Explanation } from '@/lib/utils/prediction-explanation';
 import { PredictionExplanation } from '@/components/prediction/PredictionExplanation';
 import { NonNativeOnly } from '@/components/native/NonNativeOnly';
+import { getSpeciesDisplayName } from '@/lib/utils/species-name';
 
 interface HotspotPanelProps {
   speciesId: number | null;
@@ -49,6 +50,7 @@ function sourceCredit(
 
 export function HotspotPanel({ speciesId, data, explanations, isLoading, error }: HotspotPanelProps) {
   const t = useTranslations('HotspotPanel');
+  const locale = useLocale();
   const [open, setOpen] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
 
@@ -78,7 +80,12 @@ export function HotspotPanel({ speciesId, data, explanations, isLoading, error }
     <div className="absolute left-3 bottom-20 z-[1000] w-[min(380px,calc(100%-1.5rem))] max-h-[calc(100%-9rem)] overflow-y-auto rounded-xl border border-gray-200 bg-white/95 p-3 shadow-lg backdrop-blur">
       <div className="flex items-baseline justify-between gap-2">
         <h3 className="text-sm font-semibold text-gray-900">
-          {data?.species ? data.species.norwegianName : t('conditionsHere')}
+          {data?.species
+            ? getSpeciesDisplayName(
+                { norwegian_name: data.species.norwegianName, swedish_name: data.species.swedishName },
+                locale
+              )
+            : t('conditionsHere')}
         </h3>
         <div className="flex items-center gap-2">
           {data ? <span className="text-sm font-bold text-forest-900">{data.score}/100</span> : null}

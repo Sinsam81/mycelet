@@ -27,6 +27,8 @@ export interface PredictionTile {
 export interface PredictionSpeciesSummary {
   id: number;
   norwegianName: string;
+  /** Curated Swedish name; the client prefers it when the reader's language is Swedish. */
+  swedishName?: string | null;
   latinName: string;
   genus: string | null;
   seasonStart: number;
@@ -66,7 +68,9 @@ export interface PredictionForest {
 
 /**
  * Per-species habitat-fit result: a multiplier in [0.2, 1.3] plus the
- * Norwegian reasons (tree-species match, soil richness) shown in the UI.
+ * reasons (tree-species match, soil richness) shown in the UI, in the
+ * requesting user's language. Reasons that come from pre-generated tiles are
+ * stored in Norwegian, since tiles are computed once for all readers.
  */
 export interface PredictionHabitat {
   score: number;

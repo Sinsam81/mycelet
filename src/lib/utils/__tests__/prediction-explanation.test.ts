@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildExplanation, type SpeciesExplanationContext } from '../prediction-explanation';
+import { buildExplanation, buildSpotSummary, type SpeciesExplanationContext } from '../prediction-explanation';
 
 const KANTARELL: SpeciesExplanationContext = {
   norwegianName: 'Kantarell',
@@ -309,5 +309,91 @@ describe('buildExplanation — output ordering', () => {
     });
     // season + temp + rain + humidity + habitat + mycorrhizal = 6
     expect(lines.length).toBeGreaterThanOrEqual(4);
+  });
+});
+
+describe('buildExplanation — language', () => {
+  it('renders every generic line in Swedish for a Swedish reader', () => {
+    const lines = buildExplanation({ month: 9, weather: PERFECT_KANTARELL_WEATHER, locale: 'sv' });
+    const text = lines.map((l) => l.text).join(' | ');
+    expect(text).toContain('Högsäsong för svamp');
+    // Swedish needs the definite plural after "senaste".
+    expect(text).toContain('senaste 14 dagarna');
+    expect(text).toContain('luftfuktighet');
+    // No Norwegian leftovers
+    expect(text).not.toContain('siste');
+    expect(text).not.toContain('sopp-temperatur');
+  });
+
+  it('names the species in Swedish when a Swedish name exists', () => {
+    const lines = buildExplanation({
+      species: { ...KANTARELL, norwegianName: 'Steinsopp', swedishName: 'Karljohan' },
+      month: 8,
+      weather: PERFECT_KANTARELL_WEATHER,
+      locale: 'sv'
+    });
+    const seasonLine = lines.find((l) => l.category === 'season');
+    expect(seasonLine?.text.toLowerCase()).toContain('karljohan');
+    expect(seasonLine?.text).not.toContain('Steinsopp');
+  });
+
+  it('falls back to the Norwegian name when no Swedish name is curated', () => {
+    const lines = buildExplanation({
+      species: { ...KANTARELL, swedishName: null },
+      month: 2,
+      weather: PERFECT_KANTARELL_WEATHER,
+      locale: 'sv'
+    });
+    const seasonLine = lines.find((l) => l.category === 'season');
+    expect(seasonLine?.text).toContain('Kantarell');
+    expect(seasonLine?.text).toContain('utanför säsong');
+  });
+
+  it('uses Swedish forest labels and month names', () => {
+    const lines = buildExplanation({
+      species: { ...KANTARELL, swedishName: 'Kantarell' },
+      month: 8,
+      weather: PERFECT_KANTARELL_WEATHER,
+      locale: 'sv',
+      forest: {
+        forestType: 'furu',
+        productivity: 8,
+        volumePerHa: 65,
+        habitatScore: 0.9,
+        habitatReasons: []
+      }
+    });
+    const text = lines.map((l) => l.text).join(' | ');
+    expect(text).toContain('tallskog');
+    expect(text).toContain('augusti');
+    expect(text).not.toContain('furuskog');
+  });
+
+  it('defaults to Norwegian when no locale is given', () => {
+    const lines = buildExplanation({ month: 9, weather: PERFECT_KANTARELL_WEATHER });
+    expect(lines.map((l) => l.text).join(' | ')).toContain('Hovedsesong for sopp i Norge');
+  });
+});
+
+describe('buildSpotSummary — language', () => {
+  it('renders the verdict in Swedish', () => {
+    const summary = buildSpotSummary({
+      species: { ...KANTARELL, swedishName: 'Kantarell' },
+      month: 8,
+      weather: PERFECT_KANTARELL_WEATHER,
+      score: 80,
+      locale: 'sv'
+    });
+    expect(summary.verdict).toBe('Mycket goda förhållanden för kantarell nu');
+  });
+
+  it('defaults to Norwegian', () => {
+    const summary = buildSpotSummary({
+      species: KANTARELL,
+      month: 8,
+      weather: PERFECT_KANTARELL_WEATHER,
+      score: 80
+    });
+    expect(summary.verdict).toBe('Svært gode forhold for kantarell nå');
   });
 });

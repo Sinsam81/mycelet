@@ -4,6 +4,7 @@ import { assessMushroomDay } from '@/lib/prediction/mushroom-day';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { getClientKey, rateLimitResponse } from '@/lib/rate-limit/route';
 import { createRequestLogger } from '@/lib/log/request';
+import { getUserLocale } from '@/i18n/locale';
 
 /**
  * "Perfekt soppdag" endpoint — returns today's mushroom-foraging verdict for a
@@ -15,6 +16,9 @@ import { createRequestLogger } from '@/lib/log/request';
 export const runtime = 'nodejs';
 
 function num(value: string | null): number {
+  // Number(null) is 0, so a missing parameter would otherwise pass the range
+  // check as a valid 0,0 coordinate instead of being rejected.
+  if (value == null || value.trim() === '') return NaN;
   const n = Number(value);
   return Number.isFinite(n) ? n : NaN;
 }
@@ -40,8 +44,11 @@ export async function GET(request: NextRequest) {
     return rateLimitResponse(rl);
   }
 
+  // Verdict + reasons are user-facing text, so the language is part of the
+  // cache identity — otherwise the first caller's language wins for everyone.
+  const locale = await getUserLocale();
   const month = new Date().getMonth() + 1;
-  const cacheKey = `${lat.toFixed(2)},${lon.toFixed(2)},${month}`;
+  const cacheKey = `${lat.toFixed(2)},${lon.toFixed(2)},${month},${locale}`;
   const cached = dayCache.get(cacheKey);
   if (cached && Date.now() - cached.at < CACHE_TTL_MS) {
     return NextResponse.json(cached.payload);
@@ -63,7 +70,8 @@ export async function GET(request: NextRequest) {
         minTemp7dC: weather.minTemp7dC,
         maxTemp7dC: weather.maxTemp7dC
       },
-      month
+      month,
+      locale
     );
 
     const payload = { ...assessment, weatherSource: weather.source };

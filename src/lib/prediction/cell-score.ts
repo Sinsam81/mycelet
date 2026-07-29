@@ -28,6 +28,7 @@ import {
   type SpeciesHabitatPreferences
 } from '@/lib/forest';
 import { elevationToTerrainScore } from '@/lib/terrain';
+import type { Locale } from '@/i18n/config';
 
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, Math.round(value)));
@@ -69,6 +70,11 @@ export interface CellPredictionInput {
    * lookup; defaults to the middle of `month` when omitted (back-compat).
    */
   dayOfYear?: number;
+  /**
+   * Language for the habitat reasons in the result. Only affects text, never
+   * scores. Defaults to Norwegian — pre-generated tiles are stored in Norwegian.
+   */
+  locale?: Locale;
 }
 
 export interface CellPrediction {
@@ -122,7 +128,7 @@ export function computeCellPrediction(input: CellPredictionInput): CellPredictio
   const seasonality = species ? phenologyFactor(species.speciesId, lat, dayOfYear) : null;
   const speciesFit = species ? computeSpeciesAdjustment(species, weather, month, seasonality) : null;
 
-  const habitat = forest && speciesHabitat ? computeHabitatScore(forest, speciesHabitat) : null;
+  const habitat = forest && speciesHabitat ? computeHabitatScore(forest, speciesHabitat, input.locale) : null;
   // Recenter on 1.0: computeHabitatScore is centered on 0.5 (= neutral / no
   // signal), but here it's a SCORE MULTIPLIER where 1.0 must be neutral.
   // Without this, a matching habitat (e.g. 0.8) would *reduce* the score.

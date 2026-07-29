@@ -6,6 +6,8 @@ import { assessFlush } from '@/lib/prediction/flush';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { getClientKey, rateLimitResponse } from '@/lib/rate-limit/route';
 import { createRequestLogger } from '@/lib/log/request';
+import { getUserLocale } from '@/i18n/locale';
+import { DEFAULT_LOCALE, type Locale } from '@/i18n/config';
 
 /**
  * 7-day "soppforhold"-trend for the home page. Day 0 uses observed weather (so it
@@ -17,13 +19,25 @@ import { createRequestLogger } from '@/lib/log/request';
 export const runtime = 'nodejs';
 
 function num(value: string | null): number {
+  // Number(null) is 0, so a missing parameter would otherwise pass the range
+  // check as a valid 0,0 coordinate instead of being rejected.
+  if (value == null || value.trim() === '') return NaN;
   const n = Number(value);
   return Number.isFinite(n) ? n : NaN;
 }
 
 const cache = new Map<string, { at: number; payload: Record<string, unknown> }>();
 const CACHE_TTL_MS = 30 * 60 * 1000;
-const WEEKDAYS = ['søn', 'man', 'tir', 'ons', 'tor', 'fre', 'lør'];
+
+// Short weekday labels for the 7-day strip, per language. Written out rather
+// than derived from Intl so the Norwegian labels stay exactly as they were
+// (Intl's nb-NO short weekdays carry a trailing period) and the Swedish ones
+// are the ones a Swedish reader expects (lör/sön/tis, not lør/søn/tir).
+const WEEKDAYS: Record<Locale, string[]> = {
+  nb: ['søn', 'man', 'tir', 'ons', 'tor', 'fre', 'lør'],
+  sv: ['sön', 'mån', 'tis', 'ons', 'tors', 'fre', 'lör']
+};
+const TODAY_LABEL: Record<Locale, string> = { nb: 'I dag', sv: 'I dag' };
 
 export async function GET(request: NextRequest) {
   const log = createRequestLogger(request);
@@ -40,10 +54,13 @@ export async function GET(request: NextRequest) {
     return rateLimitResponse(rl);
   }
 
+  // The payload carries user-facing text (verdict, flush banner, weekday
+  // labels), so the reader's language is part of the cache identity.
+  const locale = await getUserLocale();
   const now = new Date();
   const todayKey = now.toISOString().slice(0, 10);
   const month = now.getMonth() + 1;
-  const cacheKey = `${lat.toFixed(2)},${lon.toFixed(2)},${todayKey}`;
+  const cacheKey = `${lat.toFixed(2)},${lon.toFixed(2)},${todayKey},${locale}`;
   const cached = cache.get(cacheKey);
   if (cached && Date.now() - cached.at < CACHE_TTL_MS) {
     return NextResponse.json(cached.payload);
@@ -68,11 +85,19 @@ export async function GET(request: NextRequest) {
         minTemp7dC: observed.minTemp7dC,
         maxTemp7dC: observed.maxTemp7dC
       },
-      month
+      month,
+      locale
     );
 
-    const days: { date: string; label: string; score: number; optimal: boolean }[] = [
-      { date: todayKey, label: 'I dag', score: today.score, optimal: today.optimal }
+    const weekdays = WEEKDAYS[locale] ?? WEEKDAYS[DEFAULT_LOCALE];
+    const days: { date: string; label: string; isToday: boolean; score: number; optimal: boolean }[] = [
+      {
+        date: todayKey,
+        label: TODAY_LABEL[locale] ?? TODAY_LABEL[DEFAULT_LOCALE],
+        isToday: true,
+        score: today.score,
+        optimal: today.optimal
+      }
     ];
 
     const future = (forecast ?? []).filter((d) => d.date > todayKey).slice(0, 6);
@@ -98,20 +123,31 @@ export async function GET(request: NextRequest) {
           minTemp7dC: null,
           maxTemp7dC: null
         },
-        dayDate.getUTCMonth() + 1
+        dayDate.getUTCMonth() + 1,
+        locale
       );
-      days.push({ date: d.date, label: WEEKDAYS[dayDate.getUTCDay()], score: a.score, optimal: a.optimal });
+      days.push({
+        date: d.date,
+        label: weekdays[dayDate.getUTCDay()],
+        isToday: false,
+        score: a.score,
+        optimal: a.optimal
+      });
     });
 
     // Flush timing — "should I go now, or wait?" — from the moisture base now
     // plus the upcoming forecast rain.
-    const flush = assessFlush({
-      month,
-      soilMoistureIndex: observed.soilMoistureIndex,
-      rain7dMm: observed.rain7dMm ?? observed.rain3dMm * 2,
-      currentTempC: observed.temperatureC,
-      forecast: future
-    });
+    const flush = assessFlush(
+      {
+        month,
+        soilMoistureIndex: observed.soilMoistureIndex,
+        rain7dMm: observed.rain7dMm ?? observed.rain3dMm * 2,
+        currentTempC: observed.temperatureC,
+        forecast: future
+      },
+      undefined,
+      locale
+    );
 
     const payload = { today, days, flush, hasForecast: future.length > 0, weatherSource: observed.source };
     cache.set(cacheKey, { at: Date.now(), payload });

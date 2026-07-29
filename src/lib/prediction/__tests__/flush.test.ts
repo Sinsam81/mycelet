@@ -131,3 +131,29 @@ describe('assessFlush — per-species phenology gate', () => {
     expect(r.status).toBe('fruiting');
   });
 });
+
+describe('assessFlush — language', () => {
+  const dry = { month: 9, soilMoistureIndex: 0.1, rain7dMm: 0, currentTempC: 12, forecast: fc([0, 0, 0]) };
+
+  it('returns Swedish copy for a Swedish reader', () => {
+    const r = assessFlush(dry, undefined, 'sv');
+    expect(r.status).toBe('dry');
+    expect(r.title).toBe('Torrt — svampen väntar på regn');
+    expect(r.message).toContain('nederbörd');
+  });
+
+  it('uses Swedish plural for the "rain on the way" projection', () => {
+    const r = assessFlush(
+      { month: 9, soilMoistureIndex: 0.1, rain7dMm: 0, currentTempC: 12, forecast: fc([0, 12, 0]) },
+      undefined,
+      'sv'
+    );
+    expect(r.status).toBe('soon');
+    expect(r.title).toContain('dagar');
+    expect(r.message).toContain('2 dagar');
+  });
+
+  it('defaults to Norwegian when no locale is given', () => {
+    expect(assessFlush(dry).title).toBe('Tørt — soppen venter på regn');
+  });
+});

@@ -14,6 +14,7 @@
  */
 
 import { buildExplanation, type ExplanationWeather } from '@/lib/utils/prediction-explanation';
+import { DEFAULT_LOCALE, type Locale } from '@/i18n/config';
 
 export interface MushroomDayAssessment {
   /** True only inside the broad mushroom season and when the score clears the bar. */
@@ -35,7 +36,38 @@ function cumulativeRain(weather: ExplanationWeather): number {
   return weather.rain3dMm * 3; // rough extrapolation from the 3-day figure
 }
 
-export function assessMushroomDay(weather: ExplanationWeather, month: number): MushroomDayAssessment {
+/**
+ * User-facing copy per language. These strings are served straight to the client
+ * (home card, push notification), so the caller must pass the reader's locale —
+ * a Swedish user seeing Norwegian here was the bug this table fixes.
+ */
+interface DayCopy {
+  titleOptimal: string;
+  titleNormal: string;
+  messageOptimal: string;
+  messageNormal: string;
+}
+
+const COPY: Record<Locale, DayCopy> = {
+  nb: {
+    titleOptimal: '🍄 Perfekt soppdag i dag!',
+    titleNormal: 'Soppforhold i dag',
+    messageOptimal: 'Forholdene er ideelle for å finne sopp i dag — ta turen ut! 🍄',
+    messageNormal: 'Forholdene er ikke helt optimale akkurat nå. Sjekk kartet for ditt nærområde.'
+  },
+  sv: {
+    titleOptimal: '🍄 Perfekt svampdag i dag!',
+    titleNormal: 'Svampförhållanden i dag',
+    messageOptimal: 'Förhållandena är idealiska för att hitta svamp i dag — ut i skogen! 🍄',
+    messageNormal: 'Förhållandena är inte helt optimala just nu. Kolla kartan över ditt närområde.'
+  }
+};
+
+export function assessMushroomDay(
+  weather: ExplanationWeather,
+  month: number,
+  locale: Locale = DEFAULT_LOCALE
+): MushroomDayAssessment {
   let score = 0;
 
   // Season (0–35) — the strongest gate.
@@ -68,14 +100,13 @@ export function assessMushroomDay(weather: ExplanationWeather, month: number): M
   const inSeasonWindow = month >= 6 && month <= 11;
   const optimal = score >= 65 && inSeasonWindow && rain >= 15;
 
-  const reasons = buildExplanation({ weather, month })
+  const reasons = buildExplanation({ weather, month, locale })
     .filter((line) => line.level === 'positive')
     .map((line) => line.text);
 
-  const title = optimal ? '🍄 Perfekt soppdag i dag!' : 'Soppforhold i dag';
-  const message = optimal
-    ? 'Forholdene er ideelle for å finne sopp i dag — ta turen ut! 🍄'
-    : 'Forholdene er ikke helt optimale akkurat nå. Sjekk kartet for ditt nærområde.';
+  const copy = COPY[locale] ?? COPY[DEFAULT_LOCALE];
+  const title = optimal ? copy.titleOptimal : copy.titleNormal;
+  const message = optimal ? copy.messageOptimal : copy.messageNormal;
 
   return { optimal, score, title, message, reasons };
 }

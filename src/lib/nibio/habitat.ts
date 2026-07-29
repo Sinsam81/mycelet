@@ -13,6 +13,7 @@
  */
 
 import type { ForestProperties, HabitatScore, SpeciesHabitatPreferences } from './types';
+import { DEFAULT_LOCALE, type Locale } from '@/i18n/config';
 
 /**
  * Deciduous tree species (ASCII-normalized — see normalizeTreeName in
@@ -97,6 +98,83 @@ function hasTag(habitat: string[], tags: string[]): boolean {
 }
 
 /**
+ * Tree-species codes on ForestProperties are Norwegian ('furu', 'lauv', 'bjork').
+ * They get interpolated into the reason sentences, so they need translating too —
+ * otherwise a Swedish reader gets "Trädslaget (furu) …" next to the already-Swedish
+ * "Skog här: tallskog" from prediction-explanation.ts. Norwegian passes through
+ * unchanged, which keeps the existing Norwegian output byte-identical.
+ */
+const TREE_NAMES_SV: Readonly<Record<string, string>> = {
+  gran: 'gran',
+  furu: 'tall',
+  bar: 'barrträd',
+  lauv: 'lövträd',
+  bjork: 'björk',
+  eik: 'ek',
+  bok: 'bok',
+  osp: 'asp',
+  or: 'al',
+  blandet: 'blandskog',
+  apent: 'öppen mark',
+  ukjent: 'okänt'
+};
+
+function treeName(code: string, locale: Locale): string {
+  if (locale !== 'sv') return code;
+  return TREE_NAMES_SV[code] ?? code;
+}
+
+/**
+ * The reasons are shown verbatim in the map's "hvorfor er dette markert?" panel,
+ * so they follow the reader's language.
+ */
+interface HabitatCopy {
+  noForestData: string;
+  partnerMatch: (treeSpecies: string) => string;
+  deciduousMatch: string;
+  coniferousMatch: string;
+  mixedForest: string;
+  openHabitatMatch: string;
+  openNoHostTrees: string;
+  openUncertain: string;
+  notFavoriteTree: (treeSpecies: string) => string;
+  ageInWindow: (ageYears: number) => string;
+  standTooYoung: (ageYears: number, min: number) => string;
+  richSoil: string;
+}
+
+const COPY: Record<Locale, HabitatCopy> = {
+  nb: {
+    noForestData: 'Ingen NIBIO-data tilgjengelig — bruker værsignal alene.',
+    partnerMatch: (tree) => `Treslag (${tree}) matcher artens partnere.`,
+    deciduousMatch: 'Lauvskog matcher artens lauvtre-partnere (eksakt treslag ukjent i SR16).',
+    coniferousMatch: 'Barskog matcher artens bartre-partnere (eksakt treslag ukjent i CORINE).',
+    mixedForest: 'Blandingsskog — sannsynlig overlapp med foretrukket treslag.',
+    openHabitatMatch: 'Åpen mark (eng/beite) — akkurat denne artens habitat.',
+    openNoHostTrees: 'Åpent landskap uten vertstrær — arten er skogsavhengig og finnes praktisk talt ikke her.',
+    openUncertain: 'Åpent landskap — usikkert habitat for arten.',
+    notFavoriteTree: (tree) => `Treslag (${tree}) er ikke artens favoritt.`,
+    ageInWindow: (age) => `Bestandsalder (${age} år) er innenfor foretrukket vindu.`,
+    standTooYoung: (age, min) => `Bestandet er for ungt (${age} år, ønsker ≥${min}).`,
+    richSoil: 'Høy bonitet — næringsrik mark som arten trives i.'
+  },
+  sv: {
+    noForestData: 'Inga skogsdata tillgängliga — använder endast vädersignalen.',
+    partnerMatch: (tree) => `Trädslaget (${tree}) matchar artens värdträd.`,
+    deciduousMatch: 'Lövskog matchar artens lövträdspartner (exakt trädslag okänt i SR16).',
+    coniferousMatch: 'Barrskog matchar artens barrträdspartner (exakt trädslag okänt i CORINE).',
+    mixedForest: 'Blandskog — sannolik överlappning med föredraget trädslag.',
+    openHabitatMatch: 'Öppen mark (äng/bete) — precis den här artens habitat.',
+    openNoHostTrees: 'Öppet landskap utan värdträd — arten är skogsberoende och finns praktiskt taget inte här.',
+    openUncertain: 'Öppet landskap — osäkert habitat för arten.',
+    notFavoriteTree: (tree) => `Trädslaget (${tree}) är inte artens favorit.`,
+    ageInWindow: (age) => `Beståndsåldern (${age} år) ligger inom det föredragna intervallet.`,
+    standTooYoung: (age, min) => `Beståndet är för ungt (${age} år, arten vill ha ≥${min}).`,
+    richSoil: 'Hög bonitet — näringsrik mark som arten trivs i.'
+  }
+};
+
+/**
  * Compute the habitat-fit multiplier for a given (forest, species) pair.
  *
  * Returns a neutral score with a single "no data" reason when forest is
@@ -105,13 +183,16 @@ function hasTag(habitat: string[], tags: string[]): boolean {
  */
 export function computeHabitatScore(
   forest: ForestProperties | null,
-  preferences: SpeciesHabitatPreferences
+  preferences: SpeciesHabitatPreferences,
+  locale: Locale = DEFAULT_LOCALE
 ): HabitatScore {
+  const copy = COPY[locale] ?? COPY[DEFAULT_LOCALE];
+
   if (!forest || forest.source === 'fallback') {
     return {
       score: 0.5,
       hostGate: 1,
-      reasons: ['Ingen NIBIO-data tilgjengelig — bruker værsignal alene.']
+      reasons: [copy.noForestData]
     };
   }
 
@@ -130,7 +211,7 @@ export function computeHabitatScore(
   // piggsopp, svart trompetsopp — i.e. our entire v1).
   if (preferences.preferredPartners.includes(forest.forestType)) {
     score += 0.4;
-    reasons.push(`Treslag (${forest.forestType}) matcher artens partnere.`);
+    reasons.push(copy.partnerMatch(treeName(forest.forestType, locale)));
   } else if (
     forest.forestType === 'lauv' &&
     preferences.preferredPartners.some((partner) => DECIDUOUS_PARTNERS.includes(partner))
@@ -139,7 +220,7 @@ export function computeHabitatScore(
     // deciduous but not the exact tree. Reward species that like any
     // deciduous partner, a notch below an exact-species match.
     score += 0.3;
-    reasons.push('Lauvskog matcher artens lauvtre-partnere (eksakt treslag ukjent i SR16).');
+    reasons.push(copy.deciduousMatch);
   } else if (
     forest.forestType === 'bar' &&
     preferences.preferredPartners.some((partner) => CONIFEROUS_PARTNERS.includes(partner))
@@ -148,27 +229,27 @@ export function computeHabitatScore(
     // know it's conifer but not gran vs furu. Reward species that like any
     // conifer partner, a notch below an exact-species match (mirror of lauv).
     score += 0.3;
-    reasons.push('Barskog matcher artens bartre-partnere (eksakt treslag ukjent i CORINE).');
+    reasons.push(copy.coniferousMatch);
   } else if (forest.forestType === 'blandet') {
     score += 0.2;
-    reasons.push('Blandingsskog — sannsynlig overlapp med foretrukket treslag.');
+    reasons.push(copy.mixedForest);
   } else if (forest.forestType === 'apent') {
     // Host gate. Open landscape is GOOD for meadow species (eng/beite) but a
     // hard "cannot grow here" for forest/ectomycorrhizal species — a steinsopp
     // in a field should score ~0, not a soft 0.2.
     if (opensTolerant) {
       score += 0.3;
-      reasons.push('Åpen mark (eng/beite) — akkurat denne artens habitat.');
+      reasons.push(copy.openHabitatMatch);
     } else if (forestDependent) {
       hostGate = 0.12;
-      reasons.push('Åpent landskap uten vertstrær — arten er skogsavhengig og finnes praktisk talt ikke her.');
+      reasons.push(copy.openNoHostTrees);
     } else {
       score -= 0.1;
-      reasons.push('Åpent landskap — usikkert habitat for arten.');
+      reasons.push(copy.openUncertain);
     }
   } else if (forest.forestType !== 'ukjent') {
     score -= 0.15;
-    reasons.push(`Treslag (${forest.forestType}) er ikke artens favoritt.`);
+    reasons.push(copy.notFavoriteTree(treeName(forest.forestType, locale)));
   }
 
   // ---- Stand age --------------------------------------------------------
@@ -179,10 +260,10 @@ export function computeHabitatScore(
     const max = preferences.preferredAgeYearsMax ?? Infinity;
     if (forest.ageYears >= min && forest.ageYears <= max) {
       score += 0.15;
-      reasons.push(`Bestandsalder (${forest.ageYears} år) er innenfor foretrukket vindu.`);
+      reasons.push(copy.ageInWindow(forest.ageYears));
     } else if (forest.ageYears < min) {
       score -= 0.1;
-      reasons.push(`Bestandet er for ungt (${forest.ageYears} år, ønsker ≥${min}).`);
+      reasons.push(copy.standTooYoung(forest.ageYears, min));
     }
   }
 
@@ -193,7 +274,7 @@ export function computeHabitatScore(
   if (forest.productivity != null && forest.productivity >= 14) {
     if (preferences.habitat.includes('kalkrik') || preferences.habitat.includes('næringsrik')) {
       score += 0.1;
-      reasons.push('Høy bonitet — næringsrik mark som arten trives i.');
+      reasons.push(copy.richSoil);
     }
   }
 
