@@ -2,7 +2,22 @@ export const ANALYTICS_CONSENT_KEY = 'mycelet:analytics-consent-v1';
 export const ANALYTICS_CONSENT_CHANGED_EVENT = 'mycelet:analytics-consent-changed';
 export const ANALYTICS_CONSENT_REQUEST_EVENT = 'mycelet:analytics-consent-request';
 
+// GA4 admin settings this integration assumes for property G-0ZYHPZ2KM4
+// (they are NOT code-enforceable — set them in GA4 Admin and keep them):
+//   - Data retention: 14 months, "Reset user data on new activity" OFF
+//     (matches the privacy-policy wording in messages/*.json)
+//   - Enhanced measurement → "Page changes based on browser history events"
+//     OFF (we send consent-guarded page_view manually; the default ON would
+//     double-count every SPA navigation)
+//   - Google Signals OFF at property level
+export const GA_MEASUREMENT_ID = process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID ?? 'G-0ZYHPZ2KM4';
+
 export type AnalyticsConsent = 'granted' | 'denied';
+
+// Session-scoped mirror of the persisted consent so a grant still works when
+// localStorage is blocked (private mode) — readAnalyticsConsent() would return
+// null there and silently drop every event after the user said yes.
+let sessionConsent: AnalyticsConsent | null = null;
 
 type AnalyticsValue =
   | string
@@ -55,10 +70,11 @@ export function readAnalyticsConsent(): AnalyticsConsent | null {
 
   try {
     const stored = window.localStorage.getItem(ANALYTICS_CONSENT_KEY);
-    return stored === 'granted' || stored === 'denied' ? stored : null;
+    if (stored === 'granted' || stored === 'denied') return stored;
   } catch {
-    return null;
+    // Storage blocked — fall through to the session-scoped choice.
   }
+  return sessionConsent;
 }
 
 function clearGoogleAnalyticsCookies() {
@@ -84,11 +100,19 @@ function clearGoogleAnalyticsCookies() {
 export function updateAnalyticsConsent(consent: AnalyticsConsent) {
   if (typeof window === 'undefined') return;
 
+  const previous = readAnalyticsConsent();
+  sessionConsent = consent;
+
   try {
     window.localStorage.setItem(ANALYTICS_CONSENT_KEY, consent);
   } catch {
     // Consent still applies for this page even if persistent storage is blocked.
   }
+
+  // Google's documented kill switch: fully disables an already-loaded gtag
+  // instance (a mere consent update still allows cookieless pings).
+  (window as unknown as Record<string, unknown>)[`ga-disable-${GA_MEASUREMENT_ID}`] =
+    consent === 'denied';
 
   const gtag = ensureGoogleTagQueue();
   gtag?.(
@@ -97,13 +121,24 @@ export function updateAnalyticsConsent(consent: AnalyticsConsent) {
     consent === 'granted' ? GRANTED_ANALYTICS_CONSENT : DENIED_GOOGLE_CONSENT
   );
 
-  if (consent === 'denied') clearGoogleAnalyticsCookies();
+  if (consent === 'denied') {
+    clearGoogleAnalyticsCookies();
+    // An in-flight gtag write can re-create _ga right after the update; sweep
+    // once more after the current task queue drains.
+    setTimeout(clearGoogleAnalyticsCookies, 0);
+  }
 
   window.dispatchEvent(
     new CustomEvent<AnalyticsConsent>(ANALYTICS_CONSENT_CHANGED_EVENT, {
       detail: consent
     })
   );
+
+  // Withdrawing after the script has loaded: a reload is the only way back to
+  // a truly Google-free page (the loaded script cannot be unloaded).
+  if (previous === 'granted' && consent === 'denied' && document.getElementById('mycelet-ga4')) {
+    window.location.reload();
+  }
 }
 
 export function requestAnalyticsConsentChoice() {

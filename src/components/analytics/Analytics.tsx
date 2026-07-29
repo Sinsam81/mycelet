@@ -5,23 +5,35 @@ import { usePathname } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ANALYTICS_CONSENT_CHANGED_EVENT,
+  ANALYTICS_CONSENT_KEY,
   AnalyticsConsent,
   DENIED_GOOGLE_CONSENT,
+  GA_MEASUREMENT_ID,
   GRANTED_ANALYTICS_CONSENT,
   ensureGoogleTagQueue,
   readAnalyticsConsent,
   trackPageView
 } from '@/lib/analytics';
 
-const MEASUREMENT_ID = process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID ?? 'G-0ZYHPZ2KM4';
+const MEASUREMENT_ID = GA_MEASUREMENT_ID;
+
+// Only report from the real production site — localhost, `next start` and
+// Vercel preview deploys would otherwise pollute the live GA4 property the
+// moment a tester accepts the banner.
+function isProductionHost() {
+  return typeof window !== 'undefined' && /(^|\.)mycelet\.com$/.test(window.location.hostname);
+}
 
 export function Analytics() {
   const pathname = usePathname();
   const initialized = useRef(false);
   const [consent, setConsent] = useState<AnalyticsConsent | null>(null);
   const [ready, setReady] = useState(false);
+  const [enabled, setEnabled] = useState(false);
 
   useEffect(() => {
+    if (!isProductionHost()) return;
+    setEnabled(true);
     // Basic consent mode: queue a denied default locally, but do not load the
     // Google script or send any network request before explicit consent.
     ensureGoogleTagQueue()?.('consent', 'default', {
@@ -34,7 +46,18 @@ export function Analytics() {
       setConsent((event as CustomEvent<AnalyticsConsent>).detail);
     };
     window.addEventListener(ANALYTICS_CONSENT_CHANGED_EVENT, onConsentChanged);
-    return () => window.removeEventListener(ANALYTICS_CONSENT_CHANGED_EVENT, onConsentChanged);
+    // A withdrawal in another tab must also stop this tab's loaded tag.
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === ANALYTICS_CONSENT_KEY && event.newValue === 'denied') {
+        (window as unknown as Record<string, unknown>)[`ga-disable-${MEASUREMENT_ID}`] = true;
+        setConsent('denied');
+      }
+    };
+    window.addEventListener('storage', onStorage);
+    return () => {
+      window.removeEventListener(ANALYTICS_CONSENT_CHANGED_EVENT, onConsentChanged);
+      window.removeEventListener('storage', onStorage);
+    };
   }, []);
 
   useEffect(() => {
@@ -69,7 +92,7 @@ export function Analytics() {
     trackPageView(pathname);
   }, [consent, pathname, ready]);
 
-  if (consent !== 'granted') return null;
+  if (!enabled || consent !== 'granted') return null;
 
   return (
     <Script

@@ -93,6 +93,13 @@ Alle kategorier: **None** (ingen vold, gambling, rus, medisinsk innhold osv.).
 
 Tracking (på tvers av apper/ATT): **NEI** — ingen sporing, ingen annonser.
 
+> **NB (2026-07-29):** Google Analytics 4 er lagt til på **web-versjonen**, men er
+> bevisst skrudd AV i den native appen (`NonNativeOnly` rundt `<Analytics/>` og
+> `<CookieNotice/>` i `src/app/layout.tsx`). App Store-bygget sender altså ingen
+> analysedata, og App Privacy-svarene under er fortsatt korrekte. Ikke fjern
+> denne gatingen uten samtidig å oppdatere App Privacy i App Store Connect
+> (Usage Data → Product Interaction).
+
 Data som samles inn (alle «Linked to you», ingen til tracking):
 | Datatype | Formål |
 |---|---|

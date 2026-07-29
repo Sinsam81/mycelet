@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
+import { ANALYTICS_CONSENT_CHANGED_EVENT, readAnalyticsConsent } from '@/lib/analytics';
 
 const DISMISS_KEY = 'mycelet:install-prompt-dismissed-v1';
 
@@ -35,12 +36,26 @@ export function InstallPrompt() {
       window.matchMedia('(display-mode: standalone)').matches ||
       (window.navigator as { standalone?: boolean }).standalone === true;
     if (standalone) return;
-    if (localStorage.getItem(DISMISS_KEY) === '1') return;
+    try {
+      if (localStorage.getItem(DISMISS_KEY) === '1') return;
+    } catch {
+      // Storage blocked — treat as not dismissed.
+    }
 
     const onPrompt = (event: Event) => {
       event.preventDefault();
       setDeferred(event as BeforeInstallPromptEvent);
-      setVisible(true);
+      // Don't fight the cookie-consent card for the bottom of the screen:
+      // wait until the visitor has answered it before showing the banner.
+      if (readAnalyticsConsent() !== null) {
+        setVisible(true);
+        return;
+      }
+      const onConsentAnswered = () => {
+        setVisible(true);
+        window.removeEventListener(ANALYTICS_CONSENT_CHANGED_EVENT, onConsentAnswered);
+      };
+      window.addEventListener(ANALYTICS_CONSENT_CHANGED_EVENT, onConsentAnswered);
     };
     const onInstalled = () => setVisible(false);
 

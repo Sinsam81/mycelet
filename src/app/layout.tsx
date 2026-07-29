@@ -5,6 +5,7 @@ import { getMessages, getTranslations } from 'next-intl/server';
 import './globals.css';
 import { CookieNotice } from '@/components/layout/CookieNotice';
 import { Analytics } from '@/components/analytics/Analytics';
+import { NonNativeOnly } from '@/components/native/NonNativeOnly';
 import { Providers } from '@/components/layout/Providers';
 import { getUserLocale } from '@/i18n/locale';
 
@@ -70,9 +71,16 @@ export default async function RootLayout({
     <html lang={locale} className={`${fraunces.variable} ${inter.variable}`}>
       <body>
         <NextIntlClientProvider locale={locale} messages={messages}>
-          <Analytics />
+          {/* Analytics + consent are WEB-ONLY on purpose: the App Store
+              build's App Privacy label declares no usage analytics, and the
+              native shell must match it. */}
+          <NonNativeOnly>
+            <Analytics />
+          </NonNativeOnly>
           <Providers>{children}</Providers>
-          <CookieNotice />
+          <NonNativeOnly>
+            <CookieNotice />
+          </NonNativeOnly>
         </NextIntlClientProvider>
       </body>
     </html>
