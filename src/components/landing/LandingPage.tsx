@@ -156,19 +156,20 @@ export async function LandingPage() {
   ];
 
   return (
-    <PageWrapper>
-      <div className="space-y-12 pb-10 pt-2">
-      {/* ── Hero ────────────────────────────────────────────────────── */}
-      <section className="space-y-5 text-center">
+    <PageWrapper wide>
+      <div className="space-y-14 pb-10 pt-2 lg:space-y-20 lg:pt-6">
+      {/* ── Hero: stablet på mobil, delt tekst/telefon på desktop ───── */}
+      <section className="mx-auto grid max-w-6xl items-center gap-10 space-y-5 text-center lg:grid-cols-[1.2fr_1fr] lg:gap-6 lg:space-y-0 lg:text-left">
+        <div className="space-y-5">
         <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-3 py-1 text-xs font-medium text-forest-900">
           <span className="h-1.5 w-1.5 rounded-full bg-amber-500" aria-hidden="true" />
           {t('heroBadge')}
         </span>
-        <h1 className="font-serif text-5xl font-bold leading-[1.05] tracking-tight text-forest-900">
+        <h1 className="font-serif text-5xl font-bold leading-[1.05] tracking-tight text-forest-900 lg:text-7xl">
           {t('heroTitle')}
         </h1>
-        <p className="mx-auto max-w-md text-base text-gray-700">{t('heroSub')}</p>
-        <div className="flex flex-wrap items-center justify-center gap-3">
+        <p className="mx-auto max-w-md text-base text-gray-700 lg:mx-0 lg:text-lg">{t('heroSub')}</p>
+        <div className="flex flex-wrap items-center justify-center gap-3 lg:justify-start">
           <Link
             href="/auth/register"
             className="inline-flex items-center gap-2 rounded-xl bg-forest-800 px-6 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-forest-700"
@@ -183,15 +184,16 @@ export async function LandingPage() {
           </NonNativeOnly>
         </div>
         <p className="text-xs text-gray-500">{t('heroTrust')}</p>
-        <div className="pt-2">
+        </div>
+        <div className="pt-2 lg:pt-0">
           <PhoneMockup t={t} />
         </div>
       </section>
 
       {/* ── Slik virker det ─────────────────────────────────────────── */}
       <section className="space-y-4">
-        <h2 className="text-center font-serif text-3xl font-bold text-forest-900">{t('howHeading')}</h2>
-        <div className="grid gap-3 sm:grid-cols-3">
+        <h2 className="text-center font-serif text-3xl font-bold text-forest-900 lg:text-4xl">{t('howHeading')}</h2>
+        <div className="mx-auto grid max-w-6xl gap-3 sm:grid-cols-3">
           {steps.map((step, index) => (
             <article key={step.title} className="rounded-2xl bg-white p-4 shadow-card">
               <span className="flex h-10 w-10 items-center justify-center rounded-full bg-forest-100 font-serif text-lg font-bold text-forest-800">
@@ -209,8 +211,8 @@ export async function LandingPage() {
 
       {/* ── Funksjoner ──────────────────────────────────────────────── */}
       <section className="space-y-4">
-        <h2 className="text-center font-serif text-3xl font-bold text-forest-900">{t('featuresHeading')}</h2>
-        <div className="grid gap-3 sm:grid-cols-2">
+        <h2 className="text-center font-serif text-3xl font-bold text-forest-900 lg:text-4xl">{t('featuresHeading')}</h2>
+        <div className="mx-auto grid max-w-6xl gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {features.map((feature) => (
             <article key={feature.title} className="rounded-2xl bg-white p-4 shadow-card">
               <h3 className="flex items-center gap-2 font-semibold text-forest-900">
@@ -225,13 +227,13 @@ export async function LandingPage() {
 
       {/* ── Lær skogen ──────────────────────────────────────────────── */}
       <section className="space-y-4">
-        <h2 className="text-center font-serif text-3xl font-bold text-forest-900">{t('forestHeading')}</h2>
+        <h2 className="text-center font-serif text-3xl font-bold text-forest-900 lg:text-4xl">{t('forestHeading')}</h2>
         <p className="mx-auto max-w-md text-center text-sm text-gray-700">{t('forestIntro')}</p>
-        <div className="overflow-hidden rounded-2xl bg-white shadow-card">
-          {forestRows.map((row, index) => (
+        <div className="mx-auto grid max-w-4xl gap-3 sm:grid-cols-2">
+          {forestRows.map((row) => (
             <div
               key={row.forest}
-              className={`flex items-start gap-3 p-4 ${index > 0 ? 'border-t border-gray-100' : ''}`}
+              className="flex items-start gap-3 rounded-2xl bg-white p-4 shadow-card"
             >
               <TreePine className="mt-0.5 h-4 w-4 shrink-0 text-forest-700" />
               <div>
@@ -245,8 +247,8 @@ export async function LandingPage() {
 
       {/* ── Priser ──────────────────────────────────────────────────── */}
       <section className="space-y-4">
-        <h2 className="text-center font-serif text-3xl font-bold text-forest-900">{t('pricingHeading')}</h2>
-        <div className="grid gap-3 sm:grid-cols-3">
+        <h2 className="text-center font-serif text-3xl font-bold text-forest-900 lg:text-4xl">{t('pricingHeading')}</h2>
+        <div className="mx-auto grid max-w-5xl gap-3 sm:grid-cols-3">
           <article className="flex flex-col rounded-2xl border border-gray-200 bg-white p-4">
             <h3 className="font-serif text-lg font-semibold text-forest-900">{t('planFree')}</h3>
             <p className="mt-1 text-2xl font-bold text-forest-900">0 kr</p>
@@ -304,7 +306,7 @@ export async function LandingPage() {
       </section>
 
       {/* ── Sikkerhet ───────────────────────────────────────────────── */}
-      <section className="rounded-2xl border border-amber-300 bg-amber-50 p-5">
+      <section className="mx-auto max-w-4xl rounded-2xl border border-amber-300 bg-amber-50 p-5">
         <h2 className="flex items-center gap-2 font-serif text-xl font-bold text-forest-900">
           <AlertTriangle className="h-5 w-5 text-amber-600" />
           {t('safetyHeading')}
@@ -314,8 +316,8 @@ export async function LandingPage() {
 
       {/* ── FAQ ─────────────────────────────────────────────────────── */}
       <section className="space-y-3">
-        <h2 className="text-center font-serif text-3xl font-bold text-forest-900">{t('faqHeading')}</h2>
-        <div className="divide-y divide-gray-100 rounded-2xl bg-white p-4 shadow-card">
+        <h2 className="text-center font-serif text-3xl font-bold text-forest-900 lg:text-4xl">{t('faqHeading')}</h2>
+        <div className="mx-auto max-w-3xl divide-y divide-gray-100 rounded-2xl bg-white p-4 shadow-card">
           {faqs.map((faq) => (
             <details key={faq.q} className="group py-2.5">
               <summary className="flex cursor-pointer list-none items-center justify-between gap-2 text-sm font-medium text-gray-900">
@@ -332,7 +334,7 @@ export async function LandingPage() {
 
       {/* ── Avslutnings-CTA + footer ────────────────────────────────── */}
       <section className="space-y-6 text-center">
-        <div className="rounded-2xl bg-gradient-to-br from-forest-900 to-forest-800 p-6 text-white">
+        <div className="mx-auto max-w-4xl rounded-2xl bg-gradient-to-br from-forest-900 to-forest-800 p-6 text-white lg:p-10">
           <h2 className="font-serif text-2xl font-bold">{t('finalCtaHeading')}</h2>
           <p className="mx-auto mt-1 max-w-sm text-sm text-white/85">{t('finalCtaSub')}</p>
           <Link
