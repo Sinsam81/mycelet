@@ -70,3 +70,9 @@ Ingen rollback av kode eller database var nødvendig.
 - **What:** Sindre fullførte hele oppsettet (walked through): ASC-abonnementer (gruppe «Mycelet Premium»: no.mycelet.premium.monthly 79kr + no.mycelet.seasonpass.yearly 249kr, priser/availability/localization), RevenueCat-prosjekt med App Store-app + .p8 IAP-key («Valid credentials»), produkter + entitlement `premium` + default offering ($rc_monthly/$rc_annual → App Store-produktene), webhook «Mycelet backend». Claude la inn NEXT_PUBLIC_REVENUECAT_APPLE_KEY + REVENUECAT_WEBHOOK_AUTH + REVENUECAT_ALLOW_SANDBOX=1 i Vercel (Production) via CLI og trigget redeploy.
 - **Verify post-deploy:** POST /api/revenuecat/webhook med riktig auth + TEST-event → 200 {received, ignored:test_event}; feil auth → 401. Paid Apps Agreement/bank/tax alle Active i ASC.
 - **Next:** sandbox-tester i ASC (Users and Access → Sandbox Testers), dev-bygg på fysisk iPhone, sandbox-kjøp E2E, skjermbilder, arkiv + innsending.
+
+## 2026-07-29 — PR #92: Marketing landing page for logged-out visitors
+- **What:** `/` now renders a landing page for anon visitors (hero «Vit når soppen kommer» + CSS/SVG phone mockup, 3 steg, funksjoner, skogtype-tabell, priser, sikkerhet, FAQ, kilde-footer; nb+sv). Logged-in users unchanged. OnboardingIntro gated to logged-in users (used to pop over the landing hero). Ported from the founder's Claude Design draft.
+- **Verify pre-merge:** 332 tests, typecheck, build; local anon verification (hero, mockup, cookie notice, ingen onboarding-modal, header/bottom-nav).
+- **Verify post-deploy:** «Vit når soppen kommer» live on mycelet.com; `/api/health` ok; `qa:prod` see below.
+- **Rollback:** none needed.
