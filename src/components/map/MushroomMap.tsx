@@ -1,10 +1,10 @@
 'use client';
 
 import Link from 'next/link';
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import { NonNativeOnly } from '@/components/native/NonNativeOnly';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronDown, ChevronUp, Download, Navigation, Trash2 } from 'lucide-react';
+import { Download, MoreHorizontal, Navigation, Trash2, X } from 'lucide-react';
 import { createRoot, Root } from 'react-dom/client';
 import { createClient } from '@/lib/supabase/client';
 import { useGeolocation, watchPositionUntilAccurate } from '@/lib/hooks/useGeolocation';
@@ -17,8 +17,18 @@ import { FindingPopup } from './FindingPopup';
 import { HotspotPanel } from './HotspotPanel';
 import { MapFilters, MapFilterState } from './MapFilters';
 import { MapFinding } from '@/types/finding';
-import { OfflineArea, cacheMapTilesForArea, readOfflineAreas, removeOfflineAreaById, saveOfflineAreas } from '@/lib/utils/offlineMap';
+import {
+  OfflineArea,
+  OSM_TILE_TEMPLATE,
+  SATELLITE_TILE_TEMPLATE,
+  TERRAIN_TILE_TEMPLATE,
+  cacheMapTilesForArea,
+  readOfflineAreas,
+  removeOfflineAreaById,
+  saveOfflineAreas
+} from '@/lib/utils/offlineMap';
 import { buildExplanation } from '@/lib/utils/prediction-explanation';
+import { getSpeciesDisplayName } from '@/lib/utils/species-name';
 import { FLAGS } from '@/lib/flags';
 import toast from 'react-hot-toast';
 
@@ -63,6 +73,7 @@ const initialFilters: MapFilterState = {
 
 export function MushroomMap() {
   const t = useTranslations('MushroomMap');
+  const locale = useLocale();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<import('leaflet').Map | null>(null);
   const clusterRef = useRef<any>(null);
@@ -89,12 +100,20 @@ export function MushroomMap() {
   const geoAbortRef = useRef<AbortController | null>(null); // cancels an in-flight locate watch
   // True once the user manually picks a base layer — stops the region auto-switch.
   const userPickedBaseLayerRef = useRef(false);
+  // The three switchable base layers, so the offline-save can cache whichever one
+  // is currently shown (Terreng=Kartverket / Kart=OSM / Satellitt=Esri) instead
+  // of always assuming Kartverket — which is blank outside Norway.
+  const baseLayersRef = useRef<{
+    terreng: import('leaflet').TileLayer;
+    kart: import('leaflet').TileLayer;
+    satellitt: import('leaflet').TileLayer;
+  } | null>(null);
   // Last known position, so the map can recenter even if geolocation resolves
   // before the (async) map init finishes.
   const posRef = useRef<{ lat: number; lng: number } | null>(null);
 
   const supabase = useRef(createClient()).current;
-  const { latitude, longitude, loading: geoLoading, error: geoError } = useGeolocation();
+  const { latitude, longitude, error: geoError } = useGeolocation();
 
   const [filters, setFilters] = useState<MapFilterState>(initialFilters);
   const [showAddSheet, setShowAddSheet] = useState(false);
@@ -120,6 +139,7 @@ export function MushroomMap() {
   const [offlineStatus, setOfflineStatus] = useState<string | null>(null);
   const [offlineBusy, setOfflineBusy] = useState(false);
   const [offlineOpen, setOfflineOpen] = useState(false);
+  const [toolsOpen, setToolsOpen] = useState(false);
   const [topSpots, setTopSpots] = useState<{ lat: number; lng: number; score: number; forestType: string; productivity: number | null; verdict?: string; reasons?: string[]; topSpecies?: string[] }[] | null>(null);
   const [topLoading, setTopLoading] = useState(false);
   const [topMsg, setTopMsg] = useState<string | null>(null);
@@ -231,7 +251,10 @@ export function MushroomMap() {
               lng: Number(box.dataset.lng),
               found,
               scoreShown: box.dataset.score ? Number(box.dataset.score) : null,
-              speciesId: box.dataset.species ? Number(box.dataset.species) : null
+              speciesId: box.dataset.species ? Number(box.dataset.species) : null,
+              visitedAt: new Date().toISOString(),
+              modelVersion: box.dataset.model,
+              predictionSource: box.dataset.source
             })
           });
           if (res.status === 401) {
@@ -280,7 +303,7 @@ export function MushroomMap() {
           : '';
         const feedbackHtml = `<div data-spot-feedback data-lat="${spot.lat}" data-lng="${spot.lng}" data-score="${spot.score}"${
           opts?.speciesId ? ` data-species="${opts.speciesId}"` : ''
-        } style="margin-top:8px;border-top:1px solid #e5e7eb;padding-top:7px">
+        } data-model="v4_species_spots_habitat" data-source="computed_top_spots" style="margin-top:8px;border-top:1px solid #e5e7eb;padding-top:7px">
           <div style="font-size:12px;font-weight:600;color:#1f2937">${t('wereYouHere')}</div>
           <div style="display:flex;gap:6px;margin-top:5px">
             <button type="button" data-fb="yes" style="flex:1;background:#15803d;color:#fff;border:none;border-radius:8px;padding:5px 0;font-size:12px;font-weight:600;cursor:pointer">${t('feedbackYes')}</button>
@@ -321,34 +344,69 @@ export function MushroomMap() {
       const center = map.getCenter();
       const originLat = latitude ?? center.lat;
       const originLng = longitude ?? center.lng;
-      const latDelta = 5 / 111;
-      const lngDelta = 5 / (111 * Math.cos((originLat * Math.PI) / 180));
-      const params = new URLSearchParams({
-        minLat: String(originLat - latDelta),
-        maxLat: String(originLat + latDelta),
-        minLng: String(originLng - lngDelta),
-        maxLng: String(originLng + lngDelta),
-        n: '7',
-        top: '12'
-      });
-      if (sid) params.set('speciesId', String(sid));
-      const res = await fetch(`/api/prediction/grid?${params.toString()}`, { cache: 'no-store' });
-      const data = await res.json();
-      if (res.status === 403) {
-        setTopMsg(t('requiresPremium'));
-        return;
+
+      type Spot = { lat: number; lng: number; score: number; forestType: string; productivity: number | null; verdict?: string; reasons?: string[]; topSpecies?: string[] };
+
+      // Start local (5 km) and widen only when the near area has no promising
+      // forest, so users in fields/towns still get pointed at the nearest good
+      // ground instead of a dead-end message. 35 km stays inside the grid
+      // route's bounds cap (2·35/111≈0.63° lat, ≤1.76° lng even at 69°N).
+      const RADII_KM = [5, 10, 20, 35];
+      let spots: Spot[] = [];
+      let usedRadius = RADII_KM[0];
+      let limited = false;
+
+      for (let i = 0; i < RADII_KM.length; i++) {
+        const radiusKm = RADII_KM[i];
+        const latDelta = radiusKm / 111;
+        const lngDelta = radiusKm / (111 * Math.cos((originLat * Math.PI) / 180));
+        const params = new URLSearchParams({
+          minLat: String(originLat - latDelta),
+          maxLat: String(originLat + latDelta),
+          minLng: String(originLng - lngDelta),
+          maxLng: String(originLng + lngDelta),
+          n: '7',
+          top: '12'
+        });
+        if (sid) params.set('speciesId', String(sid));
+
+        const res = await fetch(`/api/prediction/grid?${params.toString()}`, { cache: 'no-store' });
+        const data = await res.json();
+        if (res.status === 403) {
+          setTopMsg(t('requiresPremium'));
+          return;
+        }
+        if (res.status === 429) {
+          // Rate limited mid-expansion: stop widening, keep whatever the
+          // server told us rather than masking it with a generic error.
+          setTopMsg(data?.error ?? t('couldNotFindSpots'));
+          return;
+        }
+        if (!res.ok) {
+          setTopMsg(data?.error ?? t('couldNotFindSpots'));
+          return;
+        }
+
+        const found = (data.cells ?? []) as Spot[];
+        if (found.length > 0) {
+          spots = found;
+          usedRadius = radiusKm;
+          limited = data.access === 'free_limited';
+          break;
+        }
+
+        // Nothing here — tell the user we're widening before the next attempt.
+        if (i < RADII_KM.length - 1) {
+          setTopMsg(t('expandingSearch', { km: radiusKm }));
+        }
       }
-      if (!res.ok) {
-        setTopMsg(data?.error ?? t('couldNotFindSpots'));
-        return;
-      }
-      const spots = (data.cells ?? []) as { lat: number; lng: number; score: number; forestType: string; productivity: number | null; verdict?: string; reasons?: string[]; topSpecies?: string[] }[];
+
       if (spots.length === 0) {
         clearTopSpots();
-        setTopMsg(t('littleForestData'));
+        setTopMsg(t('littleForestData', { km: RADII_KM[RADII_KM.length - 1] }));
         return;
       }
-      const limited = data.access === 'free_limited';
+
       setTopAccess(limited ? 'free_limited' : 'premium_full');
       setTopSpots(spots);
       await renderTopSpots(spots, { lat: originLat, lng: originLng }, { limited, speciesId: sid ?? null });
@@ -361,8 +419,8 @@ export function MushroomMap() {
         limited
           ? t('topSpotsLimited', { count: spots.length })
           : sName
-            ? t('topSpotsForSpecies', { count: spots.length, species: sName })
-            : t('topSpotsGeneric', { count: spots.length })
+            ? t('topSpotsForSpecies', { count: spots.length, species: sName, km: usedRadius })
+            : t('topSpotsGeneric', { count: spots.length, km: usedRadius })
       );
     } catch {
       setTopMsg(t('couldNotFindSpots'));
@@ -385,16 +443,19 @@ export function MushroomMap() {
       speciesSearchTimer.current = setTimeout(async () => {
         const { data } = await supabase
           .from('mushroom_species')
-          .select('id,norwegian_name')
-          .or(`norwegian_name.ilike.%${value}%,latin_name.ilike.%${value}%`)
+          .select('id,norwegian_name,swedish_name')
+          .or(`norwegian_name.ilike.%${value}%,swedish_name.ilike.%${value}%,latin_name.ilike.%${value}%`)
           .order('norwegian_name', { ascending: true })
           .limit(8);
         setSpeciesSuggestions(
-          ((data ?? []) as { id: number; norwegian_name: string }[]).map((d) => ({ id: d.id, name: d.norwegian_name }))
+          ((data ?? []) as { id: number; norwegian_name: string; swedish_name: string | null }[]).map((d) => ({
+            id: d.id,
+            name: getSpeciesDisplayName(d, locale)
+          }))
         );
       }, 250);
     },
-    [supabase]
+    [locale, supabase]
   );
 
   const selectSpeciesForSpots = useCallback(
@@ -846,11 +907,26 @@ export function MushroomMap() {
       createdAt: now.toISOString()
     };
 
+    // Cache whichever base map the user is actually looking at — not a hardcoded
+    // Kartverket layer that's blank outside Norway. Region guard: if Terreng is
+    // active but the area sits outside Norway (e.g. the user manually picked it
+    // over Sweden), fall back to OSM so the saved area isn't a blank cache.
+    const layers = baseLayersRef.current;
+    let tileTemplate = OSM_TILE_TEMPLATE;
+    if (layers) {
+      if (map.hasLayer(layers.satellitt)) tileTemplate = SATELLITE_TILE_TEMPLATE;
+      else if (map.hasLayer(layers.kart)) tileTemplate = OSM_TILE_TEMPLATE;
+      else if (map.hasLayer(layers.terreng)) tileTemplate = TERRAIN_TILE_TEMPLATE;
+    }
+    if (tileTemplate === TERRAIN_TILE_TEMPLATE && getRegion(center.lat, center.lng) !== 'NO') {
+      tileTemplate = OSM_TILE_TEMPLATE;
+    }
+
     setOfflineBusy(true);
 
     try {
       const zoomLevels = Array.from(new Set([Math.max(8, zoom - 1), zoom, Math.min(18, zoom + 1)]));
-      const cacheResult = await cacheMapTilesForArea(area.bounds, zoomLevels);
+      const cacheResult = await cacheMapTilesForArea(area.bounds, zoomLevels, tileTemplate);
       const areaWithTiles: OfflineArea = {
         ...area,
         cachedTiles: cacheResult.cached,
@@ -1010,25 +1086,23 @@ export function MushroomMap() {
       // maxNativeZoom = deepest REAL tile each provider serves over our coverage
       // (verified: Kartverket topo tops out at z18); maxZoom = shared over-zoom
       // ceiling so all layers reach the same depth by upscaling the last tiles.
-      const baseTerreng = L.tileLayer('https://cache.kartverket.no/v1/wmts/1.0.0/topo/default/webmercator/{z}/{y}/{x}.png', {
+      const baseTerreng = L.tileLayer(TERRAIN_TILE_TEMPLATE, {
         attribution: '&copy; Kartverket',
         maxNativeZoom: 18,
         maxZoom: 20
       });
-      const baseKart = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      const baseKart = L.tileLayer(OSM_TILE_TEMPLATE, {
         attribution: '&copy; OpenStreetMap',
         maxNativeZoom: 19,
         maxZoom: 20
       });
-      const baseSatellitt = L.tileLayer(
-        'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-        {
-          attribution: 'Flyfoto &copy; Esri, Maxar, Earthstar Geographics',
-          maxNativeZoom: 19,
-          maxZoom: 20
-        }
-      );
+      const baseSatellitt = L.tileLayer(SATELLITE_TILE_TEMPLATE, {
+        attribution: 'Flyfoto &copy; Esri, Maxar, Earthstar Geographics',
+        maxNativeZoom: 19,
+        maxZoom: 20
+      });
       baseTerreng.addTo(map);
+      baseLayersRef.current = { terreng: baseTerreng, kart: baseKart, satellitt: baseSatellitt };
 
       L.control.zoom({ position: 'topright' }).addTo(map);
       L.control
@@ -1127,6 +1201,7 @@ export function MushroomMap() {
       topLayerRef.current = null;
       speciesLayerRef.current = null;
       occClusterRef.current = null;
+      baseLayersRef.current = null;
       // Stop any in-flight GPS watch (so it can't keep the radio hot after the
       // user leaves the map) and drop the accuracy circle.
       geoAbortRef.current?.abort();
@@ -1148,18 +1223,21 @@ export function MushroomMap() {
   useEffect(() => {
     supabase
       .from('mushroom_species')
-      .select('id,norwegian_name,edibility')
+      .select('id,norwegian_name,swedish_name,edibility')
       .then(({ data }) => {
         const nameMap = new Map<number, string>();
         const ediMap = new Map<number, string>();
         for (const s of data ?? []) {
-          nameMap.set(s.id as number, (s.norwegian_name as string | null) ?? t('mushroomFallback'));
+          nameMap.set(s.id as number, getSpeciesDisplayName({
+            norwegian_name: s.norwegian_name as string | null,
+            swedish_name: s.swedish_name as string | null
+          }, locale) || t('mushroomFallback'));
           if (s.edibility) ediMap.set(s.id as number, s.edibility as string);
         }
         speciesNamesRef.current = nameMap;
         speciesEdibilityRef.current = ediMap;
       });
-  }, [supabase, t]);
+  }, [locale, supabase, t]);
 
   useEffect(() => {
     setOfflineAreas(readOfflineAreas());
@@ -1278,6 +1356,10 @@ export function MushroomMap() {
     if (speciesMsg) toast(speciesMsg);
   }, [speciesMsg]);
 
+  useEffect(() => {
+    if (geoError) toast.error(t('gpsUnavailable'), { id: 'map-geolocation-error' });
+  }, [geoError, t]);
+
   return (
     <div className="relative h-[calc(100vh-8.5rem)] overflow-hidden rounded-xl border border-gray-200">
       <div ref={containerRef} className="h-full w-full" />
@@ -1326,7 +1408,7 @@ export function MushroomMap() {
             </div>
           )}
         </div>
-        <div className="flex flex-wrap justify-center gap-1.5">
+        <div className="flex justify-center gap-1.5">
           <button
             type="button"
             onClick={toggleOccurrences}
@@ -1346,37 +1428,85 @@ export function MushroomMap() {
           >
             {topLoading ? t('searching') : topSpots ? t('hideSpots') : t('promisingSpotsButton')}
           </button>
-          {hasOfflineAccess ? (
-            <button
-              type="button"
-              onClick={() => (speciesSpots ? clearSpeciesSpots() : void generateSpeciesSpots())}
-              disabled={speciesLoading}
-              className={`rounded-full px-3 py-1.5 text-xs font-medium shadow-lg backdrop-blur disabled:opacity-60 ${
-                speciesSpots ? 'bg-forest-800 text-white hover:bg-forest-700' : 'bg-white/95 text-gray-800 hover:bg-white'
-              }`}
-            >
-              {speciesLoading ? t('loading') : speciesSpots ? t('hidePhotos') : t('photosButton')}
-            </button>
-          ) : (
-            <NonNativeOnly>
-              <Link
-                href="/pricing"
-                className="rounded-full bg-white/95 px-3 py-1.5 text-xs font-medium text-forest-900 shadow-lg backdrop-blur hover:bg-white"
-              >
-                ⭐ {t('premiumTools')}
-              </Link>
-            </NonNativeOnly>
-          )}
-          {FLAGS.tripMode && !tripActive ? (
-            <button
-              type="button"
-              onClick={startTrip}
-              className="rounded-full bg-white/95 px-3 py-1.5 text-xs font-medium text-gray-800 shadow-lg backdrop-blur hover:bg-white"
-            >
-              🎒 {t('trip')}
-            </button>
-          ) : null}
+          <button
+            type="button"
+            onClick={() => {
+              setToolsOpen((open) => !open);
+              setOfflineOpen(false);
+            }}
+            aria-expanded={toolsOpen}
+            aria-controls="map-more-tools"
+            className={`inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-medium shadow-lg backdrop-blur ${
+              toolsOpen || offlineOpen || speciesSpots
+                ? 'bg-forest-800 text-white hover:bg-forest-700'
+                : 'bg-white/95 text-gray-800 hover:bg-white'
+            }`}
+          >
+            <MoreHorizontal className="h-3.5 w-3.5" />
+            {t('moreTools')}
+          </button>
         </div>
+        {toolsOpen ? (
+          <div id="map-more-tools" className="w-full max-w-xs rounded-xl border border-gray-200 bg-white/95 p-2 shadow-xl backdrop-blur">
+            <div className="mb-1 flex items-center justify-between px-1">
+              <p className="text-xs font-semibold text-gray-900">{t('moreToolsHeading')}</p>
+              <button
+                type="button"
+                onClick={() => setToolsOpen(false)}
+                aria-label={t('closeTools')}
+                className="rounded-full p-1 text-gray-500 hover:bg-gray-100"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+            <div className="grid gap-1">
+              {billing.isLoading ? (
+                <p className="px-2 py-1.5 text-xs text-gray-500">{t('checkingPlan')}</p>
+              ) : hasOfflineAccess ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setToolsOpen(false);
+                    if (speciesSpots) clearSpeciesSpots();
+                    else void generateSpeciesSpots();
+                  }}
+                  disabled={speciesLoading}
+                  className="rounded-lg px-2 py-2 text-left text-xs font-medium text-gray-800 hover:bg-gray-100 disabled:opacity-60"
+                >
+                  {speciesLoading ? t('loading') : speciesSpots ? `📸 ${t('hidePhotos')}` : t('photosButton')}
+                </button>
+              ) : (
+                <NonNativeOnly>
+                  <Link href="/pricing" className="rounded-lg px-2 py-2 text-xs font-medium text-forest-900 hover:bg-gray-100">
+                    ⭐ {t('premiumTools')}
+                  </Link>
+                </NonNativeOnly>
+              )}
+              <button
+                type="button"
+                onClick={() => {
+                  setToolsOpen(false);
+                  setOfflineOpen(true);
+                }}
+                className="rounded-lg px-2 py-2 text-left text-xs font-medium text-gray-800 hover:bg-gray-100"
+              >
+                ⬇️ {t('offlineMap')}
+              </button>
+              {FLAGS.tripMode && !tripActive ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setToolsOpen(false);
+                    startTrip();
+                  }}
+                  className="rounded-lg px-2 py-2 text-left text-xs font-medium text-gray-800 hover:bg-gray-100"
+                >
+                  🎒 {t('trip')}
+                </button>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
         {topAccess === 'free_limited' && topSpots ? (
           <NonNativeOnly>
             <Link
@@ -1438,24 +1568,23 @@ export function MushroomMap() {
           consolidated HotspotPanel below — shown for every query, not just when
           a species is selected. */}
 
-      <div className={`absolute right-3 top-28 z-[1000] ${offlineOpen ? 'w-72' : 'w-auto'} rounded-xl border border-gray-200 bg-white/95 p-3 shadow-lg backdrop-blur`}>
+      {offlineOpen ? (
+      <div className="absolute left-3 right-3 top-28 z-[1050] max-h-[calc(100%-8rem)] overflow-y-auto overscroll-contain rounded-xl border border-gray-200 bg-white/95 p-3 shadow-lg backdrop-blur sm:left-auto sm:w-72">
         <div className="flex items-center justify-between gap-2">
           <p className="text-sm font-semibold text-gray-900">{t('offlineMap')}</p>
           <div className="flex items-center gap-2">
             {billing.isLoading ? <span className="text-[11px] text-gray-500">{t('checkingPlan')}</span> : null}
             <button
               type="button"
-              onClick={() => setOfflineOpen((v) => !v)}
-              aria-label={offlineOpen ? t('hideOfflineMap') : t('showOfflineMap')}
+              onClick={() => setOfflineOpen(false)}
+              aria-label={t('hideOfflineMap')}
               className="rounded-full p-1 text-gray-500 hover:bg-gray-100"
             >
-              {offlineOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+              <X className="h-4 w-4" />
             </button>
           </div>
         </div>
 
-        {offlineOpen ? (
-          <>
         {showOfflineUpsell ? (
           <div className="mt-2 rounded border border-amber-300 bg-amber-50 px-2 py-2">
             <p className="text-xs text-amber-800">{t('offlineSaveRequiresPremium')}</p>
@@ -1518,9 +1647,8 @@ export function MushroomMap() {
           ))}
           {offlineAreas.length === 0 ? <p className="text-[11px] text-gray-600">{t('noSavedAreas')}</p> : null}
         </div>
-          </>
-        ) : null}
       </div>
+      ) : null}
 
       <button
         type="button"
@@ -1586,8 +1714,6 @@ export function MushroomMap() {
         error={prediction.isError && tileHotspots.length === 0}
       />
 
-      {geoLoading ? <div className="absolute bottom-4 left-4 z-[1000] rounded-lg bg-white px-3 py-2 text-xs">{t('fetchingGps')}</div> : null}
-      {geoError ? <div className="absolute bottom-4 left-4 z-[1000] rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">{geoError}</div> : null}
     </div>
   );
 }

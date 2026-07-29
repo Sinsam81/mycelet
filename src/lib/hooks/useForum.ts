@@ -444,6 +444,7 @@ export function useMyFindings() {
         .from('findings')
         .select('id,species_id,species_name_override,found_at,is_zone_finding,zone_label,zone_precision_km,mushroom_species:species_id(norwegian_name)')
         .eq('user_id', user.id)
+        .eq('is_negative_observation', false)
         .order('found_at', { ascending: false })
         .limit(30);
 

@@ -1,8 +1,9 @@
 import Link from 'next/link';
-import { getTranslations } from 'next-intl/server';
+import { getLocale, getTranslations } from 'next-intl/server';
 import { PageWrapper } from '@/components/layout/PageWrapper';
 import { createClient } from '@/lib/supabase/server';
 import { SeasonNow, type CalendarSpecies } from '@/components/calendar/SeasonNow';
+import { getSpeciesDisplayName } from '@/lib/utils/species-name';
 
 const MONTH_KEYS = [
   'monthJan', 'monthFeb', 'monthMar', 'monthApr', 'monthMay', 'monthJun',
@@ -16,11 +17,12 @@ function isInMonth(month: number, start: number, end: number) {
 
 export default async function CalendarPage() {
   const t = await getTranslations('Calendar');
+  const locale = await getLocale();
   const supabase = createClient();
   const currentMonth = new Date().getMonth() + 1;
   const { data, error } = await supabase
     .from('mushroom_species')
-    .select('id,norwegian_name,latin_name,edibility,season_start,season_end,peak_season_start,peak_season_end,primary_image_url')
+    .select('id,norwegian_name,swedish_name,latin_name,edibility,season_start,season_end,peak_season_start,peak_season_end,primary_image_url')
     .order('norwegian_name', { ascending: true });
 
   const species = (data ?? []) as CalendarSpecies[];
@@ -71,7 +73,7 @@ export default async function CalendarPage() {
                   <tr key={s.id} className="border-t border-gray-100">
                     <td className="sticky left-0 bg-white py-1 pr-2 font-medium">
                       <Link href={`/species/${s.id}`} className="text-forest-900 hover:underline">
-                        {s.norwegian_name}
+                        {getSpeciesDisplayName(s, locale)}
                       </Link>
                     </td>
                     {MONTH_KEYS.map((_, idx) => {

@@ -1,8 +1,9 @@
 'use client';
 
 import Link from 'next/link';
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import { EdibilityBadge } from '@/components/ui/EdibilityBadge';
+import { getSpeciesDisplayName } from '@/lib/utils/species-name';
 import { Species } from '@/types/species';
 
 interface SpeciesCardProps {
@@ -12,6 +13,8 @@ interface SpeciesCardProps {
 
 export function SpeciesCard({ species, imageUrl }: SpeciesCardProps) {
   const t = useTranslations('SpeciesCard');
+  const locale = useLocale();
+  const displayName = getSpeciesDisplayName(species, locale);
   return (
     <Link
       href={`/species/${species.id}`}
@@ -21,7 +24,7 @@ export function SpeciesCard({ species, imageUrl }: SpeciesCardProps) {
         {imageUrl ? (
           <img
             src={imageUrl}
-            alt={species.norwegian_name}
+            alt={displayName}
             className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
           />
         ) : (
@@ -32,7 +35,7 @@ export function SpeciesCard({ species, imageUrl }: SpeciesCardProps) {
         </div>
       </div>
       <div className="space-y-0.5 p-3">
-        <h3 className="font-serif text-base font-bold text-forest-900">{species.norwegian_name}</h3>
+        <h3 className="font-serif text-base font-bold text-forest-900">{displayName}</h3>
         <p className="text-xs italic text-gray-600">{species.latin_name}</p>
       </div>
     </Link>

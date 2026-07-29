@@ -163,22 +163,28 @@ export function AddFindingSheet({ latitude, longitude, onClose, onSaved }: AddFi
         throw new Error(t('errorZoneLabelRequired'));
       }
 
-      const { error: insertError } = await supabase.from('findings').insert({
-        user_id: user.id,
-        species_id: speciesId,
-        latitude: adjusted.lat,
-        longitude: adjusted.lng,
-        notes: notes || null,
-        visibility,
-        image_url: imageUrl,
-        thumbnail_url: imageUrl,
-        is_zone_finding: isZoneFinding,
-        zone_label: isZoneFinding ? zoneLabel.trim() : null,
-        zone_precision_km: isZoneFinding ? zonePrecisionKm : 5,
-        is_negative_observation: isNegative
+      const saveResponse = await fetch('/api/findings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          speciesId,
+          latitude: adjusted.lat,
+          longitude: adjusted.lng,
+          notes: notes || null,
+          visibility,
+          imageUrl,
+          thumbnailUrl: imageUrl,
+          isZoneFinding,
+          zoneLabel: isZoneFinding ? zoneLabel.trim() : null,
+          zonePrecisionKm: isZoneFinding ? zonePrecisionKm : 5,
+          isNegativeObservation: isNegative
+        })
       });
 
-      if (insertError) throw insertError;
+      if (!saveResponse.ok) {
+        const body = await saveResponse.json().catch(() => null);
+        throw new Error(body?.error || t('errorSaveFinding'));
+      }
       onSaved(speciesQuery || undefined);
     } catch (err) {
       setError(err instanceof Error ? err.message : t('errorSaveFinding'));
@@ -190,7 +196,7 @@ export function AddFindingSheet({ latitude, longitude, onClose, onSaved }: AddFi
   const isNegative = findingType === 'negative';
 
   return (
-    <div className="absolute inset-x-0 bottom-0 z-[1100] rounded-t-2xl border border-gray-200 bg-white p-4 shadow-2xl">
+    <div className="absolute inset-x-0 bottom-0 z-[1100] max-h-full overflow-y-auto overscroll-contain rounded-t-2xl border border-gray-200 bg-white p-4 shadow-2xl">
       <div className="mb-3 h-1.5 w-12 rounded-full bg-gray-300" />
       <h3 className="text-lg font-semibold">{isNegative ? t('logNoFinding') : t('addFinding')}</h3>
 

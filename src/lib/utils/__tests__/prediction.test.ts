@@ -45,6 +45,17 @@ describe('prediction utils', () => {
     expect(advancedEnvironment).toBeLessThanOrEqual(100);
   });
 
+  it('keeps unknown spatial factors neutral instead of inventing coordinate gradients', () => {
+    const weather = { temperature: 11, humidity: 82, rain3dMm: 9 };
+    const oslo = computeAdvancedFactors({ latitude: 59.91, longitude: 10.75, month: 9, weather });
+    const gothenburg = computeAdvancedFactors({ latitude: 57.71, longitude: 11.97, month: 9, weather });
+
+    expect(oslo.vegetation).toBe(50);
+    expect(oslo.terrain).toBe(50);
+    expect(oslo.soil).toBe(50);
+    expect(gothenburg).toEqual(oslo);
+  });
+
   it('maps total score to condition', () => {
     expect(scoreToCondition(15)).toBe('poor');
     expect(scoreToCondition(40)).toBe('moderate');

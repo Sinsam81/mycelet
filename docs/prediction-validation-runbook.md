@@ -67,6 +67,15 @@ Sampled full-pipeline spatial audit:
 MAX_TEST=300 NEG_PER_POS=3 FOREST_CONCURRENCY=4 npm run backtest:full-pipeline
 ```
 
+Bakgrunnspunktene matches mot observerte punkter for **andre arter** i samme
+land, fortrinnsvis innen 150 km og samme ±1-måneds sesongvindu. Det hindrer at
+et kjent treningsfunn for målarten brukes som en falsk negativ, og reduserer
+land-/sesongskjevhet. Juster bare ved eksplisitte sensitivitetsanalyser:
+
+```bash
+BG_RADIUS_KM=100 BG_MONTH_WINDOW=1 npm run backtest:full-pipeline
+```
+
 Over-natten-variant når cache er varm eller du har tid:
 
 ```bash
@@ -87,6 +96,10 @@ SDM_JSONL=.next/validation/sdm-target-group.jsonl npm run fit:sdm-logistic
 ```
 
 Default `FEATURE_SET=habitat` utelater occurrence-kjernen og koordinater, fordi målet er å teste habitat/skogsignal uten enkel sampling-lekkasje. Bruk `FEATURE_SET=full` bare som sammenligning, ikke som produksjonsmodell.
+
+SDM-evalueringen bruker romlige blokker fra det holdte presence-punktet som
+kryssvalideringsgrupper. Land og rå koordinater er utelatt som features som
+standard; `INCLUDE_REGION=1`/`INCLUDE_COORDS=1` er kun lekkasje-/sensitivitetskontroller.
 
 `backtest:full-pipeline` bruker `.next/backtest-full-pipeline-forest-cache.json` som cache for NIBIO/CORINE-oppslag. Det er med vilje, og filen skal ikke committes.
 
@@ -137,10 +150,10 @@ Tolkning:
 
 Viktigste varianter:
 
-- `occurrenceOnly`: avstandsvektet historisk funn-gjentakelse.
+- `occurrenceOnly`: avstandsvektet historisk funn-tetthet, kun som audit-signal.
 - `habitatWithinForest`: habitat/vertstre blant punkter der begge sider har skogdata.
 - `habitatCandidate`: produksjonens kandidatmask + habitat. Ingen skogdata blir ingen lovende-sted-kandidat.
-- `fullCore`: kandidatmask + habitat + occurrence + fenologi.
+- `fullCore`: kandidatmask + habitat + fenologi. Historiske GBIF-funn endrer ikke lenger produksjonsskåren.
 - `forestMask`: om grid-ruten i det hele tatt kan score punktet som skogcelle.
 
 Tolkning av target-group AUC:

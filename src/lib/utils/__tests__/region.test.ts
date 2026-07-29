@@ -144,6 +144,46 @@ describe('isNordic — convenience wrapper', () => {
   });
 });
 
+describe('getRegion — Bohuslän coast vs Halden (border refinement)', () => {
+  // The Swedish Bohuslän coast lies WEST of the old fixed 11.4°E cutoff at
+  // lat ≤ 59, so Strömstad/Grebbestad/Fjällbacka were misclassified as NO →
+  // blank Kartverket map + wrong weather provider for users vacationing there.
+  // The refined border (11.0 south of Iddefjorden, steep rise to 11.48 by
+  // 59.1°N) fixes them while keeping Halden/Tistedal Norwegian.
+
+  it('Strömstad resolves to SE', () => {
+    expect(getRegion(58.9366, 11.1706)).toBe('SE');
+  });
+
+  it('Grebbestad resolves to SE', () => {
+    expect(getRegion(58.6968, 11.2532)).toBe('SE');
+  });
+
+  it('Fjällbacka resolves to SE', () => {
+    expect(getRegion(58.5995, 11.2841)).toBe('SE');
+  });
+
+  it('Kosteröarna resolve to SE', () => {
+    expect(getRegion(58.89, 11.04)).toBe('SE');
+  });
+
+  it('Halden stays NO', () => {
+    expect(getRegion(59.1215, 11.3875)).toBe('NO');
+  });
+
+  it('Tistedal (east of Halden) stays NO', () => {
+    expect(getRegion(59.14, 11.44)).toBe('NO');
+  });
+
+  it('Fredrikstad stays NO', () => {
+    expect(getRegion(59.2181, 10.9298)).toBe('NO');
+  });
+
+  it('Sarpsborg stays NO', () => {
+    expect(getRegion(59.2839, 11.1096)).toBe('NO');
+  });
+});
+
 describe('getRegion — known imprecisions (documented, not bugs)', () => {
   // Bounding rectangles can't precisely separate countries with
   // intermingled coastlines or borders that don't align with lat/lon

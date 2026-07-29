@@ -40,25 +40,18 @@ export function Header() {
           Mycelet
         </Link>
         <div className="flex items-center gap-2">
+          {/* The badge links to /pricing on BOTH web and native. It used to be
+              a dead span in the shell (App Store 3.1.1-era gating, when pricing
+              only offered Stripe) — with IAP live, natives need the path too. */}
           {!loading && user ? (
-            native ? (
-              <span
-                className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
-                  tier === 'free' ? 'bg-white/15 text-white' : 'bg-amber-400 text-forest-900'
-                }`}
-              >
-                {getTierLabel(tier, t)}
-              </span>
-            ) : (
-              <Link
-                href="/pricing"
-                className={`rounded-full px-2.5 py-1 text-[11px] font-semibold transition-opacity hover:opacity-90 ${
-                  tier === 'free' ? 'bg-white/15 text-white' : 'bg-amber-400 text-forest-900'
-                }`}
-              >
-                {getTierLabel(tier, t)}
-              </Link>
-            )
+            <Link
+              href="/pricing"
+              className={`rounded-full px-2.5 py-1 text-[11px] font-semibold transition-opacity hover:opacity-90 ${
+                tier === 'free' ? 'bg-white/15 text-white' : 'bg-amber-400 text-forest-900'
+              }`}
+            >
+              {getTierLabel(tier, t)}
+            </Link>
           ) : null}
 
           <Link href="/profile" aria-label={t('profileAriaLabel')} className="rounded-full p-2 hover:bg-white/10">

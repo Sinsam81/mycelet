@@ -1,5 +1,10 @@
-const STATIC_CACHE = 'mycelet-static-v1';
-const TILE_CACHE = 'mycelet-map-tiles-v1';
+// v2 (2026-07-19): byte-bump to force reinstall on every client. A service
+// worker runs under the CSP captured when its script was fetched, so widening
+// the header (PR #85, OSM/Esri in connect-src) never reached already-installed
+// workers — an unchanged script skips reinstall. Any byte change here re-runs
+// install; skipWaiting/clients.claim swap the new worker in immediately.
+const STATIC_CACHE = 'mycelet-static-v2';
+const TILE_CACHE = 'mycelet-map-tiles-v1'; // unchanged: users' saved offline tiles live here
 const STATIC_ASSETS = ['/', '/map', '/pricing', '/manifest.json', '/icons/icon.svg', '/icons/icon-maskable.svg'];
 
 self.addEventListener('install', (event) => {
@@ -23,7 +28,22 @@ self.addEventListener('activate', (event) => {
 });
 
 function isMapTileRequest(url) {
-  return url.origin === 'https://cache.kartverket.no' && url.pathname.includes('/wmts/1.0.0/topo/default/webmercator/');
+  // The base maps the app can save offline. Must stay in sync with the three
+  // tile templates in src/lib/utils/offlineMap.ts — a tile the cache warms but
+  // this predicate misses would never be served back offline (blank map).
+  // Kartverket "Terreng" (Norway only)
+  if (url.origin === 'https://cache.kartverket.no' && url.pathname.includes('/wmts/1.0.0/topo/default/webmercator/')) {
+    return true;
+  }
+  // OpenStreetMap "Kart" (Sweden + rest of world) — {a,b,c}.tile.openstreetmap.org
+  if (url.hostname === 'tile.openstreetmap.org' || url.hostname.endsWith('.tile.openstreetmap.org')) {
+    return true;
+  }
+  // Esri World Imagery "Satellitt"
+  if (url.origin === 'https://server.arcgisonline.com' && url.pathname.includes('/World_Imagery/MapServer/tile/')) {
+    return true;
+  }
+  return false;
 }
 
 function isCacheableStaticRequest(url) {

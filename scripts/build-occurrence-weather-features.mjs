@@ -13,7 +13,7 @@
  *   LIMIT=25 DRY_RUN=1 node --env-file=.env.local scripts/build-occurrence-weather-features.mjs
  *
  * Then write batches:
- *   LIMIT=200 node --env-file=.env.local scripts/build-occurrence-weather-features.mjs
+ *   LIMIT=200 WRITE_FEATURES=1 node --env-file=.env.local scripts/build-occurrence-weather-features.mjs
  *
  * Filters:
  *   REGION=NO|SE
@@ -28,6 +28,7 @@
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { parseSmhiCsv } from './lib/weather-features.mjs';
 
 const HELP = new Set(['-h', '--help']);
 const args = new Set(process.argv.slice(2));
@@ -90,7 +91,6 @@ const WRITE_ERRORS = process.env.WRITE_ERRORS === '1';
 const JSON_OUTPUT = args.has('--json') || process.env.JSON === '1';
 const SMHI_STATION_CANDIDATES = clampInt(Number(process.env.SMHI_STATION_CANDIDATES || 4), 1, 10);
 
-const NEUTRAL_HUMIDITY_PCT = 75;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const FROST_BASE = 'https://frost.met.no';
 const FROST_DAILY_ELEMENTS =
@@ -368,7 +368,7 @@ async function frostHistoricalFeatures(occ) {
   return {
     provider: 'met_frost',
     temperature_c: temperatureC,
-    humidity_pct: latestWithin(humiditySeries, targetStart, targetEnd) ?? NEUTRAL_HUMIDITY_PCT,
+    humidity_pct: latestWithin(humiditySeries, targetStart, targetEnd),
     rain_3d_mm: sumWithinDays(precipSeries, 3, targetEnd),
     rain_7d_mm: sumWithinDays(precipSeries, 7, targetEnd),
     rain_14d_mm: precipSeries.length ? sumWithinDays(precipSeries, 14, targetEnd) : null,
@@ -408,20 +408,6 @@ async function nearestSmhiStations(parameterId, lat, lon, targetMs) {
 
 function smhiStationKey(station) {
   return String(station.key ?? station.id);
-}
-
-function parseSmhiCsv(csv) {
-  const rows = [];
-  for (const line of csv.split(/\r?\n/)) {
-    if (!/^\d{4}-\d{2}-\d{2};/.test(line)) continue;
-    const cols = line.split(';');
-    const date = cols[0];
-    const time = cols[1] || '00:00:00';
-    const value = Number(String(cols[2]).replace(',', '.'));
-    if (!Number.isFinite(value)) continue;
-    rows.push({ time: Date.parse(`${date}T${time}Z`), date, value });
-  }
-  return rows.filter((r) => Number.isFinite(r.time));
 }
 
 async function smhiArchiveSeries(parameterId, station) {
@@ -484,7 +470,7 @@ async function smhiHistoricalFeatures(occ) {
   return {
     provider: 'smhi',
     temperature_c: temperatureC,
-    humidity_pct: humidity ? meanOnDate(humidity.series, occ.observed_at) ?? NEUTRAL_HUMIDITY_PCT : NEUTRAL_HUMIDITY_PCT,
+    humidity_pct: humidity ? meanOnDate(humidity.series, occ.observed_at) : null,
     rain_3d_mm: rain ? sumWithinDays(rain.series, 3, targetEnd) : 0,
     rain_7d_mm: rain ? sumWithinDays(rain.series, 7, targetEnd) : 0,
     rain_14d_mm: rain ? sumWithinDays(rain.series, 14, targetEnd) : null,
@@ -572,7 +558,7 @@ async function upsertFeatures(rows) {
 async function main() {
   ensureDir(CACHE_DIR);
 
-  // Collect up to LIMIT region-matched occurrences. Region-matched rows are
+  // Collect up to LIMIT missing region-matched occurrences. Region-matched rows are
   // interleaved by id (the low ids are NO-heavy), so a REGION batch pages
   // through until it has enough rather than region-filtering a single
   // LIMIT-sized page (which can yield zero SE rows). A non-region run keeps the
@@ -581,6 +567,8 @@ async function main() {
   const MAX_SCAN = REGION ? 80000 : LIMIT;
   const matched = [];
   let scanned = 0;
+  let regionMatched = 0;
+  let existingSkipped = 0;
   let offset = OFFSET;
   while (matched.length < LIMIT && scanned < MAX_SCAN) {
     const rows = await rest(occurrencePath(offset, PAGE_SIZE));
@@ -596,17 +584,19 @@ async function main() {
     if (!batch.length) break;
     scanned += batch.length;
     offset += batch.length;
-    for (const o of batch) {
-      if (!REGION || getRegion(o.latitude, o.longitude) === REGION) matched.push(o);
+    const regional = batch.filter((o) => !REGION || getRegion(o.latitude, o.longitude) === REGION);
+    const existing = await existingFeatureIds(regional.map((o) => o.id));
+    existingSkipped += existing.size;
+    for (const o of regional) {
+      regionMatched++;
+      if (!existing.has(o.id)) matched.push(o);
       if (matched.length >= LIMIT) break;
     }
     if (batch.length < PAGE_SIZE) break; // exhausted the table
     if (!REGION) break; // non-region run: a single page of LIMIT rows
   }
 
-  const regionFiltered = matched.slice(0, LIMIT);
-  const existing = await existingFeatureIds(regionFiltered.map((o) => o.id));
-  const todo = regionFiltered.filter((o) => !existing.has(o.id));
+  const todo = matched.slice(0, LIMIT);
   const results = await mapLimit(todo, CONCURRENCY, async (occ, idx) => {
     const result = await featureForOccurrence(occ);
     if (!JSON_OUTPUT && (idx + 1) % 25 === 0) process.stdout.write(`  processed ${idx + 1}/${todo.length}\r`);
@@ -634,8 +624,8 @@ async function main() {
       writeErrors: WRITE_ERRORS
     },
     inspected: scanned,
-    regionMatched: regionFiltered.length,
-    existingSkipped: existing.size,
+    regionMatched,
+    existingSkipped,
     attempted: todo.length,
     featuresReady: good.length,
     byRegion,

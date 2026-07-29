@@ -22,8 +22,9 @@ Environment:
   SDM_JSONL                      Default .next/validation/sdm-target-group.jsonl
   FEATURE_SET                    habitat (default), no_occurrence, or full
   INCLUDE_SPECIES=1              Add species one-hot features
+  INCLUDE_REGION=1               Add country one-hot; off by default to avoid region drift leakage
   INCLUDE_COORDS=1               Add latitude/longitude; off by default to avoid easy geography leakage
-  FOLDS                          Grouped CV folds by pairId, default 5
+  FOLDS                          Spatially grouped CV folds by cvGroup, default 5
   ITERATIONS                     Gradient steps, default 1200
   LEARNING_RATE                  Default 0.08
   L2                             L2 penalty, default 0.02
@@ -38,6 +39,7 @@ const FEATURE_SET = ['habitat', 'no_occurrence', 'full'].includes(process.env.FE
   ? process.env.FEATURE_SET
   : 'habitat';
 const INCLUDE_SPECIES = process.env.INCLUDE_SPECIES === '1';
+const INCLUDE_REGION = process.env.INCLUDE_REGION === '1';
 const INCLUDE_COORDS = process.env.INCLUDE_COORDS === '1';
 const FOLDS = clampInt(Number(process.env.FOLDS || 5), 2, 10);
 const ITERATIONS = clampInt(Number(process.env.ITERATIONS || 1200), 50, 20000);
@@ -64,11 +66,14 @@ function sigmoid(z) {
   return e / (1 + e);
 }
 
-function hash32(n) {
-  let x = (Number(n) ^ 0x9e3779b9) >>> 0;
-  x = Math.imul(x ^ (x >>> 16), 0x45d9f3b) >>> 0;
-  x = Math.imul(x ^ (x >>> 16), 0x45d9f3b) >>> 0;
-  return (x ^ (x >>> 16)) >>> 0;
+function hash32(value) {
+  const input = String(value);
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < input.length; i++) {
+    hash ^= input.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return hash >>> 0;
 }
 
 function readJsonl(path) {
@@ -109,7 +114,7 @@ function rowFeatures(row) {
   addNumeric(out, 'hostGate', f.hostGate);
   addNumeric(out, 'forestProductivity', f.forestProductivity);
   addNumeric(out, 'forestVolumePerHa', f.forestVolumePerHa);
-  addOneHot(out, 'region', row.region);
+  if (INCLUDE_REGION) addOneHot(out, 'region', row.region);
   addOneHot(out, 'forestSource', f.forestSource);
   addOneHot(out, 'forestType', f.forestType);
 
@@ -262,12 +267,16 @@ if (rows.length < 20) throw new Error(`Need at least 20 rows, got ${rows.length}
 const labels = rows.map((r) => Number(r.label));
 const { x, names } = buildMatrix(rows);
 const predictions = new Array(rows.length).fill(null);
+const cvGroups = new Set(rows.map((row) => row.cvGroup ?? row.presenceId ?? row.pairId));
+if (cvGroups.size < FOLDS) {
+  throw new Error(`Need at least ${FOLDS} spatial CV groups, got ${cvGroups.size}.`);
+}
 
 for (let fold = 0; fold < FOLDS; fold++) {
   const trainIdx = [];
   const evalIdx = [];
   rows.forEach((row, idx) => {
-    const bucket = hash32(row.pairId) % FOLDS;
+    const bucket = hash32(row.cvGroup ?? row.presenceId ?? row.pairId) % FOLDS;
     if (bucket === fold) evalIdx.push(idx);
     else trainIdx.push(idx);
   });
@@ -297,6 +306,7 @@ const report = {
     dataPath: DATA_PATH,
     featureSet: FEATURE_SET,
     includeSpecies: INCLUDE_SPECIES,
+    includeRegion: INCLUDE_REGION,
     includeCoordinates: INCLUDE_COORDS,
     folds: FOLDS,
     iterations: ITERATIONS,
@@ -305,8 +315,9 @@ const report = {
     rows: rows.length,
     evaluatedRows: kept.length,
     pairs: new Set(rows.map((r) => r.pairId)).size,
+    cvGroups: cvGroups.size,
     features: names.length,
-    note: 'Grouped by pairId. Use as an SDM audit baseline, not as a production artifact.'
+    note: 'Spatially grouped by the held-out presence block. Use as an SDM audit baseline, not as a production artifact.'
   },
   metrics: {
     auc: auc(keptLabels, keptScores),
@@ -331,8 +342,12 @@ if (JSON_OUTPUT) {
   console.log(JSON.stringify(report, null, 2));
 } else {
   console.log('\n=== SDM logistic baseline (target-group JSONL) ===');
-  console.log(`Rows: ${report.method.rows}  | pairs: ${report.method.pairs}  | features: ${report.method.features}`);
-  console.log(`Feature set: ${FEATURE_SET}${INCLUDE_SPECIES ? ' + species' : ''}${INCLUDE_COORDS ? ' + coords' : ''}`);
+  console.log(
+    `Rows: ${report.method.rows}  | pairs: ${report.method.pairs}  | spatial CV groups: ${report.method.cvGroups}  | features: ${report.method.features}`
+  );
+  console.log(
+    `Feature set: ${FEATURE_SET}${INCLUDE_SPECIES ? ' + species' : ''}${INCLUDE_REGION ? ' + region' : ''}${INCLUDE_COORDS ? ' + coords' : ''}`
+  );
   console.log(`AUC: ${fixed(report.metrics.auc)}  | paired AUC: ${fixed(report.metrics.pairedAuc)}`);
   console.log(`Brier: ${fixed(report.metrics.brier)}  | baseline Brier: ${fixed(report.metrics.baselineBrier)}  | logLoss: ${fixed(report.metrics.logLoss)}`);
   console.log('\nTop positive coefficients:');

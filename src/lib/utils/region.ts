@@ -24,7 +24,15 @@ function inBox(lat: number, lon: number, box: BoundingBox) {
  * (a polygon border is the eventual upgrade), but correct for populated areas.
  */
 function noSeBorderLon(lat: number): number {
-  if (lat <= 59) return 11.4; // Strömstad/Svinesund latitude
+  // South of Iddefjorden the border meets the sea at ~11.1°E (Svinesund), and
+  // Norway's south coast ends well west of 11°E — so the whole Swedish
+  // Bohuslän coast (Strömstad 11.17, Grebbestad 11.25, Fjällbacka 11.28) lies
+  // WEST of the old 11.4 cutoff and was misclassified as Norway → blank
+  // Kartverket map + Frost weather for users vacationing there.
+  if (lat <= 58.9) return 11.0;
+  // Iddefjord/Svinesund transition: rise steeply so Halden (59.12°N, 11.39°E)
+  // and Tistedal stay Norwegian while Strömstad (58.94°N, 11.17°E) is Swedish.
+  if (lat <= 59.1) return 11.0 + (lat - 58.9) * 2.4; // → 11.48 at 59.1°N
   if (lat <= 61) return 11.4 + (lat - 59) * 0.6; // → 12.6 at 61°N
   if (lat <= 65) return 12.6 + (lat - 61) * 0.475; // → 14.5 at 65°N
   if (lat <= 69) return 14.5 + (lat - 65) * 1.5; // → 20.5 at 69°N

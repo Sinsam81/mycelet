@@ -88,23 +88,31 @@ export default function IdentifyResultPage() {
         }
       }
 
-      const { error: insertError } = await supabase.from('findings').insert({
-        user_id: user.id,
-        latitude: payload.location.latitude,
-        longitude: payload.location.longitude,
-        species_id: chosen.speciesId ?? null,
-        species_name_override: chosen.name,
-        ai_used: true,
-        ai_top_suggestion: topSuggestion.name,
-        ai_confidence: topSuggestion.probability / 100,
-        ai_raw_response: { suggestions: payload.suggestions, confirmedIndex: selectedIndex },
-        visibility: 'approximate',
-        user_confirmed_species: true,
-        image_url: imageUrl,
-        thumbnail_url: imageUrl
+      const saveResponse = await fetch('/api/findings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          latitude: payload.location.latitude,
+          longitude: payload.location.longitude,
+          speciesId: chosen.speciesId ?? null,
+          speciesNameOverride: chosen.name,
+          aiUsed: true,
+          aiTopSuggestion: topSuggestion.name,
+          aiConfidence: topSuggestion.probability / 100,
+          aiRawResponse: { suggestions: payload.suggestions, confirmedIndex: selectedIndex },
+          visibility: 'approximate',
+          userConfirmedSpecies: true,
+          imageUrl,
+          thumbnailUrl: imageUrl,
+          isZoneFinding: false,
+          isNegativeObservation: false
+        })
       });
 
-      if (insertError) throw insertError;
+      if (!saveResponse.ok) {
+        const body = await saveResponse.json().catch(() => null);
+        throw new Error(body?.error || t('errorSaveFailed'));
+      }
       toast.success(t('saveSuccess'));
       router.push('/map');
     } catch (err) {

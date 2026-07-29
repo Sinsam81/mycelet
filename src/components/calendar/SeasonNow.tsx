@@ -2,15 +2,17 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import { MapPin } from 'lucide-react';
 import { EdibilityBadge } from '@/components/ui/EdibilityBadge';
 import { seasonShiftDays, isInSeasonOn, shiftLabel } from '@/lib/utils/season-region';
 import type { Edibility } from '@/types/species';
+import { getSpeciesDisplayName } from '@/lib/utils/species-name';
 
 export interface CalendarSpecies {
   id: number;
   norwegian_name: string;
+  swedish_name: string | null;
   latin_name: string;
   edibility: Edibility;
   season_start: number;
@@ -27,6 +29,8 @@ const MONTH_KEYS = [
 
 function SpeciesRowLink({ s, peak }: { s: CalendarSpecies; peak?: boolean }) {
   const t = useTranslations('SeasonNow');
+  const locale = useLocale();
+  const displayName = getSpeciesDisplayName(s, locale);
   return (
     <Link
       href={`/species/${s.id}`}
@@ -34,11 +38,11 @@ function SpeciesRowLink({ s, peak }: { s: CalendarSpecies; peak?: boolean }) {
     >
       <div className="h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-gray-100">
         {s.primary_image_url ? (
-          <img src={s.primary_image_url} alt={s.norwegian_name} className="h-full w-full object-cover" />
+          <img src={s.primary_image_url} alt={displayName} className="h-full w-full object-cover" />
         ) : null}
       </div>
       <div className="min-w-0 flex-1">
-        <p className="truncate font-serif text-base font-bold text-forest-900">{s.norwegian_name}</p>
+        <p className="truncate font-serif text-base font-bold text-forest-900">{displayName}</p>
         <p className="truncate text-xs italic text-gray-600">{s.latin_name}</p>
         <div className="mt-1 flex items-center gap-1.5">
           <EdibilityBadge edibility={s.edibility} />
