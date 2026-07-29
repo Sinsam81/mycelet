@@ -88,3 +88,8 @@ Ingen rollback av kode eller database var nødvendig.
 - **Sikkerhet verifisert:** dødelige forvekslingsarter navngitt m/ latenstid (orellanin), Galerina-advarsel på stubbesopp, «la den stå» + soppkontroll i alle tre; ingen artikkel påstår at appen vet HVOR soppen står.
 - **Verify:** 332 tests, typecheck, build; live 200 på alle tre + kortlenker på forsiden; qa:prod 29/29; health ok.
 - **Rollback:** none needed.
+
+## 2026-07-29 — PR #97: «Logg inn»-lenke i landingssidens toppnav (NO + SE)
+- **What:** Utloggede brukere hadde ingen direkte vei til `/auth/login` fra landingssiden — alle CTA-er pekte til `/auth/register`. Diskret «Logg inn»-lenke lagt til i toppnav (mellom ankerlenkene og «Prøv gratis») på både `index.html` og `index.sv.html` («Logga in»). Sanketips-artiklene bygget på nytt så de arver headeren — de plukket samtidig opp Svenska-fotlenken fra PR #96 som aldri var bygget inn i artiklene.
+- **Verify:** live curl viser lenken i NO-nav, SE-nav og artikkel-header; /api/health 200; qa:prod 29/29.
+- **Rollback:** none needed.
