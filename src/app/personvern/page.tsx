@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { Cookie, Database, FileDown, Lock, Mail, Trash2, Users } from 'lucide-react';
 import { getTranslations } from 'next-intl/server';
 import { PageWrapper } from '@/components/layout/PageWrapper';
+import { AnalyticsPreferencesButton } from '@/components/analytics/AnalyticsPreferencesButton';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations('Personvern');
@@ -17,8 +18,6 @@ export async function generateMetadata(): Promise<Metadata> {
 //   3) Når kjøp i iOS-appen (RevenueCat/Apple IAP) skrus på: legg Apple + RevenueCat
 //      til som databehandlere i punkt 4.
 
-const LAST_UPDATED = '25. mai 2026';
-
 export default async function PersonvernPage() {
   const t = await getTranslations('Personvern');
   const s = await getTranslations('Safety');
@@ -28,7 +27,7 @@ export default async function PersonvernPage() {
         <div>
           <h1 className="text-xl font-semibold">{t('title')}</h1>
           <p className="text-sm text-gray-700">
-            {t('lastUpdatedIntro', { date: LAST_UPDATED })}
+            {t('lastUpdatedIntro', { date: t('lastUpdatedDate') })}
           </p>
         </div>
 
@@ -170,6 +169,18 @@ export default async function PersonvernPage() {
               .
             </li>
             <li>
+              <span className="font-medium">Google Analytics</span> {t('processorGoogleAnalyticsDesc')}{' '}
+              <a
+                href="https://support.google.com/analytics/answer/6004245"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-medium text-forest-700 underline"
+              >
+                support.google.com/analytics
+              </a>
+              .
+            </li>
+            <li>
               <span className="font-medium">{t('processorMetLabel')}</span> {t('processorAnd')} <span className="font-medium">{t('processorSmhiLabel')}</span>{' '}
               {t('processorWeatherDesc')}
             </li>
@@ -210,6 +221,9 @@ export default async function PersonvernPage() {
             </li>
             <li>
               <span className="font-medium">{t('retentionServerLabel')}</span> {t('retentionServerDesc')}
+            </li>
+            <li>
+              <span className="font-medium">{t('retentionAnalyticsLabel')}</span> {t('retentionAnalyticsDesc')}
             </li>
           </ul>
         </article>
@@ -298,9 +312,14 @@ export default async function PersonvernPage() {
               <span className="font-medium">{t('cookiesStripeLabel')}</span> {t('cookiesStripeDesc')}
             </li>
           </ul>
-          <p className="text-sm text-gray-700">
-            {t('cookiesNoneBefore')} <span className="font-medium">{t('cookiesNoneEmphasis')}</span> {t('cookiesNoneAfter')}
-          </p>
+          <p className="text-sm text-gray-700">{t('cookiesOptionalIntro')}</p>
+          <ul className="list-disc space-y-1 pl-5 text-sm text-gray-700">
+            <li>
+              <span className="font-medium">{t('cookiesAnalyticsLabel')}</span> {t('cookiesAnalyticsDesc')}
+            </li>
+          </ul>
+          <p className="text-sm text-gray-700">{t('cookiesMarketing')}</p>
+          <AnalyticsPreferencesButton label={t('cookiesManage')} />
         </article>
 
         {/* === 9. Sikkerhet === */}

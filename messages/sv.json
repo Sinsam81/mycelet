@@ -1,4 +1,10 @@
 {
+  "InstallPrompt": {
+    "title": "Installera Mycelet",
+    "subtitle": "Lägg appen på hemskärmen för snabb åtkomst.",
+    "install": "Installera",
+    "close": "Stäng"
+  },
   "Common": {
     "appName": "Mycelet",
     "language": "Språk",
@@ -444,6 +450,7 @@
   },
   "Personvern": {
     "title": "Integritetspolicy",
+    "lastUpdatedDate": "29 juli 2026",
     "lastUpdatedIntro": "Senast uppdaterad: {date}. Denna policy förklarar hur Mycelet behandlar dina personuppgifter.",
     "controllerHeading": "1. Personuppgiftsansvarig",
     "controllerIntro": "Personuppgiftsansvarig för dina personuppgifter är:",
@@ -458,7 +465,7 @@
     "collectLocationTerm": "Positionsdata",
     "collectLocationDesc": "GPS-koordinater från din mobil när du registrerar fynd, samt valfri hemregion. Vi visar endast grovt randomiserade eller rutnätsfästa koordinater för andra användare — aldrig exakt fyndplats.",
     "collectTechnicalTerm": "Tekniska data",
-    "collectTechnicalDesc": "IP-adress, webbläsare, inloggningstidpunkt (samlas in av Supabase Auth för säkerhet och upptäckt av missbruk).",
+    "collectTechnicalDesc": "IP-adress, webbläsare och inloggningstidpunkt (samlas in av Supabase Auth för säkerhet och upptäckt av missbruk). Om du samtycker till analys samlar Google Analytics även in sidvisningar, grovt land, enhetstyp och utvalda användarhändelser. Bilder, exakta positioner, e-post och fritext skickas inte till Analytics.",
     "collectPaymentTerm": "Betalningsdata",
     "collectPaymentDesc": "Om du köper en prenumeration: Stripe hanterar kortuppgifter direkt. Vi tar endast emot prenumerationsstatus, prisplan och periodens datum — aldrig kortnummer.",
     "collectImagesTerm": "Bilder du laddar upp",
@@ -471,7 +478,7 @@
     "legalBasisLegalLabel": "Rättslig förpliktelse (art. 6.1 c)",
     "legalBasisLegalDesc": "för bokföringsplikt på betalningsdata i 5 år, enligt norska bokföringslagen § 13.",
     "legalBasisConsentLabel": "Samtycke (art. 6.1 a)",
-    "legalBasisConsentDesc": "endast för valfri kommunikation (t.ex. nyhetsbrev om du tackar ja). Du kan när som helst återkalla ditt samtycke.",
+    "legalBasisConsentDesc": "för valfri användningsanalys och valfri kommunikation. Du kan avvisa eller återkalla samtycket när som helst utan att det påverkar tjänsten.",
     "processorsHeading": "4. Vem vi delar data med (personuppgiftsbiträden)",
     "processorsIntro": "Vi använder följande leverantörer (personuppgiftsbiträden) för att driva tjänsten. De behandlar endast de uppgifter som är nödvändiga för sin funktion, på våra vägnar:",
     "processorSupabaseDesc": "(databas, inloggning, fillagring) — uppgifterna lagras i EU. Personuppgiftsbiträdesavtal:",
@@ -480,6 +487,7 @@
     "processorStripeDesc": "(betalning på webben) — Personuppgiftsbiträdesavtal:",
     "processorStripeNote": "Stripe kan överföra data till USA under SCC.",
     "processorKindwiseDesc": "(AI-svampidentifiering) — när du använder foto-ID skickas bilden och koordinaterna till Kindwise för analys. Integritet:",
+    "processorGoogleAnalyticsDesc": "(valfri användningsanalys) — aktiveras endast efter samtycke och tar inte emot bilder, exakta positioner eller kontouppgifter. Google Analytics integritet och säkerhet:",
     "processorAnd": "och",
     "processorMetLabel": "MET Norge (Frost)",
     "processorSmhiLabel": "SMHI (Sverige)",
@@ -505,6 +513,8 @@
     "retentionAuditDesc": "behålls i 7 år för att uppfylla krav på revisionsspår.",
     "retentionServerLabel": "Serverloggar:",
     "retentionServerDesc": "30 dagar hos Vercel.",
+    "retentionAnalyticsLabel": "Google Analytics:",
+    "retentionAnalyticsDesc": "händelse- och användardata lagras i 14 månader utan att perioden förlängs vid ny aktivitet. Analyskakor löper ut senast efter 13 månader.",
     "transfersHeading": "6. Överföring utanför EES",
     "transfersDesc": "Några av våra leverantörer är baserade utanför EES (särskilt USA). Dessa överföringar sker under EU:s Standard Contractual Clauses (SCC) eller annan giltig grund för överföring. Vi bedömer leverantörerna innan vi börjar använda dem och säkerställer att de ger tillräckligt skydd för personuppgifter.",
     "rightsHeading": "7. Dina rättigheter",
@@ -524,11 +534,16 @@
     "rightsComplaintDescBefore": "Du kan klaga till IMY (Integritetsskyddsmyndigheten) på",
     "rightsComplaintDescAfter": "om du anser att vi behandlar dina uppgifter i strid med integritetsreglerna.",
     "cookiesHeading": "8. Kakor (cookies)",
-    "cookiesIntro": "Mycelet använder endast strikt nödvändiga kakor:",
+    "cookiesIntro": "Mycelet använder dessa strikt nödvändiga kakor:",
     "cookiesSessionLabel": "Inloggningssession (Supabase):",
     "cookiesSessionDesc": "kommer ihåg att du är inloggad så att du inte behöver logga in på varje sida.",
     "cookiesStripeLabel": "Stripe (endast vid betalning):",
     "cookiesStripeDesc": "säkrar betalningsflödet och förhindrar bedrägeri.",
+    "cookiesOptionalIntro": "Om du väljer «Tillåt analys» använder vi dessutom:",
+    "cookiesAnalyticsLabel": "Google Analytics (_ga):",
+    "cookiesAnalyticsDesc": "hjälper oss att förstå sidvisningar och centrala produktflöden. Kakan löper ut senast efter 13 månader. Google Analytics laddas inte och inga analysdata skickas innan du samtycker.",
+    "cookiesMarketing": "Vi använder inte marknadsföringskakor, annonspersonalisering eller Google Signals.",
+    "cookiesManage": "Ändra analysval",
     "cookiesNoneBefore": "Vi använder",
     "cookiesNoneEmphasis": "inga",
     "cookiesNoneAfter": "analyskakor, spårningskakor eller marknadsföringskakor. Ingen tredjepartsannonsering.",
@@ -857,12 +872,11 @@
     "checkWithControl": "Kontrollera med en svampkonsulent"
   },
   "CookieNotice": {
-    "title": "Vi använder endast nödvändiga kakor",
-    "description": "Mycelet sätter kakor för inloggning och betalning. Vi har inga analys-, spårnings- eller marknadsföringskakor.",
+    "title": "Vill du tillåta valfri användningsanalys?",
+    "description": "Mycelet använder nödvändiga kakor för inloggning och betalning. Med ditt samtycke använder vi Google Analytics för att förstå hur appen används. Vi skickar inte bilder, exakta positioner eller kontouppgifter.",
     "privacyLink": "Läs integritetspolicyn",
-    "acknowledge": "Förstått",
-    "closeNoticeAria": "Stäng informationsruta",
-    "closeAria": "Stäng"
+    "reject": "Avvisa analys",
+    "accept": "Tillåt analys"
   },
   "RetentionWarningBanner": {
     "scheduledDeletion": "Ditt konto är schemalagt att raderas {date} ({count, plural, =1 {# dag} other {# dagar}} kvar).",

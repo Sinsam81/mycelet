@@ -7,6 +7,7 @@ import { useTranslations } from 'next-intl';
 import { Button } from '@/components/ui/Button';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { NonNativeOnly } from '@/components/native/NonNativeOnly';
+import { trackEvent } from '@/lib/analytics';
 
 // Next 15+ requires useSearchParams() to be inside a Suspense boundary.
 // Inner form rendered by LoginForm; default export wraps it in Suspense.
@@ -34,6 +35,7 @@ function LoginForm() {
 
     try {
       await signIn(email, password);
+      trackEvent('login', { method: 'password' });
       router.push(redirectPath);
       router.refresh();
     } catch (err) {

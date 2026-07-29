@@ -8,6 +8,7 @@ import { Check, Crown, Leaf, Loader2, ShieldCheck, Undo2 } from 'lucide-react';
 import { PageWrapper } from '@/components/layout/PageWrapper';
 import { BILLING_PLANS } from '@/lib/billing/plans';
 import { useIsNative } from '@/lib/hooks/useIsNative';
+import { trackEvent } from '@/lib/analytics';
 
 type BillingStatusResponse = {
   subscription: {
@@ -178,7 +179,22 @@ function PricingInner() {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data?.error ?? t('errorCheckout'));
-      if (data?.url) window.location.href = data.url;
+      if (data?.url) {
+        const value = plan === 'premium' ? PREMIUM_MONTHLY : SEASON_YEARLY;
+        trackEvent('begin_checkout', {
+          currency: 'NOK',
+          value,
+          items: [
+            {
+              item_id: plan,
+              item_name: plan,
+              price: value,
+              quantity: 1
+            }
+          ]
+        });
+        window.location.href = data.url;
+      }
     } catch (error) {
       setStatusError(error instanceof Error ? error.message : t('errorCheckout'));
     } finally {
