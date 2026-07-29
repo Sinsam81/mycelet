@@ -117,6 +117,13 @@ const nextConfig = {
         headers: securityHeaders
       }
     ];
+  },
+  async rewrites() {
+    return [
+      // Clean URLs for the static «Sanketips» articles built by
+      // scripts/build-articles.mjs into public/landing/sanketips/.
+      { source: '/sanketips/:slug', destination: '/landing/sanketips/:slug.html' }
+    ];
   }
 };
 
