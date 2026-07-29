@@ -2,8 +2,32 @@ import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 import { logger } from '@/lib/log';
 import { getOrCreateRequestId } from '@/lib/log/request';
+import { LOCALE_COOKIE, isLocale, type Locale } from '@/i18n/config';
 
 const PROTECTED_PATHS = ['/profile', '/forum/new', '/map', '/admin', '/mine-steder'];
+
+/**
+ * Which language of the static landing page a logged-out visitor should get.
+ * Priority: explicit ?lang= toggle click → saved app-wide language cookie →
+ * geo-IP (Vercel sets x-vercel-ip-country at the edge; SE → Swedish) →
+ * Accept-Language (matches getUserLocale in src/i18n/locale.ts) → Norwegian.
+ * Geo-IP is landing-only on purpose: inside the app the user has a language
+ * toggle, and their cookie choice must always win over where they happen to be.
+ */
+function resolveLandingLocale(request: NextRequest): Locale {
+  const langParam = request.nextUrl.searchParams.get('lang') ?? undefined;
+  if (isLocale(langParam)) return langParam;
+
+  const cookieValue = request.cookies.get(LOCALE_COOKIE)?.value;
+  if (isLocale(cookieValue)) return cookieValue;
+
+  if (request.headers.get('x-vercel-ip-country')?.toUpperCase() === 'SE') return 'sv';
+
+  const acceptLanguage = request.headers.get('accept-language') ?? '';
+  if (/(^|[,\s])sv\b/i.test(acceptLanguage)) return 'sv';
+
+  return 'nb';
+}
 
 export async function updateSession(request: NextRequest) {
   // Per-request correlation ID. Injected into the forwarded request headers so
@@ -81,14 +105,29 @@ export async function updateSession(request: NextRequest) {
   }
 
   // Logged-out visitors on the front page get the designed static landing
-  // (public/landing/index.html — zero JS, self-hosted fonts). Logged-in users
-  // fall through to the app home. NB: Turbopack dev skips middleware, so
-  // local dev shows the React fallback in src/app/page.tsx instead — verify
-  // this path with `next start` or against prod.
+  // (public/landing/index.html, Swedish: index.sv.html — zero JS, self-hosted
+  // fonts). Logged-in users fall through to the app home. NB: Turbopack dev
+  // skips middleware, so local dev shows the React fallback in
+  // src/app/page.tsx instead — verify this path with `next start` or against
+  // prod.
   if (request.nextUrl.pathname === '/' && !user) {
-    return NextResponse.rewrite(new URL('/landing/index.html', request.url), {
+    const landingLocale = resolveLandingLocale(request);
+    const landingFile = landingLocale === 'sv' ? '/landing/index.sv.html' : '/landing/index.html';
+    const landingResponse = NextResponse.rewrite(new URL(landingFile, request.url), {
       headers: { 'x-request-id': reqId }
     });
+    // A ?lang= click on the landing toggle persists the choice in the same
+    // cookie the in-app language switcher uses, so landing and app stay in
+    // the same language from then on.
+    const langParam = request.nextUrl.searchParams.get('lang') ?? undefined;
+    if (isLocale(langParam) && langParam !== request.cookies.get(LOCALE_COOKIE)?.value) {
+      landingResponse.cookies.set(LOCALE_COOKIE, langParam, {
+        path: '/',
+        maxAge: 60 * 60 * 24 * 365,
+        sameSite: 'lax'
+      });
+    }
+    return landingResponse;
   }
 
   return response;
