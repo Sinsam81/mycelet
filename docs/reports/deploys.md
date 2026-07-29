@@ -76,3 +76,8 @@ Ingen rollback av kode eller database var nødvendig.
 - **Verify pre-merge:** 332 tests, typecheck, build; local anon verification (hero, mockup, cookie notice, ingen onboarding-modal, header/bottom-nav).
 - **Verify post-deploy:** «Vit når soppen kommer» live on mycelet.com; `/api/health` ok; `qa:prod` see below.
 - **Rollback:** none needed.
+
+## 2026-07-29 — PR #94: Designed landing page served 1:1 (static HTML)
+- **What:** Anon `/` now serves the approved Claude Design page verbatim: extracted from the design-tool bundle, lucide icons baked as inline SVG (zero JS), images 8.4 MB→~600 KB JPEG, 8 self-hosted woff2, CTAs → /auth/register (plan buttons ?redirect=/pricing), dead newsletter form removed, canonical+favicon added. Middleware rewrite `/` → `/landing/index.html` for !user; logged-in unchanged. React landing kept as Turbopack-dev fallback.
+- **Verify:** 332 tests; local next start (pixel-identical, rewrite header confirmed); live title + assets 200; qa:prod 29/29; health ok.
+- **Rollback:** none needed.
