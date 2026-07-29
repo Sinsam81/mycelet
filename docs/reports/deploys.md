@@ -89,6 +89,11 @@ Ingen rollback av kode eller database var nødvendig.
 - **Verify:** 332 tests, typecheck, build; live 200 på alle tre + kortlenker på forsiden; qa:prod 29/29; health ok.
 - **Rollback:** none needed.
 
+## 2026-07-29 — PR #96: Svensk landingsside med geo-IP-språkvalg *(ført i etterkant samme dag)*
+- **What:** Full svensk utgave av landingssiden (`public/landing/index.sv.html`), kvalitetssikret av uavhengige korrektur-agenter (21 funn fikset: Karl Johan, svampkonsulenter i stedet for Soppkontrollen, Giftinformationscentralen 010-456 6700, NOK-merking av priser, «prognos» i stedet for norsk-ismen «utsikt»). Middleware velger landingsspråk med prioritet `?lang=`-klikk → `MYCELET_LOCALE`-cookie → `x-vercel-ip-country=SE` → `Accept-Language` → nb. Språkvelger («Norsk/Svenska») i footer på begge sider, gjensidige hreflang-tagger for SEO, og svenske app-skjermbilder (Stockholm-kart med 938 fynd, hjemskjerm, AI-side — generert via `scripts/capture-sv-landing-screenshots.mjs`).
+- **Verify:** build + typecheck + 332 vitest ved merge; lokal `next start` med simulerte IP-er (SE→sv, NO/DK/US→nb, `?lang=`-overstyring, cookie-persistens). Live etterkontroll ved loggføring: `/?lang=sv` serverer svensk tittel, `/` har hreflang nb-NO/sv-SE/x-default, alle tre `.sv.jpg` gir 200.
+- **Rollback:** none needed.
+
 ## 2026-07-29 — PR #97: «Logg inn»-lenke i landingssidens toppnav (NO + SE)
 - **What:** Utloggede brukere hadde ingen direkte vei til `/auth/login` fra landingssiden — alle CTA-er pekte til `/auth/register`. Diskret «Logg inn»-lenke lagt til i toppnav (mellom ankerlenkene og «Prøv gratis») på både `index.html` og `index.sv.html` («Logga in»). Sanketips-artiklene bygget på nytt så de arver headeren — de plukket samtidig opp Svenska-fotlenken fra PR #96 som aldri var bygget inn i artiklene.
 - **Verify:** live curl viser lenken i NO-nav, SE-nav og artikkel-header; /api/health 200; qa:prod 29/29.
