@@ -80,5 +80,16 @@ export async function updateSession(request: NextRequest) {
     });
   }
 
+  // Logged-out visitors on the front page get the designed static landing
+  // (public/landing/index.html — zero JS, self-hosted fonts). Logged-in users
+  // fall through to the app home. NB: Turbopack dev skips middleware, so
+  // local dev shows the React fallback in src/app/page.tsx instead — verify
+  // this path with `next start` or against prod.
+  if (request.nextUrl.pathname === '/' && !user) {
+    return NextResponse.rewrite(new URL('/landing/index.html', request.url), {
+      headers: { 'x-request-id': reqId }
+    });
+  }
+
   return response;
 }
