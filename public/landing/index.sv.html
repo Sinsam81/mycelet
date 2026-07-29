@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="sv"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mycelet — så vet du när svampen kommer</title>
+<link rel="canonical" href="https://www.mycelet.com/?lang=sv">
+<link rel="alternate" hreflang="sv-SE" href="https://www.mycelet.com/?lang=sv">
+<link rel="alternate" hreflang="nb-NO" href="https://www.mycelet.com/">
+<link rel="alternate" hreflang="x-default" href="https://www.mycelet.com/">
+<link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
+<meta name="description" content="Svampprognos byggd på riktiga väder- och skogsdata från SMHI och Copernicus/CORINE, med AI-identifiering som alltid visar förväxlingsarter. Sverige och Norge.">
+<meta property="og:type" content="website">
+<meta property="og:locale" content="sv_SE">
+<meta property="og:locale:alternate" content="nb_NO">
+<meta property="og:site_name" content="Mycelet">
+<meta property="og:title" content="Mycelet — så vet du när svampen kommer">
+<meta property="og:description" content="Svampprognos byggd på riktiga väder- och skogsdata, med AI-identifiering som varnar dig för farliga förväxlingar.">
+<meta name="theme-color" content="#1a3a24">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<style>/* latin-ext */
+@font-face {
+  font-family: 'Figtree';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/landing/f1.woff2") format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Figtree';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/landing/f2.woff2") format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'Figtree';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("/landing/f1.woff2") format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Figtree';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("/landing/f2.woff2") format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'Figtree';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("/landing/f1.woff2") format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Figtree';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("/landing/f2.woff2") format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'Figtree';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("/landing/f1.woff2") format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Figtree';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("/landing/f2.woff2") format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* vietnamese */
+@font-face {
+  font-family: 'Newsreader';
+  font-style: italic;
+  font-weight: 300 500;
+  font-display: swap;
+  src: url("/landing/f3.woff2") format('woff2');
+  unicode-range: U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'Newsreader';
+  font-style: italic;
+  font-weight: 300 500;
+  font-display: swap;
+  src: url("/landing/f4.woff2") format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Newsreader';
+  font-style: italic;
+  font-weight: 300 500;
+  font-display: swap;
+  src: url("/landing/f5.woff2") format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* vietnamese */
+@font-face {
+  font-family: 'Newsreader';
+  font-style: normal;
+  font-weight: 300 700;
+  font-display: swap;
+  src: url("/landing/f6.woff2") format('woff2');
+  unicode-range: U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'Newsreader';
+  font-style: normal;
+  font-weight: 300 700;
+  font-display: swap;
+  src: url("/landing/f7.woff2") format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Newsreader';
+  font-style: normal;
+  font-weight: 300 700;
+  font-display: swap;
+  src: url("/landing/f8.woff2") format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+</style>
+
+<style>
+body{margin:0;background:#f5f1e8}
+summary{list-style:none;cursor:pointer}
+summary::-webkit-details-marker{display:none}
+details[open] .mycelet-plus{transform:rotate(45deg)}
+@media (max-width:900px){.mycelet-split{grid-template-columns:1fr !important}.mycelet-3{grid-template-columns:1fr !important}.mycelet-feat{grid-template-columns:1fr 1fr !important}}
+@media (max-width:620px){.mycelet-feat{grid-template-columns:1fr !important}}
+</style>
+<style>
+html{scroll-behavior:smooth}
+a,a:hover{color:#8a5f06}
+.h1:hover{color:#1a3a24 !important}
+.h2:hover{color:#1a3a24 !important}
+.h3:hover{color:#1a3a24 !important}
+.h4:hover{color:#1a3a24 !important}
+.h5:hover{color:#1a3a24 !important}
+.h6:hover{background:#2d5238 !important}
+.h7:hover{background:#2d5238 !important}
+.h8:hover{background:#ece5d6 !important}
+.h9:hover{color:#f5d372 !important}
+.h10:hover{background:#f5f1e8 !important}
+.h11:hover{background:#2d5238 !important}
+.h12:hover{background:#f5d372 !important}
+.h13:hover{background:#fffdf7 !important}
+.h14:hover{background:#fffdf7 !important}
+.h15:hover{background:#fffdf7 !important}
+.h16:hover{background:#2d5238 !important}
+.h17:focus{border-color:#1a3a24;outline:none !important}
+.h18:hover{background:#f5d372 !important}
+.h19:hover{color:#fbbf24 !important}
+.h20:hover{color:#fbbf24 !important}
+.h21:hover{color:#fbbf24 !important}
+.h22:hover{color:#fbbf24 !important}
+.h23:hover{color:#fbbf24 !important}
+.h24:hover{color:#fbbf24 !important}
+.h25:hover{color:#fbbf24 !important}
+.h26:hover{color:#fbbf24 !important}
+</style>
+</head>
+<body>
+<div style="background:#f5f1e8;color:#1f2a22;font-family:Figtree,system-ui,sans-serif;font-size:17px;line-height:1.6;text-wrap:pretty;overflow-x:clip">
+
+<header style="display:flex;align-items:center;gap:28px;max-width:1180px;margin:0 auto;padding:22px clamp(20px,5vw,56px)">
+<a href="#" style="display:flex;align-items:center;gap:10px;text-decoration:none;color:#1a3a24;margin-right:auto">
+<span style="width:34px;height:34px;border-radius:999px;background:#1a3a24;display:grid;place-items:center;color:#fbbf24"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="sprout" style="width:19px;height:19px" class="lucide lucide-sprout"><path d="M7 20h10"></path><path d="M10 20c5.5-2.5.8-6.4 3-10"></path><path d="M9.5 9.4c1.1.8 1.8 2.2 2.3 3.7-2 .4-3.5.4-4.8-.3-1.2-.6-2.3-1.9-3-4.2 2.8-.5 4.4 0 5.5.8z"></path><path d="M14.1 6a7 7 0 0 0-1.1 4c1.9-.1 3.3-.6 4.3-1.4 1-1 1.6-2.3 1.7-4.6-2.7.1-4 1-4.9 2z"></path></svg></span>
+<span style="font-family:Newsreader,Georgia,serif;font-size:25px;font-weight:600;letter-spacing:-0.01em">Mycelet</span>
+</a>
+<nav style="display:flex;align-items:center;gap:26px;font-size:15px;font-weight:500">
+<a href="#sa-funkar-det" style="color:#3d4c41;text-decoration:none" class="h1">Så fungerar det</a>
+<a href="#funktioner" style="color:#3d4c41;text-decoration:none" class="h2">Funktioner</a>
+<a href="#priser" style="color:#3d4c41;text-decoration:none" class="h3">Priser</a>
+<a href="#plocktips" style="color:#3d4c41;text-decoration:none" class="h4">Plocktips</a>
+<a href="#faq" style="color:#3d4c41;text-decoration:none" class="h5">Frågor</a>
+<a href="/auth/register" style="background:#1a3a24;color:#f5f1e8;text-decoration:none;padding:10px 20px;border-radius:999px;font-weight:600" class="h6">Prova gratis</a>
+</nav>
+</header>
+
+
+<section class="mycelet-split" style="display:grid;grid-template-columns:1.05fr 0.95fr;gap:clamp(32px,5vw,72px);align-items:center;max-width:1180px;margin:0 auto;padding:clamp(24px,4vw,56px) clamp(20px,5vw,56px) clamp(56px,7vw,104px)">
+<div>
+<p style="display:inline-flex;align-items:center;gap:8px;margin:0 0 22px;padding:7px 15px 7px 11px;border-radius:999px;background:#e7e1cf;color:#3d4c41;font-size:14px;font-weight:600"><span style="width:8px;height:8px;border-radius:999px;background:#fbbf24"></span>Sverige och Norge · webbappen är live</p>
+<h1 style="font-family:Newsreader,Georgia,serif;font-weight:500;font-size:clamp(44px,6.4vw,82px);line-height:1.02;letter-spacing:-0.025em;color:#1a3a24;margin:0 0 24px">Så vet du när<br>svampen kommer.</h1>
+<p style="font-size:clamp(18px,2vw,22px);line-height:1.5;color:#3d4c41;max-width:34ch;margin:0 0 32px">Svampprognos byggd på riktiga väder- och skogsdata — med AI-identifiering som varnar dig för farliga förväxlingar.</p>
+<div style="display:flex;flex-wrap:wrap;align-items:center;gap:14px;margin-bottom:22px">
+<a href="/auth/register" style="display:inline-flex;align-items:center;gap:9px;background:#1a3a24;color:#f5f1e8;text-decoration:none;padding:16px 28px;border-radius:999px;font-size:18px;font-weight:600" class="h7">Prova gratis<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="arrow-right" style="width:18px;height:18px" class="lucide lucide-arrow-right"><path d="M5 12h14"></path><path d="m12 5 7 7-7 7"></path></svg></a>
+<a href="#faq" style="display:inline-flex;align-items:center;gap:11px;border:1.5px solid #cfc7b2;color:#1a3a24;text-decoration:none;padding:14px 24px;border-radius:999px;font-weight:600" class="h8">
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="apple" style="width:20px;height:20px" class="lucide lucide-apple"><path d="M12 20.94c1.5 0 2.75 1.06 4 1.06 3 0 6-8 6-12.22A4.91 4.91 0 0 0 17 5c-2.22 0-4 1.44-5 2-1-.56-2.78-2-5-2a4.9 4.9 0 0 0-5 4.78C2 14 5 22 8 22c1.25 0 2.5-1.06 4-1.06Z"></path><path d="M10 2c1 .5 2 2 2 5"></path></svg>
+<span style="display:block;text-align:left;line-height:1.15"><span style="display:block;font-size:11px;letter-spacing:0.06em;text-transform:uppercase;color:#6b7566;font-weight:600">Kommer snart till</span><span style="display:block;font-size:16px">App Store</span></span>
+</a>
+</div>
+<p style="font-size:15px;color:#6b7566;margin:0">Gratis att använda · inga kortuppgifter · 333 000+ svampfynd i Sverige och Norge</p>
+</div>
+<div style="position:relative;display:grid;place-items:center;padding:18px">
+<div style="position:absolute;inset:0;background:radial-gradient(60% 60% at 50% 45%,#e3e7d5 0%,rgba(245,241,232,0) 72%);border-radius:999px"></div>
+<div style="position:absolute;width:min(88%,420px);aspect-ratio:1;border-radius:999px;background:#e7e1cf"></div>
+<div style="position:relative;width:min(320px,78%);border-radius:46px;padding:11px;background:#1a3a24;box-shadow:0 30px 70px rgba(26,58,36,0.28)">
+<div style="border-radius:36px;overflow:hidden;background:#1a3a24">
+<div style="display:flex;align-items:center;justify-content:space-between;background:#1a3a24;color:#ffffff;padding:9px 20px 5px;font-size:12px;font-weight:600">
+<span>09:41</span>
+<span style="display:flex;align-items:center;gap:5px"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="wifi" style="width:13px;height:13px" class="lucide lucide-wifi"><path d="M12 20h.01"></path><path d="M2 8.82a15 15 0 0 1 20 0"></path><path d="M5 12.859a10 10 0 0 1 14 0"></path><path d="M8.5 16.429a5 5 0 0 1 7 0"></path></svg><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="battery-full" style="width:17px;height:17px" class="lucide lucide-battery-full"><rect width="16" height="10" x="2" y="7" rx="2" ry="2"></rect><line x1="22" x2="22" y1="11" y2="13"></line><line x1="6" x2="6" y1="11" y2="13"></line><line x1="10" x2="10" y1="11" y2="13"></line><line x1="14" x2="14" y1="11" y2="13"></line></svg></span>
+</div>
+<img src="/landing/soppforhold.sv.jpg" alt="Svampförhållanden i Mycelet — 72 av 100, perfekt svampdag" style="width:100%;display:block">
+</div>
+</div>
+<p style="position:absolute;right:-4px;bottom:6px;display:inline-flex;align-items:center;gap:9px;margin:0;background:#ffffff;border-radius:999px;padding:11px 18px;box-shadow:0 12px 30px rgba(26,58,36,0.16);font-size:15px;font-weight:600;color:#1a3a24"><span style="width:10px;height:10px;border-radius:999px;background:#fbbf24"></span>Dagens förhållanden · 7-dagarsprognos</p>
+</div>
+</section>
+
+
+
+
+<section style="background:#2d5238;color:#dfe4d5">
+<div style="max-width:1180px;margin:0 auto;padding:22px clamp(20px,5vw,56px);display:flex;flex-wrap:wrap;align-items:center;gap:12px 22px;font-size:15px">
+<span style="display:inline-flex;align-items:center;gap:9px;color:#fbbf24;font-weight:600"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="database" style="width:17px;height:17px" class="lucide lucide-database"><ellipse cx="12" cy="5" rx="9" ry="3"></ellipse><path d="M3 5V19A9 3 0 0 0 21 19V5"></path><path d="M3 12A9 3 0 0 0 21 12"></path></svg>Byggd på öppna data</span>
+<span style="color:#c2cbb7">SMHI (väder) · Copernicus/CORINE (skogstyp) · OpenStreetMap och Esri (kartor) · GBIF/Artportalen — 333 000+ svampfynd</span>
+</div>
+</section>
+
+<section style="max-width:1180px;margin:0 auto;padding:clamp(48px,6vw,80px) clamp(20px,5vw,56px) 0">
+<div class="mycelet-3" style="display:grid;grid-template-columns:repeat(3,1fr);gap:clamp(20px,3vw,40px);border-top:1px solid #ddd5c2;padding-top:clamp(28px,3vw,40px)">
+<div>
+<p style="font-family:Newsreader,Georgia,serif;font-size:clamp(34px,4vw,48px);line-height:1;color:#1a3a24;margin:0 0 6px">333 000+</p>
+<p style="font-size:16px;color:#3d4c41;margin:0">dokumenterade svampfynd i Sverige och Norge, från GBIF (bl.a. Artportalen)</p>
+</div>
+<div>
+<p style="font-family:Newsreader,Georgia,serif;font-size:clamp(34px,4vw,48px);line-height:1;color:#1a3a24;margin:0 0 6px">72 arter</p>
+<p style="font-size:16px;color:#3d4c41;margin:0">i artbiblioteket, med kännetecken och förväxlingsarter</p>
+</div>
+<div>
+<p style="font-family:Newsreader,Georgia,serif;font-size:clamp(34px,4vw,48px);line-height:1;color:#1a3a24;margin:0 0 6px">7 dagar</p>
+<p style="font-size:16px;color:#3d4c41;margin:0">väderbaserad prognos för din position, i Sverige och Norge</p>
+</div>
+</div>
+</section>
+
+<section id="sa-funkar-det" style="max-width:1180px;margin:0 auto;padding:clamp(64px,8vw,112px) clamp(20px,5vw,56px)"><span id="slik"></span>
+<h2 style="font-family:Newsreader,Georgia,serif;font-weight:500;font-size:clamp(32px,4.2vw,52px);line-height:1.08;letter-spacing:-0.02em;color:#1a3a24;margin:0 0 16px;max-width:22ch">Rätt tid, rätt skog</h2>
+<p style="font-size:19px;color:#3d4c41;max-width:52ch;margin:0 0 clamp(40px,5vw,64px)">Vi lovar inte att veta var svampen växer. Vi berättar när förhållandena är bra, och vilken skog som är värd turen.</p>
+<div class="mycelet-3" style="display:grid;grid-template-columns:repeat(3,1fr);gap:clamp(24px,3vw,40px)">
+<div>
+<p style="font-family:Newsreader,Georgia,serif;font-size:52px;line-height:1;color:#fbbf24;margin:0 0 14px">1</p>
+<h3 style="font-family:Newsreader,Georgia,serif;font-weight:600;font-size:26px;line-height:1.15;color:#1a3a24;margin:0 0 10px">Kolla förhållandena</h3>
+<p style="color:#3d4c41;margin:0">Dagens svampläge för din position, med prognos 7 dagar framåt — regn, temperatur och hur lång tid det tar innan svampen skjuter efter regnet.</p>
+</div>
+<div>
+<p style="font-family:Newsreader,Georgia,serif;font-size:52px;line-height:1;color:#fbbf24;margin:0 0 14px">2</p>
+<h3 style="font-family:Newsreader,Georgia,serif;font-weight:600;font-size:26px;line-height:1.15;color:#1a3a24;margin:0 0 10px">Hitta rätt skog</h3>
+<p style="color:#3d4c41;margin:0">Kartan visar lovande områden med rätt skogstyp för arten du är ute efter, ovanpå OpenStreetMap och satellitbilder.</p>
+</div>
+<div>
+<p style="font-family:Newsreader,Georgia,serif;font-size:52px;line-height:1;color:#fbbf24;margin:0 0 14px">3</p>
+<h3 style="font-family:Newsreader,Georgia,serif;font-weight:600;font-size:26px;line-height:1.15;color:#1a3a24;margin:0 0 10px">Identifiera tryggt</h3>
+<p style="color:#3d4c41;margin:0">Ta en bild och få artförslag från AI — alltid med tydlig markering av giftiga arter och varning för farliga förväxlingar.</p>
+</div>
+</div>
+</section>
+
+<section id="funktioner" style="background:#ece5d6"><span id="funksjoner"></span>
+<div style="max-width:1180px;margin:0 auto;padding:clamp(64px,8vw,112px) clamp(20px,5vw,56px)">
+<h2 style="font-family:Newsreader,Georgia,serif;font-weight:500;font-size:clamp(32px,4.2vw,52px);line-height:1.08;letter-spacing:-0.02em;color:#1a3a24;margin:0 0 clamp(36px,5vw,56px)">Allt du behöver i skogen</h2>
+<div class="mycelet-feat" style="display:grid;grid-template-columns:repeat(3,1fr);gap:clamp(16px,2vw,24px)">
+<div style="background:#ffffff;border-radius:26px;padding:28px">
+<span style="display:grid;place-items:center;width:46px;height:46px;border-radius:999px;background:#fdf1d3;color:#8a5f06;margin-bottom:18px"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="cloud-rain" style="width:22px;height:22px" class="lucide lucide-cloud-rain"><path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"></path><path d="M16 14v6"></path><path d="M8 14v6"></path><path d="M12 16v6"></path></svg></span>
+<h3 style="font-family:Newsreader,Georgia,serif;font-weight:600;font-size:22px;color:#1a3a24;margin:0 0 8px">Svampprognos</h3>
+<p style="color:#3d4c41;font-size:16px;margin:0">Väderbaserad prognos från SMHI, sju dagar framåt, med förklaring till varför dagen är bra.</p>
+</div>
+<div style="background:#ffffff;border-radius:26px;padding:28px">
+<span style="display:grid;place-items:center;width:46px;height:46px;border-radius:999px;background:#e3ecdc;color:#2d5238;margin-bottom:18px"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="map" style="width:22px;height:22px" class="lucide lucide-map"><path d="M14.106 5.553a2 2 0 0 0 1.788 0l3.659-1.83A1 1 0 0 1 21 4.619v12.764a1 1 0 0 1-.553.894l-4.553 2.277a2 2 0 0 1-1.788 0l-4.212-2.106a2 2 0 0 0-1.788 0l-3.659 1.83A1 1 0 0 1 3 19.381V6.618a1 1 0 0 1 .553-.894l4.553-2.277a2 2 0 0 1 1.788 0z"></path><path d="M15 5.764v15"></path><path d="M9 3.236v15"></path></svg></span>
+<h3 style="font-family:Newsreader,Georgia,serif;font-weight:600;font-size:22px;color:#1a3a24;margin:0 0 8px">Svampkarta</h3>
+<p style="color:#3d4c41;font-size:16px;margin:0">Riktiga fynd och lovande områden på karta och satellitbild — för hela Sverige och Norge.</p>
+</div>
+<div style="background:#ffffff;border-radius:26px;padding:28px">
+<span style="display:grid;place-items:center;width:46px;height:46px;border-radius:999px;background:#fdf1d3;color:#8a5f06;margin-bottom:18px"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="scan-search" style="width:22px;height:22px" class="lucide lucide-scan-search"><path d="M3 7V5a2 2 0 0 1 2-2h2"></path><path d="M17 3h2a2 2 0 0 1 2 2v2"></path><path d="M21 17v2a2 2 0 0 1-2 2h-2"></path><path d="M7 21H5a2 2 0 0 1-2-2v-2"></path><circle cx="12" cy="12" r="3"></circle><path d="m16 16-1.9-1.9"></path></svg></span>
+<h3 style="font-family:Newsreader,Georgia,serif;font-weight:600;font-size:22px;color:#1a3a24;margin:0 0 8px">AI-identifiering</h3>
+<p style="color:#3d4c41;font-size:16px;margin:0">Bild in, artförslag ut — med giftmarkering och förväxlingsvarningar varje gång.</p>
+</div>
+<div style="background:#ffffff;border-radius:26px;padding:28px">
+<span style="display:grid;place-items:center;width:46px;height:46px;border-radius:999px;background:#e3ecdc;color:#2d5238;margin-bottom:18px"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="calendar-days" style="width:22px;height:22px" class="lucide lucide-calendar-days"><path d="M8 2v4"></path><path d="M16 2v4"></path><rect width="18" height="18" x="3" y="4" rx="2"></rect><path d="M3 10h18"></path><path d="M8 14h.01"></path><path d="M12 14h.01"></path><path d="M16 14h.01"></path><path d="M8 18h.01"></path><path d="M12 18h.01"></path><path d="M16 18h.01"></path></svg></span>
+<h3 style="font-family:Newsreader,Georgia,serif;font-weight:600;font-size:22px;color:#1a3a24;margin:0 0 8px">Säsongskalender</h3>
+<p style="color:#3d4c41;font-size:16px;margin:0">Vilka arter är i säsong just nu, justerat för breddgraden du står på.</p>
+</div>
+<div style="background:#ffffff;border-radius:26px;padding:28px">
+<span style="display:grid;place-items:center;width:46px;height:46px;border-radius:999px;background:#e3ecdc;color:#2d5238;margin-bottom:18px"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="book-open" style="width:22px;height:22px" class="lucide lucide-book-open"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path></svg></span>
+<h3 style="font-family:Newsreader,Georgia,serif;font-weight:600;font-size:22px;color:#1a3a24;margin:0 0 8px">Artbibliotek</h3>
+<p style="color:#3d4c41;font-size:16px;margin:0">72 svenska och norska arter med bilder, kännetecken och vad de kan förväxlas med.</p>
+</div>
+<div style="background:#ffffff;border-radius:26px;padding:28px">
+<span style="display:grid;place-items:center;width:46px;height:46px;border-radius:999px;background:#fdf1d3;color:#8a5f06;margin-bottom:18px"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="cloud-off" style="width:22px;height:22px" class="lucide lucide-cloud-off"><path d="m2 2 20 20"></path><path d="M5.782 5.782A7 7 0 0 0 9 19h8.5a4.5 4.5 0 0 0 1.307-.193"></path><path d="M21.532 16.5A4.5 4.5 0 0 0 17.5 10h-1.79A7.008 7.008 0 0 0 10 5.07"></path></svg></span>
+<h3 style="font-family:Newsreader,Georgia,serif;font-weight:600;font-size:22px;color:#1a3a24;margin:0 0 8px">Offlinekarta</h3>
+<p style="color:#3d4c41;font-size:16px;margin:0">Ladda ner kartområdet före turen och använd det utan täckning. <span style="color:#8a5f06;font-weight:600">Premium</span></p>
+</div>
+</div>
+</div>
+</section>
+
+<section style="max-width:1180px;margin:0 auto;padding:clamp(64px,8vw,112px) clamp(20px,5vw,56px)">
+<h2 style="font-family:Newsreader,Georgia,serif;font-weight:500;font-size:clamp(32px,4.2vw,52px);line-height:1.08;letter-spacing:-0.02em;color:#1a3a24;margin:0 0 14px">Se appen i praktiken</h2>
+<p style="font-size:19px;color:#3d4c41;max-width:46ch;margin:0 0 clamp(44px,6vw,72px)">Kartan och identifieringen, som de ser ut i mobilen.</p>
+<div class="mycelet-split" style="display:grid;grid-template-columns:1fr 1fr;gap:clamp(28px,4vw,64px);align-items:center;margin-bottom:clamp(56px,7vw,96px)">
+<div>
+<p style="font-size:13px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:#8a5f06;margin:0 0 12px">Svampkarta</p>
+<h3 style="font-family:Newsreader,Georgia,serif;font-weight:500;font-size:clamp(26px,3.2vw,38px);line-height:1.12;letter-spacing:-0.02em;color:#1a3a24;margin:0 0 14px">Hundra år av svampfynd, på en karta</h3>
+<p style="font-size:18px;color:#3d4c41;margin:0 0 14px">Varje markering är ett dokumenterat fynd från GBIF (bl.a. Artportalen), inlagt på kartan. Filtrera på art, se lovande områden med rätt skogstyp — och planera turen i god tid.</p>
+<p style="font-size:17px;color:#3d4c41;margin:0">Mätaren längst ner på kartan är ärlig även när svaret inte lockar: ”10/100 — svaga förhållanden” betyder att du bör vänta några dagar.</p>
+</div>
+<div style="justify-self:center;max-width:330px;width:100%">
+<div style="border-radius:46px;padding:11px;background:#1a3a24;box-shadow:0 24px 60px rgba(26,58,36,0.22)">
+<div style="border-radius:36px;overflow:hidden;background:#1a3a24">
+<div style="display:flex;align-items:center;justify-content:space-between;background:#1a3a24;color:#ffffff;padding:9px 20px 5px;font-size:12px;font-weight:600">
+<span>09:41</span>
+<span style="display:flex;align-items:center;gap:5px"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="wifi" style="width:13px;height:13px" class="lucide lucide-wifi"><path d="M12 20h.01"></path><path d="M2 8.82a15 15 0 0 1 20 0"></path><path d="M5 12.859a10 10 0 0 1 14 0"></path><path d="M8.5 16.429a5 5 0 0 1 7 0"></path></svg><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="battery-full" style="width:17px;height:17px" class="lucide lucide-battery-full"><rect width="16" height="10" x="2" y="7" rx="2" ry="2"></rect><line x1="22" x2="22" y1="11" y2="13"></line><line x1="6" x2="6" y1="11" y2="13"></line><line x1="10" x2="10" y1="11" y2="13"></line><line x1="14" x2="14" y1="11" y2="13"></line></svg></span>
+</div>
+<img src="/landing/soppkart.sv.jpg" alt="Svampkartan i Mycelet med fynd och lovande platser" style="width:100%;display:block">
+</div>
+</div>
+</div>
+</div>
+<div class="mycelet-split" style="display:grid;grid-template-columns:1fr 1fr;gap:clamp(28px,4vw,64px);align-items:center">
+<div style="justify-self:center;max-width:330px;width:100%">
+<div style="border-radius:46px;padding:11px;background:#1a3a24;box-shadow:0 24px 60px rgba(26,58,36,0.22)">
+<div style="border-radius:36px;overflow:hidden;background:#1a3a24">
+<div style="display:flex;align-items:center;justify-content:space-between;background:#1a3a24;color:#ffffff;padding:9px 20px 5px;font-size:12px;font-weight:600">
+<span>09:41</span>
+<span style="display:flex;align-items:center;gap:5px"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="wifi" style="width:13px;height:13px" class="lucide lucide-wifi"><path d="M12 20h.01"></path><path d="M2 8.82a15 15 0 0 1 20 0"></path><path d="M5 12.859a10 10 0 0 1 14 0"></path><path d="M8.5 16.429a5 5 0 0 1 7 0"></path></svg><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="battery-full" style="width:17px;height:17px" class="lucide lucide-battery-full"><rect width="16" height="10" x="2" y="7" rx="2" ry="2"></rect><line x1="22" x2="22" y1="11" y2="13"></line><line x1="6" x2="6" y1="11" y2="13"></line><line x1="10" x2="10" y1="11" y2="13"></line><line x1="14" x2="14" y1="11" y2="13"></line></svg></span>
+</div>
+<img src="/landing/ai-side.sv.jpg" alt="AI-identifiering i Mycelet med säkerhetsvarning" style="width:100%;display:block">
+</div>
+</div>
+</div>
+<div>
+<p style="font-size:13px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:#8a5f06;margin:0 0 12px">AI-identifiering</p>
+<h3 style="font-family:Newsreader,Georgia,serif;font-weight:500;font-size:clamp(26px,3.2vw,38px);line-height:1.12;letter-spacing:-0.02em;color:#1a3a24;margin:0 0 14px">Varningen först, förslaget sedan</h3>
+<p style="font-size:18px;color:#3d4c41;margin:0 0 14px">Ta en bild, få artförslag — och se direkt vilka giftiga arter fyndet kan förväxlas med. Säker artbestämning kan kräva lukt, konsistens och växtplats, inte bara en bild, och det säger appen tydligt.</p>
+<p style="font-size:17px;color:#3d4c41;margin:0">Är du osäker: låt en svampkonsulent titta på fyndet, eller ring Giftinformationscentralen på <a href="tel:+46104566700">010-456 6700</a> — vid akut fara ring <a href="tel:112">112</a>.</p>
+</div>
+</div>
+<div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-top:clamp(44px,5vw,72px);padding-top:clamp(28px,3vw,40px);border-top:1px solid #ddd5c2">
+<span style="font-size:13px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:#8a5f06;margin-right:8px">I säsong nu</span>
+<span style="background:#ffffff;border-radius:999px;padding:8px 16px;font-size:16px;font-weight:500">Kantarell</span>
+<span style="background:#ffffff;border-radius:999px;padding:8px 16px;font-size:16px;font-weight:500">Karl Johan</span>
+<span style="background:#ffffff;border-radius:999px;padding:8px 16px;font-size:16px;font-weight:500">Tegelsopp</span>
+<span style="background:#ffffff;border-radius:999px;padding:8px 16px;font-size:16px;font-weight:500">Sandsopp</span>
+<span style="color:#6b7566;font-size:16px">— kalendern anpassar sig efter din breddgrad</span>
+</div>
+</section>
+
+<section id="sakerhet" style="background:#1a3a24;color:#f0ece0">
+<div class="mycelet-split" style="display:grid;grid-template-columns:0.9fr 1.1fr;gap:clamp(28px,4vw,64px);max-width:1180px;margin:0 auto;padding:clamp(56px,7vw,96px) clamp(20px,5vw,56px)">
+<div>
+<span style="display:grid;place-items:center;width:52px;height:52px;border-radius:999px;background:rgba(251,191,36,0.16);color:#fbbf24;margin-bottom:20px"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="shield-alert" style="width:26px;height:26px" class="lucide lucide-shield-alert"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"></path><path d="M12 8v4"></path><path d="M12 16h.01"></path></svg></span>
+<h2 style="font-family:Newsreader,Georgia,serif;font-weight:500;font-size:clamp(30px,3.6vw,44px);line-height:1.1;letter-spacing:-0.02em;color:#f5f1e8;margin:0">Ät aldrig svamp du inte är 100 % säker på</h2>
+</div>
+<div style="align-self:center">
+<p style="font-size:19px;line-height:1.6;color:#dfe4d5;margin:0 0 16px">Mycelet är ett hjälpmedel, inte ett facit. AI-förslag måste alltid dubbelkollas, och appen visar dig alltid de farliga förväxlingsarterna innan du drar en slutsats.</p>
+<p style="font-size:19px;line-height:1.6;color:#dfe4d5;margin:0 0 22px">Är du osäker, låt en svampkonsulent titta på fyndet. Lokala svampföreningar och svampkonsulenter arrangerar svamputställningar och svampvisningar under säsongen, där du kan få hjälp att artbestämma. Svampkonsulenternas Riksförbund samlar landets svampkonsulenter.</p>
+<a href="https://svampkonsulent.se" style="display:inline-flex;align-items:center;gap:8px;color:#fbbf24;text-decoration:none;font-weight:600" class="h9">Hitta en svampkonsulent<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="arrow-up-right" style="width:18px;height:18px" class="lucide lucide-arrow-up-right"><path d="M7 7h10v10"></path><path d="M7 17 17 7"></path></svg></a>
+</div>
+</div>
+</section>
+
+<section id="priser" style="max-width:1180px;margin:0 auto;padding:clamp(64px,8vw,112px) clamp(20px,5vw,56px)">
+<h2 style="font-family:Newsreader,Georgia,serif;font-weight:500;font-size:clamp(32px,4.2vw,52px);line-height:1.08;letter-spacing:-0.02em;color:#1a3a24;margin:0 0 14px">Börja gratis</h2>
+<p style="font-size:19px;color:#3d4c41;max-width:48ch;margin:0 0 clamp(36px,5vw,56px)">Säsongspasset kostar mindre än en korg kantareller. Avsluta när du vill.</p>
+<div class="mycelet-3" style="display:grid;grid-template-columns:repeat(3,1fr);gap:clamp(18px,2vw,26px);align-items:start">
+<div style="background:#ffffff;border-radius:30px;padding:32px">
+<h3 style="font-family:Newsreader,Georgia,serif;font-weight:600;font-size:24px;color:#1a3a24;margin:0 0 6px">Gratis</h3>
+<p style="font-family:Newsreader,Georgia,serif;font-size:44px;line-height:1;color:#1a3a24;margin:0 0 22px">0 kr</p>
+<ul style="list-style:none;padding:0;margin:0 0 26px;display:grid;gap:11px;color:#3d4c41;font-size:16px">
+<li style="display:flex;gap:10px"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="check" style="width:18px;height:18px;color:#2d5238;flex:none;margin-top:3px" class="lucide lucide-check"><path d="M20 6 9 17l-5-5"></path></svg>5 AI-identifieringar per dygn</li>
+<li style="display:flex;gap:10px"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="check" style="width:18px;height:18px;color:#2d5238;flex:none;margin-top:3px" class="lucide lucide-check"><path d="M20 6 9 17l-5-5"></path></svg>Svampkarta och svampprognos</li>
+<li style="display:flex;gap:10px"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="check" style="width:18px;height:18px;color:#2d5238;flex:none;margin-top:3px" class="lucide lucide-check"><path d="M20 6 9 17l-5-5"></path></svg>Säsongskalender och artbibliotek</li>
+<li style="display:flex;gap:10px"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="check" style="width:18px;height:18px;color:#2d5238;flex:none;margin-top:3px" class="lucide lucide-check"><path d="M20 6 9 17l-5-5"></path></svg>Forum</li>
+</ul>
+<a href="/auth/register" style="display:block;text-align:center;border:1.5px solid #cfc7b2;color:#1a3a24;text-decoration:none;padding:14px;border-radius:999px;font-weight:600" class="h10">Prova gratis</a>
+</div>
+<div style="background:#ffffff;border-radius:30px;padding:32px;border:1.5px solid #e0d9c6">
+<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+<h3 style="font-family:Newsreader,Georgia,serif;font-weight:600;font-size:24px;color:#1a3a24;margin:0">Premium</h3>
+
+</div>
+<p style="font-family:Newsreader,Georgia,serif;font-size:44px;line-height:1;color:#1a3a24;margin:0 0 4px">79 kr</p>
+<p style="color:#6b7566;font-size:15px;margin:0 0 22px">per månad (NOK)</p>
+<ul style="list-style:none;padding:0;margin:0 0 26px;display:grid;gap:11px;color:#3d4c41;font-size:16px">
+<li style="display:flex;gap:10px"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="check" style="width:18px;height:18px;color:#2d5238;flex:none;margin-top:3px" class="lucide lucide-check"><path d="M20 6 9 17l-5-5"></path></svg>Obegränsad AI-identifiering</li>
+<li style="display:flex;gap:10px"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="check" style="width:18px;height:18px;color:#2d5238;flex:none;margin-top:3px" class="lucide lucide-check"><path d="M20 6 9 17l-5-5"></path></svg>Full prognos med förklaring</li>
+<li style="display:flex;gap:10px"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="check" style="width:18px;height:18px;color:#2d5238;flex:none;margin-top:3px" class="lucide lucide-check"><path d="M20 6 9 17l-5-5"></path></svg>Offlinekarta</li>
+<li style="display:flex;gap:10px"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="check" style="width:18px;height:18px;color:#2d5238;flex:none;margin-top:3px" class="lucide lucide-check"><path d="M20 6 9 17l-5-5"></path></svg>Allt i gratisplanen</li>
+</ul>
+<a href="/auth/register" style="display:block;text-align:center;background:#1a3a24;color:#f5f1e8;text-decoration:none;padding:14px;border-radius:999px;font-weight:600" class="h11">Välj Premium</a>
+</div>
+<div style="background:#1a3a24;color:#f0ece0;border-radius:30px;padding:32px">
+<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+<h3 style="font-family:Newsreader,Georgia,serif;font-weight:600;font-size:24px;color:#f5f1e8;margin:0">Säsongspass</h3>
+<span style="background:#fbbf24;color:#1a3a24;font-size:12px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;white-space:nowrap;padding:5px 11px;border-radius:999px">Mest prisvärt</span>
+</div>
+<p style="font-family:Newsreader,Georgia,serif;font-size:44px;line-height:1;color:#fbbf24;margin:0 0 4px">249 kr</p>
+<p style="color:#a9b3a3;font-size:15px;margin:0 0 22px">per år (NOK) — mindre än en korg kantareller</p>
+<ul style="list-style:none;padding:0;margin:0 0 26px;display:grid;gap:11px;color:#dfe4d5;font-size:16px">
+<li style="display:flex;gap:10px"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="check" style="width:18px;height:18px;color:#fbbf24;flex:none;margin-top:3px" class="lucide lucide-check"><path d="M20 6 9 17l-5-5"></path></svg>Allt i Premium</li>
+<li style="display:flex;gap:10px"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="check" style="width:18px;height:18px;color:#fbbf24;flex:none;margin-top:3px" class="lucide lucide-check"><path d="M20 6 9 17l-5-5"></path></svg>Hela säsongen betald på en gång</li>
+<li style="display:flex;gap:10px"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="check" style="width:18px;height:18px;color:#fbbf24;flex:none;margin-top:3px" class="lucide lucide-check"><path d="M20 6 9 17l-5-5"></path></svg>Säker betalning</li>
+<li style="display:flex;gap:10px"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="check" style="width:18px;height:18px;color:#fbbf24;flex:none;margin-top:3px" class="lucide lucide-check"><path d="M20 6 9 17l-5-5"></path></svg>Avsluta när du vill</li>
+</ul>
+<a href="/auth/register" style="display:block;text-align:center;background:#fbbf24;color:#1a3a24;text-decoration:none;padding:14px;border-radius:999px;font-weight:700" class="h12">Köp säsongspass</a>
+</div>
+</div>
+<p style="font-size:14px;color:#6b7566;margin:18px 0 0">Priserna anges i norska kronor (NOK). Betalar du med svenskt kort räknar din bank om beloppet till svenska kronor.</p>
+</section>
+
+<section id="plocktips" style="max-width:1180px;margin:0 auto;padding:clamp(64px,8vw,112px) clamp(20px,5vw,56px)"><span id="laer"></span>
+<h2 style="font-family:Newsreader,Georgia,serif;font-weight:500;font-size:clamp(32px,4.2vw,52px);line-height:1.08;letter-spacing:-0.02em;color:#1a3a24;margin:0 0 14px">Lär känna skogen, inte bara appen</h2>
+<p style="font-size:19px;color:#3d4c41;max-width:52ch;margin:0 0 clamp(36px,5vw,56px)">Den bästa svampplockaren läser terrängen själv. Vi skriver om hur, och appen kommer ihåg det åt dig.</p>
+<div class="mycelet-split" style="display:grid;grid-template-columns:1fr 1fr;gap:clamp(32px,4vw,64px);align-items:start">
+<div>
+<h3 style="font-family:Newsreader,Georgia,serif;font-weight:500;font-size:clamp(24px,2.8vw,32px);line-height:1.14;color:#1a3a24;margin:0 0 8px">Vilken skog ger vilken svamp</h3>
+<p style="font-size:17px;color:#3d4c41;margin:0 0 22px">De flesta matsvampar lever i samspel med träd, så skogstypen avgör mycket. Det är utgångspunkten appen använder när den pekar ut lovande områden.</p>
+<table style="width:100%;border-collapse:collapse;font-size:16px">
+<thead><tr>
+<th style="text-align:left;font-family:Figtree,system-ui,sans-serif;font-size:12px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#6b7566;padding:0 0 10px">Skogstyp</th>
+<th style="text-align:left;font-family:Figtree,system-ui,sans-serif;font-size:12px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#6b7566;padding:0 0 10px">Leta efter</th>
+</tr></thead>
+<tbody>
+<tr><td style="padding:13px 16px 13px 0;border-top:1px solid #ddd5c2;font-weight:600;color:#1a3a24;white-space:nowrap">Gammal granskog</td><td style="padding:13px 0;border-top:1px solid #ddd5c2;color:#3d4c41">Trattkantarell, fårticka, blek taggsvamp, Karl Johan</td></tr>
+<tr><td style="padding:13px 16px 13px 0;border-top:1px solid #ddd5c2;font-weight:600;color:#1a3a24;white-space:nowrap">Björk- och lövskog</td><td style="padding:13px 0;border-top:1px solid #ddd5c2;color:#3d4c41">Kantarell, tegelsopp, rimskivling, milda kremlor</td></tr>
+<tr><td style="padding:13px 16px 13px 0;border-top:1px solid #ddd5c2;font-weight:600;color:#1a3a24;white-space:nowrap">Tallskog på sandjord</td><td style="padding:13px 0;border-top:1px solid #ddd5c2;color:#3d4c41">Sandsopp, rödbrun stensopp, tallblodriska</td></tr>
+<tr><td style="padding:13px 16px 13px 0;border-top:1px solid #ddd5c2;font-weight:600;color:#1a3a24;white-space:nowrap">Betesmark och park</td><td style="padding:13px 0;border-top:1px solid #ddd5c2;color:#3d4c41">Champinjoner, fjällig bläcksvamp</td></tr>
+</tbody>
+</table>
+<p style="font-size:15px;color:#6b7566;margin:16px 0 0">Mossa och fukt är goda tecken. Torr, hög ljung är sällan värd tiden.</p>
+</div>
+<div style="display:grid;gap:14px">
+<a href="/sanketips/les-terrenget" style="display:block;background:#ffffff;border-radius:26px;padding:26px 28px;text-decoration:none;color:inherit" class="h13">
+<p style="font-size:12px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:#8a5f06;margin:0 0 10px">Plocktips · 6 min · på norska</p>
+<h4 style="font-family:Newsreader,Georgia,serif;font-weight:600;font-size:22px;line-height:1.2;color:#1a3a24;margin:0 0 8px">Så läser du terrängen innan du går</h4>
+<p style="font-size:16px;color:#3d4c41;margin:0">Skogens ålder, mossa, skuggsidor och gamla skogsvägar — tecknen som skiljer en tom tur från en full korg.</p>
+</a>
+<a href="/sanketips/fem-forvekslinger" style="display:block;background:#ffffff;border-radius:26px;padding:26px 28px;text-decoration:none;color:inherit" class="h14">
+<p style="font-size:12px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:#8a5f06;margin:0 0 10px">Trygg plockning · 8 min · på norska</p>
+<h4 style="font-family:Newsreader,Georgia,serif;font-weight:600;font-size:22px;line-height:1.2;color:#1a3a24;margin:0 0 8px">De fem förväxlingarna nybörjare gör</h4>
+<p style="font-size:16px;color:#3d4c41;margin:0">Vad du måste titta på under hatten, och vilka arter du bör lära dig känna igen innan du plockar dem du vill äta.</p>
+</a>
+<a href="/sanketips/sopp-etter-regn" style="display:block;background:#ffffff;border-radius:26px;padding:26px 28px;text-decoration:none;color:inherit" class="h15">
+<p style="font-size:12px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:#8a5f06;margin:0 0 10px">Väder och tajming · 5 min · på norska</p>
+<h4 style="font-family:Newsreader,Georgia,serif;font-weight:600;font-size:22px;line-height:1.2;color:#1a3a24;margin:0 0 8px">Hur länge efter regnet kommer svampen?</h4>
+<p style="font-size:16px;color:#3d4c41;margin:0">Om fukt, temperatur och de få dagar som skiljer ”för tidigt” från ”för sent” — grunden för prognosen i appen.</p>
+</a>
+</div>
+</div>
+</section>
+
+<section id="faq" style="max-width:900px;margin:0 auto;padding:clamp(64px,8vw,112px) clamp(20px,5vw,56px)">
+<h2 style="font-family:Newsreader,Georgia,serif;font-weight:500;font-size:clamp(32px,4.2vw,52px);line-height:1.08;letter-spacing:-0.02em;color:#1a3a24;margin:0 0 clamp(28px,4vw,44px)">Vanliga frågor</h2>
+<div style="display:grid;gap:12px">
+<details style="background:#ffffff;border-radius:22px;padding:22px 26px">
+<summary style="display:flex;align-items:center;gap:16px;font-family:Newsreader,Georgia,serif;font-size:21px;font-weight:600;color:#1a3a24">Är appen gratis?<span class="mycelet-plus" style="margin-left:auto;color:#8a5f06;transition:transform 0.2s;flex:none"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="plus" style="width:20px;height:20px" class="lucide lucide-plus"><path d="M5 12h14"></path><path d="M12 5v14"></path></svg></span></summary>
+<p style="color:#3d4c41;margin:14px 0 0">Ja. Gratisplanen ger dig svampkarta, svampprognos, säsongskalender, artbibliotek och fem AI-identifieringar per dygn. Premium och säsongspass låser upp obegränsad AI, full prognos med förklaring och offlinekarta.</p>
+</details>
+<details style="background:#ffffff;border-radius:22px;padding:22px 26px">
+<summary style="display:flex;align-items:center;gap:16px;font-family:Newsreader,Georgia,serif;font-size:21px;font-weight:600;color:#1a3a24">Hur vet ni var svamp växer?<span class="mycelet-plus" style="margin-left:auto;color:#8a5f06;transition:transform 0.2s;flex:none"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="plus" style="width:20px;height:20px" class="lucide lucide-plus"><path d="M5 12h14"></path><path d="M12 5v14"></path></svg></span></summary>
+<p style="color:#3d4c41;margin:14px 0 0">Det gör vi inte — och vi låtsas inte heller. Kartan visar var svamp faktiskt <em>har</em> hittats: över 333 000 dokumenterade observationer från GBIF (bl.a. Artportalen), insamlade under mer än hundra år. Ovanpå det lägger vi skogstyp från CORINE och väderhistorik från SMHI, så att du ser vilken skog och vilken dag som är värd turen.</p>
+</details>
+<details style="background:#ffffff;border-radius:22px;padding:22px 26px">
+<summary style="display:flex;align-items:center;gap:16px;font-family:Newsreader,Georgia,serif;font-size:21px;font-weight:600;color:#1a3a24">Fungerar den i hela Sverige?<span class="mycelet-plus" style="margin-left:auto;color:#8a5f06;transition:transform 0.2s;flex:none"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="plus" style="width:20px;height:20px" class="lucide lucide-plus"><path d="M5 12h14"></path><path d="M12 5v14"></path></svg></span></summary>
+<p style="color:#3d4c41;margin:14px 0 0">Ja. Karta, prognos och artbibliotek täcker hela Sverige, och prognosen hämtar väderdata från SMHI. Appen finns även på norska och täcker Norge.</p>
+</details>
+<details style="background:#ffffff;border-radius:22px;padding:22px 26px">
+<summary style="display:flex;align-items:center;gap:16px;font-family:Newsreader,Georgia,serif;font-size:21px;font-weight:600;color:#1a3a24">Kan jag lita på AI-identifieringen?<span class="mycelet-plus" style="margin-left:auto;color:#8a5f06;transition:transform 0.2s;flex:none"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="plus" style="width:20px;height:20px" class="lucide lucide-plus"><path d="M5 12h14"></path><path d="M12 5v14"></path></svg></span></summary>
+<p style="color:#3d4c41;margin:14px 0 0">Aldrig rakt av. Förslagen är en utgångspunkt som du själv måste verifiera mot kännetecknen i artbiblioteket, och vi visar alltid vilka giftiga arter fyndet kan förväxlas med. Är du osäker: låt svampen stå, eller låt en svampkonsulent titta på den.</p>
+</details>
+<details style="background:#ffffff;border-radius:22px;padding:22px 26px">
+<summary style="display:flex;align-items:center;gap:16px;font-family:Newsreader,Georgia,serif;font-size:21px;font-weight:600;color:#1a3a24">Fungerar den utan täckning?<span class="mycelet-plus" style="margin-left:auto;color:#8a5f06;transition:transform 0.2s;flex:none"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="plus" style="width:20px;height:20px" class="lucide lucide-plus"><path d="M5 12h14"></path><path d="M12 5v14"></path></svg></span></summary>
+<p style="color:#3d4c41;margin:14px 0 0">Med Premium laddar du ner kartområdena du ska vandra i på förhand, och har dem tillgängliga utan nät. AI-identifieringen kräver uppkoppling.</p>
+</details>
+<details style="background:#ffffff;border-radius:22px;padding:22px 26px">
+<summary style="display:flex;align-items:center;gap:16px;font-family:Newsreader,Georgia,serif;font-size:21px;font-weight:600;color:#1a3a24">När kommer iOS-appen?<span class="mycelet-plus" style="margin-left:auto;color:#8a5f06;transition:transform 0.2s;flex:none"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="plus" style="width:20px;height:20px" class="lucide lucide-plus"><path d="M5 12h14"></path><path d="M12 5v14"></path></svg></span></summary>
+<p style="color:#3d4c41;margin:14px 0 0">Snart — appen granskas just nu av Apple. Under tiden använder du Mycelet i webbläsaren på mycelet.com, även i mobilen.</p>
+</details>
+</div>
+</section>
+
+<section style="background:#ece5d6">
+<div style="max-width:1180px;margin:0 auto;padding:clamp(56px,7vw,96px) clamp(20px,5vw,56px);text-align:center">
+<h2 style="font-family:Newsreader,Georgia,serif;font-weight:500;font-size:clamp(32px,4.6vw,58px);line-height:1.05;letter-spacing:-0.025em;color:#1a3a24;margin:0 auto 18px;max-width:24ch">Säsongen väntar inte på dig</h2>
+<p style="font-size:19px;color:#3d4c41;margin:0 auto 30px;max-width:44ch">Kolla läget där du bor — det tar tio sekunder och kostar ingenting.</p>
+<a href="/auth/register" style="display:inline-flex;align-items:center;gap:9px;background:#1a3a24;color:#f5f1e8;text-decoration:none;padding:17px 32px;border-radius:999px;font-size:18px;font-weight:600" class="h16">Prova Mycelet gratis<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="arrow-right" style="width:18px;height:18px" class="lucide lucide-arrow-right"><path d="M5 12h14"></path><path d="m12 5 7 7-7 7"></path></svg></a>
+
+</div>
+</section>
+
+<footer style="background:#12251a;color:#c2cbb7">
+<div class="mycelet-split" style="display:grid;grid-template-columns:1.2fr 0.8fr;gap:clamp(28px,4vw,56px);max-width:1180px;margin:0 auto;padding:clamp(44px,5vw,72px) clamp(20px,5vw,56px)">
+<div>
+<p style="display:flex;align-items:center;gap:10px;margin:0 0 14px"><span style="width:32px;height:32px;border-radius:999px;background:#fbbf24;display:grid;place-items:center;color:#1a3a24"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="sprout" style="width:18px;height:18px" class="lucide lucide-sprout"><path d="M7 20h10"></path><path d="M10 20c5.5-2.5.8-6.4 3-10"></path><path d="M9.5 9.4c1.1.8 1.8 2.2 2.3 3.7-2 .4-3.5.4-4.8-.3-1.2-.6-2.3-1.9-3-4.2 2.8-.5 4.4 0 5.5.8z"></path><path d="M14.1 6a7 7 0 0 0-1.1 4c1.9-.1 3.3-.6 4.3-1.4 1-1 1.6-2.3 1.7-4.6-2.7.1-4 1-4.9 2z"></path></svg></span><span style="font-family:Newsreader,Georgia,serif;font-size:23px;font-weight:600;color:#f5f1e8">Mycelet</span></p>
+<p style="font-size:15px;max-width:46ch;margin:0 0 14px">Svampplockning byggd på öppna data. <strong style="color:#f0ece0;font-weight:600">Datakällor:</strong> SMHI · Copernicus/CORINE · OpenStreetMap · GBIF/Artportalen — 333 000+ svampfynd.</p>
+<p style="font-size:15px;margin:0;color:#8b9684">mycelet.com · Sverige och Norge</p>
+</div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:26px 32px;align-content:start;font-size:16px">
+<div style="display:grid;gap:10px;align-content:start">
+<p style="font-size:12px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:#8b9684;margin:0 0 2px">Produkt</p>
+<a href="/auth/register" style="color:#dfe4d5;text-decoration:none" class="h19">Öppna webbappen</a>
+<a href="#priser" style="color:#dfe4d5;text-decoration:none" class="h20">Priser</a>
+<a href="#funktioner" style="color:#dfe4d5;text-decoration:none" class="h21">Funktioner</a>
+<a href="/datakilder" style="color:#dfe4d5;text-decoration:none" class="h22">Datakällor</a>
+</div>
+<div style="display:grid;gap:10px;align-content:start">
+<p style="font-size:12px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:#8b9684;margin:0 0 2px">Hjälp och villkor</p>
+<a href="#faq" style="color:#dfe4d5;text-decoration:none" class="h23">Frågor och svar</a>
+<a href="mailto:post@mycelet.com" style="color:#dfe4d5;text-decoration:none" class="h24">post@mycelet.com</a>
+<a href="/personvern" style="color:#dfe4d5;text-decoration:none" class="h25">Integritetspolicy</a>
+<a href="/kjopsvilkar" style="color:#dfe4d5;text-decoration:none" class="h26">Köpvillkor</a>
+</div>
+</div>
+</div>
+<div style="max-width:1180px;margin:0 auto;padding:0 clamp(20px,5vw,56px) clamp(32px,4vw,48px);display:flex;flex-wrap:wrap;align-items:center;gap:10px 18px;border-top:1px solid rgba(223,228,213,0.14);padding-top:22px;font-size:15px">
+<span style="color:#f0ece0;font-weight:600">Svenska</span>
+<a href="/?lang=nb" style="color:#8b9684;text-decoration:none">Norsk</a>
+<span style="color:#8b9684;margin-left:auto">© 2026 Mycelet</span>
+</div>
+</footer>
+
+</div>
+
+
+
+</body></html>

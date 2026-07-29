@@ -1,23 +1,24 @@
 # Neste økt — start her
 
-> Skrevet 2026-07-29. Lim kickoff-linja nederst inn i et nytt Claude Code-vindu.
+> Skrevet 2026-07-29, oppdatert samme dag etter metadata-økta. Lim kickoff-linja nederst inn i et nytt Claude Code-vindu.
 
 ## Hvor vi står
 
-**Alt teknisk for App Store-lansering er ferdig og live.** Gjenstår: ett sandbox-testkjøp, metadata, arkivering, innsending.
+**Alt teknisk OG all metadata i App Store Connect er ferdig.** Gjenstår: sandbox-testkjøp bekreftet, App Review-info (demo-bruker), IAP-capability, arkivering, innsending.
 
 | Område | Status |
 |---|---|
 | Web-appen (mycelet.com) | ✅ Live |
 | Landingsside for utloggede + 3 sanketips-artikler | ✅ Live (PR #92–#95) |
-| Apple: avtaler, bank, skatt, abonnementer (79 kr/mnd + 249 kr/år) | ✅ Alle Active |
-| RevenueCat: nøkler, produkter, entitlement `premium`, offering, webhook | ✅ Konfigurert + live-verifisert |
+| Apple: avtaler, bank, skatt | ✅ Alle Active |
+| Abonnementer i ASC (79 kr/mnd + 249 kr/år) | ✅ KOMPLETTE 2026-07-29: gruppe-lokalisering «Mycelet Premium» (nb), review-screenshots på begge, årlig fikk «1 Year Upfront»-availability alle land (249 NOK/SEK). Var årsaken til at kjøpsknappene manglet i appen — produktene var «Prepare for Submission» uten metadata → StoreKit leverte 0 produkter |
+| RevenueCat: nøkler, produkter, entitlement `premium`, offering, webhook | ✅ Konfigurert + verifisert via API (offering `default` med $rc_monthly/$rc_annual) |
 | IAP-koden i appen (kjøp, gjenopprett, webhook → `billing_subscriptions`) | ✅ Deployet (PR #90/#91) |
-| Appen installert på Sindres iPhone (dev-bygg) | ✅ |
-| App Store-skjermbilder | ✅ `docs/app-store-screenshots/` |
-| **Sandbox-testkjøp** | ❌ **neste steg** |
-| Metadata + App Privacy i App Store Connect | ❌ |
-| Xcode-arkiv → innsending | ❌ |
+| Appen installert på Sindres iPhone (dev-bygg m/ RevenueCat-plugin) | ✅ (bygget 28.07 kl 22:51, verifisert innhold) |
+| **ASC-metadata (2026-07-29, gjort av Claude i browser-panelet):** undertittel «Soppkart, AI og sesongvarsler», kategorier Lifestyle + Food & Drink, aldersvurdering **13+** (ærlige svar på nye sosiale-medier-spørsmål: UGC ja, Social Media ja, u13-sperre nei), pris gratis (basisland Norge), tilgjengelighet Norge + Sverige, beskrivelse/nøkkelord/promo/URL-er/copyright (NB: 🍄-emoji avvist av Apple-validering, fjernet), App Privacy publisert (6 datatyper, App Functionality + linked, ingen tracking), 6 skjermbilder i 6,9"-slot i riktig rekkefølge (kart, soppforhold, AI, lovende, kalender, bibliotek) | ✅ |
+| **Sandbox-testkjøp** | ⏳ venter på Apple-propagering av produktmetadata (kan ta timer); prøv igjen med force-quit → Priser |
+| App Review-info: demo-bruker m/premium, kontaktinfo, notater (engelsk tekst klar i app-store-metadata.md) | ❌ |
+| Xcode: In-App Purchase-capability på App-target → arkiv → innsending | ❌ |
 
 ## 1. Sandbox-kjøpet (2 min, på iPhonen)
 
