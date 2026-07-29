@@ -1,4 +1,10 @@
 {
+  "InstallPrompt": {
+    "title": "Installer Mycelet",
+    "subtitle": "Legg appen på hjemskjermen for rask tilgang.",
+    "install": "Installer",
+    "close": "Lukk"
+  },
   "Common": {
     "appName": "Mycelet",
     "language": "Språk",
@@ -444,6 +450,7 @@
   },
   "Personvern": {
     "title": "Personvernerklæring",
+    "lastUpdatedDate": "29. juli 2026",
     "lastUpdatedIntro": "Sist oppdatert: {date}. Denne erklæringen forklarer hvordan Mycelet behandler personopplysningene dine.",
     "controllerHeading": "1. Behandlingsansvarlig",
     "controllerIntro": "Behandlingsansvarlig for personopplysningene dine er:",
@@ -458,7 +465,7 @@
     "collectLocationTerm": "Posisjonsdata",
     "collectLocationDesc": "GPS-koordinater fra mobilen din når du registrerer funn, og valgfri hjemstedsregion. Vi viser kun grov-randomiserte eller gridd-snappede koordinater til andre brukere — aldri eksakt funn-sted.",
     "collectTechnicalTerm": "Teknisk data",
-    "collectTechnicalDesc": "IP-adresse, nettleser, innloggings-tidspunkt (samlet av Supabase Auth for sikkerhet og misbruks-deteksjon).",
+    "collectTechnicalDesc": "IP-adresse, nettleser og innloggings-tidspunkt (samlet av Supabase Auth for sikkerhet og misbruks-deteksjon). Hvis du samtykker til analyse, samler Google Analytics også inn sidevisninger, omtrentlig plassering (by-/landsnivå), enhetstype og utvalgte brukshendelser. Bilder, eksakte posisjoner, e-post og fritekst sendes ikke til Analytics.",
     "collectPaymentTerm": "Betalingsdata",
     "collectPaymentDesc": "Hvis du kjøper et abonnement: Stripe håndterer kort-data direkte. Vi mottar kun abonnements-status, prisplan og periodes-datoer — aldri kortnummer.",
     "collectImagesTerm": "Bilder du laster opp",
@@ -471,7 +478,7 @@
     "legalBasisLegalLabel": "Juridisk forpliktelse (Art. 6(1)(c))",
     "legalBasisLegalDesc": "for regnskapsplikt på betalingsdata i 5 år, jf. bokføringsloven § 13.",
     "legalBasisConsentLabel": "Samtykke (Art. 6(1)(a))",
-    "legalBasisConsentDesc": "kun for valgfri kommunikasjon (f.eks. nyhetsbrev hvis du takker ja). Du kan trekke tilbake samtykke når som helst.",
+    "legalBasisConsentDesc": "for valgfri bruksanalyse og valgfri kommunikasjon. Du kan avvise eller trekke tilbake samtykket når som helst uten at det påvirker tjenesten.",
     "processorsHeading": "4. Hvem vi deler data med (databehandlere)",
     "processorsIntro": "Vi bruker følgende leverandører (databehandlere) for å drive tjenesten. De behandler kun dataene som er nødvendige for sin funksjon, på våre vegne:",
     "processorSupabaseDesc": "(database, innlogging, fillagring) — dataene lagres i EU. Databehandleravtale:",
@@ -480,6 +487,7 @@
     "processorStripeDesc": "(betaling på web) — Databehandleravtale:",
     "processorStripeNote": "Stripe kan overføre data til USA under SCC.",
     "processorKindwiseDesc": "(AI-soppidentifikasjon) — når du bruker foto-ID, sendes bildet og koordinatene til Kindwise for analyse. Personvern:",
+    "processorGoogleAnalyticsDesc": "(valgfri bruksanalyse) — aktiveres bare etter samtykke og mottar ikke bilder, eksakte posisjoner eller kontodetaljer. Google Analytics' personvern og sikkerhet:",
     "processorAnd": "og",
     "processorMetLabel": "MET Norge (Frost)",
     "processorSmhiLabel": "SMHI (Sverige)",
@@ -505,6 +513,8 @@
     "retentionAuditDesc": "beholdes i 7 år for å oppfylle krav om revisjons-spor.",
     "retentionServerLabel": "Server-logger:",
     "retentionServerDesc": "30 dager hos Vercel.",
+    "retentionAnalyticsLabel": "Google Analytics:",
+    "retentionAnalyticsDesc": "hendelses- og brukerdata lagres i inntil 14 måneder. Analyse-cookies utløper senest etter 13 måneder.",
     "transfersHeading": "6. Overføring utenfor EØS",
     "transfersDesc": "Noen av leverandørene våre er basert utenfor EØS (særlig USA). Disse overføringene skjer under EUs Standard Contractual Clauses (SCC) eller annet gyldig overførings-grunnlag. Vi vurderer leverandørene før vi tar dem i bruk og sikrer at de gir tilstrekkelig beskyttelse av personopplysninger.",
     "rightsHeading": "7. Dine rettigheter",
@@ -524,14 +534,16 @@
     "rightsComplaintDescBefore": "Du kan klage til Datatilsynet ved",
     "rightsComplaintDescAfter": "hvis du mener vi behandler dataene dine i strid med personvernreglene.",
     "cookiesHeading": "8. Informasjonskapsler (cookies)",
-    "cookiesIntro": "Mycelet bruker kun strengt nødvendige cookies:",
+    "cookiesIntro": "Mycelet bruker disse strengt nødvendige cookies:",
     "cookiesSessionLabel": "Innloggings-sesjon (Supabase):",
     "cookiesSessionDesc": "husker at du er logget inn slik at du ikke trenger å logge inn på hver side.",
     "cookiesStripeLabel": "Stripe (kun ved betaling):",
     "cookiesStripeDesc": "sikrer betalings-flyten og forhindrer svindel.",
-    "cookiesNoneBefore": "Vi bruker",
-    "cookiesNoneEmphasis": "ingen",
-    "cookiesNoneAfter": "analyse-cookies, sporings-cookies eller markedsførings-cookies. Ingen tredjeparts-annonsering.",
+    "cookiesOptionalIntro": "Hvis du velger «Tillat analyse», bruker vi i tillegg:",
+    "cookiesAnalyticsLabel": "Google Analytics (_ga):",
+    "cookiesAnalyticsDesc": "hjelper oss å forstå sidevisninger og sentrale produktflyter. Cookien utløper senest etter 13 måneder. Google Analytics lastes ikke, og ingen analysedata sendes, før du samtykker.",
+    "cookiesMarketing": "Vi bruker ikke markedsføringscookies, annonsepersonalisering eller Google Signals.",
+    "cookiesManage": "Endre analysevalg",
     "securityHeading": "9. Sikkerhet",
     "securityHttps": "All trafikk er kryptert med HTTPS.",
     "securityPasswords": "Passord lagres aldri i klartekst — Supabase Auth bruker industri-standard hashing.",
@@ -865,12 +877,11 @@
     "checkWithControl": "Sjekk med Soppkontrollen"
   },
   "CookieNotice": {
-    "title": "Vi bruker kun nødvendige informasjonskapsler",
-    "description": "Mycelet setter cookies for innlogging og betaling. Vi har ingen analyse-, sporings- eller markedsførings-cookies.",
+    "title": "Vil du tillate valgfri bruksanalyse?",
+    "description": "Mycelet bruker nødvendige cookies for innlogging og betaling. Med ditt samtykke bruker vi Google Analytics for å forstå hvordan appen brukes. Vi sender ikke bilder, eksakte posisjoner eller kontodetaljer.",
     "privacyLink": "Les personvernerklæringen",
-    "acknowledge": "Forstått",
-    "closeNoticeAria": "Lukk informasjonsboks",
-    "closeAria": "Lukk"
+    "reject": "Avvis analyse",
+    "accept": "Tillat analyse"
   },
   "RetentionWarningBanner": {
     "scheduledDeletion": "Kontoen din er planlagt slettet {date} ({count, plural, =1 {# dag} other {# dager}} igjen).",

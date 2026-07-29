@@ -22,20 +22,22 @@ const cspDirectives = [
   "default-src 'self'",
   // 'unsafe-inline' is required by Next.js inline hydration scripts (the
   // long-term fix is nonce-based script-src). 'unsafe-eval' only in dev (HMR).
-  `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ''} https://js.stripe.com https://checkout.stripe.com`,
+  `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ''} https://js.stripe.com https://checkout.stripe.com https://www.googletagmanager.com`,
   // Tailwind / framer-motion / Next inject inline styles.
   "style-src 'self' 'unsafe-inline'",
   // Image sources: own bucket, Wikimedia commons, Plant.id (Kindwise),
   // Norwegian Kartverket tiles, Swedish OpenStreetMap tiles for areas
   // Kartverket doesn't cover. data: + blob: for FileReader uploads.
-  "img-src 'self' data: blob: https://*.supabase.co https://upload.wikimedia.org https://*.wikimedia.org https://*.kindwise.com https://*.kartverket.no https://opencache.statkart.no https://*.tile.openstreetmap.org https://*.arcgisonline.com",
+  "img-src 'self' data: blob: https://*.supabase.co https://upload.wikimedia.org https://*.wikimedia.org https://*.kindwise.com https://*.kartverket.no https://opencache.statkart.no https://*.tile.openstreetmap.org https://*.arcgisonline.com https://*.google-analytics.com https://*.googletagmanager.com",
   // data: for base64-inlined fonts in CSS.
   "font-src 'self' data:",
   // XHR/fetch/WebSocket destinations. wss://*.supabase.co is for Realtime.
   // The premium offline-map feature and public/sw.js fetch map tiles before
   // putting them in the Cache API. WebKit enforces this directive for service
   // worker fetches too, so every provider in offlineMap.ts must be listed here.
-  "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.openweathermap.org https://opendata-download-metobs.smhi.se https://frost.met.no https://api.stripe.com https://*.kindwise.com https://ws.geonorge.no https://cache.kartverket.no https://tile.openstreetmap.org https://*.tile.openstreetmap.org https://server.arcgisonline.com",
+  // Google-domains: GA4 event beacons + regional/config endpoints per
+  // Google's documented CSP minimum (only contacted after explicit consent).
+  "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.openweathermap.org https://opendata-download-metobs.smhi.se https://frost.met.no https://api.stripe.com https://*.kindwise.com https://ws.geonorge.no https://cache.kartverket.no https://tile.openstreetmap.org https://*.tile.openstreetmap.org https://server.arcgisonline.com https://*.google-analytics.com https://*.analytics.google.com https://*.googletagmanager.com",
   // We embed Stripe Checkout / Elements in iframes.
   "frame-src https://js.stripe.com https://hooks.stripe.com https://checkout.stripe.com",
   // Service worker (next-pwa) + blob: for any dynamically created workers.

@@ -6,6 +6,7 @@ import { FormEvent, Suspense, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Button } from '@/components/ui/Button';
 import { useAuth } from '@/lib/hooks/useAuth';
+import { trackEvent } from '@/lib/analytics';
 
 // Next 15+ requires useSearchParams() to be inside a Suspense boundary so the
 // page can prerender. We wrap the inner form-rendering component below.
@@ -59,6 +60,7 @@ function RegisterForm() {
 
     try {
       const result = await signUp({ email, password, username, displayName });
+      trackEvent('sign_up', { method: 'password' });
 
       // With e-mail confirmation OFF, signUp returns an active session, so we
       // can create the profile (RLS requires auth.uid() = id) and send the user

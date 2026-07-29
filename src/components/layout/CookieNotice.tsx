@@ -2,65 +2,61 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Cookie, X } from 'lucide-react';
+import { Cookie } from 'lucide-react';
 import { useTranslations } from 'next-intl';
+import {
+  ANALYTICS_CONSENT_REQUEST_EVENT,
+  readAnalyticsConsent,
+  updateAnalyticsConsent
+} from '@/lib/analytics';
 
 /**
- * Bottom-pinned informational notice about cookies.
- *
- * Mycelet only uses strictly-necessary cookies (Supabase auth session,
- * Stripe checkout). Per ePrivacy + GDPR, strictly-necessary cookies do not
- * require opt-in consent — but users still have a right to be informed.
- * This is a one-time notice, not a consent dialog. If we ever add analytics
- * or marketing cookies, this needs to be replaced with a proper consent UI.
- *
- * Dismissal is persisted in localStorage (not a cookie — avoids the irony
- * of a "we use cookies" cookie). The localStorage key is namespaced so
- * unrelated entries don't collide.
+ * Consent dialog for optional analytics. Google Analytics is not loaded until
+ * the user explicitly accepts. Necessary Supabase/Stripe cookies are described
+ * here but are not part of the choice because the service cannot work without
+ * them.
  */
-const STORAGE_KEY = 'mycelet:cookie-notice-dismissed-v1';
 const ONBOARDING_KEY = 'mycelet:onboarding-v1';
 const ONBOARDING_DONE_EVENT = 'mycelet:onboarding-done';
 
 export function CookieNotice() {
   const t = useTranslations('CookieNotice');
-  // Default to true so we don't flash the banner before reading localStorage.
-  // SSR will render nothing; client mount checks storage on next paint.
-  const [dismissed, setDismissed] = useState(true);
+  const [visible, setVisible] = useState(false);
 
   useEffect(() => {
+    const onPreferenceRequest = () => setVisible(true);
+    window.addEventListener(ANALYTICS_CONSENT_REQUEST_EVENT, onPreferenceRequest);
+
     let show: (() => void) | null = null;
     try {
-      const stored = window.localStorage.getItem(STORAGE_KEY);
-      if (stored === '1') return;
-      show = () => setDismissed(false);
-      // A brand-new user sees the onboarding first; the cookie notice waits
-      // for its completion event instead of covering the very first screen.
+      if (readAnalyticsConsent() !== null) {
+        return () => window.removeEventListener(ANALYTICS_CONSENT_REQUEST_EVENT, onPreferenceRequest);
+      }
+
+      show = () => setVisible(true);
       if (window.localStorage.getItem(ONBOARDING_KEY) === '1') {
         show();
-        return;
+        return () => window.removeEventListener(ANALYTICS_CONSENT_REQUEST_EVENT, onPreferenceRequest);
       }
     } catch {
-      // Private mode / disabled storage — show the banner once per session.
-      setDismissed(false);
-      return;
+      setVisible(true);
+      return () => window.removeEventListener(ANALYTICS_CONSENT_REQUEST_EVENT, onPreferenceRequest);
     }
+
     const onDone = () => show?.();
     window.addEventListener(ONBOARDING_DONE_EVENT, onDone);
-    return () => window.removeEventListener(ONBOARDING_DONE_EVENT, onDone);
+    return () => {
+      window.removeEventListener(ONBOARDING_DONE_EVENT, onDone);
+      window.removeEventListener(ANALYTICS_CONSENT_REQUEST_EVENT, onPreferenceRequest);
+    };
   }, []);
 
-  function handleDismiss() {
-    try {
-      window.localStorage.setItem(STORAGE_KEY, '1');
-    } catch {
-      // Ignore storage failures; we still want the banner to disappear in
-      // the current view.
-    }
-    setDismissed(true);
+  function handleChoice(consent: 'granted' | 'denied') {
+    updateAnalyticsConsent(consent);
+    setVisible(false);
   }
 
-  if (dismissed) return null;
+  if (!visible) return null;
 
   return (
     <div
@@ -72,7 +68,7 @@ export function CookieNotice() {
       <div className="mx-auto flex max-w-3xl items-start gap-3 rounded-xl border border-forest-200 bg-white p-4 shadow-lg">
         <Cookie aria-hidden="true" className="mt-0.5 h-5 w-5 shrink-0 text-forest-700" />
 
-        <div className="flex-1 space-y-1 text-sm text-gray-800">
+        <div className="flex-1 space-y-2 text-sm text-gray-800">
           <p id="cookie-notice-title" className="font-medium text-gray-900">
             {t('title')}
           </p>
@@ -83,25 +79,23 @@ export function CookieNotice() {
             </Link>
             .
           </p>
+          <div className="flex flex-wrap gap-2 pt-1">
+            <button
+              type="button"
+              onClick={() => handleChoice('denied')}
+              className="min-w-32 rounded-md border border-forest-700 bg-white px-3 py-2 text-sm font-medium text-forest-800 hover:bg-forest-50 focus:outline-none focus:ring-2 focus:ring-forest-400"
+            >
+              {t('reject')}
+            </button>
+            <button
+              type="button"
+              onClick={() => handleChoice('granted')}
+              className="min-w-32 rounded-md border border-forest-700 bg-white px-3 py-2 text-sm font-medium text-forest-800 hover:bg-forest-50 focus:outline-none focus:ring-2 focus:ring-forest-400"
+            >
+              {t('accept')}
+            </button>
+          </div>
         </div>
-
-        <button
-          type="button"
-          onClick={handleDismiss}
-          aria-label={t('closeNoticeAria')}
-          className="rounded-md bg-forest-700 px-3 py-1.5 text-sm font-medium text-white hover:bg-forest-800 focus:outline-none focus:ring-2 focus:ring-forest-400"
-        >
-          {t('acknowledge')}
-        </button>
-
-        <button
-          type="button"
-          onClick={handleDismiss}
-          aria-label={t('closeAria')}
-          className="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600 sm:hidden"
-        >
-          <X className="h-4 w-4" />
-        </button>
       </div>
     </div>
   );
