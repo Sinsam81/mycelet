@@ -98,3 +98,10 @@ Ingen rollback av kode eller database var nødvendig.
 - **What:** Utloggede brukere hadde ingen direkte vei til `/auth/login` fra landingssiden — alle CTA-er pekte til `/auth/register`. Diskret «Logg inn»-lenke lagt til i toppnav (mellom ankerlenkene og «Prøv gratis») på både `index.html` og `index.sv.html` («Logga in»). Sanketips-artiklene bygget på nytt så de arver headeren — de plukket samtidig opp Svenska-fotlenken fra PR #96 som aldri var bygget inn i artiklene.
 - **Verify:** live curl viser lenken i NO-nav, SE-nav og artikkel-header; /api/health 200; qa:prod 29/29.
 - **Rollback:** none needed.
+
+## 2026-07-29 — PR #100: Sted+art-søk på kartet, svensk stedssøk fikset, uke-utsikt for søkt sted
+- **Utløser:** Sindre spurte om «hvor stor sjanse for steinsopp ved Hamar i helgen?» er enkelt. Det var det ikke.
+- **What:** (1) 🐞 Stedssøket var Norge-only (Kartverket) og feilet STILLE for Sverige — «Uppsala»→«Oppsal, Hjartdal», «Sälen»→«Selen, Karmøy». Nytt `src/lib/utils/place-search.ts`: Photon (dekker NO+SE) med Kartverket som NO-fallback, filtrert til NO/SE, tettsteder rangert over gårder. (2) Stedssøk var gjemt i Filtre-arket, og artsvalg ERSTATTET søkeboksen → «art + sted» var umulig. Nå ett søkefelt med grupperte treff; chip og felt lever side om side. (3) 7-dagers utsikt fantes kun for egen GPS-posisjon → ny `PlaceForecastStrip` viser uka for søkt sted. Oppslag proxes via ny `/api/places` (CSP forblir stram, ingen bruker-IP til tredjepart, CDN-cache 1 døgn, 60/min/klient).
+- **Review:** adversariell gjennomgang fant 8 funn, alle fikset før merge — bl.a. to som brøt selve funksjonen (sen GPS-fix rykket deg vekk fra søkt sted; «lovende steder» regnet rundt GPS i stedet for søkt sted) og ett ærlighetsbrudd (generelle værtall merket med valgt art).
+- **Verify:** 344 tests, typecheck, build; nettleser-verifisert begge rekkefølger (art→sted og sted→art); live `/api/places?q=Sälen` → Dalarnas län · Sverige; qa:prod 29/29; health ok.
+- **Rollback:** none needed.
