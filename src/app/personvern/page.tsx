@@ -1,7 +1,8 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Cookie, Database, FileDown, Lock, Mail, Trash2, Users } from 'lucide-react';
-import { getTranslations } from 'next-intl/server';
+import { getLocale, getTranslations } from 'next-intl/server';
+import { entityFormSuffix, entityMessageValues } from '@/lib/legal/entity';
 import { PageWrapper } from '@/components/layout/PageWrapper';
 import { AnalyticsPreferencesButton } from '@/components/analytics/AnalyticsPreferencesButton';
 
@@ -21,6 +22,9 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function PersonvernPage() {
   const t = await getTranslations('Personvern');
   const s = await getTranslations('Safety');
+  // Who the data controller is changes with the company form: for a sole
+  // proprietorship it is the owner personally, for an AS it is the company.
+  const locale = await getLocale();
   return (
     <PageWrapper>
       <section className="space-y-6">
@@ -40,7 +44,7 @@ export default async function PersonvernPage() {
             {t('controllerIntro')}
           </p>
           <ul className="list-disc space-y-1 pl-5 text-sm text-gray-700">
-            <li>{t('controllerName')}</li>
+            <li>{t(`controllerName${entityFormSuffix()}`, entityMessageValues(locale))}</li>
             <li>
               {t('controllerContactLabel')}{' '}
               <a href="mailto:privacy@mycelet.com" className="font-medium text-forest-700 underline">
@@ -155,6 +159,30 @@ export default async function PersonvernPage() {
                 stripe.com/legal/dpa
               </a>
               . {t('processorStripeNote')}
+            </li>
+            <li>
+              <span className="font-medium">RevenueCat</span> {t('processorRevenuecatDesc')}{' '}
+              <a
+                href="https://www.revenuecat.com/dpa/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-medium text-forest-700 underline"
+              >
+                revenuecat.com/dpa
+              </a>
+              . {t('processorRevenuecatNote')}
+            </li>
+            <li>
+              <span className="font-medium">Apple</span> {t('processorAppleDesc')}{' '}
+              <a
+                href="https://www.apple.com/legal/privacy/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-medium text-forest-700 underline"
+              >
+                apple.com/legal/privacy
+              </a>
+              . {t('processorAppleNote')}
             </li>
             <li>
               <span className="font-medium">Kindwise</span> {t('processorKindwiseDesc')}{' '}

@@ -1,10 +1,12 @@
 import type { Metadata } from 'next';
 import { getTranslations } from 'next-intl/server';
 import { PageWrapper } from '@/components/layout/PageWrapper';
+import { getLocale } from 'next-intl/server';
+import { entityFormSuffix, entityMessageValues } from '@/lib/legal/entity';
 
 const SECTIONS = [
   'seller', 'productsAndPrices', 'payment', 'angrerett', 'cancellation',
-  'renewalAndPriceChanges', 'deliveryAndAccess', 'complaintsAndDisputes', 'contact'
+  'renewalAndPriceChanges', 'deliveryAndAccess', 'complaintsAndDisputes', 'assignment', 'contact'
 ];
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -14,17 +16,26 @@ export async function generateMetadata(): Promise<Metadata> {
 
 export default async function KjopsvilkarPage() {
   const t = await getTranslations('Kjopsvilkar');
+  // Seller identity from one place — see src/lib/legal/entity.ts (ENK → AS).
+  const entity = entityMessageValues(await getLocale());
   return (
     <PageWrapper>
       <section className="space-y-5">
         <div>
           <h1 className="font-serif text-3xl font-bold tracking-tight text-forest-900">{t('pageTitle')}</h1>
-          <p className="mt-2 text-sm leading-relaxed text-gray-700">{t('intro')}</p>
+          <p className="mt-2 text-sm leading-relaxed text-gray-700">{t('intro', entity)}</p>
         </div>
         {SECTIONS.map((key) => (
           <article key={key} className="space-y-1.5">
             <h2 className="font-semibold text-forest-900">{t(`${key}Title`)}</h2>
-            <p className="whitespace-pre-line text-sm leading-relaxed text-gray-800">{t(`${key}Body`)}</p>
+            <p className="whitespace-pre-line text-sm leading-relaxed text-gray-800">{t(`${key}Body`, entity)}</p>
+            {key === 'seller' ? (
+              // The "what a sole proprietorship means" paragraph has to change
+              // wording entirely for an AS, so it is its own keyed variant.
+              <p className="whitespace-pre-line text-sm leading-relaxed text-gray-800">
+                {t(`sellerFormNote${entityFormSuffix()}`, entity)}
+              </p>
+            ) : null}
           </article>
         ))}
       </section>
