@@ -3,6 +3,7 @@
 import { FormEvent, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Button } from '@/components/ui/Button';
+import { checkContent, isProhibitedContentError } from '@/lib/moderation/content-filter';
 
 interface CommentInputProps {
   onSubmit: (content: string) => Promise<void>;
@@ -11,6 +12,7 @@ interface CommentInputProps {
 
 export function CommentInput({ onSubmit, loading }: CommentInputProps) {
   const t = useTranslations('CommentInput');
+  const tFilter = useTranslations('ContentFilter');
   const [content, setContent] = useState('');
   const [error, setError] = useState<string | null>(null);
 
@@ -23,10 +25,22 @@ export function CommentInput({ onSubmit, loading }: CommentInputProps) {
       return;
     }
 
+    // Same pre-publication filter as posts (App Review 1.2); the database
+    // trigger enforces it regardless of what the client does.
+    const check = checkContent(content);
+    if (!check.ok) {
+      setError(tFilter('controlledSubstanceTrade'));
+      return;
+    }
+
     try {
       await onSubmit(content.trim());
       setContent('');
     } catch (err) {
+      if (isProhibitedContentError(err)) {
+        setError(tFilter('controlledSubstanceTrade'));
+        return;
+      }
       setError(err instanceof Error ? err.message : t('submitError'));
     }
   };

@@ -149,3 +149,44 @@ describe('terms substance — the claims must match what we actually do', () => 
     expect(age).toContain('13');
   });
 });
+
+describe('App Store guideline 1.2 — the four requirements for user content', () => {
+  const cat = (locale: string) => (locale === 'nb' ? nb : sv) as Record<string, Record<string, string>>;
+
+  it.each(['nb', 'sv'])('%s documents the block feature in the terms', (locale) => {
+    const clause = cat(locale).Vilkar.contentModerationBody;
+    expect(clause).toMatch(/BLOKKERE|BLOCKERA/);
+    // Blocking must be undoable, and the terms must say where.
+    expect(clause).toMatch(/oppheve|häva/);
+  });
+
+  it.each(['nb', 'sv'])('%s documents the pre-publication filter', (locale) => {
+    const clause = cat(locale).Vilkar.contentModerationBody;
+    expect(clause).toMatch(/FILTER FØR PUBLISERING|FILTER FÖRE PUBLICERING/);
+  });
+
+  it.each(['nb', 'sv'])('%s has the strings the block UI needs', (locale) => {
+    const c = cat(locale);
+    for (const key of ['block', 'confirm', 'explain', 'blocked', 'failed']) {
+      expect(c.BlockUser[key]).toBeTruthy();
+    }
+    for (const key of ['title', 'unblock', 'unblocked']) {
+      expect(c.BlockedUsers[key]).toBeTruthy();
+    }
+  });
+
+  it.each(['nb', 'sv'])('%s has in-app links to terms, privacy and contact', (locale) => {
+    const legal = cat(locale).LegalLinks;
+    for (const key of ['terms', 'purchaseTerms', 'privacy', 'safety', 'contactBody']) {
+      expect(legal[key]).toBeTruthy();
+    }
+    // Contact must resolve a real address, not a placeholder.
+    expect(legal.contactBody).toContain('{generalEmail}');
+  });
+
+  it.each(['nb', 'sv'])('%s explains a filter rejection in the user language', (locale) => {
+    expect(cat(locale).ContentFilter.controlledSubstanceTrade).toBeTruthy();
+    // …and tells them what to do if the filter is wrong.
+    expect(cat(locale).ContentFilter.controlledSubstanceTrade).toContain('post@mycelet.com');
+  });
+});

@@ -5,6 +5,7 @@ import { useTranslations } from 'next-intl';
 import { Button } from '@/components/ui/Button';
 import { ForumComment, ReportReason } from '@/types/forum';
 import { ReportButton } from '@/components/forum/ReportButton';
+import { BlockUserButton } from '@/components/forum/BlockUserButton';
 import { forumBadgeClass, getForumBadge } from '@/lib/utils/forumBadge';
 
 interface CommentListProps {
@@ -118,8 +119,9 @@ function CommentCard({
       </div>
 
       {onReportComment ? (
-        <div className="mt-2">
+        <div className="mt-2 flex flex-wrap items-start gap-3">
           <ReportButton label={t('reportComment')} onSubmit={(payload) => onReportComment(comment.id, payload)} />
+          <BlockUserButton userId={comment.user_id} displayName={author} currentUserId={currentUserId} />
         </div>
       ) : null}
 

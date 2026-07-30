@@ -5,6 +5,8 @@ import { PageWrapper } from '@/components/layout/PageWrapper';
 import { EdibilityBadge } from '@/components/ui/EdibilityBadge';
 import { AccountDataActions } from '@/components/profile/AccountDataActions';
 import { LogoutButton } from '@/components/profile/LogoutButton';
+import { BlockedUsersList } from '@/components/profile/BlockedUsersList';
+import { LegalLinks } from '@/components/profile/LegalLinks';
 import { createClient } from '@/lib/supabase/server';
 import { getBillingCapabilities, getUserBillingSubscription } from '@/lib/billing/subscription';
 import type { Edibility } from '@/types/species';
@@ -214,7 +216,13 @@ export default async function ProfilePage() {
           </Link>
         </article>
 
+        <BlockedUsersList />
+
         <AccountDataActions />
+
+        {/* Terms, privacy and contact must be reachable from inside the app —
+            App Store Schedule 2 § 3.8(b) and review guideline 1.2. */}
+        <LegalLinks />
 
         <article className="pt-1">
           <LogoutButton />

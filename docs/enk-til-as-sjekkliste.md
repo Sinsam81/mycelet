@@ -93,11 +93,22 @@ Oppdatert 30. juli 2026. Sindre har besluttet å lansere uten juridisk gjennomga
 **Gjenstår:**
 
 1. **Postadresse og telefonnummer mangler.** Obligatorisk etter angrerettloven § 8 og ehandelsloven § 8. Feltene finnes i `entity.ts` og er bevisst tomme framfor oppdiktede. Bruk postboks — App Store publiserer adressen offentlig. En test sier hvilke felter som står tomme
-2. **Blokker-bruker mangler.** Apples retningslinje 1.2 krever det for apper med brukerinnhold, og det er en sannsynlig avvisningsgrunn ved første innsending
-3. **Ingen tilgjengelighetserklæring.** EUs tilgjengelighetsdirektiv treffer oss ikke (mikrobedriftsunntak for tjenester), men den norske forskriften krever WCAG 2.0 AA uten størrelsesunntak
+2. ~~Blokker-bruker mangler~~ — **bygget 30. juli 2026** (migrasjon 032, RLS-filtrering + knapp på innlegg og kommentarer + liste på profilsiden)
+3. **Ingen tilgjengelighetserklæring.** EUs tilgjengelighetsdirektiv treffer oss ikke (mikrobedriftsunntak for tjenester), men den norske forskriften krever WCAG 2.0 AA uten størrelsesunntak. Krever en reell vurdering av appen, ikke bare en side
 4. **Offentlig meldeskjema.** Vilkårene peker nå på e-post, som er tilstrekkelig. Et skjema uten innlogging ville vært bedre, men krever en e-postleverandør koblet til Next-appen
 5. **MVA i EU.** Åpent: er en norsk ENK som selger digitale abonnement til svenske forbrukere registreringspliktig? Det finnes ingen bunngrense. Spørsmålet endres ikke av selskapsskiftet, men bør ikke glemmes i prosessen
 6. **DSA artikkel 13** — juridisk representant i et EU-land. Den ene plikten som koster penger årlig. Vurder bevisst, ikke la den ligge
+
+**Apple-retningslinje 1.2 — status før innsending:**
+
+| Krav | Status |
+|---|---|
+| Filtrere uakseptabelt innhold | ✅ Databasetrigger + klientsjekk (migrasjon 032) |
+| Rapportere innhold | ✅ Fantes; kategoriene utvidet i 031 |
+| Blokkere andre brukere | ✅ Bygget (migrasjon 032) |
+| Publisert kontaktinfo | ✅ På profilsiden, men **postadresse og telefon mangler fortsatt** |
+
+Det siste punktet er det eneste som gjenstår av 1.2, og det venter på at du skaffer postboks og telefonnummer.
 
 **Gjort 30. juli 2026:**
 
@@ -113,3 +124,6 @@ Oppdatert 30. juli 2026. Sindre har besluttet å lansere uten juridisk gjennomga
 - Aldersgrensen er gjort sammenhengende: 18 for kjøp, 13 for konto, 13–18 med samtykke fra foresatt
 - Nytt punkt 6b: tilbakemeldinger, hva som skjer med data når kontoen avsluttes, og hvordan vi kontakter deg
 - ODR-henvisningene fjernet, utkast-stemplet fjernet, RevenueCat og Apple inn i personvernerklæringen
+- Blokkering av brukere: `blocked_users`-tabell, filtrering lagt inn i RLS-policyene på `forum_posts` og `comments` slik at den virker i hver spørring og ikke kan omgås, knapp ved rapporter-knappen på innlegg og kommentarer, og liste på profilsiden for å oppheve
+- Innholdsfilter før publisering: databasetrigger som avviser tilbud, etterspørsel, dyrking og stedsdeling for narkotiske sopper, pluss samme mønster i TypeScript for umiddelbar tilbakemelding. En test sammenligner de to listene så de ikke kan drifte fra hverandre
+- Vilkår, kjøpsvilkår, personvern, sikkerhet, datakilder og kontaktinfo er nå tilgjengelig fra profilsiden inne i appen — Apple Schedule 2 § 3.8(b) krever det, og før dette fantes bare én lenke i cookie-banneret som forsvinner når det lukkes
