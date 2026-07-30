@@ -63,9 +63,13 @@ export const LEGAL_ENTITY: LegalEntity = {
   form: 'enk',
   legalName: 'ØVERÅS APPS',
   orgNr: '937 880 871',
-  // TODO(enk→as / pre-App-Store): set both of these. They are legally required
-  // and currently omitted rather than faked — see the checklist in docs/.
-  postalAddress: undefined,
+  // Matches the forretningsadresse registered in Enhetsregisteret, which is
+  // where the law points ("geografisk adresse ... der den næringsdrivende er
+  // etablert"). Note 21A, not 21 — the register has the letter.
+  postalAddress: 'Liaveien 21A, 1459 Nesodden, Norge',
+  // TODO(pre-App-Store): a number bought for the purpose, never the personal
+  // one. App Store Connect publishes it on the public product page in all 27
+  // EU countries and verifies it by SMS, so it must receive texts.
   phone: undefined,
   phoneHours: undefined,
   vatRegistered: false,

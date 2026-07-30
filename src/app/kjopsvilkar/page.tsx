@@ -9,9 +9,22 @@ const SECTIONS = [
   'renewalAndPriceChanges', 'deliveryAndAccess', 'complaintsAndDisputes', 'assignment', 'contact'
 ];
 
+
+/**
+ * NOINDEX, same reasoning as /kontakt: this page repeats the statutory trader
+ * block, which for a sole proprietorship contains the owner's home address.
+ * The information must be easy and directly accessible — angrerettloven § 8
+ * requires it to be GIVEN before the contract, which a linked page would not
+ * clearly satisfy — but nothing requires it to be searchable. Excluding the
+ * page from the index is the only free mitigation, and terms pages carry no
+ * SEO value anyway.
+ *
+ * Keeping the block here and noindexing is deliberate: moving the address to a
+ * link would trade a real legal duty for a cosmetic privacy gain.
+ */
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations('Kjopsvilkar');
-  return { title: t('pageTitle') };
+  return { title: t('pageTitle'), robots: { index: false, follow: true } };
 }
 
 export default async function KjopsvilkarPage() {

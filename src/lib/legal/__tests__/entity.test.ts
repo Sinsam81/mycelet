@@ -82,7 +82,7 @@ describe('mandatory pre-contractual contact information', () => {
   it('reports exactly which mandatory fields are still missing', () => {
     const missing = missingMandatoryContactInfo();
     // Update this expectation (to []) in the same commit that fills the fields.
-    expect(missing).toEqual(['postalAddress', 'phone']);
+    expect(missing).toEqual(['phone']);
   });
 });
 
@@ -228,5 +228,29 @@ describe('statutory trader information', () => {
         ? `\nTelefon: ${LEGAL_ENTITY.phone}${LEGAL_ENTITY.phoneHours ? ` (${LEGAL_ENTITY.phoneHours})` : ''}`
         : ''
     );
+  });
+});
+
+describe('the home address must not become searchable', () => {
+  // The noindex on /kontakt is pointless if another indexable page repeats the
+  // same block. This asserts every page that renders the trader block opts out
+  // of indexing — a future page that adds the block without noindex fails here.
+  const readSource = (rel: string) =>
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    (require('node:fs') as typeof import('node:fs')).readFileSync(new URL(rel, import.meta.url), 'utf8');
+
+  it.each([
+    ['../../../app/kontakt/page.tsx', 'kontakt'],
+    ['../../../app/vilkar/page.tsx', 'vilkar'],
+    ['../../../app/kjopsvilkar/page.tsx', 'kjopsvilkar']
+  ])('%s (%s) is excluded from search indexing', (rel) => {
+    const src = readSource(rel);
+    expect(src).toMatch(/robots:\s*\{\s*index:\s*false/);
+  });
+
+  it('only matters while the address is actually set', () => {
+    // If the address is ever removed the assertion above becomes optional, so
+    // record why it exists rather than leaving a mystery.
+    expect(LEGAL_ENTITY.postalAddress).toBeTruthy();
   });
 });
