@@ -79,10 +79,19 @@ describe('mandatory pre-contractual contact information', () => {
   // angrerettloven § 8 and ehandelsloven § 8 both require a geographic address
   // and a telephone number. This test is expected to FAIL-as-a-reminder until
   // they are set — it asserts the gap is tracked, not that it is acceptable.
-  it('reports exactly which mandatory fields are still missing', () => {
-    const missing = missingMandatoryContactInfo();
-    // Update this expectation (to []) in the same commit that fills the fields.
-    expect(missing).toEqual(['phone']);
+  it('has every mandatory field set', () => {
+    // angrerettloven § 8 d and ehandelsloven § 8: geographic address, telephone
+    // and email. All three are now present, so this asserts none regresses.
+    expect(missingMandatoryContactInfo()).toEqual([]);
+    expect(LEGAL_ENTITY.postalAddress).toBeTruthy();
+    expect(LEGAL_ENTITY.phone).toBeTruthy();
+    expect(LEGAL_ENTITY.generalEmail).toBeTruthy();
+  });
+
+  it('publishes a normal-rate number, not a premium one', () => {
+    // 820/829 numbers charge the caller extra. A consumer contacting a trader
+    // about a contract they already have must not pay a premium for it.
+    expect(LEGAL_ENTITY.phone).not.toMatch(/^\+?47\s?8[23]0/);
   });
 });
 

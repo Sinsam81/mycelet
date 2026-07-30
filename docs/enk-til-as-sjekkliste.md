@@ -92,9 +92,10 @@ Oppdatert 30. juli 2026. Sindre har besluttet å lansere uten juridisk gjennomga
 
 **Gjenstår:**
 
-1. **Telefonnummer mangler.** Adressen er lagt inn (Liaveien 21A — den registrerte forretningsadressen). Telefon er ubetinget påkrevd etter angrerettloven § 8 d siden 1. oktober 2023, da LOV-2023-06-16-38 flyttet ordet «eventuelt» slik at det bare gjelder nettbaserte kommunikasjonsmidler. Skaff et eget nummer, ikke privatnummeret — Apple publiserer det på produktsiden i alle 27 EU-land og verifiserer med SMS. En test sier fra så lenge feltet står tomt.
+1. **Telefonnummeret som er publisert er Sindres private mobil.** Lagt inn 30. juli 2026 etter et bevisst valg, med kjennskap til at Apple publiserer det på produktsiden i alle 27 EU-land, permanent og uten mulighet til å skjule det. På nettsiden er eksponeringen begrenset — alle sidene som viser det er `noindex`.
 
-   **Postboks løser ikke adressen.** «Geografisk» står i selve lovteksten, EU-kommisjonens veiledning (2021/C 525/01, 3.2.2.3) sier uttrykkelig at postboks ikke holder, og svensk lov skriver «gatuadressen». En virtuell kontoradresse slår tilbake: Forbrukertilsynet vil ha *begge* adressene hvis etableringsstedet er et annet enn det registrerte. Postboks *fungerer* derimot på App Store — og bare så lenge kontoen er Individual-innmeldt. Går den til Organization (AS + D-U-N-S), forsvinner valget.
+   Vil du bytte det senere: én linje i `entity.ts`, pluss oppdatering av trader-informasjonen i App Store Connect. Ingenting annet må endres. Et eget nummer koster typisk 50–200 kr/mnd, og må kunne motta SMS (Apple verifiserer med tofaktor) og ikke være overtakst (820/829).
+
 2. ~~Blokker-bruker mangler~~ — **bygget 30. juli 2026** (migrasjon 032, RLS-filtrering + knapp på innlegg og kommentarer + liste på profilsiden)
 3. **Ingen tilgjengelighetserklæring.** EUs tilgjengelighetsdirektiv treffer oss ikke (mikrobedriftsunntak for tjenester), men den norske forskriften krever WCAG 2.0 AA uten størrelsesunntak. Krever en reell vurdering av appen, ikke bare en side
 4. **Offentlig meldeskjema.** Vilkårene peker nå på e-post, som er tilstrekkelig. Et skjema uten innlogging ville vært bedre, men krever en e-postleverandør koblet til Next-appen
