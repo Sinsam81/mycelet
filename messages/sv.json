@@ -1083,7 +1083,14 @@
     "dir_south": "syd",
     "dir_southWest": "sydväst",
     "dir_west": "väster",
-    "dir_northWest": "nordväst"
+    "dir_northWest": "nordväst",
+    "searchSpeciesOrPlace": "Sök svamp eller plats — t.ex. «stensopp» eller «Sälen»",
+    "groupSpecies": "Svamparter",
+    "groupPlaces": "Platser",
+    "forecastLoading": "Hämtar utsikten …",
+    "forecastBestDay": "Bäst {day}: {score}/100",
+    "forecastUnavailable": "Hittade ingen utsikt för denna plats.",
+    "searchPlaceOnly": "Sök plats — t.ex. «Sälen»"
   },
   "OnboardingIntro": {
     "step1Title": "Välkommen till Mycelet",

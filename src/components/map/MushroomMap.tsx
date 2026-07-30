@@ -29,6 +29,8 @@ import {
 } from '@/lib/utils/offlineMap';
 import { buildExplanation } from '@/lib/utils/prediction-explanation';
 import { getSpeciesDisplayName } from '@/lib/utils/species-name';
+import { PlaceResult, searchPlaces } from '@/lib/utils/place-search';
+import { PlaceForecastStrip } from './PlaceForecastStrip';
 import { FLAGS } from '@/lib/flags';
 import toast from 'react-hot-toast';
 
@@ -127,6 +129,10 @@ export function MushroomMap() {
   const [tripFinds, setTripFinds] = useState<string[]>([]);
   const [speciesSearch, setSpeciesSearch] = useState('');
   const [speciesSuggestions, setSpeciesSuggestions] = useState<{ id: number; name: string }[]>([]);
+  const [placeSuggestions, setPlaceSuggestions] = useState<PlaceResult[]>([]);
+  // Set when the user searches a place — the forecast strip and the reset chip
+  // follow the searched location instead of the GPS position.
+  const [searchedPlace, setSearchedPlace] = useState<PlaceResult | null>(null);
   const [selectedSpeciesName, setSelectedSpeciesName] = useState<string | null>(null);
   const [locating, setLocating] = useState(false);
   const [predictionCoords, setPredictionCoords] = useState<{ lat: number | null; lon: number | null }>({
@@ -429,33 +435,53 @@ export function MushroomMap() {
     }
   }, [latitude, longitude, filters.speciesId, renderTopSpots, clearTopSpots, t]);
 
-  // Prominent "which mushroom do you want?" search: pick a species and we jump
-  // straight to the best spots for it (the prediction already re-ranks per
-  // species). Debounced species lookup.
+  // One search box, two answers: «hvilken sopp» AND «hvor». Both lookups run
+  // on the same keystrokes so «steinsopp» and «Hamar» each resolve without the
+  // user having to know which kind of thing they're typing.
   const searchSpeciesForSpots = useCallback(
     (value: string) => {
       setSpeciesSearch(value);
       if (speciesSearchTimer.current) clearTimeout(speciesSearchTimer.current);
       if (value.trim().length < 2) {
         setSpeciesSuggestions([]);
+        setPlaceSuggestions([]);
         return;
       }
       speciesSearchTimer.current = setTimeout(async () => {
-        const { data } = await supabase
-          .from('mushroom_species')
-          .select('id,norwegian_name,swedish_name')
-          .or(`norwegian_name.ilike.%${value}%,swedish_name.ilike.%${value}%,latin_name.ilike.%${value}%`)
-          .order('norwegian_name', { ascending: true })
-          .limit(8);
+        const [speciesRes, places] = await Promise.all([
+          supabase
+            .from('mushroom_species')
+            .select('id,norwegian_name,swedish_name')
+            .or(`norwegian_name.ilike.%${value}%,swedish_name.ilike.%${value}%,latin_name.ilike.%${value}%`)
+            .order('norwegian_name', { ascending: true })
+            .limit(6),
+          searchPlaces(value)
+        ]);
         setSpeciesSuggestions(
-          ((data ?? []) as { id: number; norwegian_name: string; swedish_name: string | null }[]).map((d) => ({
+          ((speciesRes.data ?? []) as { id: number; norwegian_name: string; swedish_name: string | null }[]).map((d) => ({
             id: d.id,
             name: getSpeciesDisplayName(d, locale)
           }))
         );
+        setPlaceSuggestions(places.slice(0, 5));
       }, 250);
     },
     [locale, supabase]
+  );
+
+  /** Jump the map to a searched place and re-run the prediction for it. */
+  const goToPlace = useCallback(
+    (place: PlaceResult) => {
+      setSpeciesSearch(place.name);
+      setSpeciesSuggestions([]);
+      setPlaceSuggestions([]);
+      posRef.current = { lat: place.lat, lng: place.lng };
+      mapRef.current?.setView([place.lat, place.lng], 12);
+      // The prediction panel follows the map, not the GPS, once you search.
+      setPredictionCoords({ lat: place.lat, lon: place.lng });
+      setSearchedPlace(place);
+    },
+    []
   );
 
   const selectSpeciesForSpots = useCallback(
@@ -474,6 +500,7 @@ export function MushroomMap() {
     setSelectedSpeciesName(null);
     setSpeciesSearch('');
     setSpeciesSuggestions([]);
+    setPlaceSuggestions([]);
     clearTopSpots();
   }, [clearTopSpots]);
 
@@ -1371,43 +1398,80 @@ export function MushroomMap() {
       />
 
       <div className="absolute left-1/2 top-3 z-[1000] flex w-[calc(100%-7rem)] max-w-md -translate-x-1/2 flex-col items-center gap-1">
+        {/* The species chip and the search box coexist: picking a species used
+            to REPLACE the input, which made «steinsopp ved Hamar» impossible —
+            you could have one or the other, never both. */}
+        {selectedSpeciesName ? (
+          <div className="flex w-full items-center justify-between gap-2 rounded-full bg-forest-800 px-3 py-2 text-xs font-medium text-white shadow-lg">
+            <span className="truncate">🍄 {t('promisingSpotsFor', { species: selectedSpeciesName })}</span>
+            <button
+              type="button"
+              onClick={clearSpeciesSearch}
+              className="shrink-0 rounded-full bg-white/20 px-2 py-0.5 font-semibold hover:bg-white/30"
+            >
+              {t('reset')}
+            </button>
+          </div>
+        ) : null}
         <div className="w-full">
-          {selectedSpeciesName ? (
-            <div className="flex items-center justify-between gap-2 rounded-full bg-forest-800 px-3 py-2 text-xs font-medium text-white shadow-lg">
-              <span className="truncate">🍄 {t('promisingSpotsFor', { species: selectedSpeciesName })}</span>
-              <button
-                type="button"
-                onClick={clearSpeciesSearch}
-                className="shrink-0 rounded-full bg-white/20 px-2 py-0.5 font-semibold hover:bg-white/30"
-              >
-                {t('reset')}
-              </button>
-            </div>
-          ) : (
             <div className="relative">
+              {/* One box for BOTH questions: «hvilken sopp» and «hvor». The
+                  place search used to be buried in the Filtre sheet, so
+                  planning a trip («steinsopp ved Hamar») meant digging. */}
               <input
                 value={speciesSearch}
                 onChange={(event) => searchSpeciesForSpots(event.target.value)}
-                placeholder={t('whichMushroomToday')}
+                placeholder={selectedSpeciesName ? t('searchPlaceOnly') : t('searchSpeciesOrPlace')}
                 className="w-full rounded-full bg-white/95 px-4 py-2 text-xs text-gray-800 shadow-lg backdrop-blur placeholder:text-gray-500 focus:outline-none"
               />
-              {speciesSuggestions.length > 0 ? (
-                <div className="absolute left-0 right-0 top-full z-[1001] mt-1 max-h-48 overflow-auto rounded-xl bg-white shadow-xl">
-                  {speciesSuggestions.map((s) => (
-                    <button
-                      key={s.id}
-                      type="button"
-                      onClick={() => selectSpeciesForSpots(s.id, s.name)}
-                      className="block w-full px-3 py-2 text-left text-xs text-gray-800 hover:bg-gray-50"
-                    >
-                      {s.name}
-                    </button>
-                  ))}
+              {speciesSuggestions.length > 0 || placeSuggestions.length > 0 ? (
+                <div className="absolute left-0 right-0 top-full z-[1001] mt-1 max-h-60 overflow-auto rounded-xl bg-white shadow-xl">
+                  {speciesSuggestions.length > 0 ? (
+                    <>
+                      <p className="px-3 pt-2 text-[10px] font-semibold uppercase tracking-wide text-gray-400">
+                        {t('groupSpecies')}
+                      </p>
+                      {speciesSuggestions.map((s) => (
+                        <button
+                          key={`sp-${s.id}`}
+                          type="button"
+                          onClick={() => selectSpeciesForSpots(s.id, s.name)}
+                          className="block w-full px-3 py-2 text-left text-xs text-gray-800 hover:bg-gray-50"
+                        >
+                          🍄 {s.name}
+                        </button>
+                      ))}
+                    </>
+                  ) : null}
+                  {placeSuggestions.length > 0 ? (
+                    <>
+                      <p className="px-3 pt-2 text-[10px] font-semibold uppercase tracking-wide text-gray-400">
+                        {t('groupPlaces')}
+                      </p>
+                      {placeSuggestions.map((p) => (
+                        <button
+                          key={`pl-${p.name}-${p.lat}-${p.lng}`}
+                          type="button"
+                          onClick={() => goToPlace(p)}
+                          className="block w-full px-3 py-2 text-left text-xs text-gray-800 hover:bg-gray-50"
+                        >
+                          📍 {p.name}
+                          <span className="ml-1 text-[10px] text-gray-500">{p.context}</span>
+                        </button>
+                      ))}
+                    </>
+                  ) : null}
                 </div>
               ) : null}
             </div>
-          )}
         </div>
+        {searchedPlace ? (
+          <PlaceForecastStrip
+            place={searchedPlace}
+            speciesName={selectedSpeciesName}
+            onClear={() => setSearchedPlace(null)}
+          />
+        ) : null}
         <div className="flex justify-center gap-1.5">
           <button
             type="button"

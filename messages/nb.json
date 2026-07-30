@@ -1083,7 +1083,14 @@
     "dir_south": "sør",
     "dir_southWest": "sørvest",
     "dir_west": "vest",
-    "dir_northWest": "nordvest"
+    "dir_northWest": "nordvest",
+    "searchSpeciesOrPlace": "Søk sopp eller sted — f.eks. «steinsopp» eller «Hamar»",
+    "groupSpecies": "Sopparter",
+    "groupPlaces": "Steder",
+    "forecastLoading": "Henter utsikten …",
+    "forecastBestDay": "Best {day}: {score}/100",
+    "forecastUnavailable": "Fant ikke utsikt for dette stedet.",
+    "searchPlaceOnly": "Søk sted — f.eks. «Hamar»"
   },
   "OnboardingIntro": {
     "step1Title": "Velkommen til Mycelet",
