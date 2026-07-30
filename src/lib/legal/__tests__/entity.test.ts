@@ -85,3 +85,67 @@ describe('mandatory pre-contractual contact information', () => {
     expect(missing).toEqual(['postalAddress', 'phone']);
   });
 });
+
+describe('terms substance — the claims must match what we actually do', () => {
+  const cat = (locale: string) => (locale === 'nb' ? nb : sv) as Record<string, Record<string, string>>;
+
+  // We stopped relying on the digital-content exception, so no document may
+  // still tell the customer their withdrawal right lapses.
+  it.each(['nb', 'sv'])('%s no longer claims the withdrawal right lapses on delivery', (locale) => {
+    const c = cat(locale);
+    const purchase = JSON.stringify(c.Kjopsvilkar);
+    const pricing = JSON.stringify(c.Pricing);
+    for (const blob of [purchase, pricing]) {
+      expect(blob).not.toContain('angreretten dermed bortfaller');
+      expect(blob).not.toContain('ångerrätten därmed upphör');
+      expect(blob).not.toContain('taper angreretten');
+    }
+    // …and it must positively grant the 14 days.
+    expect(purchase).toMatch(/14 dagers angrerett|14 dagars ångerrätt/);
+  });
+
+  it.each(['nb', 'sv'])('%s describes both purchase channels, including Apple', (locale) => {
+    const purchase = JSON.stringify(cat(locale).Kjopsvilkar);
+    expect(purchase).toContain('App Store');
+    expect(purchase).toContain('reportaproblem.apple.com');
+    expect(purchase).not.toContain('foreløpig ikke tilgjengelig');
+  });
+
+  it.each(['nb', 'sv'])('%s prohibits controlled-substance mushrooms explicitly', (locale) => {
+    const terms = JSON.stringify(cat(locale).Vilkar);
+    expect(terms).toContain('psilocybin');
+    expect(terms).toMatch(/Psilocybe semilanceata/);
+  });
+
+  it.each(['nb', 'sv'])('%s frames picking rights as allemannsrett, not US private property', (locale) => {
+    const terms = JSON.stringify(cat(locale).Vilkar);
+    expect(terms).toMatch(/allemannsrett|allemansrätt/);
+  });
+
+  it.each(['nb', 'sv'])('%s warns that advice from other users is not verification', (locale) => {
+    const safety = cat(locale).Vilkar.safetyBody;
+    expect(safety).toMatch(/SOPPKONTROLL|SVAMPKONTROLL/);
+  });
+
+  it.each(['nb', 'sv'])('%s carves out product liability and states no monetary cap', (locale) => {
+    const liability = cat(locale).Vilkar.liabilityBody;
+    expect(liability).toMatch(/produktansvar/);
+    expect(liability).toMatch(/kronetak|takbelopp/);
+  });
+
+  it.each(['nb', 'sv'])('%s has a moderation and notice clause with a stated response time', (locale) => {
+    const clause = cat(locale).Vilkar.contentModerationBody;
+    expect(clause).toBeTruthy();
+    expect(clause).toMatch(/7 dager|7 dagar/);
+    // The notice channel has to work without an account.
+    expect(clause).toMatch(/trenger ikke ha konto|behöver inte ha konto/);
+    // Don't advertise a page that does not exist.
+    expect(clause).not.toContain('meld-innhold');
+  });
+
+  it.each(['nb', 'sv'])('%s age clause is internally coherent', (locale) => {
+    const age = cat(locale).Vilkar.ageBody;
+    expect(age).toContain('18');
+    expect(age).toContain('13');
+  });
+});

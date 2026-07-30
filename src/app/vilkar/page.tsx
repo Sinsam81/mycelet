@@ -7,7 +7,7 @@ import { entityFormSuffix, entityMessageValues } from '@/lib/legal/entity';
 // Section order (keys live in the Vilkar message namespace as <key>Title / <key>Body).
 const SECTIONS = [
   'lastUpdated', 'serviceNature', 'safety', 'warrantyDisclaimer', 'liability',
-  'acceptableUse', 'userContent', 'age', 'changes', 'governingLaw', 'assignment', 'entity'
+  'acceptableUse', 'userContent', 'userContentExtra', 'contentModeration', 'age', 'changes', 'governingLaw', 'assignment', 'entity'
 ];
 
 export async function generateMetadata(): Promise<Metadata> {

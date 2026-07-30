@@ -32,7 +32,7 @@ Husk også å oppdatere `docs/app-store-metadata.md` (copyright-feltet) — den 
 
 ## 2. Varsle kundene — før skiftet
 
-Overdragelsesklausulen (Vilkår punkt 10, Kjøpsvilkår punkt 9) gir oss rett til å overdra avtalen, men **bare mot varsel i god tid**, og kunden kan si opp med forholdsmessig refusjon hvis hen ikke vil fortsette. Det er den betingelsen som gjør klausulen holdbar mot en forbruker — ikke drop den.
+Overdragelsesklausulen (Vilkår punkt 11, Kjøpsvilkår punkt 9) gir oss rett til å overdra avtalen, men **bare mot varsel i god tid**, og kunden kan si opp med forholdsmessig refusjon hvis hen ikke vil fortsette. Det er den betingelsen som gjør klausulen holdbar mot en forbruker — ikke drop den.
 
 Varselet må inneholde navn og organisasjonsnummer på den nye parten, at pris og periode er uendret, og at rettighetene følger med.
 
@@ -88,13 +88,28 @@ Din regnskapsførers bord, men konsekvenser for koden og tekstene:
 
 ## Fortsatt uløst, uavhengig av selskapsform
 
-Fra vilkårsgjennomgangen 30. juli 2026, i prioritert rekkefølge:
+Oppdatert 30. juli 2026. Sindre har besluttet å lansere uten juridisk gjennomgang, så der loven er uklar er vilkårene lagt om til den konservative siden — vi gir forbrukeren rettigheten framfor å hevde et unntak som kanskje ikke holder.
 
-1. **Postadresse og telefonnummer mangler.** Obligatorisk etter angrerettloven § 8 og ehandelsloven § 8. Feltene finnes i `entity.ts` og er bevisst tomme framfor oppdiktede. Bruk postboks — App Store publiserer adressen offentlig
-2. **Angreretten.** Kjøpsvilkår punkt 4 bygger på unntaket for digitalt *innhold*. Mycelet er antakelig en digital *tjeneste*, og da gjelder § 22 bokstav c, som først slår inn når tjenesten er «levert fullt ut» — noe et løpende abonnement aldri er innen 14 dager. Til jurist
-3. **Samtykket til umiddelbar levering lagres ikke.** `agreedToPurchaseTerms` er kun nettleser-state; kroppen til `/api/billing/checkout` inneholder bare `{ plan }`. Ingen dokumentasjon på at kunden samtykket
-4. **App Store-delen av kjøpsvilkårene.** Punkt 2 sier fortsatt at iOS-kjøp ikke er tilgjengelig, mens RevenueCat-IAP er implementert. Oppsigelse og refusjon går via Apple, ikke via oss
-5. **Blokker-bruker mangler.** Apples retningslinje 1.2 krever det for apper med brukerinnhold
-6. **Domenespesifikk forbudsliste.** Særlig narkotiske sopper — fleinsopp står på den norske narkotikalisten, og Sverige navngir Psilocybe semilanceata og cubensis
-7. **DSA-pliktene** gjelder via de svenske brukerne (ikke via Norge — DSA er ikke innlemmet i EØS ennå): moderasjonsåpenhet, meldekanal som ikke krever innlogging, og begrunnelse til den som mister innhold
-8. **Ingen tilgjengelighetserklæring.** EUs tilgjengelighetsdirektiv treffer oss ikke (mikrobedrift), men den norske forskriften krever WCAG 2.0 AA uten størrelsesunntak
+**Gjenstår:**
+
+1. **Postadresse og telefonnummer mangler.** Obligatorisk etter angrerettloven § 8 og ehandelsloven § 8. Feltene finnes i `entity.ts` og er bevisst tomme framfor oppdiktede. Bruk postboks — App Store publiserer adressen offentlig. En test sier hvilke felter som står tomme
+2. **Blokker-bruker mangler.** Apples retningslinje 1.2 krever det for apper med brukerinnhold, og det er en sannsynlig avvisningsgrunn ved første innsending
+3. **Ingen tilgjengelighetserklæring.** EUs tilgjengelighetsdirektiv treffer oss ikke (mikrobedriftsunntak for tjenester), men den norske forskriften krever WCAG 2.0 AA uten størrelsesunntak
+4. **Offentlig meldeskjema.** Vilkårene peker nå på e-post, som er tilstrekkelig. Et skjema uten innlogging ville vært bedre, men krever en e-postleverandør koblet til Next-appen
+5. **MVA i EU.** Åpent: er en norsk ENK som selger digitale abonnement til svenske forbrukere registreringspliktig? Det finnes ingen bunngrense. Spørsmålet endres ikke av selskapsskiftet, men bør ikke glemmes i prosessen
+6. **DSA artikkel 13** — juridisk representant i et EU-land. Den ene plikten som koster penger årlig. Vurder bevisst, ikke la den ligge
+
+**Gjort 30. juli 2026:**
+
+- Angreretten: vi bygger ikke lenger på unntaket for digitalt innhold. Kjøpsvilkår punkt 4 gir 14 dager også ved umiddelbar levering, med det forholdsmessige fradraget angrerettloven tillater. Avkrysningsteksten i kassen sier nå det samme
+- Samtykket til umiddelbar levering sendes til serveren, kjøp uten det avvises, og tidspunkt + tekstversjon lagres i Stripe-sesjonens metadata
+- Kjøpsvilkårene dekker to kanaler: Stripe på nett og Apple IAP i appen, med riktig part for oppsigelse og refusjon, og en advarsel mot å kjøpe i begge
+- Forbudsliste tilpasset norsk og svensk rett: narkotiske sopper (med lovgrunnlag), farlige identifikasjonsråd, andres personopplysninger i bilder, salg av plukket sopp, og plukkerett formulert som allemannsrett — ikke som amerikansk «private property»
+- Sikkerhetspunktet dekker nå råd fra andre brukere, forumets største skadekanal, inkludert at merker ved brukernavn ikke betyr kvalifisert
+- Ansvarspunktet: fjernet den uhåndhevbare setningen om å handle på informasjon i tjenesten, lagt inn produktansvarsforbehold, og sagt eksplisitt at vi ikke opererer med noe kronetak
+- «Som den er» navngir digitalytelsesloven, så den ikke leses som en fraskrivelse av lovens krav
+- Moderasjonspunkt etter mønster av DSA: meldekanal åpen for alle uten konto, menneskelig vurdering innen 7 dager, begrunnelse til den som mister innhold, klagerett i seks måneder, kontaktpunkt med språk
+- Rapportkategorier utvidet med ulovlig innhold, narkotika, personopplysninger, vernet art og salg (migrasjon 031) — de fantes ikke, så meldekanalen kunne ikke fange opp det vilkårene forbyr
+- Aldersgrensen er gjort sammenhengende: 18 for kjøp, 13 for konto, 13–18 med samtykke fra foresatt
+- Nytt punkt 6b: tilbakemeldinger, hva som skjer med data når kontoen avsluttes, og hvordan vi kontakter deg
+- ODR-henvisningene fjernet, utkast-stemplet fjernet, RevenueCat og Apple inn i personvernerklæringen

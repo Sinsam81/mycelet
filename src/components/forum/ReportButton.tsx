@@ -20,6 +20,11 @@ export function ReportButton({ label, onSubmit }: ReportButtonProps) {
     { value: 'misinformation', label: t('reasonMisinformation') },
     { value: 'dangerous_advice', label: t('reasonDangerousAdvice') },
     { value: 'harassment', label: t('reasonHarassment') },
+    { value: 'illegal_content', label: t('reasonIllegalContent') },
+    { value: 'controlled_substances', label: t('reasonControlledSubstances') },
+    { value: 'privacy', label: t('reasonPrivacy') },
+    { value: 'protected_species', label: t('reasonProtectedSpecies') },
+    { value: 'sale', label: t('reasonSale') },
     { value: 'other', label: t('reasonOther') }
   ];
 
