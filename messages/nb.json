@@ -346,7 +346,8 @@
     "takeOrChoosePhoto": "Ta bilde / velg bilde",
     "analyzing": "Analyserer bilde...",
     "identifyFailed": "Identifikasjon feilet",
-    "couldNotGetImage": "Kunne ikke hente bilde."
+    "couldNotGetImage": "Kunne ikke hente bilde.",
+    "networkError": "Fikk ikke kontakt med serveren. Sjekk dekningen og prøv igjen."
   },
   "IdentifyResult": {
     "errorNotLoggedIn": "Du må være logget inn for å lagre funn.",

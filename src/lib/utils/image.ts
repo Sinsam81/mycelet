@@ -46,6 +46,30 @@ function drawToCanvas(file: File, maxDim: number): Promise<HTMLCanvasElement> {
   });
 }
 
+/**
+ * Decode base64 image data to a Blob without fetch().
+ *
+ * fetch('data:…') and fetch('capacitor://…') are subject to connect-src in
+ * the (enforcing) CSP, which allowlists neither scheme — in Safari/WKWebView
+ * they die with the bare «Load failed». Manual decoding has no CSP surface.
+ */
+export function base64ToBlob(base64: string, mimeType: string): Blob {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return new Blob([bytes], { type: mimeType });
+}
+
+/** Decode a data:-URL (e.g. canvas.toDataURL output) to a Blob without fetch(). */
+export function dataUrlToBlob(dataUrl: string): Blob {
+  const [header, base64] = dataUrl.split(',');
+  if (!base64) throw new Error('Ugyldig bilde-data.');
+  const mimeType = header.match(/^data:([^;]+)/)?.[1] ?? 'application/octet-stream';
+  return base64ToBlob(base64, mimeType);
+}
+
 /** EXIF-free base64 JPEG (max 1500px) for the AI identification call. */
 export async function optimizeImageForIdentification(file: File): Promise<string> {
   const canvas = await drawToCanvas(file, 1500);

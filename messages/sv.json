@@ -346,7 +346,8 @@
     "takeOrChoosePhoto": "Ta bild / välj bild",
     "analyzing": "Analyserar bild...",
     "identifyFailed": "Identifieringen misslyckades",
-    "couldNotGetImage": "Kunde inte hämta bild."
+    "couldNotGetImage": "Kunde inte hämta bild.",
+    "networkError": "Kunde inte nå servern. Kontrollera täckningen och försök igen."
   },
   "IdentifyResult": {
     "errorNotLoggedIn": "Du måste vara inloggad för att spara fynd.",
