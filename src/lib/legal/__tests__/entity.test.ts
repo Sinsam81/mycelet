@@ -190,3 +190,43 @@ describe('App Store guideline 1.2 — the four requirements for user content', (
     expect(cat(locale).ContentFilter.controlledSubstanceTrade).toContain('post@mycelet.com');
   });
 });
+
+describe('statutory trader information', () => {
+  const cat = (locale: string) => (locale === 'nb' ? nb : sv) as Record<string, Record<string, string>>;
+
+  it.each(['nb', 'sv'])('%s states VAT status truthfully', (locale) => {
+    const purchase = cat(locale).Kjopsvilkar.productsAndPricesBody;
+    if (LEGAL_ENTITY.vatRegistered) {
+      expect(purchase).toMatch(/inkluderer merverdiavgift|inkluderar moms/);
+    } else {
+      // Claiming prices include VAT while not registered is simply false, and
+      // ehandelsloven § 8 requires the status to be stated either way.
+      expect(purchase).toMatch(/ikke registrert i Merverdiavgiftsregisteret|inte registrerat i det norska momsregistret/);
+      expect(purchase).not.toMatch(/og inkluderer merverdiavgift|och inkluderar moms/);
+    }
+  });
+
+  it.each(['nb', 'sv'])('%s has a contact page with every field the law lists', (locale) => {
+    const k = cat(locale).Kontakt;
+    for (const key of ['orgNrLabel', 'addressLabel', 'phoneLabel', 'emailLabel', 'registerLabel', 'vatLabel']) {
+      expect(k[key], `missing ${key}`).toBeTruthy();
+    }
+    expect(k.vatNo).toBeTruthy();
+    expect(k.vatYes).toBeTruthy();
+  });
+
+  it('renders no empty contact rows while address and phone are unset', () => {
+    const v = entityMessageValues('nb');
+    expect(v.addressLine).not.toMatch(/undefined|null/);
+    expect(v.phoneLine).not.toMatch(/undefined|null/);
+  });
+
+  it('appends opening hours to the phone only when both are set', () => {
+    // Guards the formatting used on /kontakt and in the terms.
+    expect(entityMessageValues('nb').phoneLine).toBe(
+      LEGAL_ENTITY.phone
+        ? `\nTelefon: ${LEGAL_ENTITY.phone}${LEGAL_ENTITY.phoneHours ? ` (${LEGAL_ENTITY.phoneHours})` : ''}`
+        : ''
+    );
+  });
+});

@@ -33,8 +33,27 @@ export interface LegalEntity {
    * status in App Store Connect publishes it on the public EU product page.
    */
   postalAddress?: string;
-  /** Telephone number. Same legal basis, and also published by App Store Connect. */
+  /**
+   * Telephone number. Mandatory since 1 October 2023: LOV-2023-06-16-38 moved
+   * the word "eventuelt" in angrerettloven § 8 d so it now qualifies only
+   * "nettbaserte kommunikasjonsmidler", not the phone number. Most Norwegian
+   * guidance online still reflects the old, optional wording — and the EU case
+   * C-649/17 (Amazon), often cited for "no phone needed", interpreted "where
+   * available", which has since been deleted from the directive.
+   *
+   * Publish a number bought for the purpose, never a personal one: App Store
+   * Connect publishes it on the public product page in all 27 EU countries.
+   */
   phone?: string;
+  /** Opening hours shown next to the phone. Limiting availability is allowed; omitting the number is not. */
+  phoneHours?: string;
+  /**
+   * VAT registration status. ehandelsloven § 8 second paragraph requires this to
+   * be stated. Checked against Enhetsregisteret 2026-07-30: not registered, so
+   * prices must NOT claim to include VAT. Flip this when turnover passes the
+   * 50 000 NOK threshold and registration follows.
+   */
+  vatRegistered: boolean;
   generalEmail: string;
   privacyEmail: string;
   website: string;
@@ -48,6 +67,8 @@ export const LEGAL_ENTITY: LegalEntity = {
   // and currently omitted rather than faked — see the checklist in docs/.
   postalAddress: undefined,
   phone: undefined,
+  phoneHours: undefined,
+  vatRegistered: false,
   generalEmail: 'post@mycelet.com',
   privacyEmail: 'privacy@mycelet.com',
   website: 'mycelet.com'
@@ -78,7 +99,7 @@ export function entityMessageValues(locale: string): Record<string, string> {
     privacyEmail: e.privacyEmail,
     website: e.website,
     addressLine: e.postalAddress ? `\n${labels.address}: ${e.postalAddress}` : '',
-    phoneLine: e.phone ? `\n${labels.phone}: ${e.phone}` : ''
+    phoneLine: e.phone ? `\n${labels.phone}: ${e.phone}${e.phoneHours ? ` (${e.phoneHours})` : ''}` : ''
   };
 }
 

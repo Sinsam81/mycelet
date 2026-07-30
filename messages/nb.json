@@ -1254,7 +1254,7 @@
     "sellerTitle": "1. Selger",
     "sellerBody": "Tjenesten Mycelet selges av:\n\n{legalName}\nOrganisasjonsnummer: {orgNr}{addressLine}{phoneLine}\nE-post: {generalEmail}\nNettsted: {website}\n\nHenvendelser om kjøp, abonnement, angrerett og reklamasjon rettes til {generalEmail}. Henvendelser om personvern rettes til {privacyEmail}.",
     "productsAndPricesTitle": "2. Produkter og priser",
-    "productsAndPricesBody": "Mycelet tilbyr betalte abonnement som gir tilgang til premium-funksjoner, blant annet utvidet AI-soppidentifikasjon, prediksjonskart og andre funksjoner som til enhver tid er beskrevet på {website}.\n\nDu kan velge mellom:\n\n• Premium – 79 kr per måned. Fornyes automatisk hver måned.\n• Sesongpass – 249 kr per år. Fornyes automatisk hvert år.\n\nKJØPSKANALER. Du kan kjøpe på to måter, og vilkårene skiller seg på noen punkter:\n\n(a) På {website} (nett). Selger er {legalName}. Betaling skjer med kort via Stripe. Prisene over er i norske kroner (NOK) og inkluderer merverdiavgift. Prisen du ser før du bekrefter kjøpet er den totale prisen for perioden.\n\n(b) I iOS-appen (in-app-kjøp i App Store). Her er Apple selger og betalingsmottaker, og kjøpet gjennomføres etter Apples vilkår. Prisen kan avvike fra 79/249 kr, fordi Apple bruker egne pristrinn og beregner lokal merverdiavgift. Du ser den faktiske prisen i appen før du bekrefter. Oppsigelse og refusjon for slike kjøp håndteres av Apple — se punkt 4 og 5.\n\nKjøper du på nett, belastes du alltid i norske kroner. Betaler du med et kort utstedt i en annen valuta (for eksempel svenske kroner), regner banken eller kortutstederen om beløpet etter sin egen vekslingskurs og kan legge på et valutapåslag. Vi mottar kun NOK-beløpet og har ingen kontroll over bankens kurs eller gebyrer. Kjøper du i App Store, fastsetter Apple valutaen.\n\nDu bør ikke kjøpe i begge kanaler. To aktive abonnement på samme konto gir dobbel belastning, og vi kan ikke stanse eller refundere et Apple-abonnement på dine vegne. Har du kjøpt begge steder ved en feil, kontakt oss på {generalEmail} — vi hjelper deg med å avslutte det som er kjøpt hos oss, og viser deg hvordan du avslutter det hos Apple.",
+    "productsAndPricesBody": "Mycelet tilbyr betalte abonnement som gir tilgang til premium-funksjoner, blant annet utvidet AI-soppidentifikasjon, prediksjonskart og andre funksjoner som til enhver tid er beskrevet på {website}.\n\nDu kan velge mellom:\n\n• Premium – 79 kr per måned. Fornyes automatisk hver måned.\n• Sesongpass – 249 kr per år. Fornyes automatisk hvert år.\n\nKJØPSKANALER. Du kan kjøpe på to måter, og vilkårene skiller seg på noen punkter:\n\n(a) På {website} (nett). Selger er {legalName}. Betaling skjer med kort via Stripe. Prisene over er i norske kroner (NOK). {legalName} er ikke registrert i Merverdiavgiftsregisteret, og det beregnes derfor ikke merverdiavgift på kjøpet. Prisen du ser før du bekrefter kjøpet er den totale prisen for perioden.\n\n(b) I iOS-appen (in-app-kjøp i App Store). Her er Apple selger og betalingsmottaker, og kjøpet gjennomføres etter Apples vilkår. Prisen kan avvike fra 79/249 kr, fordi Apple bruker egne pristrinn og beregner lokal merverdiavgift. Du ser den faktiske prisen i appen før du bekrefter. Oppsigelse og refusjon for slike kjøp håndteres av Apple — se punkt 4 og 5.\n\nKjøper du på nett, belastes du alltid i norske kroner. Betaler du med et kort utstedt i en annen valuta (for eksempel svenske kroner), regner banken eller kortutstederen om beløpet etter sin egen vekslingskurs og kan legge på et valutapåslag. Vi mottar kun NOK-beløpet og har ingen kontroll over bankens kurs eller gebyrer. Kjøper du i App Store, fastsetter Apple valutaen.\n\nDu bør ikke kjøpe i begge kanaler. To aktive abonnement på samme konto gir dobbel belastning, og vi kan ikke stanse eller refundere et Apple-abonnement på dine vegne. Har du kjøpt begge steder ved en feil, kontakt oss på {generalEmail} — vi hjelper deg med å avslutte det som er kjøpt hos oss, og viser deg hvordan du avslutter det hos Apple.",
     "paymentTitle": "3. Betaling",
     "paymentBody": "Betaling skjer med betalingskort gjennom vår betalingsleverandør Stripe. Stripe håndterer selve korttransaksjonen og lagrer kortopplysningene dine på en sikker måte. {legalName} ser ikke og lagrer ikke det fullstendige kortnummeret ditt.\n\nNår du fullfører kjøpet, inngår du et løpende abonnement. Beløpet trekkes på nytt automatisk ved starten av hver nye periode (hver måned for Premium, hvert år for Sesongpass) til du selv sier opp. Du gir samtykke til disse gjentakende trekkene når du bekrefter kjøpet.\n\nKvittering for kjøpet sendes til e-postadressen som er knyttet til kontoen din. Dersom et trekk mislykkes (for eksempel fordi kortet er utløpt), kan tilgangen til premium-funksjonene bli midlertidig stanset til betaling er gjennomført.",
     "angrerettTitle": "4. Angrerett",
@@ -1380,6 +1380,7 @@
   },
   "LegalLinks": {
     "title": "Vilkår, personvern og kontakt",
+    "contactPage": "Kontakt og foretaksinformasjon",
     "terms": "Vilkår for bruk",
     "purchaseTerms": "Kjøpsvilkår",
     "privacy": "Personvernerklæring",
@@ -1392,5 +1393,30 @@
   "ContentFilter": {
     "controlledSubstanceTrade": "Innlegget ser ut til å handle om kjøp, salg, dyrking eller voksesteder for narkotiske sopper. Det er ikke tillatt — se vilkårene punkt 5. Mener du at dette er en feil, kontakt oss på post@mycelet.com.",
     "generic": "Innholdet kan ikke publiseres fordi det bryter vilkårene."
+  },
+  "Kontakt": {
+    "pageTitle": "Kontakt",
+    "intro": "Her finner du hvem som står bak Mycelet, og hvordan du får tak i oss. Opplysningene er lovpålagte etter angrerettloven § 8 og ehandelsloven § 8.",
+    "operatorHeading": "Tjenesten drives av",
+    "orgNrLabel": "Organisasjonsnummer",
+    "addressLabel": "Adresse",
+    "phoneLabel": "Telefon",
+    "emailLabel": "E-post",
+    "privacyEmailLabel": "E-post (personvern)",
+    "websiteLabel": "Nettsted",
+    "registerLabel": "Registrert i",
+    "registerValue": "Enhetsregisteret, Brønnøysundregistrene",
+    "vatLabel": "Merverdiavgift",
+    "vatNo": "Ikke registrert i Merverdiavgiftsregisteret. Det beregnes ikke MVA på kjøp.",
+    "vatYes": "Registrert i Merverdiavgiftsregisteret. Priser inkluderer MVA.",
+    "responseHeading": "Svartid",
+    "responseBody": "E-post besvares normalt innen én til to virkedager. Gjelder det melding om ulovlig innhold i forumet, se punktet om melding og moderasjon i vilkårene.",
+    "missingHeading": "Mangler noe her?",
+    "missingBody": "Finner du ikke opplysningen du trenger, skriv til oss, så sender vi den.",
+    "termsLink": "Vilkår for bruk",
+    "purchaseTermsLink": "Kjøpsvilkår",
+    "privacyLink": "Personvernerklæring",
+    "metaTitle": "Kontakt — Mycelet",
+    "metaDescription": "Kontaktopplysninger og foretaksinformasjon for Mycelet."
   }
 }

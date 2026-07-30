@@ -27,6 +27,9 @@ export function LegalLinks() {
   const entity = entityMessageValues(locale);
 
   const links = [
+    // Contact first: it carries the statutory trader information, and the
+    // page is noindex so this link is how people actually reach it.
+    { href: '/kontakt', label: t('contactPage'), icon: Mail },
     { href: '/vilkar', label: t('terms'), icon: FileText },
     { href: '/kjopsvilkar', label: t('purchaseTerms'), icon: FileText },
     { href: '/personvern', label: t('privacy'), icon: FileText },
