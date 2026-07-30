@@ -17,7 +17,7 @@
 | Appen installert på Sindres iPhone (dev-bygg m/ RevenueCat-plugin) | ✅ (bygget 28.07 kl 22:51, verifisert innhold) |
 | **ASC-metadata (2026-07-29, gjort av Claude i browser-panelet):** undertittel «Soppkart, AI og sesongvarsler», kategorier Lifestyle + Food & Drink, aldersvurdering **13+** (ærlige svar på nye sosiale-medier-spørsmål: UGC ja, Social Media ja, u13-sperre nei), pris gratis (basisland Norge), tilgjengelighet Norge + Sverige, beskrivelse/nøkkelord/promo/URL-er/copyright (NB: 🍄-emoji avvist av Apple-validering, fjernet), App Privacy publisert (6 datatyper, App Functionality + linked, ingen tracking), 6 skjermbilder i 6,9"-slot i riktig rekkefølge (kart, soppforhold, AI, lovende, kalender, bibliotek) | ✅ |
 | **Sandbox-testkjøp** | ⏳ venter på Apple-propagering av produktmetadata (kan ta timer); prøv igjen med force-quit → Priser |
-| App Review-info: demo-bruker m/premium, kontaktinfo, notater (engelsk tekst klar i app-store-metadata.md) | ❌ |
+| App Review-info: demo-bruker ✅ OPPRETTET 2026-07-29 (applereview@mycelet.com / Mycelet-Review-2026!, sesongpass til 2028); gjenstår å LIME INN i ASC (sign-in info + notes + kontakttelefon) | ⏳ |
 | Xcode: In-App Purchase-capability på App-target → arkiv → innsending | ❌ |
 
 ## 1. Sandbox-kjøpet (2 min, på iPhonen)
