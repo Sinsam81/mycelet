@@ -351,6 +351,9 @@ export async function POST(request: NextRequest) {
         taxonomy: s.taxonomy,
         similarImages: s.similarImages,
         speciesId: s.speciesId,
+        // Curated catalog photo — without this the client falls back to
+        // Kindwise's similar_images CDN for the look-alike safety card.
+        imageUrl: s.imageUrl,
         inSeason: s.inSeason,
         peakSeason: s.peakSeason,
         nearbyFindings: s.nearbyFindings,
