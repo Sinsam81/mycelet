@@ -1090,7 +1090,9 @@
     "forecastLoading": "Henter utsikten …",
     "forecastBestDay": "Best {day}: {score}/100",
     "forecastUnavailable": "Fant ikke utsikt for dette stedet.",
-    "searchPlaceOnly": "Søk sted — f.eks. «Hamar»"
+    "searchPlaceOnly": "Søk sted — f.eks. «Hamar»",
+    "forecastToday": "I dag",
+    "forecastConditionsThisWeek": "soppforhold denne uka"
   },
   "OnboardingIntro": {
     "step1Title": "Velkommen til Mycelet",

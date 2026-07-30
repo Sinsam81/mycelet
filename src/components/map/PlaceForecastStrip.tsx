@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useTranslations } from 'next-intl';
+import { useEffect, useMemo, useState } from 'react';
+import { useLocale, useTranslations } from 'next-intl';
 import { X } from 'lucide-react';
 
 interface ForecastDay {
@@ -19,7 +19,6 @@ interface ForecastResponse {
 
 interface PlaceForecastStripProps {
   place: { name: string; lat: number; lng: number };
-  speciesName: string | null;
   onClear: () => void;
 }
 
@@ -31,8 +30,9 @@ interface PlaceForecastStripProps {
  * the app even though the API could answer it. This strip appears when you
  * search a place on the map and answers it there.
  */
-export function PlaceForecastStrip({ place, speciesName, onClear }: PlaceForecastStripProps) {
+export function PlaceForecastStrip({ place, onClear }: PlaceForecastStripProps) {
   const t = useTranslations('MushroomMap');
+  const locale = useLocale();
   const [data, setData] = useState<ForecastResponse | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -57,21 +57,35 @@ export function PlaceForecastStrip({ place, speciesName, onClear }: PlaceForecas
     };
   }, [place.lat, place.lng]);
 
+  const dayFormatter = useMemo(
+    () => new Intl.DateTimeFormat(locale === 'sv' ? 'sv-SE' : 'nb-NO', { weekday: 'short', timeZone: 'UTC' }),
+    [locale]
+  );
   const days = data?.days ?? [];
-  const best = days.reduce<ForecastDay | null>((top, day) => (!top || day.score > top.score ? day : top), null);
+  // The API returns Norwegian day labels; format from the ISO date instead so
+  // Swedish users don't get «lør» in a Swedish sentence.
+  const labelFor = (day: ForecastDay, index: number) =>
+    index === 0 ? t('forecastToday') : dayFormatter.format(new Date(`${day.date}T12:00:00Z`)).replace('.', '');
+  const bestIndex = days.reduce((topIdx, day, idx) => (day.score > days[topIdx].score ? idx : topIdx), 0);
+  const best = days.length > 0 ? days[bestIndex] : null;
 
   return (
     <div className="pointer-events-auto rounded-2xl bg-white/95 p-3 shadow-lg backdrop-blur">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
+          {/* Deliberately NOT labelled with the selected species: this strip
+              shows the general weather-driven conditions from
+              /api/mushroom-forecast, which has no per-species adjustment. The
+              species-specific score lives in the prediction panel. */}
           <p className="truncate text-xs font-semibold text-forest-900">
-            📍 {place.name}
-            {speciesName ? <span className="font-normal text-gray-600"> · {speciesName}</span> : null}
+            📍 {place.name} <span className="font-normal text-gray-600">· {t('forecastConditionsThisWeek')}</span>
           </p>
           {loading ? (
             <p className="text-[11px] text-gray-500">{t('forecastLoading')}</p>
           ) : best ? (
-            <p className="text-[11px] text-gray-600">{t('forecastBestDay', { day: best.label, score: best.score })}</p>
+            <p className="text-[11px] text-gray-600">
+              {t('forecastBestDay', { day: labelFor(best, bestIndex), score: best.score })}
+            </p>
           ) : (
             <p className="text-[11px] text-gray-500">{t('forecastUnavailable')}</p>
           )}
@@ -88,21 +102,22 @@ export function PlaceForecastStrip({ place, speciesName, onClear }: PlaceForecas
 
       {days.length > 0 ? (
         <div className="mt-2 flex items-end justify-between gap-1">
-          {days.map((day) => {
+          {days.map((day, index) => {
             // Bar height maps 0-100 → 10-34px so even a bad day stays visible.
-            const height = Math.max(10, Math.round((day.score / 100) * 34));
-            const isBest = best?.date === day.date;
+            const safeScore = Number.isFinite(day.score) ? Math.max(0, Math.min(100, day.score)) : 0;
+            const height = Math.max(10, Math.round((safeScore / 100) * 34));
+            const isBest = index === bestIndex;
             return (
               <div key={day.date} className="flex flex-1 flex-col items-center gap-0.5">
                 <span className={`text-[9px] font-semibold ${isBest ? 'text-forest-800' : 'text-gray-400'}`}>
-                  {day.score}
+                  {safeScore}
                 </span>
                 <div
                   style={{ height }}
-                  className={`w-full rounded-sm ${day.optimal ? 'bg-forest-600' : day.score >= 40 ? 'bg-amber-500' : 'bg-gray-300'}`}
+                  className={`w-full rounded-sm ${day.optimal ? 'bg-forest-600' : safeScore >= 40 ? 'bg-amber-500' : 'bg-gray-300'}`}
                 />
                 <span className={`text-[9px] ${isBest ? 'font-bold text-forest-900' : 'text-gray-500'}`}>
-                  {day.label}
+                  {labelFor(day, index)}
                 </span>
               </div>
             );

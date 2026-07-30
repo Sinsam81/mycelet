@@ -1090,7 +1090,9 @@
     "forecastLoading": "Hämtar utsikten …",
     "forecastBestDay": "Bäst {day}: {score}/100",
     "forecastUnavailable": "Hittade ingen utsikt för denna plats.",
-    "searchPlaceOnly": "Sök plats — t.ex. «Sälen»"
+    "searchPlaceOnly": "Sök plats — t.ex. «Sälen»",
+    "forecastToday": "I dag",
+    "forecastConditionsThisWeek": "svampförhållanden denna vecka"
   },
   "OnboardingIntro": {
     "step1Title": "Välkommen till Mycelet",

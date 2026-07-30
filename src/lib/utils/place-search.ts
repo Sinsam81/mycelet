@@ -128,17 +128,24 @@ async function searchKartverket(query: string, signal: AbortSignal): Promise<Pla
 export async function searchPlacesServer(query: string, signal?: AbortSignal): Promise<PlaceResult[]> {
   const trimmed = query.trim();
   if (trimmed.length < 2) return [];
-  const useSignal = signal ?? AbortSignal.timeout(5000);
+
+  // Each provider gets its OWN deadline. Sharing one signal meant a slow
+  // Photon burned the whole budget and then handed Kartverket an
+  // already-aborted signal — killing the fallback in exactly the case it
+  // exists for (Photon unreachable).
+  const attempt = (ms: number) => (signal ? AbortSignal.any([signal, AbortSignal.timeout(ms)]) : AbortSignal.timeout(ms));
 
   try {
-    const results = await searchPhoton(trimmed, useSignal);
+    const results = await searchPhoton(trimmed, attempt(4000));
     if (results.length > 0) return results;
   } catch {
     // fall through to Kartverket (Norway only, but better than nothing)
   }
 
+  if (signal?.aborted) return [];
+
   try {
-    return await searchKartverket(trimmed, useSignal);
+    return await searchKartverket(trimmed, attempt(4000));
   } catch {
     return [];
   }

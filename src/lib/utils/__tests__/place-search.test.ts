@@ -127,6 +127,40 @@ describe('searchPlacesServer (upstream)', () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('offline')));
     expect(await searchPlacesServer('Hamar')).toEqual([]);
   });
+
+  it('still reaches Kartverket when Photon aborts its own deadline', async () => {
+    // Regression guard: both providers used to share ONE AbortSignal, so a
+    // slow (not instantly-failing) Photon burned the budget and handed
+    // Kartverket an already-aborted signal — killing the fallback in exactly
+    // the case it exists for. Each provider now gets its own deadline.
+    const fetchSpy = vi.fn(async (_url: unknown, init?: { signal?: AbortSignal }) => {
+      const signal = init?.signal;
+      if (String(_url).includes('photon')) {
+        // Simulate the signal firing rather than the request failing fast.
+        const err = new Error('The operation was aborted') as Error & { name: string };
+        err.name = 'TimeoutError';
+        throw err;
+      }
+      expect(signal?.aborted).toBe(false); // the fallback must get a live signal
+      return {
+        ok: true,
+        json: async () => ({
+          navn: [
+            {
+              'skrivemåte': 'Hamar',
+              navneobjekttype: 'By',
+              kommuner: [{ kommunenavn: 'Hamar' }],
+              representasjonspunkt: { nord: 60.79, 'øst': 11.07 }
+            }
+          ]
+        })
+      };
+    });
+    vi.stubGlobal('fetch', fetchSpy);
+
+    const results = await searchPlacesServer('Hamar');
+    expect(results[0].name).toBe('Hamar');
+  });
 });
 
 describe('searchPlaces (client → /api/places proxy)', () => {

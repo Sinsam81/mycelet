@@ -133,6 +133,11 @@ export function MushroomMap() {
   // Set when the user searches a place — the forecast strip and the reset chip
   // follow the searched location instead of the GPS position.
   const [searchedPlace, setSearchedPlace] = useState<PlaceResult | null>(null);
+  // Mirrors searchedPlace for the GPS effects, which must read the current
+  // value without re-running when it changes.
+  const searchedPlaceRef = useRef<PlaceResult | null>(null);
+  // Monotonic id so a slow older typeahead response can't overwrite a newer one.
+  const searchReqRef = useRef(0);
   const [selectedSpeciesName, setSelectedSpeciesName] = useState<string | null>(null);
   const [locating, setLocating] = useState(false);
   const [predictionCoords, setPredictionCoords] = useState<{ lat: number | null; lon: number | null }>({
@@ -347,9 +352,12 @@ export function MushroomMap() {
     setTopMsg(null);
     setTopLoading(true);
     try {
+      // Origin priority: a searched place beats the GPS fix — otherwise
+      // «steinsopp ved Hamar» computed spots around the user's home instead.
       const center = map.getCenter();
-      const originLat = latitude ?? center.lat;
-      const originLng = longitude ?? center.lng;
+      const place = searchedPlaceRef.current;
+      const originLat = place?.lat ?? latitude ?? center.lat;
+      const originLng = place?.lng ?? longitude ?? center.lng;
 
       type Spot = { lat: number; lng: number; score: number; forestType: string; productivity: number | null; verdict?: string; reasons?: string[]; topSpecies?: string[] };
 
@@ -447,6 +455,7 @@ export function MushroomMap() {
         setPlaceSuggestions([]);
         return;
       }
+      const reqId = ++searchReqRef.current;
       speciesSearchTimer.current = setTimeout(async () => {
         const [speciesRes, places] = await Promise.all([
           supabase
@@ -457,6 +466,10 @@ export function MushroomMap() {
             .limit(6),
           searchPlaces(value)
         ]);
+        // A cached place lookup can beat an older uncached one home; without
+        // this the dropdown could end up showing results for a query the user
+        // already typed past.
+        if (reqId !== searchReqRef.current) return;
         setSpeciesSuggestions(
           ((speciesRes.data ?? []) as { id: number; norwegian_name: string; swedish_name: string | null }[]).map((d) => ({
             id: d.id,
@@ -479,7 +492,9 @@ export function MushroomMap() {
       mapRef.current?.setView([place.lat, place.lng], 12);
       // The prediction panel follows the map, not the GPS, once you search.
       setPredictionCoords({ lat: place.lat, lon: place.lng });
+      searchedPlaceRef.current = place;
       setSearchedPlace(place);
+      searchReqRef.current++;
     },
     []
   );
@@ -490,6 +505,8 @@ export function MushroomMap() {
       setSelectedSpeciesName(name);
       setSpeciesSearch(name);
       setSpeciesSuggestions([]);
+      setPlaceSuggestions([]);
+      searchReqRef.current++; // discard any in-flight lookup for the old text
       void generateTopSpots(id);
     },
     [generateTopSpots]
@@ -1270,7 +1287,20 @@ export function MushroomMap() {
     setOfflineAreas(readOfflineAreas());
   }, []);
 
+  // Don't let a queued typeahead fire after the map unmounts.
+  useEffect(
+    () => () => {
+      if (speciesSearchTimer.current) clearTimeout(speciesSearchTimer.current);
+    },
+    []
+  );
+
+  // The GPS fix is one-shot and can land many seconds after mount (permission
+  // prompt, cold fix). If the user has already searched a place by then, it
+  // must NOT yank the map and prediction back — that silently left the panel
+  // and the forecast strip describing two different places.
   useEffect(() => {
+    if (searchedPlaceRef.current) return;
     if (latitude != null && longitude != null) {
       posRef.current = { lat: latitude, lng: longitude };
       if (mapRef.current) {
@@ -1280,6 +1310,7 @@ export function MushroomMap() {
   }, [latitude, longitude]);
 
   useEffect(() => {
+    if (searchedPlaceRef.current) return;
     if (latitude != null && longitude != null) {
       setPredictionCoords({ lat: latitude, lon: longitude });
     }
@@ -1468,8 +1499,10 @@ export function MushroomMap() {
         {searchedPlace ? (
           <PlaceForecastStrip
             place={searchedPlace}
-            speciesName={selectedSpeciesName}
-            onClear={() => setSearchedPlace(null)}
+            onClear={() => {
+              searchedPlaceRef.current = null;
+              setSearchedPlace(null);
+            }}
           />
         ) : null}
         <div className="flex justify-center gap-1.5">
