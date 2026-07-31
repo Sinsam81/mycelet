@@ -129,7 +129,6 @@ interface ExplanationCopy {
   tempGenericBad: (temp: number) => string;
 
   rainWellWatered: (mm: number, window: string) => string;
-  rainAboveOptimum: (mm: number, window: string) => string;
   rainBelowOptimum: (mm: number, window: string) => string;
   rainTooDry: (mm: number, window: string) => string;
   fruitingWindow: string;
@@ -196,7 +195,6 @@ const COPY: Record<Locale, ExplanationCopy> = {
     tempGenericBad: (temp) => `${temp}°C — for kaldt eller for varmt`,
 
     rainWellWatered: (mm, window) => `${mm}mm regn siste ${window} — godt fuktet`,
-    rainAboveOptimum: (mm, window) => `${mm}mm regn siste ${window} — over optimum`,
     rainBelowOptimum: (mm, window) => `${mm}mm regn siste ${window} — under optimum`,
     rainTooDry: (mm, window) => `Bare ${mm}mm regn siste ${window} — for tørt`,
     fruitingWindow:
@@ -261,7 +259,6 @@ const COPY: Record<Locale, ExplanationCopy> = {
     tempGenericBad: (temp) => `${temp}°C — för kallt eller för varmt`,
 
     rainWellWatered: (mm, window) => `${mm}mm regn senaste ${window} — ordentligt fuktig mark`,
-    rainAboveOptimum: (mm, window) => `${mm}mm regn senaste ${window} — över optimum`,
     rainBelowOptimum: (mm, window) => `${mm}mm regn senaste ${window} — under optimum`,
     rainTooDry: (mm, window) => `Bara ${mm}mm regn senaste ${window} — för torrt`,
     fruitingWindow:
@@ -321,12 +318,17 @@ function habitatLevel(score: number | null): ExplanationLevel {
   return 'neutral';
 }
 
-function pickRain(weather: ExplanationInput['weather'], copy: ExplanationCopy): { mm: number; window: string } {
+function pickRain(
+  weather: ExplanationInput['weather'],
+  copy: ExplanationCopy
+): { mm: number; days: number; window: string } {
   // Prefer the longest window we have data for; mushroom prediction cares
   // most about cumulative rainfall across 1-2 weeks, not the last 3 days.
-  if (weather.rain14dMm != null) return { mm: weather.rain14dMm, window: copy.rainWindow.d14 };
-  if (weather.rain7dMm != null) return { mm: weather.rain7dMm, window: copy.rainWindow.d7 };
-  return { mm: weather.rain3dMm, window: copy.rainWindow.d3 };
+  // The DAY COUNT comes back too — the threshold is calibrated per 3 days, so
+  // comparing it to a 14-day total made a drought read as "over optimum".
+  if (weather.rain14dMm != null) return { mm: weather.rain14dMm, days: 14, window: copy.rainWindow.d14 };
+  if (weather.rain7dMm != null) return { mm: weather.rain7dMm, days: 7, window: copy.rainWindow.d7 };
+  return { mm: weather.rain3dMm, days: 3, window: copy.rainWindow.d3 };
 }
 
 /**
@@ -460,18 +462,26 @@ export function buildExplanation(input: ExplanationInput): Explanation[] {
       }).rainOptMm
     : 6;
   const rainMm = Math.round(rain.mm);
-  if (rain.mm >= optMm * 1.5) {
+  // rainOptMm is calibrated as mm over THREE days (species-scoring.ts) and is
+  // applied to rain3dMm by rainFit(). Comparing it against a 14-day total made
+  // 6mm/14d — 0.4 mm/day, a drought — print a green "over optimum", while the
+  // ground loses ~2.7 mm/day to evapotranspiration at 15 °C. Normalise both
+  // sides to mm per day so the line means the same thing in every window.
+  const RAIN_OPT_WINDOW_DAYS = 3;
+  const optPerDay = optMm / RAIN_OPT_WINDOW_DAYS;
+  const ratePerDay = rain.mm / rain.days;
+  if (ratePerDay >= optPerDay * 1.5) {
     lines.push({ level: 'positive', category: 'rain', text: copy.rainWellWatered(rainMm, rain.window) });
-  } else if (rain.mm >= optMm) {
-    lines.push({ level: 'positive', category: 'rain', text: copy.rainAboveOptimum(rainMm, rain.window) });
-  } else if (rain.mm >= optMm * 0.5) {
+  } else if (ratePerDay >= optPerDay * 0.5) {
     lines.push({ level: 'neutral', category: 'rain', text: copy.rainBelowOptimum(rainMm, rain.window) });
   } else {
     lines.push({ level: 'negative', category: 'rain', text: copy.rainTooDry(rainMm, rain.window) });
   }
 
   // ── Fruiting window (a wet base + recent drying often triggers a flush) ──
-  if (input.weather.rain14dMm != null && input.weather.rain14dMm >= optMm * 2 && input.weather.rain3dMm < optMm) {
+  // A wet BASE plus a drier spell right now is the flush signal. "Wet base" has
+  // to mean the same thing the rain band means, not a separate lower threshold.
+  if (ratePerDay >= optPerDay * 1.5 && input.weather.rain3dMm < optMm) {
     lines.push({ level: 'positive', category: 'rain', text: copy.fruitingWindow });
   }
 

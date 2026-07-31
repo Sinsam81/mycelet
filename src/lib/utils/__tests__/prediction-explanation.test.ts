@@ -397,3 +397,44 @@ describe('buildSpotSummary — language', () => {
     expect(summary.verdict).toBe('Svært gode forhold for kantarell nå');
   });
 });
+
+describe('buildExplanation — the rain line must mean the same in every window', () => {
+  const weather = (over: Partial<typeof PERFECT_KANTARELL_WEATHER>) => ({
+    ...PERFECT_KANTARELL_WEATHER,
+    ...over
+  });
+
+  const rainLine = (w: Parameters<typeof buildExplanation>[0]['weather']) =>
+    buildExplanation({ month: 9, weather: w }).find((l) => l.category === 'rain');
+
+  it('calls a 14-day drought dry, not "over optimum"', () => {
+    // 6mm over 14 days is 0.4 mm/day. The ground loses ~2.7 mm/day to
+    // evapotranspiration at 15 °C, so this is a drought — it used to print a
+    // green tick because the 3-day threshold was compared to a 14-day total.
+    const line = rainLine(weather({ rain14dMm: 6, rain7dMm: 3, rain3dMm: 0 }));
+    expect(line?.level).toBe('negative');
+    expect(line?.text.toLowerCase()).toContain('tørt');
+  });
+
+  it('still calls a genuinely wet fortnight well watered', () => {
+    // 63mm/14d = 4.5 mm/day, comfortably above evapotranspiration.
+    const line = rainLine(weather({ rain14dMm: 63, rain7dMm: 30, rain3dMm: 8 }));
+    expect(line?.level).toBe('positive');
+  });
+
+  it('judges the same rate the same way whichever window carries it', () => {
+    // 9mm/3d, 21mm/7d and 42mm/14d are all 3 mm/day and must agree.
+    const three = rainLine(weather({ rain14dMm: null, rain7dMm: null, rain3dMm: 9 }));
+    const seven = rainLine(weather({ rain14dMm: null, rain7dMm: 21, rain3dMm: 3 }));
+    const fourteen = rainLine(weather({ rain14dMm: 42, rain7dMm: 21, rain3dMm: 3 }));
+    expect(seven?.level).toBe(three?.level);
+    expect(fourteen?.level).toBe(three?.level);
+  });
+
+  it('does not announce a fruiting window during a drought', () => {
+    // Previously gated on rain14dMm >= 12, so 20mm/14d printed both
+    // "godt fuktet" and "gunstig vindu for soppfruktsetting" on dry ground.
+    const lines = buildExplanation({ month: 9, weather: weather({ rain14dMm: 20, rain7dMm: 2, rain3dMm: 0 }) });
+    expect(lines.some((l) => l.text.includes('fruktsetting'))).toBe(false);
+  });
+});
