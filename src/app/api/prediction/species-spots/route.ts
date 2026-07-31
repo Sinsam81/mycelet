@@ -12,6 +12,9 @@ import type { SpeciesContext } from '@/lib/utils/species-scoring';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { getClientKey, rateLimitResponse } from '@/lib/rate-limit/route';
 import { createRequestLogger } from '@/lib/log/request';
+import { getUserLocale } from '@/i18n/locale';
+import { getSpeciesDisplayName } from '@/lib/utils/species-name';
+import { isRecommendableSpecies } from '@/lib/prediction/recommendable';
 
 /**
  * "Soppbilder på kartet" — for each species in season, find the single best
@@ -27,6 +30,23 @@ import { createRequestLogger } from '@/lib/log/request';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
+
+// The two "nothing to show" replies are rendered as-is in a toast, so they
+// follow the reader's language like the rest of the payload.
+const EMPTY_MESSAGES = {
+  nb: {
+    noSpeciesInSeason: 'Ingen arter med bilde er i sesong nå.',
+    littleForestData: 'Fant lite skogdata her — prøv et område med mer skog.',
+    premiumRequired: 'Soppbilder på kartet krever Premium eller Sesongpass',
+    noWeather: 'Værdata ikke tilgjengelig for området'
+  },
+  sv: {
+    noSpeciesInSeason: 'Inga arter med bild är i säsong just nu.',
+    littleForestData: 'För lite skogsdata här — prova ett område med mer skog.',
+    premiumRequired: 'Svampbilder på kartan kräver Premium eller Säsongspass',
+    noWeather: 'Väderdata är inte tillgängliga för området'
+  }
+} as const;
 
 const DEFAULT_N = 6;
 const MAX_N = 7;
@@ -89,6 +109,8 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    // Explanation text is generated server-side, so it follows the reader's language.
+    const locale = await getUserLocale();
     const supabase = createClient();
     const {
       data: { user }
@@ -105,7 +127,7 @@ export async function GET(request: NextRequest) {
     const subscription = await getUserBillingSubscription(supabase, user.id);
     const billing = getBillingCapabilities(subscription);
     if (!billing.paid) {
-      return NextResponse.json({ error: 'Soppbilder på kartet krever Premium eller Sesongpass', upsell: true }, { status: 403 });
+      return NextResponse.json({ error: EMPTY_MESSAGES[locale].premiumRequired, upsell: true }, { status: 403 });
     }
 
     const month = new Date().getMonth() + 1;
@@ -114,7 +136,7 @@ export async function GET(request: NextRequest) {
     const { data: speciesRows } = await supabase
       .from('mushroom_species')
       .select(
-        'id,norwegian_name,latin_name,genus,season_start,season_end,peak_season_start,peak_season_end,habitat,mycorrhizal_partners,primary_image_url'
+        'id,norwegian_name,swedish_name,latin_name,genus,season_start,season_end,peak_season_start,peak_season_end,habitat,mycorrhizal_partners,primary_image_url,edibility'
       )
       .not('primary_image_url', 'is', null);
 
@@ -123,12 +145,15 @@ export async function GET(request: NextRequest) {
         (s) =>
           s.season_start != null &&
           s.season_end != null &&
-          inSeason(month, s.season_start as number, s.season_end as number)
+          inSeason(month, s.season_start as number, s.season_end as number) &&
+          // A photo pin on a concrete coordinate is the strongest invitation the
+          // map makes. It must never land on a toxic species.
+          isRecommendableSpecies(s.edibility as string | null)
       )
       .slice(0, MAX_SPECIES);
 
     if (candidates.length === 0) {
-      return NextResponse.json({ spots: [], message: 'Ingen arter med bilde er i sesong nå.' });
+      return NextResponse.json({ spots: [], message: EMPTY_MESSAGES[locale].noSpeciesInSeason });
     }
 
     const centerLat = (minLat + maxLat) / 2;
@@ -138,7 +163,7 @@ export async function GET(request: NextRequest) {
     const centerWeather = nearestWeatherSample(weatherSamples, centerLat, centerLng)?.weather ?? null;
     const weatherSource = weatherSourceSummary(weatherSamples);
     if (!centerWeather) {
-      return NextResponse.json({ error: 'Værdata ikke tilgjengelig for området' }, { status: 502 });
+      return NextResponse.json({ error: EMPTY_MESSAGES[locale].noWeather }, { status: 502 });
     }
 
     // Real occurrences in the bounds (all species), grouped per species so each
@@ -182,7 +207,7 @@ export async function GET(request: NextRequest) {
     const cells = forested.filter((c): c is NonNullable<typeof c> => c !== null);
 
     if (cells.length === 0) {
-      return NextResponse.json({ spots: [], message: 'Fant lite skogdata her — prøv et område med mer skog.' });
+      return NextResponse.json({ spots: [], message: EMPTY_MESSAGES[locale].littleForestData });
     }
 
     const weatherInput = (weather: NonNullable<typeof centerWeather>) => ({
@@ -205,6 +230,8 @@ export async function GET(request: NextRequest) {
     const spots: {
       speciesId: number;
       norwegianName: string;
+      /** Label for the pin, in the reader's language. */
+      displayName: string;
       latinName: string;
       imageUrl: string;
       lat: number;
@@ -253,11 +280,12 @@ export async function GET(request: NextRequest) {
       }
 
       if (best && best.score > 0) {
-        const habitat = computeHabitatScore(best.cell.forest, speciesHabitat);
+        const habitat = computeHabitatScore(best.cell.forest, speciesHabitat, locale);
         const summary = buildSpotSummary({
           weather: whyWeather(best.cell.weather),
           species: {
             norwegianName: (sp.norwegian_name as string | null) ?? '',
+            swedishName: (sp.swedish_name as string | null) ?? null,
             latinName: (sp.latin_name as string | null) ?? '',
             genus: (sp.genus as string | null) ?? null,
             seasonStart: sp.season_start as number,
@@ -277,11 +305,18 @@ export async function GET(request: NextRequest) {
           },
           nearbyOccurrences: best.nearby,
           month,
-          score: best.score
+          score: best.score,
+          locale
         });
         spots.push({
           speciesId: sp.id as number,
           norwegianName: (sp.norwegian_name as string | null) ?? '',
+          // What the pin label shows — the Swedish name when the reader is
+          // Swedish and we have one, Norwegian otherwise.
+          displayName: getSpeciesDisplayName(
+            sp as { norwegian_name: string | null; swedish_name: string | null },
+            locale
+          ),
           latinName: (sp.latin_name as string | null) ?? '',
           imageUrl: sp.primary_image_url as string,
           lat: Number(best.cell.lat.toFixed(5)),

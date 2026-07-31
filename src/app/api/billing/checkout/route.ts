@@ -37,11 +37,29 @@ export async function POST(request: NextRequest) {
       return rateLimitResponse(rateLimit);
     }
 
-    const body = (await request.json()) as { plan?: CheckoutPlan };
+    const body = (await request.json()) as {
+      plan?: CheckoutPlan;
+      /** The customer ticked "start delivery now, I know I keep my 14-day right". */
+      immediateDeliveryConsent?: boolean;
+      /** Which wording they were shown, so a later dispute can be answered. */
+      consentVersion?: string;
+    };
     const plan = body.plan;
     if (!plan || !(plan in BILLING_PLANS)) {
       return NextResponse.json({ error: 'Ugyldig plan' }, { status: 400 });
     }
+
+    // Distance selling: the consumer has to ask for delivery to start before the
+    // withdrawal period is over. Previously the tick lived only in React state
+    // and never reached the server, so there was no record that it happened —
+    // and no way to answer a chargeback claiming there was no consent. Refusing
+    // checkout without it is deliberate: an unrecorded consent is no consent.
+    if (body.immediateDeliveryConsent !== true) {
+      userLog.warn('billing.checkout.missing_delivery_consent', { tier: plan });
+      return NextResponse.json({ error: 'Du må bekrefte kjøpsvilkårene før du kan fortsette' }, { status: 400 });
+    }
+    const consentVersion = typeof body.consentVersion === 'string' ? body.consentVersion.slice(0, 32) : 'v1';
+    const consentAt = new Date().toISOString();
 
     const selectedPlan = BILLING_PLANS[plan];
     const priceId = process.env[selectedPlan.priceEnvKey];
@@ -87,12 +105,18 @@ export async function POST(request: NextRequest) {
         metadata: {
           user_id: user.id,
           tier: plan,
-          price_id: priceId
+          price_id: priceId,
+          // Stored on the Stripe object itself so the record outlives our own
+          // database and travels with the payment it belongs to.
+          delivery_consent_at: consentAt,
+          delivery_consent_version: consentVersion
         },
         subscription_data: {
           metadata: {
             user_id: user.id,
-            tier: plan
+            tier: plan,
+            delivery_consent_at: consentAt,
+            delivery_consent_version: consentVersion
           }
         }
       },

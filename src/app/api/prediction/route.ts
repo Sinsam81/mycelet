@@ -12,6 +12,21 @@ import { dayOfYearOf } from '@/lib/prediction/phenology';
 import { weightedOccurrenceDensity } from '@/lib/prediction/occurrences';
 import { getElevation } from '@/lib/terrain';
 import { createRequestLogger } from '@/lib/log/request';
+import { getUserLocale } from '@/i18n/locale';
+import { DEFAULT_LOCALE, type Locale } from '@/i18n/config';
+
+// The client renders these verbatim (it prefers the server string over its own
+// translated fallback), so they follow the reader's language.
+const COPY: Record<Locale, { upsell: string; noWeather: string }> = {
+  nb: {
+    upsell: 'Gratis viser forenklet heatmap. Oppgrader for full detalj.',
+    noWeather: 'Værdata ikke tilgjengelig for disse koordinatene (mangler API-nøkkel eller stasjonsdata)'
+  },
+  sv: {
+    upsell: 'Gratisversionen visar en förenklad heatmap. Uppgradera för full detalj.',
+    noWeather: 'Väderdata är inte tillgängliga för dessa koordinater (saknar API-nyckel eller stationsdata)'
+  }
+};
 
 // This route calls two slow, no-SLA external providers (weather + NIBIO forest)
 // in series. Pin the runtime and give it real headroom so a slow provider ends
@@ -99,6 +114,8 @@ export async function GET(request: NextRequest) {
   const maxLng = lon + lonDelta;
 
   try {
+    // Explanation text is generated server-side, so it follows the reader's language.
+    const locale = await getUserLocale();
     const supabase = createClient();
     const {
       data: { user }
@@ -138,7 +155,7 @@ export async function GET(request: NextRequest) {
         ? supabase
             .from('mushroom_species')
             .select(
-              'id,norwegian_name,latin_name,genus,season_start,season_end,peak_season_start,peak_season_end,habitat,mycorrhizal_partners'
+              'id,norwegian_name,swedish_name,latin_name,genus,season_start,season_end,peak_season_start,peak_season_end,habitat,mycorrhizal_partners'
             )
             .eq('id', speciesId)
             .maybeSingle()
@@ -163,6 +180,7 @@ export async function GET(request: NextRequest) {
       ? {
           id: speciesRes.data.id as number,
           norwegianName: (speciesRes.data.norwegian_name as string | null) ?? '',
+          swedishName: (speciesRes.data.swedish_name as string | null) ?? null,
           latinName: (speciesRes.data.latin_name as string | null) ?? '',
           genus: (speciesRes.data.genus as string | null) ?? null,
           seasonStart: speciesRes.data.season_start as number,
@@ -266,7 +284,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({
         source: 'prediction_tiles',
         access: premiumPrediction ? 'premium_full' : 'free_limited',
-        upsellMessage: premiumPrediction ? undefined : 'Gratis viser forenklet heatmap. Oppgrader for full detalj.',
+        upsellMessage: premiumPrediction ? undefined : (COPY[locale] ?? COPY[DEFAULT_LOCALE]).upsell,
         score,
         condition,
         weatherSource: weather?.source ?? null,
@@ -313,7 +331,7 @@ export async function GET(request: NextRequest) {
         region: lat > 0 ? 'NO/SE/other' : 'unknown'
       });
       return NextResponse.json(
-        { error: 'Værdata ikke tilgjengelig for disse koordinatene (mangler API-nøkkel eller stasjonsdata)' },
+        { error: (COPY[locale] ?? COPY[DEFAULT_LOCALE]).noWeather },
         { status: 502 }
       );
     }
@@ -385,7 +403,8 @@ export async function GET(request: NextRequest) {
       recent30d,
       recent365d,
       nearbyOccurrences,
-      elevation: elevationData?.elevationM ?? null
+      elevation: elevationData?.elevationM ?? null,
+      locale
     });
 
     const { score, baseScore, speciesFit, habitatFit, habitat: habitatScore, factors: advancedFactors } = cell;
@@ -448,7 +467,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       source: 'computed_fallback',
       access: premiumPrediction ? 'premium_full' : 'free_limited',
-      upsellMessage: premiumPrediction ? undefined : 'Gratis viser forenklet heatmap. Oppgrader for full detalj.',
+      upsellMessage: premiumPrediction ? undefined : (COPY[locale] ?? COPY[DEFAULT_LOCALE]).upsell,
       score,
       baseScore,
       speciesFit,

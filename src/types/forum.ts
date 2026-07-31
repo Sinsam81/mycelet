@@ -1,6 +1,19 @@
 export type ForumSort = 'newest' | 'popular' | 'unanswered';
 export type ForumCategory = 'find' | 'question' | 'tip' | 'discussion' | null;
-export type ReportReason = 'spam' | 'inappropriate' | 'misinformation' | 'dangerous_advice' | 'harassment' | 'other';
+// Must stay in sync with the reports_reason_check constraint —
+// see supabase/migrations/031_report_reasons_illegal_content.sql.
+export type ReportReason =
+  | 'spam'
+  | 'inappropriate'
+  | 'misinformation'
+  | 'dangerous_advice'
+  | 'harassment'
+  | 'illegal_content'
+  | 'controlled_substances'
+  | 'privacy'
+  | 'protected_species'
+  | 'sale'
+  | 'other';
 
 export interface ForumImage {
   url: string;

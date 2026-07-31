@@ -13,6 +13,24 @@ import type { SpeciesContext } from '@/lib/utils/species-scoring';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { getClientKey, rateLimitResponse } from '@/lib/rate-limit/route';
 import { createRequestLogger } from '@/lib/log/request';
+import { getUserLocale } from '@/i18n/locale';
+import { getSpeciesDisplayName } from '@/lib/utils/species-name';
+import { isRecommendableSpecies } from '@/lib/prediction/recommendable';
+import { DEFAULT_LOCALE, type Locale } from '@/i18n/config';
+
+// Surfaced verbatim as toasts on the map, so they follow the reader's language.
+const COPY: Record<Locale, { premiumRequired: string; noWeather: string; speciesFallback: string }> = {
+  nb: {
+    premiumRequired: 'Detaljert heatmap krever Premium eller Sesongpass',
+    noWeather: 'Værdata ikke tilgjengelig for området',
+    speciesFallback: 'Sopp'
+  },
+  sv: {
+    premiumRequired: 'Detaljerad heatmap kräver Premium eller Säsongspass',
+    noWeather: 'Väderdata är inte tillgängliga för området',
+    speciesFallback: 'Svamp'
+  }
+};
 
 /**
  * On-demand local heatmap.
@@ -99,6 +117,8 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    // Explanation text is generated server-side, so it follows the reader's language.
+    const locale = await getUserLocale();
     const supabase = createClient();
     const {
       data: { user }
@@ -122,7 +142,7 @@ export async function GET(request: NextRequest) {
     // spots, and no "why" — the upsell is seeing the value, not a 403.
     if (!paid && !top) {
       return NextResponse.json(
-        { error: 'Detaljert heatmap krever Premium eller Sesongpass', upsell: true },
+        { error: (COPY[locale] ?? COPY[DEFAULT_LOCALE]).premiumRequired, upsell: true },
         { status: 403 }
       );
     }
@@ -140,7 +160,7 @@ export async function GET(request: NextRequest) {
       speciesId
         ? supabase
             .from('mushroom_species')
-            .select('id,norwegian_name,latin_name,genus,season_start,season_end,peak_season_start,peak_season_end,habitat,mycorrhizal_partners')
+            .select('id,norwegian_name,swedish_name,latin_name,genus,season_start,season_end,peak_season_start,peak_season_end,habitat,mycorrhizal_partners')
             .eq('id', speciesId)
             .maybeSingle()
         : Promise.resolve(null),
@@ -158,7 +178,7 @@ export async function GET(request: NextRequest) {
     const weatherSource = weatherSourceSummary(weatherSamples);
 
     if (!centerWeather) {
-      return NextResponse.json({ error: 'Værdata ikke tilgjengelig for området' }, { status: 502 });
+      return NextResponse.json({ error: (COPY[locale] ?? COPY[DEFAULT_LOCALE]).noWeather }, { status: 502 });
     }
 
     const speciesContext: SpeciesContext | null = speciesRes?.data
@@ -191,17 +211,22 @@ export async function GET(request: NextRequest) {
       const { data: rows } = await supabase
         .from('mushroom_species')
         .select(
-          'id,norwegian_name,latin_name,genus,season_start,season_end,peak_season_start,peak_season_end,habitat,mycorrhizal_partners'
+          'id,norwegian_name,swedish_name,latin_name,genus,season_start,season_end,peak_season_start,peak_season_end,habitat,mycorrhizal_partners,edibility'
         );
       topSpeciesCandidates = (rows ?? [])
         .filter(
           (s) =>
             s.season_start != null &&
             s.season_end != null &&
-            inSeason(month, s.season_start as number, s.season_end as number)
+            inSeason(month, s.season_start as number, s.season_end as number) &&
+            // Only species you may actually pick get named as a reason to walk
+            // somewhere. See src/lib/prediction/recommendable.ts.
+            isRecommendableSpecies(s.edibility as string | null)
         )
         .map((s) => ({
-          name: (s.norwegian_name as string | null) ?? 'Sopp',
+          name:
+            getSpeciesDisplayName(s as { norwegian_name: string | null; swedish_name: string | null }, locale) ||
+            (COPY[locale] ?? COPY[DEFAULT_LOCALE]).speciesFallback,
           ctx: {
             speciesId: s.id as number,
             latinName: (s.latin_name as string | null) ?? null,
@@ -289,6 +314,7 @@ export async function GET(request: NextRequest) {
     const whySpecies = speciesRes?.data
       ? {
           norwegianName: (speciesRes.data.norwegian_name as string | null) ?? '',
+          swedishName: (speciesRes.data.swedish_name as string | null) ?? null,
           latinName: (speciesRes.data.latin_name as string | null) ?? '',
           genus: (speciesRes.data.genus as string | null) ?? null,
           seasonStart: speciesRes.data.season_start as number,
@@ -311,7 +337,7 @@ export async function GET(request: NextRequest) {
         if (!paid) {
           return { lat: c.lat, lng: c.lng, score: c.score, forestType: c.forestType, productivity: c.productivity };
         }
-        const habitat = speciesHabitat ? computeHabitatScore(c.forest, speciesHabitat) : null;
+        const habitat = speciesHabitat ? computeHabitatScore(c.forest, speciesHabitat, locale) : null;
         const summary = buildSpotSummary({
           weather: whyWeather(c.weather),
           species: whySpecies,
@@ -325,7 +351,8 @@ export async function GET(request: NextRequest) {
           },
           nearbyOccurrences: c.nearbyOccurrences,
           month,
-          score: c.score
+          score: c.score,
+          locale
         });
         let topSpecies: string[] = [];
         if (!speciesId && topSpeciesCandidates.length > 0) {

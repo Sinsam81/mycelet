@@ -224,3 +224,48 @@ describe('computeHabitatScore', () => {
     expect(result.score).toBeLessThanOrEqual(1.3);
   });
 });
+
+describe('computeHabitatScore — language', () => {
+  it('returns Swedish reasons for a Swedish reader without changing the score', () => {
+    const nb = computeHabitatScore(forest(), KANTARELL_PREFS);
+    const sv = computeHabitatScore(forest(), KANTARELL_PREFS, 'sv');
+
+    expect(sv.score).toBe(nb.score);
+    expect(sv.hostGate).toBe(nb.hostGate);
+    expect(sv.reasons.join(' ')).toContain('Trädslaget');
+    expect(sv.reasons.join(' ')).not.toContain('Treslag');
+  });
+
+  it('translates the no-forest-data fallback reason', () => {
+    const sv = computeHabitatScore(fallbackProperties(), KANTARELL_PREFS, 'sv');
+    // NIBIO has no Swedish coverage, so the Swedish wording must not name it.
+    expect(sv.reasons[0]).toContain('Inga skogsdata');
+    expect(sv.reasons[0]).not.toContain('NIBIO');
+  });
+
+  it('defaults to Norwegian', () => {
+    expect(computeHabitatScore(forest(), KANTARELL_PREFS).reasons.join(' ')).toContain('Treslag');
+  });
+});
+
+describe('computeHabitatScore — tree-species codes are translated too', () => {
+  it('renders the Swedish tree name, not the raw Norwegian code', () => {
+    // 'furu' is a Norwegian code on ForestProperties; Swedish is "tall".
+    const sv = computeHabitatScore(forest({ forestType: 'furu' }), KANTARELL_PREFS, 'sv');
+    const text = sv.reasons.join(' ');
+    expect(text).toContain('tall');
+    expect(text).not.toMatch(/\(furu\)/);
+  });
+
+  it('translates the deciduous code a Swedish CORINE cell actually produces', () => {
+    const sv = computeHabitatScore(forest({ forestType: 'lauv' }), CONIFER_ONLY_PREFS, 'sv');
+    const text = sv.reasons.join(' ');
+    expect(text).toContain('lövträd');
+    expect(text).not.toMatch(/\(lauv\)/);
+  });
+
+  it('leaves the Norwegian code untouched for Norwegian readers', () => {
+    const nb = computeHabitatScore(forest({ forestType: 'furu' }), KANTARELL_PREFS);
+    expect(nb.reasons.join(' ')).toContain('(furu)');
+  });
+});

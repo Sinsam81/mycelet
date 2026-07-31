@@ -5,6 +5,7 @@ import { useTranslations } from 'next-intl';
 import { Heart, MessageCircle, Pencil, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { ReportButton } from '@/components/forum/ReportButton';
+import { BlockUserButton } from '@/components/forum/BlockUserButton';
 import { SharePostButton } from '@/components/forum/SharePostButton';
 import { ForumPostDetail, ReportReason } from '@/types/forum';
 import { forumBadgeClass, getForumBadge } from '@/lib/utils/forumBadge';
@@ -16,9 +17,11 @@ interface PostDetailProps {
   onEdit?: (payload: { title: string; content: string; category: 'find' | 'question' | 'tip' | 'discussion' }) => Promise<void>;
   onDelete?: () => Promise<void>;
   likeLoading?: boolean;
+  /** Enables the block action, and hides it on your own posts. */
+  currentUserId?: string | null;
 }
 
-export function PostDetail({ post, onToggleLike, onReport, onEdit, onDelete, likeLoading }: PostDetailProps) {
+export function PostDetail({ post, onToggleLike, onReport, onEdit, onDelete, likeLoading, currentUserId }: PostDetailProps) {
   const t = useTranslations('PostDetail');
   const categoryLabel: Record<ForumPostDetail['category'], string> = {
     find: t('categoryFind'),
@@ -128,8 +131,9 @@ export function PostDetail({ post, onToggleLike, onReport, onEdit, onDelete, lik
       ) : null}
 
       {onReport ? (
-        <div className="mt-3">
+        <div className="mt-3 flex flex-wrap items-start gap-3">
           <ReportButton label={t('reportPost')} onSubmit={onReport} />
+          <BlockUserButton userId={post.user_id} displayName={author} currentUserId={currentUserId} />
         </div>
       ) : null}
     </article>

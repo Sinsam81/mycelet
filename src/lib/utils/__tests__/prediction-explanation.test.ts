@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { buildExplanation, type SpeciesExplanationContext } from '../prediction-explanation';
+import {
+  buildExplanation,
+  buildSpotSummary,
+  type ExplanationWeather,
+  type SpeciesExplanationContext
+} from '../prediction-explanation';
 
 const KANTARELL: SpeciesExplanationContext = {
   norwegianName: 'Kantarell',
@@ -309,5 +314,132 @@ describe('buildExplanation — output ordering', () => {
     });
     // season + temp + rain + humidity + habitat + mycorrhizal = 6
     expect(lines.length).toBeGreaterThanOrEqual(4);
+  });
+});
+
+describe('buildExplanation — language', () => {
+  it('renders every generic line in Swedish for a Swedish reader', () => {
+    const lines = buildExplanation({ month: 9, weather: PERFECT_KANTARELL_WEATHER, locale: 'sv' });
+    const text = lines.map((l) => l.text).join(' | ');
+    expect(text).toContain('Högsäsong för svamp');
+    // Swedish needs the definite plural after "senaste".
+    expect(text).toContain('senaste 14 dagarna');
+    expect(text).toContain('luftfuktighet');
+    // No Norwegian leftovers
+    expect(text).not.toContain('siste');
+    expect(text).not.toContain('sopp-temperatur');
+  });
+
+  it('names the species in Swedish when a Swedish name exists', () => {
+    const lines = buildExplanation({
+      species: { ...KANTARELL, norwegianName: 'Steinsopp', swedishName: 'Karljohan' },
+      month: 8,
+      weather: PERFECT_KANTARELL_WEATHER,
+      locale: 'sv'
+    });
+    const seasonLine = lines.find((l) => l.category === 'season');
+    expect(seasonLine?.text.toLowerCase()).toContain('karljohan');
+    expect(seasonLine?.text).not.toContain('Steinsopp');
+  });
+
+  it('falls back to the Norwegian name when no Swedish name is curated', () => {
+    const lines = buildExplanation({
+      species: { ...KANTARELL, swedishName: null },
+      month: 2,
+      weather: PERFECT_KANTARELL_WEATHER,
+      locale: 'sv'
+    });
+    const seasonLine = lines.find((l) => l.category === 'season');
+    expect(seasonLine?.text).toContain('Kantarell');
+    expect(seasonLine?.text).toContain('utanför säsong');
+  });
+
+  it('uses Swedish forest labels and month names', () => {
+    const lines = buildExplanation({
+      species: { ...KANTARELL, swedishName: 'Kantarell' },
+      month: 8,
+      weather: PERFECT_KANTARELL_WEATHER,
+      locale: 'sv',
+      forest: {
+        forestType: 'furu',
+        productivity: 8,
+        volumePerHa: 65,
+        habitatScore: 0.9,
+        habitatReasons: []
+      }
+    });
+    const text = lines.map((l) => l.text).join(' | ');
+    expect(text).toContain('tallskog');
+    expect(text).toContain('augusti');
+    expect(text).not.toContain('furuskog');
+  });
+
+  it('defaults to Norwegian when no locale is given', () => {
+    const lines = buildExplanation({ month: 9, weather: PERFECT_KANTARELL_WEATHER });
+    expect(lines.map((l) => l.text).join(' | ')).toContain('Hovedsesong for sopp i Norge');
+  });
+});
+
+describe('buildSpotSummary — language', () => {
+  it('renders the verdict in Swedish', () => {
+    const summary = buildSpotSummary({
+      species: { ...KANTARELL, swedishName: 'Kantarell' },
+      month: 8,
+      weather: PERFECT_KANTARELL_WEATHER,
+      score: 80,
+      locale: 'sv'
+    });
+    expect(summary.verdict).toBe('Mycket goda förhållanden för kantarell nu');
+  });
+
+  it('defaults to Norwegian', () => {
+    const summary = buildSpotSummary({
+      species: KANTARELL,
+      month: 8,
+      weather: PERFECT_KANTARELL_WEATHER,
+      score: 80
+    });
+    expect(summary.verdict).toBe('Svært gode forhold for kantarell nå');
+  });
+});
+
+describe('buildExplanation — the rain line must mean the same in every window', () => {
+  const weather = (over: Partial<ExplanationWeather>): ExplanationWeather => ({
+    ...PERFECT_KANTARELL_WEATHER,
+    ...over
+  });
+
+  const rainLine = (w: ExplanationWeather) =>
+    buildExplanation({ month: 9, weather: w }).find((l) => l.category === 'rain');
+
+  it('calls a 14-day drought dry, not "over optimum"', () => {
+    // 6mm over 14 days is 0.4 mm/day. The ground loses ~2.7 mm/day to
+    // evapotranspiration at 15 °C, so this is a drought — it used to print a
+    // green tick because the 3-day threshold was compared to a 14-day total.
+    const line = rainLine(weather({ rain14dMm: 6, rain7dMm: 3, rain3dMm: 0 }));
+    expect(line?.level).toBe('negative');
+    expect(line?.text.toLowerCase()).toContain('tørt');
+  });
+
+  it('still calls a genuinely wet fortnight well watered', () => {
+    // 63mm/14d = 4.5 mm/day, comfortably above evapotranspiration.
+    const line = rainLine(weather({ rain14dMm: 63, rain7dMm: 30, rain3dMm: 8 }));
+    expect(line?.level).toBe('positive');
+  });
+
+  it('judges the same rate the same way whichever window carries it', () => {
+    // 9mm/3d, 21mm/7d and 42mm/14d are all 3 mm/day and must agree.
+    const three = rainLine(weather({ rain14dMm: null, rain7dMm: null, rain3dMm: 9 }));
+    const seven = rainLine(weather({ rain14dMm: null, rain7dMm: 21, rain3dMm: 3 }));
+    const fourteen = rainLine(weather({ rain14dMm: 42, rain7dMm: 21, rain3dMm: 3 }));
+    expect(seven?.level).toBe(three?.level);
+    expect(fourteen?.level).toBe(three?.level);
+  });
+
+  it('does not announce a fruiting window during a drought', () => {
+    // Previously gated on rain14dMm >= 12, so 20mm/14d printed both
+    // "godt fuktet" and "gunstig vindu for soppfruktsetting" on dry ground.
+    const lines = buildExplanation({ month: 9, weather: weather({ rain14dMm: 20, rain7dMm: 2, rain3dMm: 0 }) });
+    expect(lines.some((l) => l.text.includes('fruktsetting'))).toBe(false);
   });
 });

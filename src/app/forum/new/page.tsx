@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl';
 import { Camera, X } from 'lucide-react';
 import { PageWrapper } from '@/components/layout/PageWrapper';
 import { Button } from '@/components/ui/Button';
+import { checkContent, isProhibitedContentError } from '@/lib/moderation/content-filter';
 import { useCreatePost, useMyFindings } from '@/lib/hooks/useForum';
 import { createClient } from '@/lib/supabase/client';
 import { reencodeImageForUpload } from '@/lib/utils/image';
@@ -18,6 +19,7 @@ type Category = 'find' | 'question' | 'tip' | 'discussion';
 // export at the bottom wraps NewForumPostInner.
 function NewForumPostInner() {
   const t = useTranslations('ForumNew');
+  const tFilter = useTranslations('ContentFilter');
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -110,6 +112,15 @@ function NewForumPostInner() {
       return;
     }
 
+    // Pre-publication filter (App Review 1.2). The database enforces the same
+    // rule in a trigger; this is here so the user gets an explanation up front
+    // instead of a failed insert after the images have already uploaded.
+    const check = checkContent(title, content);
+    if (!check.ok) {
+      setError(tFilter('controlledSubstanceTrade'));
+      return;
+    }
+
     try {
       const uploadedUrls = await Promise.all(images.map(uploadForumImage));
       const mappedImages = uploadedUrls.map((url) => ({ url }));
@@ -124,6 +135,11 @@ function NewForumPostInner() {
 
       router.push(`/forum/${post.id}`);
     } catch (err) {
+      // The trigger fires for anything the client-side pattern missed.
+      if (isProhibitedContentError(err)) {
+        setError(tFilter('controlledSubstanceTrade'));
+        return;
+      }
       setError(err instanceof Error ? err.message : t('couldNotPublish'));
     }
   };

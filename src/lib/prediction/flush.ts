@@ -12,6 +12,7 @@
  */
 import type { DailyForecast } from '@/lib/weather/forecast';
 import { dayOfYearFromMonth, phenologyFactor } from '@/lib/prediction/phenology';
+import { DEFAULT_LOCALE, type Locale } from '@/i18n/config';
 
 export type FlushStatus = 'fruiting' | 'soon' | 'building' | 'dry' | 'dormant';
 
@@ -90,7 +91,73 @@ function clamp01(v: number): number {
   return Math.max(0, Math.min(1, v));
 }
 
-export function assessFlush(input: FlushInput, species?: FlushSpeciesContext): FlushAssessment {
+/**
+ * User-facing copy per language. The flush banner is rendered verbatim from
+ * `title`/`message`, so the caller passes the reader's locale — otherwise a
+ * Swedish user gets Norwegian text (the bug this table fixes).
+ */
+interface FlushCopy {
+  offSeasonTitle: string;
+  offSeasonMessage: string;
+  tooColdTitle: string;
+  tooColdMessage: string;
+  speciesOffSeasonTitle: string;
+  speciesOffSeasonMessage: string;
+  fruitingTitle: string;
+  fruitingMessage: string;
+  buildingTitle: string;
+  buildingMessage: string;
+  soonTitle: (daysUntil: number) => string;
+  soonMessage: (rainInDays: number) => string;
+  dryTitle: string;
+  dryMessage: string;
+}
+
+const COPY: Record<Locale, FlushCopy> = {
+  nb: {
+    offSeasonTitle: 'Utenom soppsesongen',
+    offSeasonMessage: 'Det er utenfor hovedsesongen. Kom tilbake fra sensommeren.',
+    tooColdTitle: 'For kaldt akkurat nå',
+    tooColdMessage: 'For kaldt for soppvekst. Vent på mildere vær.',
+    speciesOffSeasonTitle: 'Utenom artens sesong',
+    speciesOffSeasonMessage:
+      'Denne arten fruktifiserer vanligvis ikke nå her. Prøv en annen art eller kom tilbake i sesongen.',
+    fruitingTitle: 'Forholdene er modne nå 🍄',
+    fruitingMessage: 'Fuktig mark og mildt vær — soppen kommer nå. Ta turen ut!',
+    buildingTitle: 'Soppen er på vei',
+    buildingMessage: 'Det regnet nylig — gi det noen dager, så er forholdene gode.',
+    soonTitle: (daysUntil) => `Regn på vei — sopp om ~${daysUntil} dager`,
+    soonMessage: (rainInDays) =>
+      `Det er meldt regn om ${rainInDays} dag${rainInDays === 1 ? '' : 'er'}. Soppen følger gjerne ~1 uke etter.`,
+    dryTitle: 'Tørt — soppen venter på regn',
+    dryMessage: 'Lite fukt og ingen regn i sikte. Sjansene er små inntil det kommer nedbør.'
+  },
+  sv: {
+    offSeasonTitle: 'Utanför svampsäsongen',
+    offSeasonMessage: 'Det är utanför högsäsongen. Kom tillbaka i slutet av sommaren.',
+    tooColdTitle: 'För kallt just nu',
+    tooColdMessage: 'För kallt för svamptillväxt. Vänta på mildare väder.',
+    speciesOffSeasonTitle: 'Utanför artens säsong',
+    speciesOffSeasonMessage:
+      'Den här arten fruktifierar vanligtvis inte den här tiden på året. Prova en annan art eller kom tillbaka i säsong.',
+    fruitingTitle: 'Nu är det läge för svamp 🍄',
+    fruitingMessage: 'Fuktig mark och milt väder — svampen kommer nu. Ut i skogen!',
+    buildingTitle: 'Svampen är på väg',
+    buildingMessage: 'Det regnade nyligen — om några dagar bör förhållandena vara bra.',
+    soonTitle: (daysUntil) => `Regn på väg — svamp om ~${daysUntil} dagar`,
+    soonMessage: (rainInDays) =>
+      `Regn väntas om ${rainInDays} dag${rainInDays === 1 ? '' : 'ar'}. Svampen följer ofta ~1 vecka efter.`,
+    dryTitle: 'Torrt — svampen väntar på regn',
+    dryMessage: 'Lite fukt och inget regn i sikte. Chanserna är små tills det kommer nederbörd.'
+  }
+};
+
+export function assessFlush(
+  input: FlushInput,
+  species?: FlushSpeciesContext,
+  locale: Locale = DEFAULT_LOCALE
+): FlushAssessment {
+  const copy = COPY[locale] ?? COPY[DEFAULT_LOCALE];
   const { month, soilMoistureIndex, rain7dMm, currentTempC, forecast } = input;
 
   // Off-season: the brain is dormant regardless of weather.
@@ -98,8 +165,8 @@ export function assessFlush(input: FlushInput, species?: FlushSpeciesContext): F
     return {
       status: 'dormant',
       daysUntil: null,
-      title: 'Utenom soppsesongen',
-      message: 'Det er utenfor hovedsesongen. Kom tilbake fra sensommeren.'
+      title: copy.offSeasonTitle,
+      message: copy.offSeasonMessage
     };
   }
 
@@ -108,8 +175,8 @@ export function assessFlush(input: FlushInput, species?: FlushSpeciesContext): F
     return {
       status: 'dormant',
       daysUntil: null,
-      title: 'For kaldt akkurat nå',
-      message: 'For kaldt for soppvekst. Vent på mildere vær.'
+      title: copy.tooColdTitle,
+      message: copy.tooColdMessage
     };
   }
 
@@ -124,8 +191,8 @@ export function assessFlush(input: FlushInput, species?: FlushSpeciesContext): F
       return {
         status: 'dormant',
         daysUntil: null,
-        title: 'Utenom artens sesong',
-        message: 'Denne arten fruktifiserer vanligvis ikke nå her. Prøv en annen art eller kom tilbake i sesongen.'
+        title: copy.speciesOffSeasonTitle,
+        message: copy.speciesOffSeasonMessage
       };
     }
   }
@@ -141,8 +208,8 @@ export function assessFlush(input: FlushInput, species?: FlushSpeciesContext): F
     return {
       status: 'fruiting',
       daysUntil: 0,
-      title: 'Forholdene er modne nå 🍄',
-      message: 'Fuktig mark og mildt vær — soppen kommer nå. Ta turen ut!'
+      title: copy.fruitingTitle,
+      message: copy.fruitingMessage
     };
   }
 
@@ -151,8 +218,8 @@ export function assessFlush(input: FlushInput, species?: FlushSpeciesContext): F
     return {
       status: 'building',
       daysUntil: 5,
-      title: 'Soppen er på vei',
-      message: 'Det regnet nylig — gi det noen dager, så er forholdene gode.'
+      title: copy.buildingTitle,
+      message: copy.buildingMessage
     };
   }
 
@@ -170,8 +237,8 @@ export function assessFlush(input: FlushInput, species?: FlushSpeciesContext): F
     return {
       status: 'soon',
       daysUntil,
-      title: `Regn på vei — sopp om ~${daysUntil} dager`,
-      message: `Det er meldt regn om ${rainDay} dag${rainDay === 1 ? '' : 'er'}. Soppen følger gjerne ~1 uke etter.`
+      title: copy.soonTitle(daysUntil),
+      message: copy.soonMessage(rainDay)
     };
   }
 
@@ -179,7 +246,7 @@ export function assessFlush(input: FlushInput, species?: FlushSpeciesContext): F
   return {
     status: 'dry',
     daysUntil: null,
-    title: 'Tørt — soppen venter på regn',
-    message: 'Lite fukt og ingen regn i sikte. Sjansene er små inntil det kommer nedbør.'
+    title: copy.dryTitle,
+    message: copy.dryMessage
   };
 }

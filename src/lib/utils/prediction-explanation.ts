@@ -1,5 +1,5 @@
 /**
- * Build human-readable Norwegian explanations for a prediction result.
+ * Build human-readable explanations for a prediction result.
  *
  * The "alltid forklar hvorfor"-prinsippet from docs/roadmap.md says every
  * highlighted area on the map should answer the question "hvorfor er dette
@@ -17,13 +17,16 @@
  *     can color-code without re-parsing the text.
  *   - Group by category so a UI could show only "weather" or only
  *     "season" sections if it wants.
- *   - Norwegian copy throughout — these strings ARE the user-facing
- *     explanations, not internal telemetry.
+ *   - The copy lives in a per-locale table (COPY below) because these strings
+ *     ARE the user-facing explanations, not internal telemetry — and they are
+ *     generated server-side, so the reader's language has to be passed in.
+ *     Callers that omit `locale` get Norwegian, the app default.
  *   - When no species context is provided (general "is it mushroom
  *     weather?" call), fall back to generic advice using the same data.
  */
 
 import { resolveSpeciesPreferences, type SpeciesContext } from '@/lib/utils/species-scoring';
+import { DEFAULT_LOCALE, type Locale } from '@/i18n/config';
 
 export type ExplanationLevel = 'positive' | 'neutral' | 'negative';
 
@@ -37,6 +40,8 @@ export interface Explanation {
 
 export interface SpeciesExplanationContext {
   norwegianName: string;
+  /** Curated Swedish name; used instead of the Norwegian one when locale is 'sv'. */
+  swedishName?: string | null;
   latinName: string;
   genus: string | null;
   seasonStart: number; // 1-12
@@ -61,6 +66,12 @@ export interface ExplanationWeather {
   rain14dMm?: number | null;
   minTemp7dC?: number | null;
   maxTemp7dC?: number | null;
+  /**
+   * Root-zone moisture index [0,1] from computeSoilMoistureIndex. Unlike a raw
+   * rain sum it dries out, so it is the signal that can tell "wet two weeks ago"
+   * apart from "wet now". Null/undefined outside NO/SE and for forecast days.
+   */
+  soilMoistureIndex?: number | null;
 }
 
 /**
@@ -74,7 +85,7 @@ export interface ExplanationForest {
   volumePerHa: number | null;
   /** Habitat-fit multiplier [0.2, 1.3] from computeHabitatScore. */
   habitatScore: number | null;
-  /** Server-built Norwegian reasons (tree-species match, soil richness). */
+  /** Habitat reasons (tree-species match, soil richness), already in the reader's language. */
   habitatReasons: string[];
   /** Data provider: 'sr16' (NO/NIBIO), 'corine' (SE/Europe). Drives the credit label. */
   source?: string;
@@ -90,25 +101,198 @@ export interface ExplanationInput {
   nearbyOccurrences?: number;
   /** Current month (1-12). Pass `new Date().getMonth() + 1`. */
   month: number;
+  /** Reader's language. Defaults to Norwegian. */
+  locale?: Locale;
 }
 
-const MONTH_NAMES_GENITIVE = [
-  'januar',
-  'februar',
-  'mars',
-  'april',
-  'mai',
-  'juni',
-  'juli',
-  'august',
-  'september',
-  'oktober',
-  'november',
-  'desember'
-];
+/** Every user-facing sentence this module can produce, in one language. */
+interface ExplanationCopy {
+  months: string[];
+  forestTypes: Record<string, string>;
+  forestFallback: string;
+  rainWindow: { d14: string; d7: string; d3: string };
 
-function monthName(month: number): string {
-  return MONTH_NAMES_GENITIVE[Math.max(1, Math.min(12, month)) - 1];
+  speciesOutOfSeason: (name: string, from: string, to: string) => string;
+  speciesPeakSeason: (name: string, from: string, to: string) => string;
+  speciesInSeason: (name: string) => string;
+  genericHighSeason: string;
+  genericShoulderSeason: string;
+  genericLowSeason: string;
+
+  occurrenceHint: string;
+
+  tempInOptimum: (temp: number, name: string, min: number, max: number) => string;
+  tempInTolerance: (temp: number, min: number, max: number) => string;
+  tempOutsideTolerance: (temp: number, floor: number, ceil: number) => string;
+  tempGenericGood: (temp: number) => string;
+  tempGenericModerate: (temp: number) => string;
+  tempGenericBad: (temp: number) => string;
+
+  rainWellWatered: (mm: number, window: string) => string;
+  rainBelowOptimum: (mm: number, window: string) => string;
+  rainTooDry: (mm: number, window: string) => string;
+  fruitingWindow: string;
+
+  humidityHigh: (pct: number) => string;
+  humidityModerate: (pct: number) => string;
+  humidityLow: (pct: number) => string;
+
+  forestHere: (source: string, forest: string, bonitet: string) => string;
+  bonitetSuffix: (productivity: number) => string;
+  preferredHabitat: (tags: string) => string;
+  mycorrhizalPartners: (partners: string) => string;
+
+  verdictExcellent: (who: string) => string;
+  verdictGood: (who: string) => string;
+  verdictOk: (who: string) => string;
+  verdictWeak: (who: string) => string;
+  verdictFor: (name: string) => string;
+}
+
+const COPY: Record<Locale, ExplanationCopy> = {
+  nb: {
+    months: [
+      'januar',
+      'februar',
+      'mars',
+      'april',
+      'mai',
+      'juni',
+      'juli',
+      'august',
+      'september',
+      'oktober',
+      'november',
+      'desember'
+    ],
+    forestTypes: {
+      gran: 'granskog',
+      furu: 'furuskog',
+      bar: 'barskog',
+      lauv: 'løvskog',
+      blandet: 'blandingsskog',
+      apent: 'åpent landskap'
+    },
+    forestFallback: 'skog',
+    rainWindow: { d14: '14 dager', d7: '7 dager', d3: '3 dager' },
+
+    speciesOutOfSeason: (name, from, to) => `${name} er utenfor sesong nå (sesong: ${from}–${to})`,
+    speciesPeakSeason: (name, from, to) => `Topp-sesong for ${name.toLowerCase()} (${from}–${to})`,
+    speciesInSeason: (name) => `${name} er i sesong, men ikke topp-sesong`,
+    genericHighSeason: 'Hovedsesong for sopp i Norge',
+    genericShoulderSeason: 'Tidlig/sen sesong — variert utvalg',
+    genericLowSeason: 'Lav sesong for de fleste arter',
+
+    occurrenceHint:
+      'Andre har registrert funn i nærheten før — men registreringer følger stier og veier, så bruk det som et hint',
+
+    tempInOptimum: (temp, name, min, max) =>
+      `${temp}°C — innenfor optimum for ${name.toLowerCase()} (${min}–${max}°C)`,
+    tempInTolerance: (temp, min, max) => `${temp}°C — innenfor toleranse, men ikke optimum (${min}–${max}°C)`,
+    tempOutsideTolerance: (temp, floor, ceil) => `${temp}°C — utenfor toleranse-vindu (${floor}–${ceil}°C)`,
+    tempGenericGood: (temp) => `${temp}°C — gunstig sopp-temperatur`,
+    tempGenericModerate: (temp) => `${temp}°C — moderat for sopp`,
+    tempGenericBad: (temp) => `${temp}°C — for kaldt eller for varmt`,
+
+    rainWellWatered: (mm, window) => `${mm}mm regn siste ${window} — godt fuktet`,
+    rainBelowOptimum: (mm, window) => `${mm}mm regn siste ${window} — under optimum`,
+    rainTooDry: (mm, window) => `Bare ${mm}mm regn siste ${window} — for tørt`,
+    fruitingWindow:
+      'God fukt-base de siste ukene + tørrere de siste dagene — gunstig vindu for soppfruktsetting',
+
+    humidityHigh: (pct) => `${pct}% luftfuktighet — høyt`,
+    humidityModerate: (pct) => `${pct}% luftfuktighet — moderat`,
+    humidityLow: (pct) => `${pct}% luftfuktighet — tørt`,
+
+    forestHere: (source, forest, bonitet) => `Skog her (${source}): ${forest}${bonitet}`,
+    bonitetSuffix: (productivity) => `, bonitet ${productivity}`,
+    preferredHabitat: (tags) => `Foretrukket habitat: ${tags}`,
+    mycorrhizalPartners: (partners) => `Følger ${partners}`,
+
+    verdictExcellent: (who) => `Svært gode forhold${who} nå`,
+    verdictGood: (who) => `Gode forhold${who} nå`,
+    verdictOk: (who) => `Brukbare forhold${who} nå`,
+    verdictWeak: (who) => `Svake forhold${who} nå`,
+    verdictFor: (name) => ` for ${name.toLowerCase()}`
+  },
+  sv: {
+    months: [
+      'januari',
+      'februari',
+      'mars',
+      'april',
+      'maj',
+      'juni',
+      'juli',
+      'augusti',
+      'september',
+      'oktober',
+      'november',
+      'december'
+    ],
+    forestTypes: {
+      gran: 'granskog',
+      furu: 'tallskog',
+      bar: 'barrskog',
+      lauv: 'lövskog',
+      blandet: 'blandskog',
+      apent: 'öppet landskap'
+    },
+    forestFallback: 'skog',
+    rainWindow: { d14: '14 dagarna', d7: '7 dagarna', d3: '3 dagarna' },
+
+    speciesOutOfSeason: (name, from, to) => `${name} är utanför säsong nu (säsong: ${from}–${to})`,
+    speciesPeakSeason: (name, from, to) => `Toppsäsong för ${name.toLowerCase()} (${from}–${to})`,
+    speciesInSeason: (name) => `${name} är i säsong, men inte toppsäsong`,
+    genericHighSeason: 'Högsäsong för svamp',
+    genericShoulderSeason: 'Tidig/sen säsong — varierat utbud',
+    genericLowSeason: 'Lågsäsong för de flesta arter',
+
+    occurrenceHint:
+      'Andra har registrerat fynd i närheten tidigare — men registreringar följer stigar och vägar, så använd det som en ledtråd',
+
+    tempInOptimum: (temp, name, min, max) => `${temp}°C — inom optimum för ${name.toLowerCase()} (${min}–${max}°C)`,
+    tempInTolerance: (temp, min, max) => `${temp}°C — inom tolerans, men inte optimum (${min}–${max}°C)`,
+    tempOutsideTolerance: (temp, floor, ceil) => `${temp}°C — utanför toleransfönstret (${floor}–${ceil}°C)`,
+    tempGenericGood: (temp) => `${temp}°C — gynnsam svamptemperatur`,
+    tempGenericModerate: (temp) => `${temp}°C — medelbra för svamp`,
+    tempGenericBad: (temp) => `${temp}°C — för kallt eller för varmt`,
+
+    rainWellWatered: (mm, window) => `${mm}mm regn senaste ${window} — ordentligt fuktig mark`,
+    rainBelowOptimum: (mm, window) => `${mm}mm regn senaste ${window} — under optimum`,
+    rainTooDry: (mm, window) => `Bara ${mm}mm regn senaste ${window} — för torrt`,
+    fruitingWindow:
+      'Bra markfukt de senaste veckorna + torrare de senaste dagarna — gynnsamt läge för svampens fruktsättning',
+
+    humidityHigh: (pct) => `${pct}% luftfuktighet — hög`,
+    humidityModerate: (pct) => `${pct}% luftfuktighet — måttlig`,
+    humidityLow: (pct) => `${pct}% luftfuktighet — låg`,
+
+    forestHere: (source, forest, bonitet) => `Skog här (${source}): ${forest}${bonitet}`,
+    bonitetSuffix: (productivity) => `, bonitet ${productivity}`,
+    preferredHabitat: (tags) => `Föredraget habitat: ${tags}`,
+    mycorrhizalPartners: (partners) => `Följer ${partners}`,
+
+    verdictExcellent: (who) => `Mycket goda förhållanden${who} nu`,
+    verdictGood: (who) => `Goda förhållanden${who} nu`,
+    verdictOk: (who) => `Godtagbara förhållanden${who} nu`,
+    verdictWeak: (who) => `Svaga förhållanden${who} nu`,
+    verdictFor: (name) => ` för ${name.toLowerCase()}`
+  }
+};
+
+function copyFor(locale: Locale | undefined): ExplanationCopy {
+  return COPY[locale ?? DEFAULT_LOCALE] ?? COPY[DEFAULT_LOCALE];
+}
+
+/** The species name in the reader's language, falling back to Norwegian. */
+function speciesName(species: SpeciesExplanationContext, locale: Locale | undefined): string {
+  if (locale === 'sv') return species.swedishName?.trim() || species.norwegianName;
+  return species.norwegianName;
+}
+
+function monthName(month: number, copy: ExplanationCopy): string {
+  return copy.months[Math.max(1, Math.min(12, month)) - 1];
 }
 
 function inMonth(month: number, start: number, end: number): boolean {
@@ -116,17 +300,8 @@ function inMonth(month: number, start: number, end: number): boolean {
   return month >= start || month <= end;
 }
 
-const FOREST_TYPE_LABEL: Record<string, string> = {
-  gran: 'granskog',
-  furu: 'furuskog',
-  bar: 'barskog',
-  lauv: 'løvskog',
-  blandet: 'blandingsskog',
-  apent: 'åpent landskap'
-};
-
-function forestLabel(forestType: string): string {
-  return FOREST_TYPE_LABEL[forestType] ?? 'skog';
+function forestLabel(forestType: string, copy: ExplanationCopy): string {
+  return copy.forestTypes[forestType] ?? copy.forestFallback;
 }
 
 /** Credit the right data source in the habitat line. CORINE for Sweden/Europe,
@@ -143,12 +318,17 @@ function habitatLevel(score: number | null): ExplanationLevel {
   return 'neutral';
 }
 
-function pickRain(weather: ExplanationInput['weather']): { mm: number; window: string } {
+function pickRain(
+  weather: ExplanationInput['weather'],
+  copy: ExplanationCopy
+): { mm: number; days: number; window: string } {
   // Prefer the longest window we have data for; mushroom prediction cares
   // most about cumulative rainfall across 1-2 weeks, not the last 3 days.
-  if (weather.rain14dMm != null) return { mm: weather.rain14dMm, window: '14 dager' };
-  if (weather.rain7dMm != null) return { mm: weather.rain7dMm, window: '7 dager' };
-  return { mm: weather.rain3dMm, window: '3 dager' };
+  // The DAY COUNT comes back too — the threshold is calibrated per 3 days, so
+  // comparing it to a 14-day total made a drought read as "over optimum".
+  if (weather.rain14dMm != null) return { mm: weather.rain14dMm, days: 14, window: copy.rainWindow.d14 };
+  if (weather.rain7dMm != null) return { mm: weather.rain7dMm, days: 7, window: copy.rainWindow.d7 };
+  return { mm: weather.rain3dMm, days: 3, window: copy.rainWindow.d3 };
 }
 
 /**
@@ -158,10 +338,12 @@ function pickRain(weather: ExplanationInput['weather']): { mm: number; window: s
  */
 export function buildExplanation(input: ExplanationInput): Explanation[] {
   const lines: Explanation[] = [];
+  const copy = copyFor(input.locale);
 
   // ── Season ──────────────────────────────────────────────────────────
   if (input.species) {
     const { species } = input;
+    const name = speciesName(species, input.locale);
     const inSeason = inMonth(input.month, species.seasonStart, species.seasonEnd);
     const inPeak =
       species.peakSeasonStart != null &&
@@ -172,30 +354,34 @@ export function buildExplanation(input: ExplanationInput): Explanation[] {
       lines.push({
         level: 'negative',
         category: 'season',
-        text: `${species.norwegianName} er utenfor sesong nå (sesong: ${monthName(species.seasonStart)}–${monthName(species.seasonEnd)})`
+        text: copy.speciesOutOfSeason(
+          name,
+          monthName(species.seasonStart, copy),
+          monthName(species.seasonEnd, copy)
+        )
       });
     } else if (inPeak) {
       lines.push({
         level: 'positive',
         category: 'season',
-        text: `Topp-sesong for ${species.norwegianName.toLowerCase()} (${monthName(species.peakSeasonStart!)}–${monthName(species.peakSeasonEnd!)})`
+        text: copy.speciesPeakSeason(
+          name,
+          monthName(species.peakSeasonStart!, copy),
+          monthName(species.peakSeasonEnd!, copy)
+        )
       });
     } else {
-      lines.push({
-        level: 'neutral',
-        category: 'season',
-        text: `${species.norwegianName} er i sesong, men ikke topp-sesong`
-      });
+      lines.push({ level: 'neutral', category: 'season', text: copy.speciesInSeason(name) });
     }
   } else {
     // Generic mushroom-season heuristic
     const month = input.month;
     if (month >= 8 && month <= 10) {
-      lines.push({ level: 'positive', category: 'season', text: 'Hovedsesong for sopp i Norge' });
+      lines.push({ level: 'positive', category: 'season', text: copy.genericHighSeason });
     } else if (month === 7 || month === 11) {
-      lines.push({ level: 'neutral', category: 'season', text: 'Tidlig/sen sesong — variert utvalg' });
+      lines.push({ level: 'neutral', category: 'season', text: copy.genericShoulderSeason });
     } else {
-      lines.push({ level: 'negative', category: 'season', text: 'Lav sesong for de fleste arter' });
+      lines.push({ level: 'negative', category: 'season', text: copy.genericLowSeason });
     }
   }
 
@@ -209,7 +395,7 @@ export function buildExplanation(input: ExplanationInput): Explanation[] {
       // Explicitly framed as an observation-density hint, not evidence of
       // presence: registrations cluster on trails/roads (accessibility bias),
       // so this signal is near-chance and deliberately does NOT raise the score.
-      text: 'Andre har registrert funn i nærheten før — men registreringer følger stier og veier, så bruk det som et hint'
+      text: copy.occurrenceHint
     });
   }
 
@@ -233,33 +419,38 @@ export function buildExplanation(input: ExplanationInput): Explanation[] {
       lines.push({
         level: 'positive',
         category: 'temperature',
-        text: `${Math.round(temp)}°C — innenfor optimum for ${input.species.norwegianName.toLowerCase()} (${prefs.tempCMin}–${prefs.tempCMax}°C)`
+        text: copy.tempInOptimum(
+          Math.round(temp),
+          speciesName(input.species, input.locale),
+          prefs.tempCMin,
+          prefs.tempCMax
+        )
       });
     } else if (inTolerance) {
       lines.push({
         level: 'neutral',
         category: 'temperature',
-        text: `${Math.round(temp)}°C — innenfor toleranse, men ikke optimum (${prefs.tempCMin}–${prefs.tempCMax}°C)`
+        text: copy.tempInTolerance(Math.round(temp), prefs.tempCMin, prefs.tempCMax)
       });
     } else {
       lines.push({
         level: 'negative',
         category: 'temperature',
-        text: `${Math.round(temp)}°C — utenfor toleranse-vindu (${prefs.tempCFloor}–${prefs.tempCCeil}°C)`
+        text: copy.tempOutsideTolerance(Math.round(temp), prefs.tempCFloor, prefs.tempCCeil)
       });
     }
   } else {
     if (temp >= 10 && temp <= 18) {
-      lines.push({ level: 'positive', category: 'temperature', text: `${Math.round(temp)}°C — gunstig sopp-temperatur` });
+      lines.push({ level: 'positive', category: 'temperature', text: copy.tempGenericGood(Math.round(temp)) });
     } else if (temp >= 5 && temp <= 22) {
-      lines.push({ level: 'neutral', category: 'temperature', text: `${Math.round(temp)}°C — moderat for sopp` });
+      lines.push({ level: 'neutral', category: 'temperature', text: copy.tempGenericModerate(Math.round(temp)) });
     } else {
-      lines.push({ level: 'negative', category: 'temperature', text: `${Math.round(temp)}°C — for kaldt eller for varmt` });
+      lines.push({ level: 'negative', category: 'temperature', text: copy.tempGenericBad(Math.round(temp)) });
     }
   }
 
   // ── Rain (cumulative window) ────────────────────────────────────────
-  const rain = pickRain(input.weather);
+  const rain = pickRain(input.weather, copy);
   const optMm = input.species
     ? resolveSpeciesPreferences({
         latinName: input.species.latinName,
@@ -270,45 +461,38 @@ export function buildExplanation(input: ExplanationInput): Explanation[] {
         peakSeasonEnd: input.species.peakSeasonEnd
       }).rainOptMm
     : 6;
-  if (rain.mm >= optMm * 1.5) {
-    lines.push({ level: 'positive', category: 'rain', text: `${Math.round(rain.mm)}mm regn siste ${rain.window} — godt fuktet` });
-  } else if (rain.mm >= optMm) {
-    lines.push({
-      level: 'positive',
-      category: 'rain',
-      text: `${Math.round(rain.mm)}mm regn siste ${rain.window} — over optimum`
-    });
-  } else if (rain.mm >= optMm * 0.5) {
-    lines.push({
-      level: 'neutral',
-      category: 'rain',
-      text: `${Math.round(rain.mm)}mm regn siste ${rain.window} — under optimum`
-    });
+  const rainMm = Math.round(rain.mm);
+  // rainOptMm is calibrated as mm over THREE days (species-scoring.ts) and is
+  // applied to rain3dMm by rainFit(). Comparing it against a 14-day total made
+  // 6mm/14d — 0.4 mm/day, a drought — print a green "over optimum", while the
+  // ground loses ~2.7 mm/day to evapotranspiration at 15 °C. Normalise both
+  // sides to mm per day so the line means the same thing in every window.
+  const RAIN_OPT_WINDOW_DAYS = 3;
+  const optPerDay = optMm / RAIN_OPT_WINDOW_DAYS;
+  const ratePerDay = rain.mm / rain.days;
+  if (ratePerDay >= optPerDay * 1.5) {
+    lines.push({ level: 'positive', category: 'rain', text: copy.rainWellWatered(rainMm, rain.window) });
+  } else if (ratePerDay >= optPerDay * 0.5) {
+    lines.push({ level: 'neutral', category: 'rain', text: copy.rainBelowOptimum(rainMm, rain.window) });
   } else {
-    lines.push({
-      level: 'negative',
-      category: 'rain',
-      text: `Bare ${Math.round(rain.mm)}mm regn siste ${rain.window} — for tørt`
-    });
+    lines.push({ level: 'negative', category: 'rain', text: copy.rainTooDry(rainMm, rain.window) });
   }
 
   // ── Fruiting window (a wet base + recent drying often triggers a flush) ──
-  if (input.weather.rain14dMm != null && input.weather.rain14dMm >= optMm * 2 && input.weather.rain3dMm < optMm) {
-    lines.push({
-      level: 'positive',
-      category: 'rain',
-      text: 'God fukt-base de siste ukene + tørrere de siste dagene — gunstig vindu for soppfruktsetting'
-    });
+  // A wet BASE plus a drier spell right now is the flush signal. "Wet base" has
+  // to mean the same thing the rain band means, not a separate lower threshold.
+  if (ratePerDay >= optPerDay * 1.5 && input.weather.rain3dMm < optMm) {
+    lines.push({ level: 'positive', category: 'rain', text: copy.fruitingWindow });
   }
 
   // ── Humidity ────────────────────────────────────────────────────────
-  const hum = input.weather.humidityPct;
-  if (hum >= 80) {
-    lines.push({ level: 'positive', category: 'humidity', text: `${Math.round(hum)}% luftfuktighet — høyt` });
-  } else if (hum >= 60) {
-    lines.push({ level: 'neutral', category: 'humidity', text: `${Math.round(hum)}% luftfuktighet — moderat` });
+  const hum = Math.round(input.weather.humidityPct);
+  if (input.weather.humidityPct >= 80) {
+    lines.push({ level: 'positive', category: 'humidity', text: copy.humidityHigh(hum) });
+  } else if (input.weather.humidityPct >= 60) {
+    lines.push({ level: 'neutral', category: 'humidity', text: copy.humidityModerate(hum) });
   } else {
-    lines.push({ level: 'negative', category: 'humidity', text: `${Math.round(hum)}% luftfuktighet — tørt` });
+    lines.push({ level: 'negative', category: 'humidity', text: copy.humidityLow(hum) });
   }
 
   // ── Habitat ──────────────────────────────────────────────────────────
@@ -318,11 +502,11 @@ export function buildExplanation(input: ExplanationInput): Explanation[] {
   if (input.forest) {
     const f = input.forest;
     const level = habitatLevel(f.habitatScore);
-    const bonitetPart = f.productivity != null ? `, bonitet ${f.productivity}` : '';
+    const bonitetPart = f.productivity != null ? copy.bonitetSuffix(f.productivity) : '';
     lines.push({
       level: 'neutral',
       category: 'habitat',
-      text: `Skog her (${forestSourceLabel(f.source)}): ${forestLabel(f.forestType)}${bonitetPart}`
+      text: copy.forestHere(forestSourceLabel(f.source), forestLabel(f.forestType, copy), bonitetPart)
     });
     for (const reason of f.habitatReasons) {
       lines.push({ level, category: 'habitat', text: reason });
@@ -331,7 +515,7 @@ export function buildExplanation(input: ExplanationInput): Explanation[] {
     lines.push({
       level: 'neutral',
       category: 'habitat',
-      text: `Foretrukket habitat: ${input.species.habitat.join(', ')}`
+      text: copy.preferredHabitat(input.species.habitat.join(', '))
     });
   }
 
@@ -340,7 +524,7 @@ export function buildExplanation(input: ExplanationInput): Explanation[] {
     lines.push({
       level: 'neutral',
       category: 'mycorrhizal',
-      text: `Følger ${input.species.mycorrhizalPartners.join('/')}`
+      text: copy.mycorrhizalPartners(input.species.mycorrhizalPartners.join('/'))
     });
   }
 
@@ -354,12 +538,12 @@ const LEVEL_MARK: Record<ExplanationLevel, string> = { positive: '✓', neutral:
 // spot-level spatial ranking is near-chance (~0.52, accessibility bias), so the
 // old "lovende sted … her" wording overclaimed. "Gode forhold nå" is what we can
 // honestly stand behind. See docs/reports/prediction-model.md.
-function verdictText(score: number, speciesName?: string): string {
-  const who = speciesName ? ` for ${speciesName.toLowerCase()}` : '';
-  if (score >= 75) return `Svært gode forhold${who} nå`;
-  if (score >= 55) return `Gode forhold${who} nå`;
-  if (score >= 35) return `Brukbare forhold${who} nå`;
-  return `Svake forhold${who} nå`;
+function verdictText(score: number, copy: ExplanationCopy, speciesName?: string): string {
+  const who = speciesName ? copy.verdictFor(speciesName) : '';
+  if (score >= 75) return copy.verdictExcellent(who);
+  if (score >= 55) return copy.verdictGood(who);
+  if (score >= 35) return copy.verdictOk(who);
+  return copy.verdictWeak(who);
 }
 
 export interface SpotSummary {
@@ -374,8 +558,13 @@ export interface SpotSummary {
  */
 export function buildSpotSummary(input: ExplanationInput & { score: number }): SpotSummary {
   const lines = buildExplanation(input);
+  const copy = copyFor(input.locale);
   return {
-    verdict: verdictText(input.score, input.species?.norwegianName),
+    verdict: verdictText(
+      input.score,
+      copy,
+      input.species ? speciesName(input.species, input.locale) : undefined
+    ),
     reasons: lines.map((line) => `${LEVEL_MARK[line.level]} ${line.text}`)
   };
 }

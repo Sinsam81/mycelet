@@ -113,13 +113,26 @@ const nextConfig = {
     ]
   },
   async headers() {
+    // These endpoints return prose (prediction verdicts, flush banners, weekday
+    // labels) in the language of the MYCELET_LOCALE cookie, so their responses
+    // must never be reused across readers. Declared here rather than per-route
+    // so it also covers the error responses.
+    const localeVaryingHeaders = [
+      { key: 'Vary', value: 'Cookie, Accept-Language' },
+      { key: 'Cache-Control', value: 'private, no-store' }
+    ];
+
     return [
       {
         // Apply to every route, including API. JSON responses don't strictly
         // need frame-options etc., but applying globally keeps the rule simple.
         source: '/:path*',
         headers: securityHeaders
-      }
+      },
+      { source: '/api/mushroom-day', headers: localeVaryingHeaders },
+      { source: '/api/mushroom-forecast', headers: localeVaryingHeaders },
+      { source: '/api/prediction', headers: localeVaryingHeaders },
+      { source: '/api/prediction/:path*', headers: localeVaryingHeaders }
     ];
   },
   async rewrites() {

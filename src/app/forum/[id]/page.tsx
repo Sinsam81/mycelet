@@ -102,6 +102,7 @@ export default function ForumPostDetailPage({ params }: ForumPostDetailPageProps
         {post ? (
           <PostDetail
             post={post}
+            currentUserId={currentUserId}
             onToggleLike={() => toggleLike.mutate(post.isLiked)}
             likeLoading={toggleLike.isPending}
             onEdit={(payload) => updatePost.mutateAsync(payload)}

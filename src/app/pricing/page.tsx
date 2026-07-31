@@ -38,6 +38,10 @@ type BillingStatusResponse = {
 // page can never advertise a different price than Stripe charges.
 const PREMIUM_MONTHLY = BILLING_PLANS.premium.monthlyNok ?? 79;
 const SEASON_YEARLY = BILLING_PLANS.season_pass.yearlyNok ?? 249;
+// Bump this whenever the consent wording in the checkbox changes, so a stored
+// consent can be traced back to the exact text the customer was shown.
+const PURCHASE_CONSENT_VERSION = 'v2-2026-07-30';
+
 const SEASON_PER_MONTH = Math.round(SEASON_YEARLY / 12);
 
 // Next 15+ requires useSearchParams() inside a Suspense boundary; default
@@ -285,7 +289,9 @@ function PricingInner() {
       const response = await fetch('/api/billing/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ plan })
+        // The consent is sent and recorded server-side; without it the route
+        // refuses the purchase (angrerettloven — see /kjopsvilkar punkt 4).
+        body: JSON.stringify({ plan, immediateDeliveryConsent: true, consentVersion: PURCHASE_CONSENT_VERSION })
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data?.error ?? t('errorCheckout'));
@@ -556,6 +562,7 @@ function PricingFallback() {
     </PageWrapper>
   );
 }
+
 
 export default function PricingPage() {
   return (

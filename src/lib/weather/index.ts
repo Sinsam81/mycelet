@@ -17,6 +17,17 @@ export interface WeatherSummary {
    * provider has no daily precip history (OpenWeather). See soil-moisture.ts.
    */
   soilMoistureIndex: number | null;
+  /**
+   * Daily precipitation, oldest to newest, one entry per day and ending today.
+   * The same series computeSoilMoistureIndex runs on. Null when the provider has
+   * no daily history (OpenWeather).
+   *
+   * Callers that need a rolling window across an observed/forecast boundary MUST
+   * use this rather than the pre-summed rainNdMm fields: those are anchored to
+   * the observed past and cannot slide, which is what produced the day-0/day-1
+   * cliff in the home page's 7-day strip.
+   */
+  precipDailyMm: number[] | null;
 }
 
 export interface WeatherFetchOptions {
@@ -263,7 +274,8 @@ async function fetchFrost({ lat, lon }: WeatherFetchOptions): Promise<WeatherSum
     rain14dMm: precipSeries.length ? frostSumWithinDays(precipSeries, 14, now) : null,
     minTemp7dC: frostExtremeWithinDays(minSeries, 7, now, 'min'),
     maxTemp7dC: frostExtremeWithinDays(maxSeries, 7, now, 'max'),
-    soilMoistureIndex: computeSoilMoistureIndex(precipDaily, temperatureC)
+    soilMoistureIndex: computeSoilMoistureIndex(precipDaily, temperatureC),
+    precipDailyMm: precipDaily.length ? precipDaily : null
   };
 }
 
@@ -485,7 +497,8 @@ async function fetchSmhi({ lat, lon }: WeatherFetchOptions): Promise<WeatherSumm
     rain14dMm: sumWithinDays(rainData, 14, now),
     minTemp7dC: extremeWithinDays(minData, 7, now, 'min'),
     maxTemp7dC: extremeWithinDays(maxData, 7, now, 'max'),
-    soilMoistureIndex: computeSoilMoistureIndex(precipDaily, temperatureC)
+    soilMoistureIndex: computeSoilMoistureIndex(precipDaily, temperatureC),
+    precipDailyMm: precipDaily.length ? precipDaily : null
   };
 }
 
@@ -516,7 +529,8 @@ async function fetchOpenWeather({ lat, lon }: WeatherFetchOptions): Promise<Weat
       minTemp7dC: null,
       maxTemp7dC: null,
       // OpenWeather here is a short forecast, not daily precip history → no bucket.
-      soilMoistureIndex: null
+      soilMoistureIndex: null,
+      precipDailyMm: null
     };
   } catch {
     return null;
@@ -579,7 +593,8 @@ async function fetchOpenMeteo({ lat, lon }: WeatherFetchOptions): Promise<Weathe
       minTemp7dC: last7Min.length ? Math.min(...last7Min) : null,
       maxTemp7dC: last7Max.length ? Math.max(...last7Max) : null,
       soilMoistureIndex:
-        precip.length && Number.isFinite(meanTemp) ? computeSoilMoistureIndex(precip, meanTemp) : null
+        precip.length && Number.isFinite(meanTemp) ? computeSoilMoistureIndex(precip, meanTemp) : null,
+      precipDailyMm: precip.length ? precip : null
     };
   } catch {
     return null;
