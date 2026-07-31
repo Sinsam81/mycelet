@@ -28,6 +28,8 @@ import {
   saveOfflineAreas
 } from '@/lib/utils/offlineMap';
 import { buildExplanation } from '@/lib/utils/prediction-explanation';
+import { colorForScore } from '@/lib/utils/condition-colors';
+import { scoreToCondition } from '@/lib/utils/prediction';
 import { getSpeciesDisplayName } from '@/lib/utils/species-name';
 import { FLAGS } from '@/lib/flags';
 import toast from 'react-hot-toast';
@@ -163,12 +165,6 @@ export function MushroomMap() {
     popupRootsRef.current = [];
   };
 
-  const getHeatColor = (score: number) => {
-    if (score >= 80) return '#b91c1c';
-    if (score >= 60) return '#ea580c';
-    if (score >= 40) return '#eab308';
-    return '#65a30d';
-  };
 
   const updateHeatLayer = useCallback(async (data: PredictionResponse | undefined) => {
     const map = mapRef.current;
@@ -182,13 +178,13 @@ export function MushroomMap() {
       const radiusMeters = Math.max(120, Math.min(450, 90 + spot.score * 3));
       const circle = leaflet.circle([spot.lat, spot.lng], {
         radius: radiusMeters,
-        color: getHeatColor(spot.score),
-        fillColor: getHeatColor(spot.score),
+        color: colorForScore(spot.score).hex,
+        fillColor: colorForScore(spot.score).hex,
         fillOpacity: 0.2,
         weight: 1
       });
 
-      circle.bindTooltip(`Hotspot ${spot.score}%`, { direction: 'top' });
+      circle.bindTooltip(t('hotspotTooltip', { score: spot.score }), { direction: 'top' });
       heatLayer.addLayer(circle);
     }
   }, []);
@@ -284,10 +280,10 @@ export function MushroomMap() {
       layer.clearLayers();
       spots.forEach((spot, index) => {
         const rank = index + 1;
-        const color = getHeatColor(spot.score);
+        const color = colorForScore(spot.score).hex;
         const icon = leaflet.divIcon({
           className: 'top-spot-marker',
-          html: `<div style="background:${color};color:#fff;border-radius:9999px;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,0.45)">${rank}</div>`,
+          html: `<div style="background:${color};color:${colorForScore(spot.score).ink};border-radius:9999px;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,0.45)">${rank}</div>`,
           iconSize: [28, 28],
           iconAnchor: [14, 14]
         });
@@ -487,7 +483,7 @@ export function MushroomMap() {
       const leaflet = (await import('leaflet')).default;
       layer.clearLayers();
       for (const spot of spots) {
-        const color = getHeatColor(spot.score);
+        const color = colorForScore(spot.score).hex;
         const icon = leaflet.divIcon({
           className: 'species-spot-marker',
           html: `<div style="width:46px;height:46px;border-radius:9999px;border:3px solid #fff;box-shadow:0 1px 5px rgba(0,0,0,0.5);overflow:hidden;background:${color}"><img src="${spot.imageUrl}" alt="" style="width:100%;height:100%;object-fit:cover" onerror="this.style.display='none'"/></div>`,
@@ -1272,7 +1268,8 @@ export function MushroomMap() {
       const avgScore = Math.round(tileHotspots.reduce((sum, item) => sum + item.score, 0) / tileHotspots.length);
       return {
         score: avgScore,
-        condition: avgScore >= 70 ? 'excellent' : avgScore >= 50 ? 'good' : avgScore >= 30 ? 'moderate' : 'poor',
+        // Same ladder as the server uses, so one number never gets two labels.
+        condition: scoreToCondition(avgScore),
         components: {
           environment: 0,
           historical: 0,

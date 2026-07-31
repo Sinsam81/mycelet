@@ -66,6 +66,12 @@ export interface ExplanationWeather {
   rain14dMm?: number | null;
   minTemp7dC?: number | null;
   maxTemp7dC?: number | null;
+  /**
+   * Root-zone moisture index [0,1] from computeSoilMoistureIndex. Unlike a raw
+   * rain sum it dries out, so it is the signal that can tell "wet two weeks ago"
+   * apart from "wet now". Null/undefined outside NO/SE and for forecast days.
+   */
+  soilMoistureIndex?: number | null;
 }
 
 /**

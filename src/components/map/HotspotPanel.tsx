@@ -88,7 +88,15 @@ export function HotspotPanel({ speciesId, data, explanations, isLoading, error }
             : t('conditionsHere')}
         </h3>
         <div className="flex items-center gap-2">
-          {data ? <span className="text-sm font-bold text-forest-900">{data.score}/100</span> : null}
+          {data ? (
+            <span className="flex items-baseline gap-1.5">
+              <span className="text-sm font-bold text-forest-900">{data.score}</span>
+              {/* Say what the number is measured against. The home page shows a
+                  different quantity on the same 0-100 face, and users reasonably
+                  read them as one scale. */}
+              <span className="text-[10px] leading-tight text-gray-500">{t('scaleNote')}</span>
+            </span>
+          ) : null}
           <button
             type="button"
             onClick={() => setOpen(false)}

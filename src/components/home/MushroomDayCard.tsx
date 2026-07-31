@@ -45,10 +45,14 @@ const FLUSH_TINT: Record<FlushStatus, string> = {
 // via i18n inside the component.
 const DEFAULT = { lat: 59.91, lon: 10.75 };
 
-function colorFor(score: number): string {
-  if (score >= 65) return '#15803d'; // forest green — great
-  if (score >= 40) return '#d97706'; // amber — moderate
-  return '#9ca3af'; // gray — quiet
+function colorFor(score: number, optimal: boolean): string {
+  // Green is reserved for days the model will actually celebrate. Scoring alone
+  // is not enough: a mild wet January scores 65, and after the soil-moisture
+  // veto a dried-out day can still score high — both would otherwise paint
+  // forest-green next to a grey "Tørt — soppen venter på regn" banner.
+  if (score >= 65 && optimal) return '#15803d';
+  if (score >= 40) return '#d97706';
+  return '#9ca3af';
 }
 
 /**
@@ -130,7 +134,7 @@ export function MushroomDayCard() {
   if (!data) return null;
 
   const { today, days } = data;
-  const color = colorFor(today.score);
+  const color = colorFor(today.score, today.optimal);
   const r = 46;
   const circumference = 2 * Math.PI * r;
   const offset = circumference * (1 - today.score / 100);
@@ -138,7 +142,12 @@ export function MushroomDayCard() {
   return (
     <article className="min-h-[15rem] rounded-xl bg-white p-4 shadow-sm">
       <div className="flex items-center gap-4">
-        <svg viewBox="0 0 110 110" className="h-24 w-24 shrink-0" aria-hidden>
+        <svg
+          viewBox="0 0 110 110"
+          className="h-24 w-24 shrink-0"
+          role="img"
+          aria-label={t('ringLabel', { score: today.score })}
+        >
           <circle cx="55" cy="55" r={r} fill="none" stroke="#e5e7eb" strokeWidth="10" />
           <circle
             cx="55"
@@ -190,7 +199,7 @@ export function MushroomDayCard() {
                 <div className="flex h-12 w-full items-end">
                   <div
                     className="w-full rounded-t"
-                    style={{ height: `${Math.max(10, d.score)}%`, backgroundColor: colorFor(d.score) }}
+                    style={{ height: `${Math.max(10, d.score)}%`, backgroundColor: colorFor(d.score, d.optimal) }}
                   />
                 </div>
                 <span className={`text-[9px] ${d.isToday ? 'font-semibold text-forest-900' : 'text-gray-500'}`}>
@@ -202,7 +211,13 @@ export function MushroomDayCard() {
         </div>
       ) : null}
 
-      <div className="mt-3 flex items-center justify-between text-xs">
+      {/* The map computes a different quantity on the same 0-100 face — this is
+          the line that stops the two from reading as a contradiction. */}
+      <p className="mt-3 border-t border-gray-100 pt-2.5 text-[11px] leading-relaxed text-gray-500">
+        {t('scaleNote')}
+      </p>
+
+      <div className="mt-2 flex items-center justify-between text-xs">
         <span className="text-gray-500">📍 {areaLabel}</span>
         <div className="flex items-center gap-3">
           {usingDefault ? (

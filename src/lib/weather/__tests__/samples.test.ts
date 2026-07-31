@@ -10,7 +10,7 @@ const WEATHER = {
   rain14dMm: 30,
   minTemp7dC: 6,
   maxTemp7dC: 18,
-  soilMoistureIndex: 0.7
+  soilMoistureIndex: 0.7, precipDailyMm: null
 };
 
 describe('weatherSamplePoints', () => {

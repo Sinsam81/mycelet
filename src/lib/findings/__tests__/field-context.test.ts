@@ -27,7 +27,7 @@ describe('field context', () => {
           rain14dMm: 30,
           minTemp7dC: 7,
           maxTemp7dC: 18,
-          soilMoistureIndex: 0.7
+          soilMoistureIndex: 0.7, precipDailyMm: null
         },
         '2026-07-14T10:00:00.000Z'
       )

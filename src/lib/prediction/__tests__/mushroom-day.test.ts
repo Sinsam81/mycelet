@@ -70,3 +70,50 @@ describe('assessMushroomDay — language', () => {
     expect(assessMushroomDay(base, 1).title).toBe('Soppforhold i dag');
   });
 });
+
+describe('assessMushroomDay — the moisture veto', () => {
+  // A 14-day rain sum stays high long after the ground has dried. Without the
+  // bucket model the card would celebrate a day the flush banner calls dry.
+  const septemberDrought: ExplanationWeather = {
+    temperatureC: 15,
+    humidityPct: 85,
+    rain3dMm: 0,
+    rain7dMm: 0,
+    rain14dMm: 71,
+    minTemp7dC: 8,
+    maxTemp7dC: 18
+  };
+
+  it('refuses to celebrate when the ground has dried out', () => {
+    const dry = assessMushroomDay({ ...septemberDrought, soilMoistureIndex: 0.2 }, 9);
+    expect(dry.optimal).toBe(false);
+    expect(dry.title).toBe('Soppforhold i dag');
+    // …and must not still list the old rain as a reason to go.
+    expect(dry.reasons.join(' ')).not.toMatch(/regn|fuktet/i);
+  });
+
+  it('still celebrates when the ground is actually wet', () => {
+    const wet = assessMushroomDay({ ...septemberDrought, soilMoistureIndex: 0.8 }, 9);
+    expect(wet.optimal).toBe(true);
+    expect(wet.title).toContain('Perfekt soppdag');
+  });
+
+  it('uses the same 0.55 gate as the flush banner, so the two cannot disagree', () => {
+    expect(assessMushroomDay({ ...septemberDrought, soilMoistureIndex: 0.54 }, 9).optimal).toBe(false);
+    expect(assessMushroomDay({ ...septemberDrought, soilMoistureIndex: 0.55 }, 9).optimal).toBe(true);
+  });
+
+  it('is inert when no moisture index is available', () => {
+    // OpenWeather and forecast days have no bucket. Behaviour must be unchanged.
+    const withoutField = assessMushroomDay(septemberDrought, 9);
+    const explicitlyNull = assessMushroomDay({ ...septemberDrought, soilMoistureIndex: null }, 9);
+    expect(withoutField.optimal).toBe(true);
+    expect(explicitlyNull).toEqual(withoutField);
+  });
+
+  it('can only veto, never promote', () => {
+    // A soaked but out-of-season day stays un-celebrated.
+    const january = assessMushroomDay({ ...septemberDrought, soilMoistureIndex: 1 }, 1);
+    expect(january.optimal).toBe(false);
+  });
+});

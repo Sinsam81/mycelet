@@ -5,6 +5,7 @@ import { checkRateLimit } from '@/lib/rate-limit';
 import { getClientKey, rateLimitResponse } from '@/lib/rate-limit/route';
 import { createRequestLogger } from '@/lib/log/request';
 import { getUserLocale } from '@/i18n/locale';
+import { observedRainWindows } from '@/lib/weather/windows';
 
 /**
  * "Perfekt soppdag" endpoint — returns today's mushroom-foraging verdict for a
@@ -64,11 +65,14 @@ export async function GET(request: NextRequest) {
       {
         temperatureC: weather.temperatureC,
         humidityPct: weather.humidityPct,
-        rain3dMm: weather.rain3dMm,
-        rain7dMm: weather.rain7dMm,
-        rain14dMm: weather.rain14dMm,
+        // Same windows the home card uses, or the two surfaces would report
+        // different scores for the same day and place.
+        ...observedRainWindows(weather),
         minTemp7dC: weather.minTemp7dC,
-        maxTemp7dC: weather.maxTemp7dC
+        maxTemp7dC: weather.maxTemp7dC,
+        // This endpoint feeds the proactive "perfect day" push. Without the
+        // moisture veto a phone would buzz on a bone-dry day.
+        soilMoistureIndex: weather.soilMoistureIndex
       },
       month,
       locale

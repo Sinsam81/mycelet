@@ -14,6 +14,7 @@ import { getClientKey, rateLimitResponse } from '@/lib/rate-limit/route';
 import { createRequestLogger } from '@/lib/log/request';
 import { getUserLocale } from '@/i18n/locale';
 import { getSpeciesDisplayName } from '@/lib/utils/species-name';
+import { isRecommendableSpecies } from '@/lib/prediction/recommendable';
 
 /**
  * "Soppbilder på kartet" — for each species in season, find the single best
@@ -135,7 +136,7 @@ export async function GET(request: NextRequest) {
     const { data: speciesRows } = await supabase
       .from('mushroom_species')
       .select(
-        'id,norwegian_name,swedish_name,latin_name,genus,season_start,season_end,peak_season_start,peak_season_end,habitat,mycorrhizal_partners,primary_image_url'
+        'id,norwegian_name,swedish_name,latin_name,genus,season_start,season_end,peak_season_start,peak_season_end,habitat,mycorrhizal_partners,primary_image_url,edibility'
       )
       .not('primary_image_url', 'is', null);
 
@@ -144,7 +145,10 @@ export async function GET(request: NextRequest) {
         (s) =>
           s.season_start != null &&
           s.season_end != null &&
-          inSeason(month, s.season_start as number, s.season_end as number)
+          inSeason(month, s.season_start as number, s.season_end as number) &&
+          // A photo pin on a concrete coordinate is the strongest invitation the
+          // map makes. It must never land on a toxic species.
+          isRecommendableSpecies(s.edibility as string | null)
       )
       .slice(0, MAX_SPECIES);
 

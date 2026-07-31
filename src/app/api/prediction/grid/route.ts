@@ -15,6 +15,7 @@ import { getClientKey, rateLimitResponse } from '@/lib/rate-limit/route';
 import { createRequestLogger } from '@/lib/log/request';
 import { getUserLocale } from '@/i18n/locale';
 import { getSpeciesDisplayName } from '@/lib/utils/species-name';
+import { isRecommendableSpecies } from '@/lib/prediction/recommendable';
 import { DEFAULT_LOCALE, type Locale } from '@/i18n/config';
 
 // Surfaced verbatim as toasts on the map, so they follow the reader's language.
@@ -210,14 +211,17 @@ export async function GET(request: NextRequest) {
       const { data: rows } = await supabase
         .from('mushroom_species')
         .select(
-          'id,norwegian_name,swedish_name,latin_name,genus,season_start,season_end,peak_season_start,peak_season_end,habitat,mycorrhizal_partners'
+          'id,norwegian_name,swedish_name,latin_name,genus,season_start,season_end,peak_season_start,peak_season_end,habitat,mycorrhizal_partners,edibility'
         );
       topSpeciesCandidates = (rows ?? [])
         .filter(
           (s) =>
             s.season_start != null &&
             s.season_end != null &&
-            inSeason(month, s.season_start as number, s.season_end as number)
+            inSeason(month, s.season_start as number, s.season_end as number) &&
+            // Only species you may actually pick get named as a reason to walk
+            // somewhere. See src/lib/prediction/recommendable.ts.
+            isRecommendableSpecies(s.edibility as string | null)
         )
         .map((s) => ({
           name:

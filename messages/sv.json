@@ -859,10 +859,12 @@
     "defaultRegion": "Södra Norge",
     "yourPosition": "din position",
     "checkingConditions": "Kollar svampförhållandena …",
-    "outOf100": "av 100",
+    "outOf100": "av 100 · väder + säsong",
     "outlookAhead": "Utsikterna framåt",
     "myPosition": "Min position",
-    "seeMap": "Se kartan →"
+    "seeMap": "Se kartan →",
+    "ringLabel": "Väder och säsong i dag: {score} av 100",
+    "scaleNote": "Siffran är väder och säsong för området — inte hur bra skogen är där du står. Kartan räknar på ett annat sätt, så siffrorna kan inte jämföras direkt."
   },
   "LookAlikeCheck": {
     "sectionLabel": "Förväxlingskontroll",
@@ -949,7 +951,7 @@
     "sourceOccurrences": "Artsdatabanken (fynd)",
     "calculatingShort": "Beräknar…",
     "mushroomConditions": "Svampförhållanden",
-    "conditionsHere": "Svampförhållanden här",
+    "conditionsHere": "Svampförhållanden i området",
     "close": "Stäng",
     "speciesNumber": "Art #{id}",
     "allSpecies": "Alla arter",
@@ -967,7 +969,8 @@
     "environment": "Miljö: {value}",
     "history": "Historik: {value}",
     "season": "Säsong: {value}",
-    "model": "Modell: {version}"
+    "model": "Modell: {version}",
+    "scaleNote": "av 100 · räknas ut på annat sätt än siffran på startsidan, så de kan inte jämföras direkt"
   },
   "MapFilters": {
     "title": "Filter",
@@ -1004,7 +1007,7 @@
     "topSpotsLimited": "Visar de {count} mest lovande platserna nära dig. Premium visar alla 12 med full motivering.",
     "topSpotsForSpecies": "{count} lovande platser för {species} inom {km} km. Tryck på en nål.",
     "topSpotsGeneric": "{count} lovande platser inom {km} km. Tryck på en nål för motivering.",
-    "promisingSpotHere": "Goda förhållanden här",
+    "promisingSpotHere": "Goda förhållanden nu",
     "couldNotFetchPhotos": "Kunde inte hämta svampbilder.",
     "noSpeciesInSeason": "Inga arter i säsong här just nu.",
     "speciesInSeasonCount": "{count} arter i säsong — bild på lovande plats för varje.",
@@ -1093,7 +1096,8 @@
     "dir_south": "syd",
     "dir_southWest": "sydväst",
     "dir_west": "väster",
-    "dir_northWest": "nordväst"
+    "dir_northWest": "nordväst",
+    "hotspotTooltip": "Svampförhållanden {score}/100"
   },
   "OnboardingIntro": {
     "step1Title": "Välkommen till Mycelet",

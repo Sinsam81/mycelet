@@ -98,10 +98,23 @@ export function assessMushroomDay(
   // also needs a real moisture base — a dry spell never fruits, however mild or
   // in-season it is.
   const inSeasonWindow = month >= 6 && month <= 11;
-  const optimal = score >= 65 && inSeasonWindow && rain >= 15;
+
+  // A 14-day rain SUM stays high for two weeks after one old downpour, so on its
+  // own it will celebrate a day when the ground has long since dried out. When
+  // the bucket model is available it may VETO the celebration — it can never
+  // lift a low score. 0.55 is the same gate assessFlush uses to return
+  // 'fruiting', so the headline and the flush banner directly beneath it cannot
+  // contradict each other. Without this, the card could read "🍄 Perfekt
+  // soppdag i dag!" above a grey "Tørt — soppen venter på regn".
+  //
+  // Null or undefined (OpenWeather, forecast days) leaves the veto inert.
+  const moistNow = weather.soilMoistureIndex == null || weather.soilMoistureIndex >= 0.55;
+  const optimal = score >= 65 && inSeasonWindow && rain >= 15 && moistNow;
 
   const reasons = buildExplanation({ weather, month, locale })
     .filter((line) => line.level === 'positive')
+    // Don't list "godt fuktet" as a reason on a day the moisture model vetoed.
+    .filter((line) => moistNow || line.category !== 'rain')
     .map((line) => line.text);
 
   const copy = COPY[locale] ?? COPY[DEFAULT_LOCALE];

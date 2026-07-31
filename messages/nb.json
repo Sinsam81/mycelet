@@ -859,10 +859,12 @@
     "defaultRegion": "Sør-Norge",
     "yourPosition": "din posisjon",
     "checkingConditions": "Sjekker soppforholdene …",
-    "outOf100": "av 100",
+    "outOf100": "av 100 · vær + sesong",
     "outlookAhead": "Utsikten fremover",
     "myPosition": "Min posisjon",
-    "seeMap": "Se kartet →"
+    "seeMap": "Se kartet →",
+    "ringLabel": "Vær og sesong i dag: {score} av 100",
+    "scaleNote": "Tallet er vær og sesong for området — ikke hvor god skogen er der du står. Kartet regner på en annen måte, så tallene kan ikke sammenlignes direkte."
   },
   "LookAlikeCheck": {
     "sectionLabel": "Forvekslingssjekk",
@@ -949,7 +951,7 @@
     "sourceOccurrences": "Artsdatabanken (funn)",
     "calculatingShort": "Beregner…",
     "mushroomConditions": "Soppforhold",
-    "conditionsHere": "Soppforhold her",
+    "conditionsHere": "Soppforhold i området",
     "close": "Lukk",
     "speciesNumber": "Art #{id}",
     "allSpecies": "Alle arter",
@@ -967,7 +969,8 @@
     "environment": "Miljø: {value}",
     "history": "Historikk: {value}",
     "season": "Sesong: {value}",
-    "model": "Modell: {version}"
+    "model": "Modell: {version}",
+    "scaleNote": "av 100 · regnes ut annerledes enn tallet på forsiden, så de kan ikke sammenlignes direkte"
   },
   "MapFilters": {
     "title": "Filtre",
@@ -1004,7 +1007,7 @@
     "topSpotsLimited": "Viser de {count} mest lovende stedene nær deg. Premium viser alle 12 med full begrunnelse.",
     "topSpotsForSpecies": "{count} lovende steder for {species} innen {km} km. Trykk på en nål.",
     "topSpotsGeneric": "{count} lovende steder innen {km} km. Trykk på en nål for begrunnelse.",
-    "promisingSpotHere": "Gode forhold her",
+    "promisingSpotHere": "Gode forhold nå",
     "couldNotFetchPhotos": "Kunne ikke hente soppbilder.",
     "noSpeciesInSeason": "Ingen arter i sesong her nå.",
     "speciesInSeasonCount": "{count} arter i sesong — bilde på lovende sted for hver.",
@@ -1093,7 +1096,8 @@
     "dir_south": "sør",
     "dir_southWest": "sørvest",
     "dir_west": "vest",
-    "dir_northWest": "nordvest"
+    "dir_northWest": "nordvest",
+    "hotspotTooltip": "Soppforhold {score}/100"
   },
   "OnboardingIntro": {
     "step1Title": "Velkommen til Mycelet",
