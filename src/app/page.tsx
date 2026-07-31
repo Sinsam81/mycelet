@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { getLocale, getTranslations } from 'next-intl/server';
 import { NonNativeOnly } from '@/components/native/NonNativeOnly';
-import { AlertTriangle, Calendar, Camera, Check, Crown, Database, FileText, Lock, Map, MessageSquare, Shield } from 'lucide-react';
+import { AlertTriangle, Calendar, Camera, Check, Crown, Database, FileText, Lock, Map, MessageSquare, Shield, ShieldAlert } from 'lucide-react';
 import { PageWrapper } from '@/components/layout/PageWrapper';
 import { LandingPage } from '@/components/landing/LandingPage';
 import { EdibilityBadge } from '@/components/ui/EdibilityBadge';
@@ -24,6 +24,11 @@ interface SpeciesRow {
   edibility: Edibility;
   season_start: number;
   season_end: number;
+  /** Curated peak window. Drives the "why now" line — no location needed. */
+  peak_season_start: number | null;
+  peak_season_end: number | null;
+  /** How often the species is actually encountered. Ranks the list. */
+  commonality: string | null;
   primary_image_url: string | null;
 }
 
@@ -89,7 +94,7 @@ export default async function HomePage() {
   const [{ data }, { data: recentFindings }] = await Promise.all([
     supabase
       .from('mushroom_species')
-      .select('id,norwegian_name,swedish_name,latin_name,edibility,season_start,season_end,primary_image_url')
+      .select('id,norwegian_name,swedish_name,latin_name,edibility,season_start,season_end,peak_season_start,peak_season_end,commonality,primary_image_url')
       .order('norwegian_name', { ascending: true }),
     supabase
       .from('public_findings')
@@ -100,9 +105,40 @@ export default async function HomePage() {
 
   const species = (data ?? []) as SpeciesRow[];
   const findings = (recentFindings ?? []) as unknown as RecentFindingRow[];
+  // Season is the part of the model that is actually validated (~0.89 AUC),
+  // and it needs no location — so this is what the front page may state
+  // plainly. Anything about WHICH FOREST belongs on the map, where the user has
+  // chosen a point and the claim is "this forest suits X", not "X is here".
+  // very_common first. Unknown sorts last rather than first, so a missing value
+  // never promotes a species onto the front page.
+  const COMMONALITY_ORDER: Record<string, number> = {
+    very_common: 0,
+    common: 1,
+    uncommon: 2,
+    rare: 3,
+    very_rare: 4
+  };
+  const commonalityRank = (value: string | null) => COMMONALITY_ORDER[value ?? ''] ?? 9;
+  const atPeak = (s: SpeciesRow) =>
+    s.peak_season_start != null && s.peak_season_end != null && isInMonth(month, s.peak_season_start, s.peak_season_end);
   const inSeasonEdible = species
-    .filter((s) => (s.edibility === 'edible' || s.edibility === 'conditionally_edible') && isInMonth(month, s.season_start, s.season_end))
-    .slice(0, 4);
+    .filter(
+      (s) =>
+        (s.edibility === 'edible' || s.edibility === 'conditionally_edible') &&
+        isInMonth(month, s.season_start, s.season_end)
+    )
+    // Peak season first — the strongest thing we can say — then by how often
+    // the species is actually encountered. Ranking alphabetically inside the
+    // peak group buried kantarell and steinsopp under whatever started with B.
+    // "Most likely to find" is exactly what commonality records, and it is a
+    // catalogued property, not a claim about a place.
+    .sort(
+      (a, b) =>
+        Number(atPeak(b)) - Number(atPeak(a)) ||
+        commonalityRank(a.commonality) - commonalityRank(b.commonality) ||
+        getSpeciesDisplayName(a, locale).localeCompare(getSpeciesDisplayName(b, locale), locale === 'sv' ? 'sv-SE' : 'nb-NO')
+    )
+    .slice(0, 6);
   const dangerousInSeason = species.filter((s) => (s.edibility === 'toxic' || s.edibility === 'deadly') && isInMonth(month, s.season_start, s.season_end));
   const speciesNames = new globalThis.Map(species.map((item) => [item.id, getSpeciesDisplayName(item, locale)]));
 
@@ -144,6 +180,48 @@ export default async function HomePage() {
         </header>
 
         <MushroomDayCard />
+
+        {inSeasonEdible.length > 0 ? (
+          <article className="rounded-2xl border border-gray-200 bg-white p-4">
+            <div className="flex items-baseline justify-between gap-2">
+              <h2 className="font-serif text-xl font-bold text-forest-900">{t('inSeasonTitle')}</h2>
+              <Link href="/species" className="shrink-0 text-xs font-medium text-forest-800 hover:underline">
+                {t('inSeasonSeeAll')}
+              </Link>
+            </div>
+            <p className="mt-0.5 text-xs text-gray-600">{t('inSeasonWhy')}</p>
+
+            <ul className="mt-2.5 space-y-1">
+              {inSeasonEdible.map((s) => (
+                <li key={s.id}>
+                  <Link
+                    href={`/species/${s.id}`}
+                    className="flex items-baseline justify-between gap-2 rounded-lg px-1 py-1 hover:bg-gray-50"
+                  >
+                    <span className="truncate text-sm font-medium text-gray-900">
+                      {getSpeciesDisplayName(s, locale)}
+                    </span>
+                    <span
+                      className={`shrink-0 text-xs ${atPeak(s) ? 'font-medium text-forest-700' : 'text-gray-500'}`}
+                    >
+                      {atPeak(s) ? t('inSeasonAtPeak') : t('inSeasonInSeason')}
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+
+            {dangerousInSeason.length > 0 ? (
+              <Link
+                href="/sikkerhet"
+                className="mt-2.5 flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-2 text-xs text-amber-900 hover:bg-amber-100"
+              >
+                <ShieldAlert className="h-4 w-4 shrink-0" />
+                <span>{t('inSeasonDangerous', { count: dangerousInSeason.length })}</span>
+              </Link>
+            ) : null}
+          </article>
+        ) : null}
 
         <Link
           href="/identify"

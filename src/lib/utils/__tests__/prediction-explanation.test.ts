@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { buildExplanation, buildSpotSummary, type SpeciesExplanationContext } from '../prediction-explanation';
+import {
+  buildExplanation,
+  buildSpotSummary,
+  type ExplanationWeather,
+  type SpeciesExplanationContext
+} from '../prediction-explanation';
 
 const KANTARELL: SpeciesExplanationContext = {
   norwegianName: 'Kantarell',
@@ -399,12 +404,12 @@ describe('buildSpotSummary — language', () => {
 });
 
 describe('buildExplanation — the rain line must mean the same in every window', () => {
-  const weather = (over: Partial<typeof PERFECT_KANTARELL_WEATHER>) => ({
+  const weather = (over: Partial<ExplanationWeather>): ExplanationWeather => ({
     ...PERFECT_KANTARELL_WEATHER,
     ...over
   });
 
-  const rainLine = (w: Parameters<typeof buildExplanation>[0]['weather']) =>
+  const rainLine = (w: ExplanationWeather) =>
     buildExplanation({ month: 9, weather: w }).find((l) => l.category === 'rain');
 
   it('calls a 14-day drought dry, not "over optimum"', () => {

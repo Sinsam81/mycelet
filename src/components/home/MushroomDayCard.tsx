@@ -211,6 +211,23 @@ export function MushroomDayCard() {
         </div>
       ) : null}
 
+      {/* Without a position the whole card is regional. Say so plainly and make
+          the offer, rather than showing a default region that reads as local.
+          Deliberately NOT a prompt on load — the user taps if they want it. */}
+      {usingDefault ? (
+        <button
+          type="button"
+          onClick={useMyLocation}
+          className="mt-3 flex w-full items-start gap-2 rounded-xl border border-forest-200 bg-forest-50/60 px-3 py-2 text-left transition hover:bg-forest-50"
+        >
+          <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-forest-700" />
+          <span className="text-xs leading-relaxed text-forest-900">
+            <span className="font-semibold">{t('sharePositionTitle')}</span>{' '}
+            <span className="text-forest-800">{t('sharePositionBody')}</span>
+          </span>
+        </button>
+      ) : null}
+
       {/* The map computes a different quantity on the same 0-100 face — this is
           the line that stops the two from reading as a contradiction. */}
       <p className="mt-3 border-t border-gray-100 pt-2.5 text-[11px] leading-relaxed text-gray-500">
@@ -218,7 +235,10 @@ export function MushroomDayCard() {
       </p>
 
       <div className="mt-2 flex items-center justify-between text-xs">
-        <span className="text-gray-500">📍 {areaLabel}</span>
+        <span className="text-gray-500">
+          📍 {areaLabel}
+          {usingDefault ? <span className="text-gray-400"> · {t('approximate')}</span> : null}
+        </span>
         <div className="flex items-center gap-3">
           {usingDefault ? (
             <button

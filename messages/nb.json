@@ -446,7 +446,13 @@
     "navPrivacy": "Personvern",
     "navDataSources": "Datakilder",
     "navTerms": "Vilkår",
-    "navPurchaseTerms": "Kjøpsvilkår"
+    "navPurchaseTerms": "Kjøpsvilkår",
+    "inSeasonTitle": "Hva som er i sesong nå",
+    "inSeasonWhy": "Sesong er det vi vet sikrest — hvilken skog som passer, ser du på kartet.",
+    "inSeasonAtPeak": "toppsesong",
+    "inSeasonInSeason": "i sesong",
+    "inSeasonSeeAll": "Se alle →",
+    "inSeasonDangerous": "{count, plural, =1 {# giftig art er også i sesong nå} other {# giftige arter er også i sesong nå}} — les deg opp før du plukker"
   },
   "Personvern": {
     "title": "Personvernerklæring",
@@ -864,7 +870,10 @@
     "myPosition": "Min posisjon",
     "seeMap": "Se kartet →",
     "ringLabel": "Vær og sesong i dag: {score} av 100",
-    "scaleNote": "Tallet er vær og sesong for området — ikke hvor god skogen er der du står. Kartet regner på en annen måte, så tallene kan ikke sammenlignes direkte."
+    "scaleNote": "Tallet er vær og sesong for området — ikke hvor god skogen er der du står. Kartet regner på en annen måte, så tallene kan ikke sammenlignes direkte.",
+    "sharePositionTitle": "Del posisjon for bedre råd.",
+    "sharePositionBody": "Nå viser vi været for Sør-Norge generelt. Med posisjonen din regner vi på været der du faktisk er — og kartet kan foreslå steder i nærheten.",
+    "approximate": "omtrentlig"
   },
   "LookAlikeCheck": {
     "sectionLabel": "Forvekslingssjekk",
