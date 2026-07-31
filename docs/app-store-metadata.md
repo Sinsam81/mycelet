@@ -140,9 +140,9 @@ calendar and a small community forum.
 The app uses native camera (species identification), native geolocation
 (map and finds) and supports offline use. All content is in Norwegian.
 
-Demo account for review:
-  Email: [OPPRETTES FØR INNSENDING]
-  Password: [OPPRETTES FØR INNSENDING]
+Demo account for review (opprettet 2026-07-29, aktivt sesongpass til 2028-01-01):
+  Email: applereview@mycelet.com
+  Password: Mycelet-Review-2026!
 The demo account has an active premium entitlement so all features are testable.
 
 Safety note: the app never tells users a mushroom is safe to eat — every

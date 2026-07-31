@@ -98,3 +98,18 @@ Ingen rollback av kode eller database var nødvendig.
 - **What:** Utloggede brukere hadde ingen direkte vei til `/auth/login` fra landingssiden — alle CTA-er pekte til `/auth/register`. Diskret «Logg inn»-lenke lagt til i toppnav (mellom ankerlenkene og «Prøv gratis») på både `index.html` og `index.sv.html` («Logga in»). Sanketips-artiklene bygget på nytt så de arver headeren — de plukket samtidig opp Svenska-fotlenken fra PR #96 som aldri var bygget inn i artiklene.
 - **Verify:** live curl viser lenken i NO-nav, SE-nav og artikkel-header; /api/health 200; qa:prod 29/29.
 - **Rollback:** none needed.
+
+## 2026-07-29 — PR #100: Sted+art-søk på kartet, svensk stedssøk fikset, uke-utsikt for søkt sted
+- **Utløser:** Sindre spurte om «hvor stor sjanse for steinsopp ved Hamar i helgen?» er enkelt. Det var det ikke.
+- **What:** (1) 🐞 Stedssøket var Norge-only (Kartverket) og feilet STILLE for Sverige — «Uppsala»→«Oppsal, Hjartdal», «Sälen»→«Selen, Karmøy». Nytt `src/lib/utils/place-search.ts`: Photon (dekker NO+SE) med Kartverket som NO-fallback, filtrert til NO/SE, tettsteder rangert over gårder. (2) Stedssøk var gjemt i Filtre-arket, og artsvalg ERSTATTET søkeboksen → «art + sted» var umulig. Nå ett søkefelt med grupperte treff; chip og felt lever side om side. (3) 7-dagers utsikt fantes kun for egen GPS-posisjon → ny `PlaceForecastStrip` viser uka for søkt sted. Oppslag proxes via ny `/api/places` (CSP forblir stram, ingen bruker-IP til tredjepart, CDN-cache 1 døgn, 60/min/klient).
+- **Review:** adversariell gjennomgang fant 8 funn, alle fikset før merge — bl.a. to som brøt selve funksjonen (sen GPS-fix rykket deg vekk fra søkt sted; «lovende steder» regnet rundt GPS i stedet for søkt sted) og ett ærlighetsbrudd (generelle værtall merket med valgt art).
+- **Verify:** 344 tests, typecheck, build; nettleser-verifisert begge rekkefølger (art→sted og sted→art); live `/api/places?q=Sälen` → Dalarnas län · Sverige; qa:prod 29/29; health ok.
+- **Rollback:** none needed.
+
+## 2026-07-30 — PR #101: «Load failed» — native fotoopptak + CSP-blokkerte identifiseringsbilder
+- **Utløser:** Sindre fikk «Load failed» ved soppidentifisering i iOS-appen.
+- **What:** Rotårsak: skallet laster mycelet.com, men Capacitor-kameraets fil-URI-er ligger på `capacitor://localhost` — `fetch(photo.webPath)` er et kryss-skjema-kall som CORS + håndhevende CSP `connect-src` blokkerer (WebKits melding: «Load failed»). Rammet alle tre fotoflytene (identifiser/forum/kartfunn) via delt hjelper. Fiks: `CameraResultType.Base64` + ny `base64ToBlob` (ingen nettverksflate). Søskenfeil fikset i samme PR: (1) resultatsiden `fetch(data:-URL)` → lokal `dataUrlToBlob`; (2) `/api/identify` droppet `imageUrl` fra svaret → forvekslingskortet falt ALLTID tilbake til Kindwise-CDN; (3) CDN-verten `mushroom-id.ams3.cdn.digitaloceanspaces.com` lagt presist til i `img-src`; (4) rå browsertekst ved nettverksfeil erstattet med nb/sv-tekst.
+- **Review:** CSP-revisjonsworkflow (4 linser + adversariell verifisering, 6 agenter, 506k tokens) over hele appen — fant CDN-funnet, avkreftet alt annet; verifisereren avdekket at `imageUrl`-utelatelsen gjorde fallbacken til hovedvei.
+- **Verify pre-merge:** ende-til-ende i iOS-simulator mot lokal prod-bygg (bildevalg → bro → POST når API-et; gammel kode døde ved bildevalg); 349 vitest (5 nye), typecheck, build.
+- **Verify post-deploy:** CSP-header med ny img-src-vert live; `/api/identify` POST → 401 uinnlogget; health ok; qa:prod 29/29.
+- **Rollback:** none needed.

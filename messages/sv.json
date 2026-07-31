@@ -346,7 +346,8 @@
     "takeOrChoosePhoto": "Ta bild / välj bild",
     "analyzing": "Analyserar bild...",
     "identifyFailed": "Identifieringen misslyckades",
-    "couldNotGetImage": "Kunde inte hämta bild."
+    "couldNotGetImage": "Kunde inte hämta bild.",
+    "networkError": "Kunde inte nå servern. Kontrollera täckningen och försök igen."
   },
   "IdentifyResult": {
     "errorNotLoggedIn": "Du måste vara inloggad för att spara fynd.",
@@ -491,10 +492,6 @@
     "processorVercelNote": "Trafik kan dirigeras via servrar utanför EES under EU:s standardavtalsklausuler (SCC).",
     "processorStripeDesc": "(betalning på webben) — Personuppgiftsbiträdesavtal:",
     "processorStripeNote": "Stripe kan överföra data till USA under SCC.",
-    "processorRevenuecatDesc": "(köp i mobilappen) behandlar köp- och prenumerationsstatus, ett anonymiserat användar-id och kvittodata från appbutikerna, så att din prenumeration känns igen på alla dina enheter. Personuppgiftsbiträdesavtal:",
-    "processorRevenuecatNote": "RevenueCat tar inte emot namn, e-post, bilder eller positionsdata.",
-    "processorAppleDesc": "(App Store) är säljare och betalningsmottagare för köp som görs i iOS-appen. Apple behandlar dina betalningsuppgifter som självständigt personuppgiftsansvarig enligt sin egen integritetspolicy, och vi tar aldrig emot kortuppgifter. Se:",
-    "processorAppleNote": "Gäller endast köp som görs i appen. Köp på mycelet.com sker via Stripe.",
     "processorKindwiseDesc": "(AI-svampidentifiering) — när du använder foto-ID skickas bilden och koordinaterna till Kindwise för analys. Integritet:",
     "processorGoogleAnalyticsDesc": "(valfri användningsanalys) — aktiveras endast efter samtycke och tar inte emot bilder, exakta positioner eller kontouppgifter. Google Analytics integritet och säkerhet:",
     "processorAnd": "och",
@@ -573,6 +570,10 @@
     "supervisoryAuthorityName": "IMY (Integritetsskyddsmyndigheten)",
     "supervisoryAuthorityUrl": "https://www.imy.se",
     "supervisoryAuthorityHost": "imy.se",
+    "processorRevenuecatDesc": "(köp i mobilappen) behandlar köp- och prenumerationsstatus, ett anonymiserat användar-id och kvittodata från appbutikerna, så att din prenumeration känns igen på alla dina enheter. Personuppgiftsbiträdesavtal:",
+    "processorRevenuecatNote": "RevenueCat tar inte emot namn, e-post, bilder eller positionsdata.",
+    "processorAppleDesc": "(App Store) är säljare och betalningsmottagare för köp som görs i iOS-appen. Apple behandlar dina betalningsuppgifter som självständigt personuppgiftsansvarig enligt sin egen integritetspolicy, och vi tar aldrig emot kortuppgifter. Se:",
+    "processorAppleNote": "Gäller endast köp som görs i appen. Köp på mycelet.com sker via Stripe.",
     "controllerNameEnk": "Sindre Øverås, som driver Mycelet genom den enskilda firman {legalName} (org.nr {orgNr}).",
     "controllerNameAs": "{legalName} (org.nr {orgNr})."
   },
@@ -840,16 +841,16 @@
     "reasonMisinformation": "Felaktig information",
     "reasonDangerousAdvice": "Farliga råd",
     "reasonHarassment": "Trakasserier",
-    "reasonIllegalContent": "Olagligt innehåll",
-    "reasonControlledSubstances": "Narkotika — psilocybinsvamp, växtplatser eller försäljning",
-    "reasonPrivacy": "Personuppgifter eller bild av mig/andra",
-    "reasonProtectedSpecies": "Skyddad art eller naturreservat",
-    "reasonSale": "Försäljning av plockad svamp",
     "reasonOther": "Annat",
     "submitError": "Kunde inte skicka rapporten.",
     "descriptionPlaceholder": "Beskriv problemet (valfritt)",
     "submit": "Skicka rapport",
-    "success": "Rapport skickad."
+    "success": "Rapport skickad.",
+    "reasonIllegalContent": "Olagligt innehåll",
+    "reasonControlledSubstances": "Narkotika — psilocybinsvamp, växtplatser eller försäljning",
+    "reasonPrivacy": "Personuppgifter eller bild av mig/andra",
+    "reasonProtectedSpecies": "Skyddad art eller naturreservat",
+    "reasonSale": "Försäljning av plockad svamp"
   },
   "SharePostButton": {
     "shareTextFindingZone": "Hittade {findingName} i {zoneLabel} via Mycelet.",
@@ -1106,6 +1107,15 @@
     "dir_southWest": "sydväst",
     "dir_west": "väster",
     "dir_northWest": "nordväst",
+    "searchSpeciesOrPlace": "Sök svamp eller plats — t.ex. «stensopp» eller «Sälen»",
+    "groupSpecies": "Svamparter",
+    "groupPlaces": "Platser",
+    "forecastLoading": "Hämtar utsikten …",
+    "forecastBestDay": "Bäst {day}: {score}/100",
+    "forecastUnavailable": "Hittade ingen utsikt för denna plats.",
+    "searchPlaceOnly": "Sök plats — t.ex. «Sälen»",
+    "forecastToday": "I dag",
+    "forecastConditionsThisWeek": "svampförhållanden denna vecka",
     "hotspotTooltip": "Svampförhållanden {score}/100"
   },
   "OnboardingIntro": {

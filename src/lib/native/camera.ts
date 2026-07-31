@@ -5,6 +5,8 @@
  * when isNativePlatform() is true. The plugin is dynamically imported so its
  * web implementation is never evaluated during SSR.
  */
+import { base64ToBlob } from '@/lib/utils/image';
+
 export async function captureNativePhoto(): Promise<File | null> {
   const { Camera, CameraResultType, CameraSource } = await import('@capacitor/camera');
 
@@ -12,7 +14,12 @@ export async function captureNativePhoto(): Promise<File | null> {
   try {
     photo = await Camera.getPhoto({
       quality: 90,
-      resultType: CameraResultType.Uri,
+      // Base64, NOT Uri: the shell loads https://www.mycelet.com while file
+      // URIs resolve to capacitor://localhost — fetching one from the page is
+      // a cross-scheme request that CORS and the CSP's connect-src both block
+      // (WebKit surfaces it as the bare «Load failed»). Base64 crosses the
+      // bridge directly and never touches the network layer.
+      resultType: CameraResultType.Base64,
       source: CameraSource.Prompt,
       correctOrientation: true,
       promptLabelHeader: 'Legg til bilde',
@@ -27,12 +34,9 @@ export async function captureNativePhoto(): Promise<File | null> {
     throw err;
   }
 
-  if (!photo.webPath) return null;
+  if (!photo.base64String) return null;
 
-  const response = await fetch(photo.webPath);
-  const blob = await response.blob();
   const ext = photo.format || 'jpeg';
-  return new File([blob], `mycelet-${Date.now()}.${ext}`, {
-    type: blob.type || `image/${ext}`
-  });
+  const blob = base64ToBlob(photo.base64String, `image/${ext}`);
+  return new File([blob], `mycelet-${Date.now()}.${ext}`, { type: blob.type });
 }

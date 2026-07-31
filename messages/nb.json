@@ -346,7 +346,8 @@
     "takeOrChoosePhoto": "Ta bilde / velg bilde",
     "analyzing": "Analyserer bilde...",
     "identifyFailed": "Identifikasjon feilet",
-    "couldNotGetImage": "Kunne ikke hente bilde."
+    "couldNotGetImage": "Kunne ikke hente bilde.",
+    "networkError": "Fikk ikke kontakt med serveren. Sjekk dekningen og prøv igjen."
   },
   "IdentifyResult": {
     "errorNotLoggedIn": "Du må være logget inn for å lagre funn.",
@@ -491,10 +492,6 @@
     "processorVercelNote": "Trafikk kan rutes via servere utenfor EØS under EUs standardavtaler (SCC).",
     "processorStripeDesc": "(betaling på web) — Databehandleravtale:",
     "processorStripeNote": "Stripe kan overføre data til USA under SCC.",
-    "processorRevenuecatDesc": "(kjøp i mobilappen) behandler kjøps- og abonnementsstatus, en anonymisert bruker-id og kvitteringsdata fra appbutikkene, slik at abonnementet ditt gjenkjennes på tvers av enhetene dine. Databehandleravtale:",
-    "processorRevenuecatNote": "RevenueCat mottar ikke navn, e-post, bilder eller posisjonsdata.",
-    "processorAppleDesc": "(App Store) er selger og betalingsmottaker for kjøp gjort i iOS-appen. Apple behandler betalingsopplysningene dine som selvstendig behandlingsansvarlig etter sin egen personvernerklæring, og vi mottar aldri kortopplysninger. Se:",
-    "processorAppleNote": "Gjelder bare kjøp gjort i appen. Kjøp på mycelet.com går via Stripe.",
     "processorKindwiseDesc": "(AI-soppidentifikasjon) — når du bruker foto-ID, sendes bildet og koordinatene til Kindwise for analyse. Personvern:",
     "processorGoogleAnalyticsDesc": "(valgfri bruksanalyse) — aktiveres bare etter samtykke og mottar ikke bilder, eksakte posisjoner eller kontodetaljer. Google Analytics' personvern og sikkerhet:",
     "processorAnd": "og",
@@ -573,6 +570,10 @@
     "supervisoryAuthorityName": "Datatilsynet",
     "supervisoryAuthorityUrl": "https://www.datatilsynet.no",
     "supervisoryAuthorityHost": "datatilsynet.no",
+    "processorRevenuecatDesc": "(kjøp i mobilappen) behandler kjøps- og abonnementsstatus, en anonymisert bruker-id og kvitteringsdata fra appbutikkene, slik at abonnementet ditt gjenkjennes på tvers av enhetene dine. Databehandleravtale:",
+    "processorRevenuecatNote": "RevenueCat mottar ikke navn, e-post, bilder eller posisjonsdata.",
+    "processorAppleDesc": "(App Store) er selger og betalingsmottaker for kjøp gjort i iOS-appen. Apple behandler betalingsopplysningene dine som selvstendig behandlingsansvarlig etter sin egen personvernerklæring, og vi mottar aldri kortopplysninger. Se:",
+    "processorAppleNote": "Gjelder bare kjøp gjort i appen. Kjøp på mycelet.com går via Stripe.",
     "controllerNameEnk": "Sindre Øverås, som driver Mycelet gjennom enkeltpersonforetaket {legalName} (org.nr {orgNr}).",
     "controllerNameAs": "{legalName} (org.nr {orgNr})."
   },
@@ -840,16 +841,16 @@
     "reasonMisinformation": "Feilinformasjon",
     "reasonDangerousAdvice": "Farlige råd",
     "reasonHarassment": "Trakassering",
-    "reasonIllegalContent": "Ulovlig innhold",
-    "reasonControlledSubstances": "Narkotika — fleinsopp, voksesteder eller salg",
-    "reasonPrivacy": "Personopplysninger eller bilde av meg/andre",
-    "reasonProtectedSpecies": "Vernet art eller verneområde",
-    "reasonSale": "Salg av plukket sopp",
     "reasonOther": "Annet",
     "submitError": "Kunne ikke sende rapport.",
     "descriptionPlaceholder": "Beskriv problemet (valgfritt)",
     "submit": "Send rapport",
-    "success": "Rapport sendt."
+    "success": "Rapport sendt.",
+    "reasonIllegalContent": "Ulovlig innhold",
+    "reasonControlledSubstances": "Narkotika — fleinsopp, voksesteder eller salg",
+    "reasonPrivacy": "Personopplysninger eller bilde av meg/andre",
+    "reasonProtectedSpecies": "Vernet art eller verneområde",
+    "reasonSale": "Salg av plukket sopp"
   },
   "SharePostButton": {
     "shareTextFindingZone": "Fant {findingName} i {zoneLabel} via Mycelet.",
@@ -1106,6 +1107,15 @@
     "dir_southWest": "sørvest",
     "dir_west": "vest",
     "dir_northWest": "nordvest",
+    "searchSpeciesOrPlace": "Søk sopp eller sted — f.eks. «steinsopp» eller «Hamar»",
+    "groupSpecies": "Sopparter",
+    "groupPlaces": "Steder",
+    "forecastLoading": "Henter utsikten …",
+    "forecastBestDay": "Best {day}: {score}/100",
+    "forecastUnavailable": "Fant ikke utsikt for dette stedet.",
+    "searchPlaceOnly": "Søk sted — f.eks. «Hamar»",
+    "forecastToday": "I dag",
+    "forecastConditionsThisWeek": "soppforhold denne uka",
     "hotspotTooltip": "Soppforhold {score}/100"
   },
   "OnboardingIntro": {

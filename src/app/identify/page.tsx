@@ -55,7 +55,14 @@ export default function IdentifyPage() {
       sessionStorage.setItem('identifyResult', JSON.stringify(result));
       router.push('/identify/result');
     } catch (err) {
-      const message = err instanceof Error ? err.message : t('identifyFailed');
+      // fetch rejects with a TypeError whose message is browser-English
+      // («Load failed» in WebKit) — translate instead of surfacing it raw.
+      const message =
+        err instanceof TypeError
+          ? t('networkError')
+          : err instanceof Error
+            ? err.message
+            : t('identifyFailed');
       if (message.toLowerCase().includes('ikke aktivert')) {
         setAiDisabled(true);
       } else {

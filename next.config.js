@@ -28,7 +28,9 @@ const cspDirectives = [
   // Image sources: own bucket, Wikimedia commons, Plant.id (Kindwise),
   // Norwegian Kartverket tiles, Swedish OpenStreetMap tiles for areas
   // Kartverket doesn't cover. data: + blob: for FileReader uploads.
-  "img-src 'self' data: blob: https://*.supabase.co https://upload.wikimedia.org https://*.wikimedia.org https://*.kindwise.com https://*.kartverket.no https://opencache.statkart.no https://*.tile.openstreetmap.org https://*.arcgisonline.com https://*.google-analytics.com https://*.googletagmanager.com",
+  // Kindwise serves similar_images from a DigitalOcean Spaces CDN (used as
+  // fallback photo in LookAlikeCheck) — *.kindwise.com does NOT cover it.
+  "img-src 'self' data: blob: https://*.supabase.co https://upload.wikimedia.org https://*.wikimedia.org https://*.kindwise.com https://mushroom-id.ams3.cdn.digitaloceanspaces.com https://*.kartverket.no https://opencache.statkart.no https://*.tile.openstreetmap.org https://*.arcgisonline.com https://*.google-analytics.com https://*.googletagmanager.com",
   // data: for base64-inlined fonts in CSS.
   "font-src 'self' data:",
   // XHR/fetch/WebSocket destinations. wss://*.supabase.co is for Realtime.

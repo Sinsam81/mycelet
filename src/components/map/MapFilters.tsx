@@ -5,6 +5,7 @@ import { useLocale, useTranslations } from 'next-intl';
 import { SlidersHorizontal, X } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { getSpeciesDisplayName } from '@/lib/utils/species-name';
+import { PlaceResult, searchPlaces } from '@/lib/utils/place-search';
 
 export interface MapFilterState {
   speciesId: number | null;
@@ -33,7 +34,7 @@ export function MapFilters({ filters, onChange, onSelectPlace }: MapFiltersProps
   const [options, setOptions] = useState<SpeciesOption[]>([]);
   const [open, setOpen] = useState(false);
   const [placeQuery, setPlaceQuery] = useState('');
-  const [placeResults, setPlaceResults] = useState<{ name: string; context: string; lat: number; lng: number }[]>([]);
+  const [placeResults, setPlaceResults] = useState<PlaceResult[]>([]);
   const placeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const activeCount = Number(Boolean(filters.speciesId)) + Number(filters.period !== 'all') + Number(filters.onlyMine);
@@ -56,8 +57,9 @@ export function MapFilters({ filters, onChange, onSelectPlace }: MapFiltersProps
     setOptions(data ?? []);
   };
 
-  // Place search via Kartverket's free Stedsnavn API (CORS-enabled, no key).
-  // Debounced so we don't hit it on every keystroke.
+  // Uses the shared Nordic place search (via our /api/places proxy) — this
+  // field used to call Kartverket directly, which answered Swedish queries
+  // with wrong Norwegian places. Debounced so we don't fire per keystroke.
   const searchPlace = (value: string) => {
     setPlaceQuery(value);
     if (placeTimer.current) clearTimeout(placeTimer.current);
@@ -66,24 +68,7 @@ export function MapFilters({ filters, onChange, onSelectPlace }: MapFiltersProps
       return;
     }
     placeTimer.current = setTimeout(async () => {
-      try {
-        const res = await fetch(
-          `https://ws.geonorge.no/stedsnavn/v1/navn?sok=${encodeURIComponent(value)}&fuzzy=true&utkoordsys=4258&treffPerSide=6&side=1`,
-          { signal: AbortSignal.timeout(5000) }
-        );
-        const data = await res.json();
-        const results = ((data?.navn ?? []) as any[])
-          .map((n) => ({
-            name: n['skrivemåte'] as string,
-            context: [n.navneobjekttype, n.kommuner?.[0]?.kommunenavn].filter(Boolean).join(' · '),
-            lat: n.representasjonspunkt?.nord as number,
-            lng: n.representasjonspunkt?.['øst'] as number
-          }))
-          .filter((r) => typeof r.lat === 'number' && typeof r.lng === 'number');
-        setPlaceResults(results);
-      } catch {
-        setPlaceResults([]);
-      }
+      setPlaceResults(await searchPlaces(value));
     }, 300);
   };
 
