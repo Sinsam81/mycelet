@@ -38,7 +38,35 @@ kompliserer offline-kartet — som er en premium-funksjon folk betaler for.
 Summen: å bytte modell ville rørt hver bildevisning i en app med betalende
 brukere, for å lukke en risiko som i praksis allerede er lukket.
 
-## Hva som FAKTISK er et hull, og som lukkes
+## Hva jeg trodde var et hull — og som viste seg ikke å finnes
+
+**Oppdatert 1. august 2026, etter å ha sjekket produksjonen.**
+
+Jeg skrev opprinnelig at bilder lastet opp før 1. august 2026 hadde den gjettbare
+stien `${user_id}/${Date.now()}.jpg`, og at DE var den ekte eksponeringen.
+
+Det stemte ikke. Da rekey-skriptet ble kjørt mot produksjon, fant det ingenting.
+Kontrollert fra tre uavhengige hold samtidig:
+
+| Sjekk | Svar |
+|---|---|
+| `findings` med `image_url` satt | 0 |
+| `findings` med `thumbnail_url` satt | 0 |
+| `forum_posts` med bilder | 0 |
+| Oppføringer i `finding-images` | 0 |
+| Oppføringer i `forum-images` | 0 |
+
+**Ingen har lastet opp et eneste bilde ennå.** Det finnes altså ingen gamle
+stier, og har aldri gjort det. Risikoen var teoretisk hele veien.
+
+Det endrer ikke beslutningen over — den hviler på hvordan modellen bør se ut,
+ikke på hvor mange filer som ligger der. Men det flytter hastegraden fra «bør
+ryddes» til «ingenting å rydde», og det er verdt å ha skrevet ned riktig.
+
+Nye opplastinger får tilfeldige UUID-stier fra `src/lib/storage/upload-path.ts`.
+Problemet oppstår altså ikke framover heller.
+
+## Skriptet som ble skrevet for det som ikke fantes
 
 Bilder lastet opp **før 1. august 2026** har stien `${user_id}/${Date.now()}.jpg`.
 Begge delene er gjettbare:
@@ -50,9 +78,14 @@ Begge delene er gjettbare:
 For en som vil målrette én bestemt bruker er det et gjennomførbart søk. Det er
 den ekte eksponeringen, og den gjelder de gamle filene — ikke modellen.
 
-**Tiltak:** `scripts/rekey-storage-objects.mjs` gir hver gammel fil en ny,
+`scripts/rekey-storage-objects.mjs` gir en fil med gammelt navn en ny,
 tilfeldig sti og oppdaterer `findings.image_url`, `findings.thumbnail_url` og
-`forum_posts.images` i samme slengen. Kjør den med `--dry-run` først.
+`forum_posts.images` i samme slengen. Rekkefølgen er kopier → oppdater → slett,
+så ingen rad kan peke på en fil som ikke finnes.
+
+Det ble kjørt 1. august 2026 og fant null filer. Det beholdes likevel: hvis en
+sikkerhetskopi noen gang gjenopprettes, eller en gammel klient dukker opp med
+tidsstempel-navn, er dette verktøyet som rydder. Kjør alltid `--dry-run` først.
 
 ## Når bør beslutningen tas opp igjen
 
