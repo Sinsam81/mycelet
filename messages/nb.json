@@ -967,6 +967,8 @@
     "calculatingShort": "Beregner…",
     "mushroomConditions": "Soppforhold",
     "conditionsHere": "Soppforhold i området",
+    "leadingSpecies": "Best nå: {species}",
+    "leadingSpeciesNote": "Tallet gjelder denne arten — den som ligger best an her nå.",
     "close": "Lukk",
     "speciesNumber": "Art #{id}",
     "allSpecies": "Alle arter",
@@ -1121,7 +1123,9 @@
     "searchPlaceOnly": "Søk sted — f.eks. «Hamar»",
     "forecastToday": "I dag",
     "forecastConditionsThisWeek": "soppforhold denne uka",
-    "hotspotTooltip": "Soppforhold {score}/100"
+    "hotspotTooltip": "Soppforhold {score}/100",
+    "hotspotTooltipBest": "Best nå: {species} {score}/100",
+    "hotspotTooltipSpecies": "{species} {score}/100"
   },
   "OnboardingIntro": {
     "step1Title": "Velkommen til Mycelet",

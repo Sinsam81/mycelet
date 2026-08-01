@@ -31,6 +31,7 @@ import { buildExplanation } from '@/lib/utils/prediction-explanation';
 import { intlLocale } from '@/lib/utils/intl-locale';
 import { colorForScore } from '@/lib/utils/condition-colors';
 import { scoreToCondition } from '@/lib/utils/prediction';
+import { bestTilePerCell } from '@/lib/prediction/collapse-tiles';
 import { getSpeciesDisplayName } from '@/lib/utils/species-name';
 import { PlaceResult, searchPlaces } from '@/lib/utils/place-search';
 import { PlaceForecastStrip } from './PlaceForecastStrip';
@@ -97,6 +98,10 @@ export function MushroomMap() {
   const loadOccurrencesRef = useRef<() => Promise<void>>(async () => {});
   const showOccurrencesRef = useRef(false);
   const speciesNamesRef = useRef<Map<number, string>>(new Map());
+  // Artsnavnene lastes asynkront, og varmelaget rekker som regel å tegne før de
+  // er inne. Uten dette sto de første sirklene igjen uten artsnavn til neste
+  // panorering. En teller er nok — selve navnene ligger i refen.
+  const [speciesNamesVersion, setSpeciesNamesVersion] = useState(0);
   const speciesEdibilityRef = useRef<Map<number, string>>(new Map());
   const occEdibilityRef = useRef<'all' | 'edible' | 'toxic'>('all');
   const occSeasonRef = useRef(false);
@@ -181,28 +186,43 @@ export function MushroomMap() {
   };
 
 
-  const updateHeatLayer = useCallback(async (data: PredictionResponse | undefined) => {
-    const map = mapRef.current;
-    const heatLayer = heatLayerRef.current;
-    if (!map || !heatLayer) return;
+  const updateHeatLayer = useCallback(
+    async (data: PredictionResponse | undefined) => {
+      const map = mapRef.current;
+      const heatLayer = heatLayerRef.current;
+      if (!map || !heatLayer) return;
 
-    const leaflet = (await import('leaflet')).default;
-    heatLayer.clearLayers();
+      const leaflet = (await import('leaflet')).default;
+      heatLayer.clearLayers();
 
-    for (const spot of data?.hotspots ?? []) {
-      const radiusMeters = Math.max(120, Math.min(450, 90 + spot.score * 3));
-      const circle = leaflet.circle([spot.lat, spot.lng], {
-        radius: radiusMeters,
-        color: colorForScore(spot.score).hex,
-        fillColor: colorForScore(spot.score).hex,
-        fillOpacity: 0.2,
-        weight: 1
-      });
+      for (const spot of data?.hotspots ?? []) {
+        const radiusMeters = Math.max(120, Math.min(450, 90 + spot.score * 3));
+        const circle = leaflet.circle([spot.lat, spot.lng], {
+          radius: radiusMeters,
+          color: colorForScore(spot.score).hex,
+          fillColor: colorForScore(spot.score).hex,
+          fillOpacity: 0.2,
+          weight: 1
+        });
 
-      circle.bindTooltip(t('hotspotTooltip', { score: spot.score }), { direction: 'top' });
-      heatLayer.addLayer(circle);
-    }
-  }, []);
+        // Si hvilken art tallet gjelder. «60/100» på et sted er meningsløst
+        // alene: det er 60 for kantarell og 2 for vanlig morkel på nøyaktig
+        // samme rute. Uten artsfilter er sirkelen den BESTE arten der nå, og
+        // teksten sier det ("Best nå: …") så tallet ikke leses som en påstand
+        // om sopp generelt.
+        const speciesName = spot.speciesId != null ? speciesNamesRef.current.get(spot.speciesId) : undefined;
+        const label = !speciesName
+          ? t('hotspotTooltip', { score: spot.score })
+          : filters.speciesId != null
+            ? t('hotspotTooltipSpecies', { species: speciesName, score: spot.score })
+            : t('hotspotTooltipBest', { species: speciesName, score: spot.score });
+
+        circle.bindTooltip(label, { direction: 'top' });
+        heatLayer.addLayer(circle);
+      }
+    },
+    [filters.speciesId, speciesNamesVersion, t]
+  );
 
   const loadPredictionTiles = useCallback(async () => {
     const map = mapRef.current;
@@ -231,11 +251,18 @@ export function MushroomMap() {
     }
 
     const tiles = (data ?? []) as PredictionTile[];
-    const mapped: PredictionHotspot[] = tiles.slice(0, 80).map((tile) => ({
+    // Rasteret har én flis per ART per rute, så uten artsfilter kommer det sju
+    // rader på nøyaktig samme koordinat. Før dette tegnet kartet alle sju oppå
+    // hverandre; RPC-en sorterer score DESC og Leaflet tegner i mottatt
+    // rekkefølge, så den LAVESTE lå øverst og var den pekeren traff. Derfor sto
+    // det «2/100» (vanlig morkel, i august) på en rute der kantarell lå på 60.
+    const cells = bestTilePerCell(tiles);
+    const mapped: PredictionHotspot[] = cells.slice(0, 80).map((tile) => ({
       lat: tile.center_lat,
       lng: tile.center_lng,
       count: 1,
-      score: tile.score
+      score: tile.score,
+      speciesId: tile.species_id
     }));
     setTileHotspots(mapped);
   }, [filters.speciesId, supabase]);
@@ -1303,6 +1330,7 @@ export function MushroomMap() {
         }
         speciesNamesRef.current = nameMap;
         speciesEdibilityRef.current = ediMap;
+        setSpeciesNamesVersion((v) => v + 1);
       });
   }, [locale, supabase, t]);
 
@@ -1350,9 +1378,20 @@ export function MushroomMap() {
   const panelData = useMemo<PredictionResponse | undefined>(() => {
     if (!prediction.data && tileHotspots.length === 0) return undefined;
     if (!prediction.data && tileHotspots.length > 0) {
+      // tileHotspots er allerede kollapset til beste art per rute, så dette er
+      // et snitt over STEDER — ikke, som før, et snitt på tvers av arter der
+      // morkler utenfor sesong dro tallet ned hele høsten.
       const avgScore = Math.round(tileHotspots.reduce((sum, item) => sum + item.score, 0) / tileHotspots.length);
+      // Arten som drar snittet. Kartet har navnene ferdig oversatt allerede,
+      // så det slipper å vente på API-svaret for å kunne merke tallet.
+      const lead = tileHotspots.reduce((best, s) => (s.score > best.score ? s : best), tileHotspots[0]);
+      const leadName = lead.speciesId != null ? speciesNamesRef.current.get(lead.speciesId) : undefined;
       return {
         score: avgScore,
+        leadingSpecies:
+          lead.speciesId != null && leadName
+            ? { id: lead.speciesId, norwegianName: leadName, swedishName: null, displayName: leadName }
+            : undefined,
         // Same ladder as the server uses, so one number never gets two labels.
         condition: scoreToCondition(avgScore),
         components: {
@@ -1384,7 +1423,9 @@ export function MushroomMap() {
       ...prediction.data,
       hotspots: tileHotspots
     };
-  }, [prediction.data, tileHotspots]);
+    // speciesNamesVersion: navnene lastes asynkront, og uten den ville panelet
+    // stått uten artsnavn til noe annet tilfeldigvis utløste en ny beregning.
+  }, [prediction.data, tileHotspots, speciesNamesVersion]);
 
   useEffect(() => {
     const overlayData = panelData ?? prediction.data;
