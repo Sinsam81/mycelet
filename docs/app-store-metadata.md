@@ -142,7 +142,7 @@ The app uses native camera (species identification), native geolocation
 
 Demo account for review (opprettet 2026-07-29, aktivt sesongpass til 2028-01-01):
   Email: applereview@mycelet.com
-  Password: Mycelet-Review-2026!
+  Password: se App Store Connect → App Review Information
 The demo account has an active premium entitlement so all features are testable.
 
 Safety note: the app never tells users a mushroom is safe to eat — every
@@ -155,8 +155,9 @@ services (Soppkontrollen) and the national Poison Information hotline.
 1. Logg inn på **https://appstoreconnect.apple.com** (Apple-ID-en din)
 2. Klikk **Business** (evt. «Agreements, Tax, and Banking»)
 3. **Paid Apps Agreement** → Accept (privatperson — ingen org-nr trengs)
-4. **Bank:** DNB — IBAN `NO4412251002345` (samme konto som Stripe),
-   kontoinnehaver Sindre Alstad Øverås, valuta NOK
+4. **Bank:** DNB, samme konto som Stripe bruker. Kontonummeret står i
+   passordbehandleren og hos Stripe — det skal ikke stå her, se notatet nederst.
+   Kontoinnehaver Sindre Alstad Øverås, valuta NOK
 5. **Skatt:** W-8BEN-veiviser → privatperson, bosatt i Norge, «No US activities».
    Adresse: Liaveien 21 A, 1459 Nesodden
 6. Apple bruker vanligvis 1–3 dager på å godkjenne bankinfoen — resten av
@@ -171,3 +172,23 @@ services (Soppkontrollen) and the national Poison Information hotline.
 - [ ] Demo-bruker til Apple-review (med premium)
 - [ ] Skjermbilder + lim inn metadata fra dette dokumentet
 - [ ] Arkiver i Xcode (GUI, pga iCloud-codesign-fella) → last opp → send til review
+
+## Hemmeligheter hører ikke hjemme i denne fila
+
+Passordet til `applereview@mycelet.com` sto i klartekst i denne fila fra
+30. juli til 1. august 2026. **Repoet er offentlig.** Passordet er derfor
+kompromittert og må byttes, uansett hva som gjøres med git-historikken.
+
+Kontonummeret (IBAN) sto samme sted og er nå fjernet på samme måte. Et
+kontonummer er ikke en hemmelighet på linje med et passord — det står på enhver
+faktura — men det hører ikke hjemme i et offentlig repo, og fjernes gratis.
+
+Passordet skal ligge to steder, og bare der:
+
+1. **App Store Connect → App Review Information → Sign-In Information.**
+   Det er stedet Apple faktisk leser det fra. De trenger det ikke i repoet.
+2. Passordbehandleren din.
+
+Historikken inneholder det fortsatt (commit `34060c4`, `0b3a54f`, `d7ea3b5`).
+Å skrive om offentlig historikk er en egen operasjon med egne bivirkninger, og
+hjelper uansett ikke mot noen som allerede har lest det. Bytt passordet først.
