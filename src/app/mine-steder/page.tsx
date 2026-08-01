@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { getTranslations } from 'next-intl/server';
+import { getLocale, getTranslations } from 'next-intl/server';
+import { getJoinedSpeciesName } from '@/lib/utils/species-name';
 import { Camera, ExternalLink, Lock, Map as MapIcon, MapPin } from 'lucide-react';
 import { PageWrapper } from '@/components/layout/PageWrapper';
 import { createClient } from '@/lib/supabase/server';
@@ -29,8 +30,8 @@ interface FindingRow {
   visibility: string;
   species_name_override: string | null;
   mushroom_species:
-    | { norwegian_name: string | null }
-    | { norwegian_name: string | null }[]
+    | { norwegian_name: string | null; swedish_name: string | null }
+    | { norwegian_name: string | null; swedish_name: string | null }[]
     | null;
 }
 
@@ -47,12 +48,15 @@ interface Spot {
   lng: number;
 }
 
-function speciesName(row: FindingRow, unknownLabel: string): string {
-  const ms = Array.isArray(row.mushroom_species) ? row.mushroom_species[0] : row.mushroom_species;
-  return ms?.norwegian_name ?? row.species_name_override ?? unknownLabel;
+function speciesName(row: FindingRow, unknownLabel: string, locale: string): string {
+  return getJoinedSpeciesName(row.mushroom_species, locale) || row.species_name_override || unknownLabel;
 }
 
-function groupFindings(rows: FindingRow[], labels: { unknownSpecies: string; nearPlace: (lat: string, lng: string) => string }): Spot[] {
+function groupFindings(
+  rows: FindingRow[],
+  labels: { unknownSpecies: string; nearPlace: (lat: string, lng: string) => string },
+  locale: string
+): Spot[] {
   const groups = new Map<string, Spot>();
   for (const row of rows) {
     const named = !!row.location_name?.trim();
@@ -76,7 +80,7 @@ function groupFindings(rows: FindingRow[], labels: { unknownSpecies: string; nea
       groups.set(key, spot);
     }
     spot.count += 1;
-    const name = speciesName(row, labels.unknownSpecies);
+    const name = speciesName(row, labels.unknownSpecies, locale);
     spot.species.set(name, (spot.species.get(name) ?? 0) + 1);
     if (row.found_at > spot.lastVisit) spot.lastVisit = row.found_at;
     spot.years.add(new Date(row.found_at).getFullYear());
@@ -100,7 +104,7 @@ export default async function MineStederPage() {
   const { data } = await supabase
     .from('findings')
     .select(
-      'id, location_name, latitude, longitude, found_at, image_url, visibility, species_name_override, mushroom_species(norwegian_name)'
+      'id, location_name, latitude, longitude, found_at, image_url, visibility, species_name_override, mushroom_species(norwegian_name,swedish_name)'
     )
     .eq('user_id', user.id)
     .eq('is_negative_observation', false)
@@ -110,7 +114,7 @@ export default async function MineStederPage() {
   const spots = groupFindings((data ?? []) as unknown as FindingRow[], {
     unknownSpecies: t('unknownSpecies'),
     nearPlace: (lat, lng) => t('nearPlace', { lat, lng })
-  });
+  }, await getLocale());
   const totalFinds = spots.reduce((sum, s) => sum + s.count, 0);
 
   return (

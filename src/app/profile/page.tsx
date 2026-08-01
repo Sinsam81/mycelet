@@ -1,5 +1,6 @@
 import Link from 'next/link';
-import { getTranslations } from 'next-intl/server';
+import { getLocale, getTranslations } from 'next-intl/server';
+import { getJoinedSpeciesName } from '@/lib/utils/species-name';
 import { Crown, Leaf, MapPin, ShieldCheck } from 'lucide-react';
 import { PageWrapper } from '@/components/layout/PageWrapper';
 import { EdibilityBadge } from '@/components/ui/EdibilityBadge';
@@ -23,7 +24,7 @@ interface FindingRow {
   found_at: string;
   location_name: string | null;
   notes: string | null;
-  mushroom_species: { norwegian_name: string; latin_name: string; edibility: Edibility } | null;
+  mushroom_species: { norwegian_name: string; swedish_name: string | null; latin_name: string; edibility: Edibility } | null;
 }
 
 interface PostRow {
@@ -46,6 +47,7 @@ function categoryLabels(t: Awaited<ReturnType<typeof getTranslations>>): Record<
 
 export default async function ProfilePage() {
   const t = await getTranslations('Profile');
+  const locale = await getLocale();
   const supabase = createClient();
   const {
     data: { user }
@@ -65,7 +67,7 @@ export default async function ProfilePage() {
     supabase.rpc('get_user_stats', { p_user_id: user.id }),
     supabase
       .from('findings')
-      .select('id,found_at,location_name,notes,mushroom_species(norwegian_name,latin_name,edibility)')
+      .select('id,found_at,location_name,notes,mushroom_species(norwegian_name,swedish_name,latin_name,edibility)')
       .eq('user_id', user.id)
       .eq('is_negative_observation', false)
       .order('found_at', { ascending: false })
@@ -160,7 +162,7 @@ export default async function ProfilePage() {
                 <li key={f.id} className="rounded-lg border border-gray-100 p-2">
                   <div className="flex items-center justify-between gap-2">
                     <div className="min-w-0 flex-1">
-                      <p className="truncate font-medium">{f.mushroom_species?.norwegian_name ?? t('unknownSpecies')}</p>
+                      <p className="truncate font-medium">{getJoinedSpeciesName(f.mushroom_species, locale) || t('unknownSpecies')}</p>
                       <p className="truncate text-xs italic text-gray-600">{f.mushroom_species?.latin_name}</p>
                     </div>
                     {f.mushroom_species ? <EdibilityBadge edibility={f.mushroom_species.edibility} /> : null}

@@ -57,6 +57,7 @@ export interface ForumPost {
     zone_precision_km?: number | null;
     mushroom_species?: {
       norwegian_name?: string | null;
+      swedish_name?: string | null;
     } | null;
   } | null;
 }
@@ -97,5 +98,6 @@ export interface UserFindingOption {
   zone_precision_km?: number | null;
   mushroom_species?: {
     norwegian_name?: string | null;
+    swedish_name?: string | null;
   } | null;
 }

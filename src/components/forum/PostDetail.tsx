@@ -1,7 +1,8 @@
 'use client';
 
 import { FormEvent, useState } from 'react';
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
+import { getJoinedSpeciesName } from '@/lib/utils/species-name';
 import { Heart, MessageCircle, Pencil, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { ReportButton } from '@/components/forum/ReportButton';
@@ -23,6 +24,7 @@ interface PostDetailProps {
 
 export function PostDetail({ post, onToggleLike, onReport, onEdit, onDelete, likeLoading, currentUserId }: PostDetailProps) {
   const t = useTranslations('PostDetail');
+  const locale = useLocale();
   const categoryLabel: Record<ForumPostDetail['category'], string> = {
     find: t('categoryFind'),
     question: t('categoryQuestion'),
@@ -31,7 +33,8 @@ export function PostDetail({ post, onToggleLike, onReport, onEdit, onDelete, lik
   };
   const author = post.profiles?.display_name || post.profiles?.username || t('unknownUser');
   const badge = getForumBadge(post.profiles);
-  const findingName = post.finding?.mushroom_species?.norwegian_name || post.finding?.species_name_override || null;
+  const findingName =
+    getJoinedSpeciesName(post.finding?.mushroom_species, locale) || post.finding?.species_name_override || null;
   const zoneLabel = post.finding?.is_zone_finding ? post.finding?.zone_label : null;
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState(post.title);
@@ -89,7 +92,9 @@ export function PostDetail({ post, onToggleLike, onReport, onEdit, onDelete, lik
           {post.finding ? (
             <p className="mt-2 text-xs text-gray-600">
               {t('linkedFinding')}:{' '}
-              {post.finding.mushroom_species?.norwegian_name || post.finding.species_name_override || t('unknownSpecies')}
+              {getJoinedSpeciesName(post.finding.mushroom_species, locale) ||
+                post.finding.species_name_override ||
+                t('unknownSpecies')}
               {post.finding.is_zone_finding ? ` • ${t('zone')}: ${post.finding.zone_label ?? t('unknownZone')}` : ''}
             </p>
           ) : null}
