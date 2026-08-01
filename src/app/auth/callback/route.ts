@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { getSafeNext } from '@/lib/auth/safe-redirect';
+import { ensureProfile } from '@/lib/auth/ensure-profile';
 
 export async function GET(request: NextRequest) {
   const requestUrl = new URL(request.url);
@@ -45,14 +46,10 @@ export async function GET(request: NextRequest) {
   // this from overwriting an existing profile; failures must not block login.
   const user = exchanged?.user ?? null;
   if (user) {
-    const meta = (user.user_metadata ?? {}) as { username?: string; display_name?: string };
-    const username = meta.username ?? user.email?.split('@')[0] ?? `bruker-${user.id.slice(0, 8)}`;
-    await supabase
-      .from('profiles')
-      .upsert(
-        { id: user.id, username, display_name: meta.display_name ?? username },
-        { onConflict: 'id', ignoreDuplicates: true }
-      );
+    // Samme funksjon som brukes ved passordinnlogging og registrering, slik at
+    // det finnes ÉN regel for hvordan en profil sikres — inkludert utveien når
+    // brukernavnet er opptatt. Se src/lib/auth/ensure-profile.ts.
+    await ensureProfile(supabase, user);
   }
 
   return response;

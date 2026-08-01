@@ -370,7 +370,8 @@
     "notAGuarantee": "Dette er AI-forslag, ikke en bekreftelse på at soppen er trygg å spise. Få den alltid vurdert av soppkontroll eller en ekspert før du spiser.",
     "acknowledgeLabel": "Jeg forstår at dette ikke er en spiselighetsgaranti, og jeg spiser aldri sopp uten å få den bekreftet av en ekspert.",
     "matchLabel": "bildelikhet",
-    "notFoodAssessed": "Ikke matvurdert"
+    "notFoodAssessed": "Ikke matvurdert",
+    "safetyDataIncomplete": "Vi klarte ikke å hente sikkerhetsdataene for disse forslagene akkurat nå. At det ikke står noen advarsel her betyr derfor IKKE at arten er trygg — det betyr at vi ikke fikk sjekket. Åpne artssiden og sjekk forvekslingsarter manuelt, eller prøv igjen om litt."
   },
   "MineSteder": {
     "metaTitle": "Mine steder — Mycelet",
@@ -747,7 +748,8 @@
     "lookAlikesHeading": "Se også",
     "noImage": "Ingen bilde",
     "dangerPrefix": "Fare:",
-    "howToTellApart": "Hvordan skille:"
+    "howToTellApart": "Hvordan skille:",
+    "lookAlikesUnavailable": "Vi klarte ikke å hente forvekslingsartene for denne arten akkurat nå. At det ikke står noen farlige forvekslinger her betyr derfor IKKE at det ikke finnes noen. Last siden på nytt, eller få soppen vurdert av soppkontroll før du spiser den."
   },
   "Species": {
     "edibilityAll": "Alle",

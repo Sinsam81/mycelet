@@ -142,6 +142,20 @@ export default function IdentifyResultPage() {
 
         <SafetyWarning level={isDanger ? 'danger' : 'caution'} edibility={topSuggestion?.edibility} />
 
+        {/*
+          Serveren fikk ikke lest spiselighet eller forvekslingsarter. Uten
+          denne beskjeden ville skjermen sett ut som en art helt uten farlige
+          forvekslinger — den mest villedende tilstanden appen kan vise.
+        */}
+        {payload.safetyDataIncomplete ? (
+          <p
+            role="alert"
+            className="rounded-xl border-2 border-amber-500 bg-amber-50 px-3 py-2.5 text-sm font-semibold text-amber-900"
+          >
+            ⚠️ {t('safetyDataIncomplete')}
+          </p>
+        ) : null}
+
         <div className="overflow-hidden rounded-2xl bg-white shadow-card">
           <img src={payload.originalImageDataUrl} alt={t('imageAlt')} className="h-56 w-full object-cover" />
         </div>

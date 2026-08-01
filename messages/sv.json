@@ -370,7 +370,8 @@
     "notAGuarantee": "Detta är AI-förslag, inte en bekräftelse på att svampen är säker att äta. Få den alltid bedömd av en svampkonsulent eller expert innan du äter.",
     "acknowledgeLabel": "Jag förstår att detta inte är en ätlighetsgaranti, och jag äter aldrig svamp utan att få den bekräftad av en expert.",
     "matchLabel": "bildlikhet",
-    "notFoodAssessed": "Inte matbedömd"
+    "notFoodAssessed": "Inte matbedömd",
+    "safetyDataIncomplete": "Vi kunde inte hämta säkerhetsdatan för de här förslagen just nu. Att det inte står någon varning här betyder därför INTE att arten är säker — det betyder att vi inte fick kontrollerat. Öppna artsidan och kontrollera förväxlingsarter manuellt, eller försök igen om en stund."
   },
   "MineSteder": {
     "metaTitle": "Mina platser — Mycelet",
@@ -747,7 +748,8 @@
     "lookAlikesHeading": "Se även",
     "noImage": "Ingen bild",
     "dangerPrefix": "Fara:",
-    "howToTellApart": "Hur man skiljer:"
+    "howToTellApart": "Hur man skiljer:",
+    "lookAlikesUnavailable": "Vi kunde inte hämta förväxlingsarterna för den här arten just nu. Att det inte står några farliga förväxlingar här betyder därför INTE att det inte finns några. Ladda om sidan, eller låt svampen bedömas av svampkontroll innan du äter den."
   },
   "Species": {
     "edibilityAll": "Alla",

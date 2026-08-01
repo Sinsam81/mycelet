@@ -53,7 +53,8 @@ export default async function SpeciesDetailPage({ params }: SpeciesDetailPagePro
 
   const supabase = createClient();
 
-  const [{ data: species, error: speciesError }, { data: photos }, { data: lookAlikes }] = await Promise.all([
+  const [{ data: species, error: speciesError }, { data: photos }, { data: lookAlikes, error: lookAlikesError }] =
+    await Promise.all([
     supabase
       .from('mushroom_species')
       .select('*')
@@ -74,7 +75,7 @@ export default async function SpeciesDetailPage({ params }: SpeciesDetailPagePro
       // High limit so a critical look-alike can never be truncated away (safety).
       // Display ordering by danger is applied in JS below.
       .limit(50)
-  ]);
+    ]);
 
   if (speciesError || !species) {
     notFound();
@@ -201,6 +202,20 @@ export default async function SpeciesDetailPage({ params }: SpeciesDetailPagePro
             </dl>
           </div>
         </div>
+
+        {/*
+          Forvekslingsspørringen feilet. Uten denne beskjeden ville seksjonen
+          under bare uteblitt, og siden ville lest som «denne arten har ingen
+          farlige forvekslingsarter» — stikk motsatt av det vi vet.
+        */}
+        {lookAlikesError ? (
+          <p
+            role="alert"
+            className="rounded-2xl border-2 border-amber-500 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900"
+          >
+            ⚠️ {t('lookAlikesUnavailable')}
+          </p>
+        ) : null}
 
         {/* Look-alikes section */}
         {(lookAlikes?.length ?? 0) > 0 ? (

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { BILLING_PLANS } from '@/lib/billing/plans';
+import { planCheckoutWrite } from '@/lib/billing/checkout-write';
 import { getBillingCapabilities, getUserBillingSubscription } from '@/lib/billing/subscription';
 import { getStripeServerClient } from '@/lib/stripe/server';
 import { createAdminClient } from '@/lib/supabase/admin';
@@ -126,23 +127,34 @@ export async function POST(request: NextRequest) {
     );
 
     const admin = createAdminClient();
-    const { error: upsertError } = await admin.from('billing_subscriptions').upsert(
-      {
-        user_id: user.id,
-        tier: plan,
-        status: 'incomplete',
-        stripe_customer_id: customerId,
-        stripe_price_id: priceId,
-        metadata: {
-          checkout_session_id: session.id
-        }
-      },
-      { onConflict: 'user_id' }
-    );
+
+    // Denne skrivingen skjer FØR brukeren har betalt, og må derfor aldri
+    // forringe en plan som allerede er betalt for. Regelen — og historien om
+    // hvorfor den finnes — ligger i planCheckoutWrite.
+    const write = planCheckoutWrite({
+      hasPaidPlan: existingCapabilities.paid,
+      userId: user.id,
+      plan,
+      customerId,
+      priceId,
+      sessionId: session.id
+    });
+
+    const { error: upsertError } =
+      write.kind === 'link-customer-only'
+        ? await admin.from('billing_subscriptions').update(write.values).eq('user_id', write.userId)
+        : await admin.from('billing_subscriptions').upsert(write.values, { onConflict: 'user_id' });
 
     if (upsertError) {
       userLog.error('billing.checkout.subscription_upsert_failed', upsertError);
       return NextResponse.json({ error: upsertError.message }, { status: 500 });
+    }
+
+    if (existingCapabilities.paid) {
+      userLog.info('billing.checkout.plan_change_started', {
+        fromTier: existingCapabilities.tier,
+        toTier: plan
+      });
     }
 
     userLog.info('billing.checkout.success', {

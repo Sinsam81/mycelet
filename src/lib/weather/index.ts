@@ -262,6 +262,17 @@ async function fetchFrost({ lat, lon }: WeatherFetchOptions): Promise<WeatherSum
   const minSeries = nearestSeries(series.get('min(air_temperature P1D)'), sources);
   const maxSeries = nearestSeries(series.get('max(air_temperature P1D)'), sources);
 
+  // Nedbør er like obligatorisk som temperatur for en soppprediksjon.
+  //
+  // Uten denne sjekken ga en tom nedbørsserie rain3dMm = rain7dMm = 0 — altså
+  // «vi har MÅLT at det ikke har regnet». Det er den motsatte beskjeden av «vi
+  // vet ikke», og den trekker prediksjonen rett ned. Legg merke til at
+  // rain14dMm under allerede hadde denne sjekken; 3d og 7d manglet den.
+  //
+  // Merk skillet: en serie som finnes og summerer til 0 er ekte tørke og
+  // beholdes som 0. Det er den TOMME serien vi avviser.
+  if (precipSeries.length === 0) return null;
+
   // Daily precip oldest→newest over the 14-day window → soil-water bucket.
   const precipDaily = [...precipSeries].sort((a, b) => a.time - b.time).map((p) => p.value);
 
@@ -487,6 +498,12 @@ async function fetchSmhi({ lat, lon }: WeatherFetchOptions): Promise<WeatherSumm
     .sort((a, b) => a.date - b.date)
     .slice(-30)
     .map((p) => p.value);
+
+  // Samme regel som i Frost-adapteren over: nedbør er obligatorisk. Fant vi en
+  // aktiv nedbørsstasjon, men fikk ingen målinger tilbake, betyr det at vi ikke
+  // vet — ikke at det var tørt. Tidligere ble det til 0 mm målt regn, som ga
+  // svenske brukere systematisk for lav score når stasjonsdataene glapp.
+  if (precipDaily.length === 0) return null;
 
   return {
     source: 'smhi',

@@ -170,13 +170,27 @@ export async function POST(request: NextRequest) {
     }
 
     // Record this successful (cost-incurring) call against the free daily cap.
-    // Best-effort + free-only: a logging hiccup must not fail the identification.
+    // Best-effort + free-only: a logging hiccup must not fail the identification —
+    // vi har allerede betalt for kallet, og å feile nå ville tatt fra brukeren
+    // det de nettopp ventet på.
+    //
+    // MEN den må være synlig. Supabase-klienten KASTER ikke ved DB-feil, den
+    // returnerer { error }. try/catch-en her fanget derfor aldri noe, og en
+    // feilende insert var helt usynlig — mens konsekvensen er at gratisbrukere
+    // får ubegrenset AI-bruk på vår regning. Nå logges det som warn, slik at
+    // det dukker opp før det blir dyrt.
     if (!capabilities.paid) {
       try {
         const admin = createAdminClient();
-        await admin.from('ai_identifications').insert({ user_id: user.id });
-      } catch {
-        // counter unavailable / table missing — skip silently
+        const { error: quotaError } = await admin.from('ai_identifications').insert({ user_id: user.id });
+        if (quotaError) {
+          userLog.warn('identify.quota_counter_failed', { message: quotaError.message });
+        }
+      } catch (quotaThrow) {
+        // Naar admin-klienten ikke kan konstrueres (manglende service role key).
+        userLog.warn('identify.quota_counter_unavailable', {
+          message: quotaThrow instanceof Error ? quotaThrow.message : 'unknown'
+        });
       }
     }
 
@@ -184,6 +198,11 @@ export async function POST(request: NextRequest) {
     const suggestionsRaw: PlantIdSuggestion[] = plantIdData?.result?.classification?.suggestions ?? [];
 
     const month = new Date().getMonth() + 1;
+
+    // Settes hvis en spørring vi beriker resultatet med feiler. Da mangler
+    // sikkerhetsinformasjon (spiselighet, forvekslingsarter) i svaret, og
+    // klienten må si fra i stedet for å la stillhet bety «ingen fare».
+    let safetyDataIncomplete = false;
 
     const suggestions = await Promise.all(
       suggestionsRaw.slice(0, 3).map(async (suggestion) => {
@@ -223,11 +242,20 @@ export async function POST(request: NextRequest) {
         mapped.seasonFactor = 1;
         mapped.nearbyFindings = 0;
 
-        const { data: species } = await supabase
+        const { data: species, error: speciesError } = await supabase
           .from('mushroom_species')
           .select('id,norwegian_name,edibility,primary_image_url,season_start,season_end,peak_season_start,peak_season_end')
           .ilike('latin_name', suggestion.name)
           .maybeSingle();
+
+        // Feiler oppslaget, mister vi BÅDE spiselighet og speciesId — og uten
+        // speciesId kjører forvekslingssjekken under aldri for dette forslaget.
+        // «Ingen treff i katalogen» og «spørringen feilet» så tidligere helt like
+        // ut. Nå merker vi det, slik at brukeren får beskjed.
+        if (speciesError) {
+          safetyDataIncomplete = true;
+          userLog.error('identify.species_lookup_failed', speciesError, { latinName: suggestion.name });
+        }
 
         if (species) {
           mapped.speciesId = species.id;
@@ -266,13 +294,31 @@ export async function POST(request: NextRequest) {
         whySimilar?: string | null;
         howToTell?: string | null;
       };
-      const { data: lookAlikes } = await supabase
+      const { data: lookAlikes, error: lookAlikeError } = await supabase
         .from('look_alikes')
         .select(
           'species_id, danger_level, similarity_description, difference_description, la:mushroom_species!look_alikes_look_alike_id_fkey(id, norwegian_name, primary_image_url, edibility)'
         )
         .in('species_id', speciesIds)
         .in('danger_level', ['high', 'critical']);
+
+      // Dette er den viktigste feilsjekken i hele kodebasen.
+      //
+      // Spørringen droppet tidligere `error`, og `lookAlikes ?? []` gjorde en
+      // hvilken som helst databasefeil om til en tom liste. Resultatet var at
+      // appen viste nøyaktig det samme som når arten FAKTISK ikke har farlige
+      // forvekslingsarter — altså ingen advarsel. For en soppapp er «vi klarte
+      // ikke sjekke» og «det finnes ingen fare» de to mest forskjellige
+      // beskjedene som finnes, og de så helt like ut.
+      //
+      // Vi avbryter ikke identifikasjonen — brukeren skal fortsatt få forslagene
+      // sine — men flagget følger med ut, og klienten sier fra om at sjekken
+      // ikke ble kjørt.
+      if (lookAlikeError) {
+        safetyDataIncomplete = true;
+        userLog.error('identify.look_alikes_failed', lookAlikeError, { speciesIds });
+      }
+
       const byId = new Map<number, LookAlikeEntry[]>();
       for (const row of lookAlikes ?? []) {
         const r = row as unknown as {
@@ -366,12 +412,14 @@ export async function POST(request: NextRequest) {
     userLog.info('identify.success', {
       suggestionCount: ranked.length,
       topMatch: ranked[0]?.name,
-      topProbability: ranked[0]?.probability
+      topProbability: ranked[0]?.probability,
+      safetyDataIncomplete
     });
 
     return NextResponse.json({
       suggestions: ranked,
-      isPlant: plantIdData?.result?.is_plant?.binary ?? false
+      isPlant: plantIdData?.result?.is_plant?.binary ?? false,
+      safetyDataIncomplete
     });
   } catch (error) {
     log.error('identify.unexpected_failure', error);
