@@ -1,10 +1,11 @@
 'use client';
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import { Camera } from 'lucide-react';
 import { buildUserUploadPath } from '@/lib/storage/upload-path';
 import { createClient } from '@/lib/supabase/client';
+import { getSpeciesDisplayName } from '@/lib/utils/species-name';
 import { Button } from '@/components/ui/Button';
 import { reencodeImageForUpload } from '@/lib/utils/image';
 import { isNativePlatform } from '@/lib/native/platform';
@@ -38,6 +39,7 @@ interface SpeciesOption {
 
 export function AddFindingSheet({ latitude, longitude, onClose, onSaved }: AddFindingSheetProps) {
   const t = useTranslations('AddFindingSheet');
+  const locale = useLocale();
   const supabase = useMemo(() => createClient(), []);
 
   const [findingType, setFindingType] = useState<FindingType>('positive');
@@ -125,8 +127,14 @@ export function AddFindingSheet({ latitude, longitude, onClose, onSaved }: AddFi
 
     const { data } = await supabase
       .from('mushroom_species')
-      .select('id,norwegian_name,latin_name')
-      .or(`norwegian_name.ilike.%${value}%,latin_name.ilike.%${value}%,synonyms_text.ilike.%${value}%`)
+      // Uten swedish_name her får en svensk bruker som skriver «flugsvamp»
+      // eller «kremla» null treff, og må gjette det norske navnet for å få
+      // registrert arten i det hele tatt. Migrasjon 030 fylte svenske navn for
+      // hele artslisten; dette var den siste artssøkingen som ikke brukte dem.
+      .select('id,norwegian_name,swedish_name,latin_name')
+      .or(
+        `norwegian_name.ilike.%${value}%,swedish_name.ilike.%${value}%,latin_name.ilike.%${value}%,synonyms_text.ilike.%${value}%`
+      )
       .order('norwegian_name', { ascending: true })
       .limit(8);
 
@@ -249,12 +257,12 @@ export function AddFindingSheet({ latitude, longitude, onClose, onSaved }: AddFi
                 type="button"
                 onClick={() => {
                   setSpeciesId(option.id);
-                  setSpeciesQuery(option.norwegian_name);
+                  setSpeciesQuery(getSpeciesDisplayName(option, locale));
                   setSpeciesOptions([]);
                 }}
                 className="flex w-full items-center justify-between px-3 py-2 text-left hover:bg-gray-50"
               >
-                <span className="text-sm">{option.norwegian_name}</span>
+                <span className="text-sm">{getSpeciesDisplayName(option, locale)}</span>
                 <span className="text-xs italic text-gray-500">{option.latin_name}</span>
               </button>
             ))}
