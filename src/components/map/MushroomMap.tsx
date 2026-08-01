@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useLocale, useTranslations } from 'next-intl';
+import { NextIntlClientProvider, useLocale, useMessages, useTranslations } from 'next-intl';
 import { NonNativeOnly } from '@/components/native/NonNativeOnly';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Download, MoreHorizontal, Navigation, Trash2, X } from 'lucide-react';
@@ -78,6 +78,9 @@ const initialFilters: MapFilterState = {
 export function MushroomMap() {
   const t = useTranslations('MushroomMap');
   const locale = useLocale();
+  // Trengs for popup-rotene under: de er løsrevne React-røtter uten tilgang
+  // til providerens kontekst, så meldingene må sendes inn eksplisitt.
+  const messages = useMessages();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<import('leaflet').Map | null>(null);
   const clusterRef = useRef<any>(null);
@@ -1063,7 +1066,28 @@ export function MushroomMap() {
 
       const popupContainer = document.createElement('div');
       const popupRoot = createRoot(popupContainer);
-      popupRoot.render(<FindingPopup finding={finding} />);
+
+      // Provideren MÅ være med her.
+      //
+      // Dette er en løsrevet React-rot — Leaflet eier elementet, ikke React-
+      // treet vårt — og React-kontekst krysser ikke rot-grenser. Uten den
+      // kaster FindingPopup på sin aller første linje (`useTranslations`), og
+      // React lar roten stå tom. Brukeren klikker en soppmarkør og får en tom
+      // hvit boks: intet artsnavn, intet bilde, ingen dato, ingen lenke.
+      //
+      // Feilen kom inn med den svenske lokaliseringen (fae2940, 26. juni) og
+      // rammet ALLE brukere, ikke bare svenske. Se testen ved siden av
+      // FindingPopup, som fastholder at komponenten kaster uten provider.
+      popupRoot.render(
+        <NextIntlClientProvider locale={locale} messages={messages}>
+          <FindingPopup
+            finding={finding}
+            displayName={
+              finding.species_id != null ? speciesNamesRef.current.get(finding.species_id) : undefined
+            }
+          />
+        </NextIntlClientProvider>
+      );
       popupRootsRef.current.push(popupRoot);
 
       marker.bindPopup(popupContainer, {
@@ -1074,7 +1098,7 @@ export function MushroomMap() {
 
       clusters.addLayer(marker);
     }
-  }, [currentUserId, filters, supabase]);
+  }, [currentUserId, filters, supabase, locale, messages]);
 
   useEffect(() => {
     loadFindingsRef.current = loadFindings;

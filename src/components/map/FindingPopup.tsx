@@ -6,19 +6,29 @@ import { MapFinding } from '@/types/finding';
 
 interface FindingPopupProps {
   finding: MapFinding;
+  /**
+   * Artsnavnet på leserens språk. Kartet slår det opp i `speciesNamesRef`, som
+   * allerede er fylt via getSpeciesDisplayName(..., locale) — så en svensk
+   * bruker får «Kantarell» og ikke det norske navnet.
+   *
+   * `finding.norwegian_name` kommer rått fra `public_findings`-viewet og er
+   * alltid norsk. Den beholdes som reserve for funn uten art.
+   */
+  displayName?: string;
 }
 
-export function FindingPopup({ finding }: FindingPopupProps) {
+export function FindingPopup({ finding, displayName }: FindingPopupProps) {
   const t = useTranslations('FindingPopup');
+  const name = displayName ?? finding.norwegian_name ?? t('unknownSpecies');
 
   return (
     <div className="space-y-3 rounded-xl border border-gray-200 bg-white p-3 shadow-lg">
       {finding.thumbnail_url ? (
-        <img src={finding.thumbnail_url} alt={finding.norwegian_name ?? t('unknownSpecies')} className="h-32 w-full rounded-lg object-cover" />
+        <img src={finding.thumbnail_url} alt={name} className="h-32 w-full rounded-lg object-cover" />
       ) : null}
 
       <div>
-        <h3 className="font-semibold text-gray-900">{finding.norwegian_name ?? t('unknownSpecies')}</h3>
+        <h3 className="font-semibold text-gray-900">{name}</h3>
         <p className="text-xs italic text-gray-600">{finding.latin_name ?? t('notProvided')}</p>
         <p className="mt-1 text-xs text-gray-600">
           {finding.username} • {new Date(finding.found_at).toLocaleDateString('nb-NO')}
