@@ -1,24 +1,38 @@
 # Neste økt — start her
 
-> Skrevet 2026-07-29, oppdatert samme dag etter metadata-økta. Lim kickoff-linja nederst inn i et nytt Claude Code-vindu.
+> Oppdatert 2026-07-31 etter at PR #99 gikk live. Lim kickoff-linja nederst inn i et nytt Claude Code-vindu.
 
-## Hvor vi står
+## Neste oppgave: gjennomgå Codex sin tekniske rapport
+
+Sindre har fått en full teknisk gjennomgang av appen fra Codex med mange forbedringspunkter. **Rapporten er ikke i repoet ennå** — Sindre limer den inn, eller legger den i `docs/reports/`.
+
+Nyttig å vite før du leser den:
+
+- **Repoet er rent og fullt merget.** Ingen åpne PR-er. Brancher som `codex/day-review-reports`, `feat/ga4-pwa`, `claude/happy-elbakyan-eda7ae` m.fl. ligger alle BAK main og inneholder ingen filer main mangler — de er trygge å ignorere eller slette.
+- **Mye kan allerede være fikset.** Runden 30.–31. juli tok bl.a.: svensk lokalisering av all server-generert tekst, 46 manglende svenske artsnavn, vilkår/kjøpsvilkår/personvern, Apple-retningslinje 1.2 (blokkering, innholdsfilter, kontaktinfo i appen), og fire feil i prediksjonsmodellen. Sjekk `docs/reports/deploys.md` (nederste oppføring) FØR du tar et punkt fra rapporten — det sparer dobbeltarbeid.
+- **Vurder hvert punkt, ikke bare implementer.** Erfaringen fra forrige runde: av 28 forslag i en adversariell gjennomgang ble alle 28 korrigert eller forkastet før implementering. Codex-rapporten er et sett hypoteser, ikke en arbeidsordre.
+- **Den harde begrensningen:** temporalt signal er målt til ~0,89 AUC, spatialt til ~0,52. Ingenting i appen skal påstå mer om HVOR sopp er enn 0,52 tåler. Prosjektet har gått tilbake på overdreven ordlyd én gang allerede.
+
+## Hvor vi står ellers
 
 **Alt teknisk OG all metadata i App Store Connect er ferdig.** Gjenstår: sandbox-testkjøp bekreftet, App Review-info (demo-bruker), IAP-capability, arkivering, innsending.
 
 | Område | Status |
 |---|---|
-| Web-appen (mycelet.com) | ✅ Live |
+| Web-appen (mycelet.com) | ✅ Live, sist deployet 31.07 (PR #99) |
+| Migrasjoner 030–032 | ✅ Kjørt i produksjon 31.07 |
 | Landingsside for utloggede + 3 sanketips-artikler | ✅ Live (PR #92–#95) |
 | Apple: avtaler, bank, skatt | ✅ Alle Active |
-| Abonnementer i ASC (79 kr/mnd + 249 kr/år) | ✅ KOMPLETTE 2026-07-29: gruppe-lokalisering «Mycelet Premium» (nb), review-screenshots på begge, årlig fikk «1 Year Upfront»-availability alle land (249 NOK/SEK). Var årsaken til at kjøpsknappene manglet i appen — produktene var «Prepare for Submission» uten metadata → StoreKit leverte 0 produkter |
-| RevenueCat: nøkler, produkter, entitlement `premium`, offering, webhook | ✅ Konfigurert + verifisert via API (offering `default` med $rc_monthly/$rc_annual) |
-| IAP-koden i appen (kjøp, gjenopprett, webhook → `billing_subscriptions`) | ✅ Deployet (PR #90/#91) |
-| Appen installert på Sindres iPhone (dev-bygg m/ RevenueCat-plugin) | ✅ (bygget 28.07 kl 22:51, verifisert innhold) |
-| **ASC-metadata (2026-07-29, gjort av Claude i browser-panelet):** undertittel «Soppkart, AI og sesongvarsler», kategorier Lifestyle + Food & Drink, aldersvurdering **13+** (ærlige svar på nye sosiale-medier-spørsmål: UGC ja, Social Media ja, u13-sperre nei), pris gratis (basisland Norge), tilgjengelighet Norge + Sverige, beskrivelse/nøkkelord/promo/URL-er/copyright (NB: 🍄-emoji avvist av Apple-validering, fjernet), App Privacy publisert (6 datatyper, App Functionality + linked, ingen tracking), 6 skjermbilder i 6,9"-slot i riktig rekkefølge (kart, soppforhold, AI, lovende, kalender, bibliotek) | ✅ |
-| **Sandbox-testkjøp** | ⏳ venter på Apple-propagering av produktmetadata (kan ta timer); prøv igjen med force-quit → Priser |
-| App Review-info: demo-bruker ✅ OPPRETTET 2026-07-29 (applereview@mycelet.com / Mycelet-Review-2026!, sesongpass til 2028); gjenstår å LIME INN i ASC (sign-in info + notes + kontakttelefon) | ⏳ |
-| Xcode: In-App Purchase-capability på App-target → arkiv → innsending | ❌ |
+| Abonnementer i ASC (79 kr/mnd + 249 kr/år) | ✅ Komplette |
+| RevenueCat | ✅ Konfigurert + verifisert |
+| IAP-koden i appen | ✅ Deployet (PR #90/#91) |
+| Apple 1.2 (brukerinnhold) | ✅ Alle fire krav dekket (PR #99) |
+| Lovpålagt kontaktinfo (adresse, telefon, MVA-status) | ✅ Live på `/kontakt` |
+| **Sandbox-testkjøp** | ⏳ |
+| App Review-info: demo-bruker opprettet, må limes inn i ASC | ⏳ |
+| Xcode: IAP-capability → arkiv → innsending | ❌ |
+| DSA trader-status i App Store Connect | ❌ Må gjøres FØR EU-distribusjon |
+| Tilgjengelighetserklæring (norsk forskrift, WCAG 2.0 AA) | ❌ |
 
 ## 1. Sandbox-kjøpet (2 min, på iPhonen)
 
