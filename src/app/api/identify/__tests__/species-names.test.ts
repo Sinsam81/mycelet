@@ -186,3 +186,55 @@ describe('reserven når svensk navn mangler', () => {
     );
   });
 });
+
+describe('feilmeldingene følger leserens språk', () => {
+  async function errorFor(locale: 'nb' | 'sv', setup: () => void) {
+    mockLocale = locale;
+    setup();
+    const res = await POST(makeRequest());
+    return { status: res.status, body: await res.json() };
+  }
+
+  it('AI avslått: svensk tekst', async () => {
+    const { status, body } = await errorFor('sv', () => vi.stubEnv('PLANTID_API_KEY', 'kort'));
+    expect(status).toBe(503);
+    expect(body.error).toBe('AI-identifiering är inte aktiverad ännu.');
+  });
+
+  it('AI avslått: norsk tekst', async () => {
+    const { body } = await errorFor('nb', () => vi.stubEnv('PLANTID_API_KEY', 'kort'));
+    expect(body.error).toBe('AI-identifikasjon er ikke aktivert ennå.');
+  });
+
+  it('KODEN følger med — det er den klienten forgrener på', async () => {
+    // Uten dette feltet måtte klienten gjenkjent tilstanden på selve teksten.
+    for (const locale of ['nb', 'sv'] as const) {
+      const { body } = await errorFor(locale, () => vi.stubEnv('PLANTID_API_KEY', 'kort'));
+      expect(body.code).toBe('ai_disabled');
+    }
+  });
+
+  it('den svenske teksten inneholder IKKE delstrengen den gamle klienten lette etter', async () => {
+    // Dette er hele grunnen til at oversettelsen og kodefeltet måtte komme
+    // sammen: `message.toLowerCase().includes('ikke aktivert')` ville sluttet å
+    // treffe i det serveren svarte svensk, og panelet forsvunnet stille.
+    const { body } = await errorFor('sv', () => vi.stubEnv('PLANTID_API_KEY', 'kort'));
+    expect(body.error.toLowerCase()).not.toContain('ikke aktivert');
+  });
+
+  it('manglende bilde: begge språk, med kode', async () => {
+    for (const [locale, tekst] of [['nb', 'Bilde mangler'], ['sv', 'Bild saknas']] as const) {
+      mockLocale = locale;
+      const res = await POST(
+        new NextRequest('https://mycelet.com/api/identify', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', 'x-forwarded-for': `10.9.0.${Math.random()}` },
+          body: JSON.stringify({})
+        })
+      );
+      const body = await res.json();
+      expect(body.error).toBe(tekst);
+      expect(body.code).toBe('missing_image');
+    }
+  });
+});

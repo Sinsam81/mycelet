@@ -2,6 +2,16 @@
 
 import { useMutation } from '@tanstack/react-query';
 import { IdentifyResultPayload } from '@/types/identify';
+
+/** Feil fra /api/identify, med rutens `code` bevart. */
+export class IdentifyError extends Error {
+  readonly code?: string;
+  constructor(message: string, code?: string) {
+    super(message);
+    this.name = 'IdentifyError';
+    this.code = code;
+  }
+}
 import { trackEvent } from '@/lib/analytics';
 
 interface IdentifyRequest {
@@ -30,8 +40,12 @@ export function useIdentify() {
 
       const data = await response.json();
       if (!response.ok) {
-        trackEvent('identify_failed', { status: response.status });
-        throw new Error(data?.error ?? 'Identifikasjon feilet');
+        trackEvent('identify_failed', { status: response.status, code: data?.code });
+        // Koden må overleve kastet. Uten den måtte klienten gjenkjenne
+        // tilstanden på selve feilteksten — og en oversatt tekst matcher ikke
+        // en norsk delstreng, så AI-deaktivert-panelet ville forsvunnet for
+        // svenske brukere i det serveren begynte å svare på deres språk.
+        throw new IdentifyError(data?.error ?? 'Identifikasjon feilet', data?.code);
       }
 
       trackEvent('identify_completed', {
