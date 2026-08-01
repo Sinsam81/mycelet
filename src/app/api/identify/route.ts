@@ -8,6 +8,8 @@ import { getClientKey, rateLimitResponse } from '@/lib/rate-limit/route';
 import { createRequestLogger } from '@/lib/log/request';
 import { seasonFit, rankOrder } from '@/lib/utils/identify-ranking';
 import { coarsenLocation } from '@/lib/privacy/coarsen-location';
+import { getSpeciesDisplayName } from '@/lib/utils/species-name';
+import { getUserLocale } from '@/i18n/locale';
 
 const PLANTID_API_URL = 'https://mushroom.kindwise.com/api/v1/identification';
 
@@ -197,6 +199,11 @@ export async function POST(request: NextRequest) {
     const plantIdData = await plantIdResponse.json();
     const suggestionsRaw: PlantIdSuggestion[] = plantIdData?.result?.classification?.suggestions ?? [];
 
+    // Artsnavn kommer fra databasen, ikke fra meldingskatalogen, så de må slås
+    // opp mot leserens språk. Se CLAUDE.md: getSpeciesDisplayName faller stille
+    // tilbake til norsk når swedish_name mangler.
+    const locale = await getUserLocale();
+
     const month = new Date().getMonth() + 1;
 
     // Settes hvis en spørring vi beriker resultatet med feiler. Da mangler
@@ -243,7 +250,7 @@ export async function POST(request: NextRequest) {
         mapped.nearbyFindings = 0;
 
         const SPECIES_FIELDS =
-          'id,norwegian_name,edibility,primary_image_url,season_start,season_end,peak_season_start,peak_season_end';
+          'id,norwegian_name,swedish_name,edibility,primary_image_url,season_start,season_end,peak_season_start,peak_season_end';
 
         // eslint-disable-next-line prefer-const
         let { data: species, error: speciesError } = await supabase
@@ -285,7 +292,7 @@ export async function POST(request: NextRequest) {
 
         if (species) {
           mapped.speciesId = species.id;
-          mapped.norwegianName = species.norwegian_name;
+          mapped.norwegianName = getSpeciesDisplayName(species, locale);
           mapped.edibility = species.edibility;
           mapped.imageUrl = (species.primary_image_url as string | null) ?? null;
           const fit = seasonFit(
@@ -311,6 +318,15 @@ export async function POST(request: NextRequest) {
     // SAFETY: surface high/critical look-alikes right in the result (not hidden on
     // the species page). Location-independent, so always run.
     if (speciesIds.length > 0) {
+      /** Radformen fra look_alikes-joinet — nok til å slå opp navnet på riktig språk. */
+      type LookAlikeSpeciesRow = {
+        id: number;
+        norwegian_name: string;
+        swedish_name: string | null;
+        primary_image_url: string | null;
+        edibility: string | null;
+      };
+
       type LookAlikeEntry = {
         name: string;
         danger: string;
@@ -323,7 +339,7 @@ export async function POST(request: NextRequest) {
       const { data: lookAlikes, error: lookAlikeError } = await supabase
         .from('look_alikes')
         .select(
-          'species_id, danger_level, similarity_description, difference_description, la:mushroom_species!look_alikes_look_alike_id_fkey(id, norwegian_name, primary_image_url, edibility)'
+          'species_id, danger_level, similarity_description, difference_description, la:mushroom_species!look_alikes_look_alike_id_fkey(id, norwegian_name, swedish_name, primary_image_url, edibility)'
         )
         .in('species_id', speciesIds)
         .in('danger_level', ['high', 'critical']);
@@ -353,15 +369,19 @@ export async function POST(request: NextRequest) {
           similarity_description: string | null;
           difference_description: string | null;
           la:
-            | { id: number; norwegian_name: string; primary_image_url: string | null; edibility: string | null }
-            | { id: number; norwegian_name: string; primary_image_url: string | null; edibility: string | null }[]
+            | LookAlikeSpeciesRow
+            | LookAlikeSpeciesRow[]
             | null;
         };
         const laObj = Array.isArray(r.la) ? r.la[0] : r.la;
         if (r.species_id == null || !laObj?.norwegian_name) continue;
         const arr = byId.get(r.species_id) ?? [];
         arr.push({
-          name: laObj.norwegian_name,
+          // Advarselslinja i UI-et er oversatt, men navnene inni kom rått fra
+          // norwegian_name. En svensk bruker fikk «Kan förväxlas med grønn
+          // fluesopp» der arten heter Lömsk flugsvamp — navnet på den
+          // dødeligste soppen vi har, skrevet så svensken ikke kjenner det igjen.
+          name: getSpeciesDisplayName(laObj, locale),
           danger: r.danger_level,
           speciesId: laObj.id,
           imageUrl: laObj.primary_image_url ?? null,
