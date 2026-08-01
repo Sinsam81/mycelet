@@ -1,0 +1,20 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "mycelet-dev",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "port": 3000
+    },
+    {
+      "name": "mycelet-prod-worktree",
+      "runtimeExecutable": "/bin/sh",
+      "runtimeArgs": [
+        "-c",
+        "cd '/Users/sindreoveras/Documents/Dokumenter – Sindre sin MacBook Air/sopp appen/.claude/worktrees/goofy-saha-783884' && npx next start -p 3100"
+      ],
+      "port": 3100
+    }
+  ]
+}
