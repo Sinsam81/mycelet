@@ -13,6 +13,18 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import type { RateLimitResult } from './index';
+import { getUserLocale } from '@/i18n/locale';
+import { DEFAULT_LOCALE, type Locale } from '@/i18n/config';
+
+/**
+ * Feilteksten er generert på serveren, og next-intl dekker derfor ikke denne —
+ * samme felle som prediksjonstekstene gikk i. En svensk bruker som traff en
+ * grense fikk norsk beskjed.
+ */
+const COPY: Record<Locale, string> = {
+  nb: 'For mange forespørsler — prøv igjen om litt',
+  sv: 'För många förfrågningar — försök igen om en stund'
+};
 
 /**
  * Build a stable per-client identifier for bucket keys.
@@ -44,8 +56,19 @@ export function getClientKey(request: NextRequest, userId: string | null): strin
 /**
  * Standard 429 response with Retry-After + RateLimit-* headers per
  * draft-ietf-httpapi-ratelimit-headers semantics.
+ *
+ * Finner leserens språk selv når `locale` ikke oppgis. Det er med vilje:
+ * hjelperen kalles fra 18 rutehandlere, og en valgfri parameter hver enkelt
+ * kunne glemme å sende ville betydd at 17 av dem fortsatt svarte på norsk.
+ * Kostnaden er ett cookie-oppslag, og bare når noen faktisk treffer en grense.
+ *
+ * Ruter som allerede har slått opp språket kan sende det inn og spare
+ * oppslaget.
  */
-export function rateLimitResponse(result: RateLimitResult): NextResponse {
+export async function rateLimitResponse(
+  result: RateLimitResult,
+  locale?: Locale
+): Promise<NextResponse> {
   const headers: Record<string, string> = {
     'X-RateLimit-Remaining': String(result.remaining),
     'X-RateLimit-Reset': String(Math.ceil(result.resetAt / 1000))
@@ -54,9 +77,20 @@ export function rateLimitResponse(result: RateLimitResult): NextResponse {
     headers['Retry-After'] = String(result.retryAfterSeconds);
   }
 
+  // Språkoppslaget leser cookies, som kan kaste utenfor en request-kontekst.
+  // En 429 skal aldri bli en 500 fordi vi ikke fant språket.
+  let lang: Locale = locale ?? DEFAULT_LOCALE;
+  if (!locale) {
+    try {
+      lang = await getUserLocale();
+    } catch {
+      lang = DEFAULT_LOCALE;
+    }
+  }
+
   return NextResponse.json(
     {
-      error: 'For mange forespørsler — prøv igjen om litt',
+      error: COPY[lang] ?? COPY[DEFAULT_LOCALE],
       retryAfterSeconds: result.retryAfterSeconds
     },
     { status: 429, headers }
