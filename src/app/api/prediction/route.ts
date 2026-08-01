@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { getBillingCapabilities, getUserBillingSubscription } from '@/lib/billing/subscription';
 import { fetchWeatherSummary } from '@/lib/weather';
 import { checkRateLimit } from '@/lib/rate-limit';
@@ -141,8 +142,33 @@ export async function GET(request: NextRequest) {
     // (score is precomputed and species-filtered by the RPC), while the
     // fallback path needs weather for score computation AND species details
     // for per-species adjustment.
+    // Flisene hentes med tjenestenøkkelen, ikke med kallerens sesjon.
+    //
+    // Hvorfor: `get_prediction_tiles_in_bounds` er SECURITY DEFINER (migrasjon
+    // 003) og returnerer nøyaktig det samme uansett hvem som spør — den er ikke
+    // RLS-avhengig. Men fordi ruta er tilgjengelig utlogget, måtte `anon` ha
+    // EXECUTE på den. Og anon-nøkkelen er offentlig, så hvem som helst kunne
+    // kalle den direkte mot PostgREST og laste ned hele det forhåndsberegnede
+    // rasteret — det migrasjon 015 uttrykkelig prøvde å hindre.
+    //
+    // Med tjenestenøkkelen her trenger ikke `anon` rettigheten lenger, og
+    // migrasjon 033 tar den bort. `authenticated` beholder den: kartet kaller
+    // RPC-en direkte fra nettleseren for å slippe et rundturskall per panorering.
+    //
+    // Feiler admin-klienten (manglende nøkkel i miljøet), faller vi tilbake på
+    // sesjonsklienten. Da virker alt som før — dette skal ikke kunne ta ned
+    // prediksjonen.
+    const tileClient = (() => {
+      try {
+        return createAdminClient();
+      } catch {
+        log.warn('prediction.tiles.admin_client_unavailable');
+        return supabase;
+      }
+    })();
+
     const [tileRes, weather, speciesRes] = await Promise.all([
-      supabase.rpc('get_prediction_tiles_in_bounds', {
+      tileClient.rpc('get_prediction_tiles_in_bounds', {
         min_lat: minLat,
         min_lng: minLng,
         max_lat: maxLat,
