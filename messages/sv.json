@@ -177,7 +177,9 @@
     "registerLink": "Registrera dig",
     "signInFailed": "Kunde inte logga in",
     "googleSignInFailed": "Google-inloggning misslyckades",
-    "loading": "Laddar..."
+    "loading": "Laddar...",
+    "noticeConfirm": "Kontot är skapat. Vi har skickat ett e-postmeddelande — bekräfta din adress och logga in här efteråt.",
+    "noticeRecover": "Ditt konto skapades, men vi fick inte satt upp profilen. Logga in här, så ordnar vi resten automatiskt."
   },
   "AuthRegister": {
     "errorUsernameTaken": "Användarnamnet är redan upptaget. Välj ett annat.",
@@ -369,7 +371,9 @@
     "viewSpeciesPage": "Se artsida",
     "notAGuarantee": "Detta är AI-förslag, inte en bekräftelse på att svampen är säker att äta. Få den alltid bedömd av en svampkonsulent eller expert innan du äter.",
     "acknowledgeLabel": "Jag förstår att detta inte är en ätlighetsgaranti, och jag äter aldrig svamp utan att få den bekräftad av en expert.",
-    "matchLabel": "träff"
+    "matchLabel": "bildlikhet",
+    "notFoodAssessed": "Inte matbedömd",
+    "safetyDataIncomplete": "Vi kunde inte hämta säkerhetsdatan för de här förslagen just nu. Att det inte står någon varning här betyder därför INTE att arten är säker — det betyder att vi inte fick kontrollerat. Öppna artsidan och kontrollera förväxlingsarter manuellt, eller försök igen om en stund."
   },
   "MineSteder": {
     "metaTitle": "Mina platser — Mycelet",
@@ -492,7 +496,7 @@
     "processorVercelNote": "Trafik kan dirigeras via servrar utanför EES under EU:s standardavtalsklausuler (SCC).",
     "processorStripeDesc": "(betalning på webben) — Personuppgiftsbiträdesavtal:",
     "processorStripeNote": "Stripe kan överföra data till USA under SCC.",
-    "processorKindwiseDesc": "(AI-svampidentifiering) — när du använder foto-ID skickas bilden och koordinaterna till Kindwise för analys. Integritet:",
+    "processorKindwiseDesc": "(AI-svampidentifiering) — när du använder foto-ID skickas bilden till Kindwise för analys. Din position grovkornas först till en ruta på ungefär 11 km i nord–syd och 3,5–6 km i öst–väst, så att Kindwise kan vikta artförslagen mot regionen utan att få veta var du står. Vi skickar aldrig den exakta punkten. Integritet:",
     "processorGoogleAnalyticsDesc": "(valfri användningsanalys) — aktiveras endast efter samtycke och tar inte emot bilder, exakta positioner eller kontouppgifter. Google Analytics integritet och säkerhet:",
     "processorAnd": "och",
     "processorMetLabel": "MET Norge (Frost)",
@@ -746,7 +750,8 @@
     "lookAlikesHeading": "Se även",
     "noImage": "Ingen bild",
     "dangerPrefix": "Fara:",
-    "howToTellApart": "Hur man skiljer:"
+    "howToTellApart": "Hur man skiljer:",
+    "lookAlikesUnavailable": "Vi kunde inte hämta förväxlingsarterna för den här arten just nu. Att det inte står några farliga förväxlingar här betyder därför INTE att det inte finns några. Ladda om sidan, eller låt svampen bedömas av svampkontroll innan du äter den."
   },
   "Species": {
     "edibilityAll": "Alla",

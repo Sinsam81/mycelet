@@ -245,7 +245,7 @@ describe('the home address must not become searchable', () => {
   // same block. This asserts every page that renders the trader block opts out
   // of indexing — a future page that adds the block without noindex fails here.
   const readSource = (rel: string) =>
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     (require('node:fs') as typeof import('node:fs')).readFileSync(new URL(rel, import.meta.url), 'utf8');
 
   it.each([

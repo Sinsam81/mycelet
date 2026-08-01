@@ -205,6 +205,44 @@ describe('fetchSmhi (via Sweden coords)', () => {
     }
   });
 
+  describe('manglende nedbør er ikke det samme som ingen nedbør', () => {
+    // En aktiv nedbørsstasjon som ikke leverer målinger ga tidligere
+    // rain3d = rain7d = 0 — altså «vi har MÅLT at det ikke regnet». Det er
+    // motsatt beskjed av «vi vet ikke», og den trakk prediksjonen rett ned for
+    // svenske brukere hver gang stasjonsdataene glapp.
+    function mockWithPrecip(precipValues: ReturnType<typeof smhiDataPoint>[]) {
+      const near = smhiStation('100', 59.34, 18.05);
+      return vi.fn(async (url: unknown) => {
+        const u = String(url);
+        if (u.endsWith('.json') && u.includes('/parameter/') && !u.includes('/station/')) {
+          return mockJson({ station: [near] });
+        }
+        if (u.includes('parameter/1/station/100')) return mockJson({ value: [smhiDataPoint(0, 16.5)] });
+        if (u.includes('parameter/5/station/100')) return mockJson({ value: precipValues });
+        if (u.includes('parameter/6/station/100')) return mockJson({ value: [smhiDataPoint(0, 78)] });
+        if (u.includes('parameter/19/station/100')) return mockJson({ value: [smhiDataPoint(2, 9)] });
+        if (u.includes('parameter/20/station/100')) return mockJson({ value: [smhiDataPoint(2, 22)] });
+        throw new Error(`Unmocked URL: ${u}`);
+      });
+    }
+
+    it('gir null når nedbørsstasjonen ikke leverer noen målinger', async () => {
+      vi.stubGlobal('fetch', mockWithPrecip([]));
+      const result = await fetchWeatherSummary(STOCKHOLM);
+      // Ingen sammendrag er riktigere enn et sammendrag som påstår 0 mm.
+      expect(result).toBeNull();
+    });
+
+    it('rapporterer ekte tørke som 0, ikke som manglende data', async () => {
+      // Serien FINNES og er null — det er en ekte måling av tørke.
+      vi.stubGlobal('fetch', mockWithPrecip([smhiDataPoint(2, 0), smhiDataPoint(1, 0)]));
+      const result = await fetchWeatherSummary(STOCKHOLM);
+      expect(result).not.toBeNull();
+      expect(result?.rain3dMm).toBe(0);
+      expect(result?.rain7dMm).toBe(0);
+    });
+  });
+
   it('uses nearest active station by approximate distance', async () => {
     const veryClose = smhiStation('CLOSE', 59.33, 18.07); // ~50m from Stockholm
     const farther = smhiStation('FAR', 60.0, 18.0); // ~75km north

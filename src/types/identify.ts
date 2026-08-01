@@ -37,4 +37,10 @@ export interface IdentifyResultPayload {
   };
   suggestions: IdentifySuggestion[];
   isPlant: boolean;
+  /**
+   * Satt når serveren ikke fikk lest spiselighet eller farlige
+   * forvekslingsarter for ett eller flere forslag. Fraværet av en advarsel
+   * betyr da IKKE at det er trygt — bare at vi ikke vet.
+   */
+  safetyDataIncomplete?: boolean;
 }

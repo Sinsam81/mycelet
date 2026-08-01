@@ -294,7 +294,12 @@ function PricingInner() {
         body: JSON.stringify({ plan, immediateDeliveryConsent: true, consentVersion: PURCHASE_CONSENT_VERSION })
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data?.error ?? t('errorCheckout'));
+      // Ta med `details` når den finnes. Ruta legger forklaringen der — for
+      // eksempel hvorfor et planbytte er sperret og hva brukeren skal gjøre —
+      // og uten dette så brukeren bare overskriften.
+      if (!response.ok) {
+        throw new Error([data?.error, data?.details].filter(Boolean).join(' ') || t('errorCheckout'));
+      }
       if (data?.url) {
         const value = plan === 'premium' ? PREMIUM_MONTHLY : SEASON_YEARLY;
         trackEvent('begin_checkout', {

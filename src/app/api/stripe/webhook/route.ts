@@ -69,11 +69,24 @@ async function upsertBillingByUserId(payload: {
 
 async function resolveUserIdFromCustomer(customerId: string) {
   const admin = createAdminClient();
-  const { data } = await admin
+  const { data, error } = await admin
     .from('billing_subscriptions')
     .select('user_id')
     .eq('stripe_customer_id', customerId)
     .maybeSingle();
+
+  // Uten denne sjekken var «spørringen feilet» og «kunden finnes ikke hos oss»
+  // det samme svaret: null. Kalleren tolker null som «ingen bruker å oppdatere»
+  // og hopper stille over hendelsen — så en forbigående DB-feil kunne bety at
+  // et abonnement aldri ble aktivert, eller at en kansellering aldri slo inn,
+  // uten spor noe sted.
+  //
+  // Vi kaster i stedet, slik upsertBillingByUserId over allerede gjør. Da får
+  // Stripe en ikke-2xx og prøver hendelsen på nytt — som er hele poenget med
+  // webhook-retries.
+  if (error) {
+    throw new Error(`resolveUserIdFromCustomer failed: ${error.message}`);
+  }
 
   return data?.user_id ?? null;
 }

@@ -3,9 +3,25 @@
 // the header (PR #85, OSM/Esri in connect-src) never reached already-installed
 // workers — an unchanged script skips reinstall. Any byte change here re-runs
 // install; skipWaiting/clients.claim swap the new worker in immediately.
-const STATIC_CACHE = 'mycelet-static-v2';
+const STATIC_CACHE = 'mycelet-static-v3';
 const TILE_CACHE = 'mycelet-map-tiles-v1'; // unchanged: users' saved offline tiles live here
-const STATIC_ASSETS = ['/', '/map', '/pricing', '/manifest.json', '/icons/icon.svg', '/icons/icon-maskable.svg'];
+
+// v3 (2026-08-01): '/', '/map' og '/pricing' er fjernet herfra.
+//
+// De var død vekt, og en av dem var direkte misvisende:
+//
+//   • Fetch-handleren under returnerer tidlig på `event.request.mode ===
+//     'navigate'`. En HTML-side kan derfor ALDRI serveres fra denne cachen.
+//     Vi lastet altså ned tre sider ved installasjon som aldri ble brukt.
+//   • '/map' krever dessuten innlogging (PROTECTED_PATHS i
+//     src/lib/supabase/middleware.ts). For en utlogget besøkende cachet vi i
+//     praksis en omdirigering til innloggingssiden.
+//
+// At navigasjoner bevisst går til nettverket er RIKTIG for denne appen: en
+// sopp-app som serverer en gammel side i skogen kan vise utdaterte
+// sikkerhetsopplysninger om en art. Ekte offline-bruk er kartfliser
+// (TILE_CACHE, premium), ikke sider.
+const STATIC_ASSETS = ['/manifest.json', '/icons/icon.svg', '/icons/icon-maskable.svg'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(

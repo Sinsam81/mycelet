@@ -1,0 +1,82 @@
+/**
+ * Grovkorning av posisjon før den forlater oss.
+ *
+ * Bakgrunn: /api/identify sendte brukerens eksakte latitude/longitude videre
+ * til Kindwise. Det var opplyst i personvernerklæringen, men det var likevel
+ * for mye. Hele produktløftet i Mycelet er at hemmelige soppsteder er trygge —
+ * og et eksakt punkt ER stedet. En serie identifikasjoner med eksakt posisjon
+ * tegner dessuten opp bevegelsesmønsteret til brukeren hos en tredjepart.
+ *
+ * Hva leverandøren faktisk trenger posisjonen til, er å vekte artsforslag mot
+ * hvilke arter som finnes i regionen. Det er en regional opplysning, ikke en
+ * stedsopplysning. Én rute på ~11 km i nord–sør og 4–6 km i øst–vest svarer på
+ * «hvilken del av Norden er dette» uten å svare på «hvor står soppen».
+ *
+ * Vi snapper til midten av ruta, ikke til nedre hjørne. Begge er like trygge —
+ * alle punkter i samme rute får samme svar uansett, så ingen av dem lekker hvor
+ * i ruta brukeren står. Midtpunktet velges fordi det er mest NØYAKTIG: det
+ * halverer verste avstand fra det ekte punktet (~6 km mot ~12 km ved hjørnet),
+ * og gir dermed leverandøren et bedre regionalt svar for samme personvern.
+ */
+
+/**
+ * Rutestørrelse i grader. 0,1° breddegrad er ~11,1 km overalt. 0,1° lengdegrad
+ * krymper mot polene: ~5,9 km ved Göteborg (58°N), ~5,6 km ved Oslo (60°N),
+ * ~5,0 km ved Trondheim (63°N), ~3,9 km ved Tromsø (70°N), ~3,6 km ved Nordkapp (71°N).
+ *
+ * Selv den smaleste ruta er altså over tre og en halv kilometer bred. Den inneholder en
+ * hel bygd — aldri ett voksested. Merk at brukerrettet tekst må oppgi spennet,
+ * ikke ett tall: «11 x 6 km» ville vært en overdrivelse for nordnorske brukere,
+ * og et personvernløfte skal ikke love mer beskyttelse enn det gir.
+ */
+export const COARSE_GRID_DEGREES = 0.1;
+
+export interface CoarseLocation {
+  latitude: number;
+  longitude: number;
+}
+
+/**
+ * Snapper én akse til midten av sin rute.
+ *
+ * `limit` er aksens ytterpunkt (90 for bredde, 180 for lengde). Uten
+ * klemmingen ga nøyaktig 90 resultatet 90,05 — et ugyldig koordinat sendt til
+ * en tredjepart.
+ */
+function snapToCellCentre(value: number, step: number, limit: number): number {
+  // Klem så vidt innenfor ytterpunktet, slik at polen/datolinjen havner i den
+  // siste ekte ruta i stedet for i en rute som ikke finnes.
+  const clamped = Math.min(limit - step / 2, Math.max(-limit, value));
+
+  // 0.3 / 0.1 gir 2.9999999999999996 i flyttall, og Math.floor sender da
+  // punktet én rute for lavt. Vi runder bort støyen før vi tar gulvet, så et
+  // koordinat som ligger nøyaktig på en rutegrense havner i ruta over — slik
+  // regnestykket tilsier.
+  const index = Math.floor(Number((clamped / step).toFixed(9)));
+  const centre = index * step + step / 2;
+
+  // Fire desimaler er ~11 m — langt under rutestørrelsen, så avrundingen
+  // påvirker ikke personvernet.
+  return Number(centre.toFixed(4));
+}
+
+/**
+ * Gjør et eksakt punkt om til midten av ruta det ligger i.
+ *
+ * Returnerer null hvis inputen ikke er et brukbart koordinat — da skal det
+ * ikke sendes noe posisjon i det hele tatt.
+ */
+export function coarsenLocation(
+  latitude: number | null | undefined,
+  longitude: number | null | undefined
+): CoarseLocation | null {
+  if (latitude == null || longitude == null) return null;
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
+  if (latitude < -90 || latitude > 90) return null;
+  if (longitude < -180 || longitude > 180) return null;
+
+  return {
+    latitude: snapToCellCentre(latitude, COARSE_GRID_DEGREES, 90),
+    longitude: snapToCellCentre(longitude, COARSE_GRID_DEGREES, 180)
+  };
+}

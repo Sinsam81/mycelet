@@ -7,6 +7,8 @@ import { useTranslations } from 'next-intl';
 import { Button } from '@/components/ui/Button';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { trackEvent } from '@/lib/analytics';
+import { readSafeNext } from '@/lib/auth/safe-redirect';
+import { ensureProfile } from '@/lib/auth/ensure-profile';
 
 // Next 15+ requires useSearchParams() to be inside a Suspense boundary so the
 // page can prerender. We wrap the inner form-rendering component below.
@@ -41,7 +43,8 @@ function RegisterForm() {
   const t = useTranslations('AuthRegister');
   const router = useRouter();
   const searchParams = useSearchParams();
-  const redirectPath = useMemo(() => searchParams.get('next') ?? searchParams.get('redirect') ?? '/', [searchParams]);
+  // Validert mot åpen redirect — se src/lib/auth/safe-redirect.ts.
+  const redirectPath = useMemo(() => readSafeNext(searchParams), [searchParams]);
   const { signUp, supabase } = useAuth();
 
   const [email, setEmail] = useState('');
@@ -68,17 +71,21 @@ function RegisterForm() {
       // we route them to login with a "check your inbox" hint instead of
       // attempting an unauthenticated profile insert that RLS would reject.
       if (result.session && result.user) {
-        const { error: profileError } = await supabase.from('profiles').upsert(
-          {
-            id: result.user.id,
-            username,
-            display_name: displayName || username
-          },
-          { onConflict: 'id' }
-        );
+        // Tidligere kastet vi hvis profil-upserten feilet. Da hadde auth-brukeren
+        // ALLEREDE blitt opprettet, så brukeren satt igjen med en konto uten
+        // profil — og kunne ikke registrere seg på nytt («e-posten er allerede
+        // i bruk») eller komme videre i appen. En blindvei.
+        //
+        // ensureProfile prøver ønsket brukernavn, og faller tilbake på en
+        // suffikset variant hvis det er opptatt. Går selv ikke det, sender vi
+        // brukeren til innlogging — der signIn kaller den samme funksjonen på
+        // nytt, slik at kontoen reparerer seg selv ved neste forsøk i stedet
+        // for å bli stående ødelagt.
+        const { error: profileError } = await ensureProfile(supabase, result.user);
 
         if (profileError) {
-          throw profileError;
+          router.push(`/auth/login?next=${encodeURIComponent(redirectPath)}&recover=1`);
+          return;
         }
 
         router.push(redirectPath);

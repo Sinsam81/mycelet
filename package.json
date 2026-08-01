@@ -6,7 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
+    "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest",
     "calibrate:spot-feedback": "node --env-file=.env.local scripts/analyze-spot-feedback.mjs",
@@ -27,7 +27,8 @@
     "qa:report": "playwright show-report",
     "cap:sync": "cap sync",
     "cap:ios": "cap sync ios && cap open ios",
-    "cap:android": "cap sync android && cap open android"
+    "cap:android": "cap sync android && cap open android",
+    "lint:fix": "eslint . --fix"
   },
   "dependencies": {
     "@capacitor/android": "^8.3.4",
@@ -45,13 +46,13 @@
     "leaflet": "^1.9.4",
     "leaflet.markercluster": "^1.5.3",
     "lucide-react": "^0.542.0",
-    "next": "^16.2.5",
+    "next": "^16.2.12",
     "next-intl": "^4.13.0",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
     "react-hot-toast": "^2.6.0",
     "react-leaflet": "^5.0.0",
-    "sharp": "^0.34.3",
+    "sharp": "^0.35.3",
     "stripe": "^16.12.0",
     "tailwind-merge": "^3.3.1",
     "zustand": "^5.0.8"
@@ -65,9 +66,15 @@
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "autoprefixer": "^10.4.21",
-    "postcss": "^8.5.6",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "^16.2.12",
+    "postcss": "^8.5.25",
     "tailwindcss": "^3.4.17",
     "typescript": "^5.9.2",
     "vitest": "^3.2.4"
+  },
+  "overrides": {
+    "postcss": "^8.5.25",
+    "sharp": "^0.35.3"
   }
 }

@@ -46,7 +46,11 @@ export function useIdentify() {
           longitude: payload.longitude ?? null
         },
         suggestions: data.suggestions ?? [],
-        isPlant: Boolean(data.isPlant)
+        isPlant: Boolean(data.isPlant),
+        // Serveren setter dette når et oppslag av spiselighet eller
+        // forvekslingsarter feilet. Da MÅ resultatsiden si fra — uten flagget
+        // ser «vi klarte ikke sjekke» ut nøyaktig som «ingen fare funnet».
+        safetyDataIncomplete: Boolean(data.safetyDataIncomplete)
       };
     }
   });

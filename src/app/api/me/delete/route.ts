@@ -5,6 +5,7 @@ import { logAdminAction } from '@/lib/audit/log';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { getClientKey, rateLimitResponse } from '@/lib/rate-limit/route';
 import { createRequestLogger } from '@/lib/log/request';
+import { deleteUserStorageObjects, type StorageApi } from '@/lib/storage/delete-user-objects';
 
 /**
  * GDPR Article 17 — right to erasure ("right to be forgotten").
@@ -37,7 +38,24 @@ import { createRequestLogger } from '@/lib/log/request';
  *
  * Requires SUPABASE_SERVICE_ROLE_KEY to be set in the deployment env;
  * fails with 500 otherwise.
+ *
+ * OM DELVISE FEIL. Rekkefølgen er bevisst, og den er ikke tilfeldig valgt:
+ * de eksplisitte slettingene MÅ skje før auth-brukeren fjernes, fordi cascaden
+ * setter findings.user_id til NULL — etterpå finnes det ingen kobling igjen å
+ * finne radene på.
+ *
+ * Det betyr at et avbrudd midt i etterlater «data borte, konto igjen». Det er
+ * det minst dårlige av alternativene: hvert steg er idempotent og nøkles på
+ * user_id, så brukeren kan bare prøve på nytt, og andre forsøk rydder resten.
+ * Motsatt rekkefølge ville gitt «konto borte, data igjen» — og da finnes det
+ * ingen konto å logge inn med for å prøve igjen, så det ville krevd manuell
+ * opprydding. Derfor sier feilmeldingene eksplisitt at det er trygt å gjenta.
  */
+
+/** Samme beskjed uansett hvilket steg som røk: hva er tilstanden, hva gjør du nå. */
+const RETRY_IS_SAFE =
+  'Kontoen din er IKKE slettet, men noe av innholdet ditt kan være fjernet. Prøv igjen — det er trygt å gjenta, og andre forsøk rydder resten. Vedvarer feilen, kontakt oss.';
+
 export async function POST(request: NextRequest) {
   const log = createRequestLogger(request);
   // warn on entry — destroying user data is high-signal even when expected.
@@ -141,7 +159,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         error: 'Kunne ikke fjerne dine personlige funn før kontosletting',
-        details: positiveDeleteError.message
+        // Leverandørens feilmelding blir i loggen. Brukeren trenger å vite hva
+        // tilstanden er og hva de skal gjøre, ikke hva Postgres het.
+        details: RETRY_IS_SAFE
       },
       { status: 500 }
     );
@@ -158,7 +178,32 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         error: 'Kunne ikke fjerne private observasjoner før kontosletting',
-        details: privateDeleteError.message
+        details: RETRY_IS_SAFE
+      },
+      { status: 500 }
+    );
+  }
+
+  // STEP 1c — brukerens opplastede bilder.
+  //
+  // Dette manglet helt: radene forsvant, auth-brukeren forsvant, men bildene
+  // ble liggende i Storage på offentlige URL-er. En sletting etter art. 17 som
+  // etterlater brukerens egne bilder tilgjengelige er ikke en sletting.
+  //
+  // Må skje FØR auth-slettingen, mens vi fortsatt kan knytte filene til
+  // brukeren. Steget er idempotent, så et nytt forsøk er trygt.
+  const storageResult = await deleteUserStorageObjects(
+    admin.storage as unknown as StorageApi,
+    user.id
+  );
+  if (storageResult.failures.length > 0) {
+    userLog.error('account.self_delete.storage_cleanup_failed', undefined, {
+      failures: storageResult.failures
+    });
+    return NextResponse.json(
+      {
+        error: 'Kunne ikke fjerne bildene dine',
+        details: RETRY_IS_SAFE
       },
       { status: 500 }
     );
@@ -173,7 +218,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         error: 'Kunne ikke slette konto',
-        details: deleteError.message
+        details: RETRY_IS_SAFE
       },
       { status: 500 }
     );
@@ -193,7 +238,10 @@ export async function POST(request: NextRequest) {
     comments: commentsCount.count ?? 0,
     postLikes: likesCount.count ?? 0,
     savedPosts: savedCount.count ?? 0,
-    reportsFiled: reportsCount.count ?? 0
+    reportsFiled: reportsCount.count ?? 0,
+    // Bildene er nå med i kvitteringen. Uten dette kunne brukeren ikke se at
+    // de i det hele tatt ble fjernet — og før denne endringen ble de ikke det.
+    uploadedImages: storageResult.removed
   };
 
   await logAdminAction({
