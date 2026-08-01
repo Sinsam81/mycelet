@@ -29,7 +29,7 @@ export function useForumPosts(sort: ForumSort = 'newest', category: ForumCategor
       let query = supabase
         .from('forum_posts')
         .select(
-          'id,user_id,title,content,category,images,likes_count,comments_count,created_at,profiles:user_id(username,avatar_url,display_name,verified_foragers(role,badge_label)),finding:finding_id(id,species_id,species_name_override,is_zone_finding,zone_label,zone_precision_km,mushroom_species:species_id(norwegian_name))'
+          'id,user_id,title,content,category,images,likes_count,comments_count,created_at,profiles:user_id(username,avatar_url,display_name,verified_foragers(role,badge_label)),finding:finding_id(id,species_id,species_name_override,is_zone_finding,zone_label,zone_precision_km,mushroom_species:species_id(norwegian_name,swedish_name))'
         )
         .eq('is_hidden', false);
 
@@ -70,7 +70,7 @@ export function useForumPostsInfinite(sort: ForumSort = 'newest', category: Foru
       let query = supabase
         .from('forum_posts')
         .select(
-          'id,user_id,title,content,category,images,likes_count,comments_count,created_at,profiles:user_id(username,avatar_url,display_name,verified_foragers(role,badge_label)),finding:finding_id(id,species_id,species_name_override,is_zone_finding,zone_label,zone_precision_km,mushroom_species:species_id(norwegian_name))'
+          'id,user_id,title,content,category,images,likes_count,comments_count,created_at,profiles:user_id(username,avatar_url,display_name,verified_foragers(role,badge_label)),finding:finding_id(id,species_id,species_name_override,is_zone_finding,zone_label,zone_precision_km,mushroom_species:species_id(norwegian_name,swedish_name))'
         )
         .eq('is_hidden', false);
 
@@ -115,7 +115,7 @@ export function useForumPost(postId: string) {
       const { data: post, error: postError } = await supabase
         .from('forum_posts')
         .select(
-          'id,user_id,title,content,category,images,likes_count,comments_count,created_at,profiles:user_id(username,avatar_url,display_name,verified_foragers(role,badge_label)),finding:finding_id(id,species_id,species_name_override,is_zone_finding,zone_label,zone_precision_km,mushroom_species:species_id(norwegian_name))'
+          'id,user_id,title,content,category,images,likes_count,comments_count,created_at,profiles:user_id(username,avatar_url,display_name,verified_foragers(role,badge_label)),finding:finding_id(id,species_id,species_name_override,is_zone_finding,zone_label,zone_precision_km,mushroom_species:species_id(norwegian_name,swedish_name))'
         )
         .eq('id', postId)
         .maybeSingle();
@@ -442,7 +442,7 @@ export function useMyFindings() {
 
       const { data, error } = await supabase
         .from('findings')
-        .select('id,species_id,species_name_override,found_at,is_zone_finding,zone_label,zone_precision_km,mushroom_species:species_id(norwegian_name)')
+        .select('id,species_id,species_name_override,found_at,is_zone_finding,zone_label,zone_precision_km,mushroom_species:species_id(norwegian_name,swedish_name)')
         .eq('user_id', user.id)
         .eq('is_negative_observation', false)
         .order('found_at', { ascending: false })

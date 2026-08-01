@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { MessageCircle, Heart } from 'lucide-react';
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
+import { getJoinedSpeciesName } from '@/lib/utils/species-name';
 import { ForumPost } from '@/types/forum';
 import { forumBadgeClass, getForumBadge } from '@/lib/utils/forumBadge';
 
@@ -24,10 +25,14 @@ interface PostCardProps {
 
 export function PostCard({ post }: PostCardProps) {
   const t = useTranslations('PostCard');
+  const locale = useLocale();
   const author = post.profiles?.display_name || post.profiles?.username || t('unknownUser');
   const badge = getForumBadge(post.profiles);
   const image = post.images?.[0]?.url;
-  const findingSpecies = post.finding?.mushroom_species?.norwegian_name || post.finding?.species_name_override || t('unknownSpecies');
+  const findingSpecies =
+    getJoinedSpeciesName(post.finding?.mushroom_species, locale) ||
+    post.finding?.species_name_override ||
+    t('unknownSpecies');
 
   return (
     <Link
