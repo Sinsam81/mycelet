@@ -69,7 +69,7 @@ describe('the SQL trigger and the TS filter must not drift apart', () => {
   // The pattern list exists twice on purpose — TS for immediate feedback, SQL so
   // it cannot be bypassed. Duplication is only safe if drift is caught.
   const readFile = (rel: string) =>
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     (require('node:fs') as typeof import('node:fs')).readFileSync(
       new URL(rel, import.meta.url),
       'utf8'

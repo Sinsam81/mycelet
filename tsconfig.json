@@ -38,6 +38,17 @@
   ],
   "exclude": [
     "node_modules",
-    "supabase/functions"
+    "supabase/functions",
+    // Git-worktrees og mobil-skallene er egne kopier/prosjekter.
+    ".claude",
+    "android",
+    "ios",
+    // iCloud lager dublettfiler av alt i synkede mapper, med tallet foran
+    // siste punktum: «routes.d.ts» blir «routes.d 3.ts». De havner i
+    // .next/types og får typecheck til å feile på «Duplicate identifier»
+    // uten at det er noe galt med koden vår. Ingen ekte fil i repoet har
+    // mellomrom i navnet, så mønsteret kan være bredt.
+    "**/* ?*.ts",
+    "**/* ?*.tsx"
   ]
 }

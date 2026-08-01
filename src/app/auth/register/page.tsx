@@ -7,6 +7,7 @@ import { useTranslations } from 'next-intl';
 import { Button } from '@/components/ui/Button';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { trackEvent } from '@/lib/analytics';
+import { readSafeNext } from '@/lib/auth/safe-redirect';
 
 // Next 15+ requires useSearchParams() to be inside a Suspense boundary so the
 // page can prerender. We wrap the inner form-rendering component below.
@@ -41,7 +42,8 @@ function RegisterForm() {
   const t = useTranslations('AuthRegister');
   const router = useRouter();
   const searchParams = useSearchParams();
-  const redirectPath = useMemo(() => searchParams.get('next') ?? searchParams.get('redirect') ?? '/', [searchParams]);
+  // Validert mot åpen redirect — se src/lib/auth/safe-redirect.ts.
+  const redirectPath = useMemo(() => readSafeNext(searchParams), [searchParams]);
   const { signUp, supabase } = useAuth();
 
   const [email, setEmail] = useState('');

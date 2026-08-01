@@ -1,12 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
-
-function getSafeNext(rawNext: string | null): string {
-  if (!rawNext || !rawNext.startsWith('/')) return '/';
-  if (rawNext.startsWith('//')) return '/';
-  return rawNext;
-}
+import { getSafeNext } from '@/lib/auth/safe-redirect';
 
 export async function GET(request: NextRequest) {
   const requestUrl = new URL(request.url);
@@ -16,7 +11,7 @@ export async function GET(request: NextRequest) {
     requestUrl.searchParams.get('redirect');
   const next = getSafeNext(nextOrRedirect);
 
-  let response = NextResponse.redirect(new URL(next, requestUrl.origin));
+  const response = NextResponse.redirect(new URL(next, requestUrl.origin));
   if (!code) return response;
 
   // Next 15+: cookies() is async. Resolve once and reuse the store inside

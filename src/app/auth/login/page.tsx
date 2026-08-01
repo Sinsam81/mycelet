@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/Button';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { NonNativeOnly } from '@/components/native/NonNativeOnly';
 import { trackEvent } from '@/lib/analytics';
+import { readSafeNext } from '@/lib/auth/safe-redirect';
 
 // Next 15+ requires useSearchParams() to be inside a Suspense boundary.
 // Inner form rendered by LoginForm; default export wraps it in Suspense.
@@ -16,10 +17,9 @@ function LoginForm() {
   const t = useTranslations('AuthLogin');
   const router = useRouter();
   const searchParams = useSearchParams();
-  const redirectPath = useMemo(
-  () => searchParams.get('next') ?? searchParams.get('redirect') ?? '/',
-  [searchParams]
-);
+  // Validert mot åpen redirect — se src/lib/auth/safe-redirect.ts. Verdien
+  // brukes både til router.push() og til å bygge OAuth-callbackens next-param.
+  const redirectPath = useMemo(() => readSafeNext(searchParams), [searchParams]);
 
   const { signIn, signInWithGoogle } = useAuth();
 
