@@ -9,8 +9,8 @@
  *
  * Hva leverandøren faktisk trenger posisjonen til, er å vekte artsforslag mot
  * hvilke arter som finnes i regionen. Det er en regional opplysning, ikke en
- * stedsopplysning. Én rute på ~11 x 6 km svarer på «hvilken del av Norden er
- * dette» uten å svare på «hvor står soppen».
+ * stedsopplysning. Én rute på ~11 km i nord–sør og 4–6 km i øst–vest svarer på
+ * «hvilken del av Norden er dette» uten å svare på «hvor står soppen».
  *
  * Vi snapper til midten av en fast rute, ikke til nærmeste lavere hjørne.
  * Trunkering ville lekket hvilken vei brukeren ligger inne i ruta hvis man
@@ -18,9 +18,14 @@
  */
 
 /**
- * Rutestørrelse i grader. 0,1° breddegrad er ~11,1 km overalt; 0,1°
- * lengdegrad er ~5,6 km ved 60°N (Oslo/Stockholm) og ~4,6 km ved 68°N.
- * En rute inneholder dermed alltid en hel bygd — aldri ett voksested.
+ * Rutestørrelse i grader. 0,1° breddegrad er ~11,1 km overalt. 0,1° lengdegrad
+ * krymper mot polene: ~5,9 km ved Göteborg (58°N), ~5,6 km ved Oslo (60°N),
+ * ~5,0 km ved Trondheim (63°N), ~3,9 km ved Tromsø (70°N).
+ *
+ * Selv den smaleste ruta er altså nesten fire kilometer bred. Den inneholder en
+ * hel bygd — aldri ett voksested. Merk at brukerrettet tekst må oppgi spennet,
+ * ikke ett tall: «11 x 6 km» ville vært en overdrivelse for nordnorske brukere,
+ * og et personvernløfte skal ikke love mer beskyttelse enn det gir.
  */
 export const COARSE_GRID_DEGREES = 0.1;
 
