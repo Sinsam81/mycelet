@@ -21,6 +21,13 @@ function LoginForm() {
   // brukes både til router.push() og til å bygge OAuth-callbackens next-param.
   const redirectPath = useMemo(() => readSafeNext(searchParams), [searchParams]);
 
+  // Hvorfor havnet du her? Settes av registreringssiden.
+  const notice = useMemo(() => {
+    if (searchParams.get('recover') === '1') return 'noticeRecover';
+    if (searchParams.get('confirm') === '1') return 'noticeConfirm';
+    return null;
+  }, [searchParams]);
+
   const { signIn, signInWithGoogle } = useAuth();
 
   const [email, setEmail] = useState('');
@@ -63,6 +70,20 @@ function LoginForm() {
       <div className="rounded-xl bg-white p-6 shadow-sm">
         <h1 className="text-2xl font-semibold text-forest-900">{t('heading')}</h1>
         <p className="mt-2 text-sm text-gray-700">{t('subheading')}</p>
+
+        {/*
+          Registreringssiden sender folk hit med et hint om hvorfor. Begge
+          parameterne har til nå vært døde — de ble satt, men aldri lest — så
+          brukeren ble flyttet til et innloggingsskjema uten et ord om hva som
+          skjedde. `recover` er særlig viktig: kontoen ble opprettet, men uten
+          profil, og det er nettopp innloggingen som reparerer den (signIn
+          kaller ensureProfile).
+        */}
+        {notice ? (
+          <p className="mt-4 rounded-lg border border-forest-200 bg-forest-50 px-3 py-2 text-sm text-forest-900">
+            {t(notice)}
+          </p>
+        ) : null}
 
         <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
           <label className="block text-sm font-medium text-gray-800">

@@ -177,7 +177,9 @@
     "registerLink": "Registrera dig",
     "signInFailed": "Kunde inte logga in",
     "googleSignInFailed": "Google-inloggning misslyckades",
-    "loading": "Laddar..."
+    "loading": "Laddar...",
+    "noticeConfirm": "Kontot är skapat. Vi har skickat ett e-postmeddelande — bekräfta din adress och logga in här efteråt.",
+    "noticeRecover": "Ditt konto skapades, men vi fick inte satt upp profilen. Logga in här, så ordnar vi resten automatiskt."
   },
   "AuthRegister": {
     "errorUsernameTaken": "Användarnamnet är redan upptaget. Välj ett annat.",
