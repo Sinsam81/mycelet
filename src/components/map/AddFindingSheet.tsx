@@ -126,7 +126,7 @@ export function AddFindingSheet({ latitude, longitude, onClose, onSaved }: AddFi
     const { data } = await supabase
       .from('mushroom_species')
       .select('id,norwegian_name,latin_name')
-      .or(`norwegian_name.ilike.%${value}%,latin_name.ilike.%${value}%`)
+      .or(`norwegian_name.ilike.%${value}%,latin_name.ilike.%${value}%,synonyms_text.ilike.%${value}%`)
       .order('norwegian_name', { ascending: true })
       .limit(8);
 

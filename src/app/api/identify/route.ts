@@ -242,9 +242,13 @@ export async function POST(request: NextRequest) {
         mapped.seasonFactor = 1;
         mapped.nearbyFindings = 0;
 
-        const { data: species, error: speciesError } = await supabase
+        const SPECIES_FIELDS =
+          'id,norwegian_name,edibility,primary_image_url,season_start,season_end,peak_season_start,peak_season_end';
+
+        // eslint-disable-next-line prefer-const
+        let { data: species, error: speciesError } = await supabase
           .from('mushroom_species')
-          .select('id,norwegian_name,edibility,primary_image_url,season_start,season_end,peak_season_start,peak_season_end')
+          .select(SPECIES_FIELDS)
           .ilike('latin_name', suggestion.name)
           .maybeSingle();
 
@@ -255,6 +259,28 @@ export async function POST(request: NextRequest) {
         if (speciesError) {
           safetyDataIncomplete = true;
           userLog.error('identify.species_lookup_failed', speciesError, { latinName: suggestion.name });
+        }
+
+        // Leverandøren rapporterer de innarbeidede, eldre artsnavnene, og flere
+        // av dem er nå synonymer for det aksepterte navnet vi lagrer (migrasjon
+        // 034). Uten denne reserven ville en omdøping strippet både det norske
+        // navnet og spiselighetsmerket av resultatet — og blant de berørte
+        // artene er én giftig og én dødelig, så merket er den sikkerhetskritiske
+        // halvdelen av svaret.
+        //
+        // Kun binomialer: et bart slektsnavn ville truffet for mange rader til
+        // at treffet kan stoles på.
+        if (!species && suggestion.name.trim().includes(' ')) {
+          const { data: bySynonym, error: synonymError } = await supabase
+            .from('mushroom_species')
+            .select(SPECIES_FIELDS)
+            .ilike('synonyms_text', `%${suggestion.name.trim()}%`)
+            .limit(1);
+          if (synonymError) {
+            safetyDataIncomplete = true;
+            userLog.error('identify.synonym_lookup_failed', synonymError, { latinName: suggestion.name });
+          }
+          species = bySynonym?.[0] ?? null;
         }
 
         if (species) {
