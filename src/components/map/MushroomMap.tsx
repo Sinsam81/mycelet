@@ -457,7 +457,9 @@ export function MushroomMap() {
           supabase
             .from('mushroom_species')
             .select('id,norwegian_name,swedish_name')
-            .or(`norwegian_name.ilike.%${value}%,swedish_name.ilike.%${value}%,latin_name.ilike.%${value}%`)
+            .or(
+              `norwegian_name.ilike.%${value}%,swedish_name.ilike.%${value}%,latin_name.ilike.%${value}%,synonyms_text.ilike.%${value}%`
+            )
             .order('norwegian_name', { ascending: true })
             .limit(6),
           searchPlaces(value)

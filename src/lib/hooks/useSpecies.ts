@@ -46,7 +46,7 @@ export function useSpecies(filters: SpeciesFilters) {
 
         if (search.length >= 2) {
           query = query.or(
-            `norwegian_name.ilike.%${search}%,swedish_name.ilike.%${search}%,latin_name.ilike.%${search}%`
+            `norwegian_name.ilike.%${search}%,swedish_name.ilike.%${search}%,latin_name.ilike.%${search}%,synonyms_text.ilike.%${search}%`
           );
         }
 

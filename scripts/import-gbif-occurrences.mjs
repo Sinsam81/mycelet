@@ -18,6 +18,7 @@
 // habitat validation.
 
 import { createClient } from '@supabase/supabase-js';
+import { evaluateGbifMatch } from './lib/gbif-match.mjs';
 
 const HELP = new Set(['-h', '--help']);
 const args = process.argv.slice(2);
@@ -94,9 +95,36 @@ async function fetchJson(url) {
   throw new Error(`GBIF HTTP ${lastStatus} (after retries)`);
 }
 
+/**
+ * Slår opp GBIF-nøkkelen for et artsnavn.
+ *
+ * KREVER TREFF PÅ ARTSNIVÅ. Dette er ikke pedanteri — det er rettelsen av en
+ * feil som allerede har forgiftet datagrunnlaget vårt én gang:
+ *
+ * Sjekken var tidligere `matchType !== 'NONE'`. 'Agaricus silvaticus' (en
+ * ortografisk variant GBIF ikke fører på artsnivå) slo da gjennom med
+ * matchType=HIGHERRANK til usageKey 186 — HELE KLASSEN Agaricomycetes. Alle
+ * skivlingsopper i Norden ble importert som skogsjampinjong: 8 230 rader, på
+ * nivå med kantarell. Fenologikurven for arten ble bygget på nettopp de radene.
+ *
+ * Feilen var stille. Importen så vellykket ut, tallene så høye og friske ut, og
+ * ingenting i utskriften antydet at vi hadde hentet feil takson.
+ *
+ * Derfor: alt annet enn et eksakt eller fuzzy treff PÅ ARTSNIVÅ avvises, og
+ * grunnen skrives ut. Bedre å importere ingenting for en art enn å importere
+ * noe annet og tro det er arten.
+ */
 async function gbifMatch(latin) {
   const j = await fetchJson(`https://api.gbif.org/v1/species/match?name=${encodeURIComponent(latin)}`);
-  return j && j.usageKey && j.matchType !== 'NONE' ? j.usageKey : null;
+  const verdict = evaluateGbifMatch(j);
+  if (!verdict.accept) {
+    console.warn(
+      `  ⚠ ${latin}: ${verdict.reason} — hopper over. ` +
+        'Sannsynligvis et feilstavet eller utdatert navn i mushroom_species.'
+    );
+    return null;
+  }
+  return verdict.usageKey;
 }
 
 function ymd(year, month, day) {

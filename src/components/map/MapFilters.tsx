@@ -50,7 +50,9 @@ export function MapFilters({ filters, onChange, onSelectPlace }: MapFiltersProps
     const { data } = await supabase
       .from('mushroom_species')
       .select('id,norwegian_name,swedish_name,latin_name')
-      .or(`norwegian_name.ilike.%${value}%,swedish_name.ilike.%${value}%,latin_name.ilike.%${value}%`)
+      .or(
+        `norwegian_name.ilike.%${value}%,swedish_name.ilike.%${value}%,latin_name.ilike.%${value}%,synonyms_text.ilike.%${value}%`
+      )
       .order('norwegian_name', { ascending: true })
       .limit(10);
 
