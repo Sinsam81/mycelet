@@ -494,7 +494,7 @@
     "processorVercelNote": "Trafik kan dirigeras via servrar utanför EES under EU:s standardavtalsklausuler (SCC).",
     "processorStripeDesc": "(betalning på webben) — Personuppgiftsbiträdesavtal:",
     "processorStripeNote": "Stripe kan överföra data till USA under SCC.",
-    "processorKindwiseDesc": "(AI-svampidentifiering) — när du använder foto-ID skickas bilden till Kindwise för analys. Din position grovkornas först till en ruta på ungefär 11 km i nord–syd och 4–6 km i öst–väst, så att Kindwise kan vikta artförslagen mot regionen utan att få veta var du står. Vi skickar aldrig den exakta punkten. Integritet:",
+    "processorKindwiseDesc": "(AI-svampidentifiering) — när du använder foto-ID skickas bilden till Kindwise för analys. Din position grovkornas först till en ruta på ungefär 11 km i nord–syd och 3,5–6 km i öst–väst, så att Kindwise kan vikta artförslagen mot regionen utan att få veta var du står. Vi skickar aldrig den exakta punkten. Integritet:",
     "processorGoogleAnalyticsDesc": "(valfri användningsanalys) — aktiveras endast efter samtycke och tar inte emot bilder, exakta positioner eller kontouppgifter. Google Analytics integritet och säkerhet:",
     "processorAnd": "och",
     "processorMetLabel": "MET Norge (Frost)",

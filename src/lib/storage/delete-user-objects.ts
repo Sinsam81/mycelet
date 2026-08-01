@@ -53,11 +53,25 @@ export async function deleteUserStorageObjects(
     try {
       const api = storage.from(bucket);
       let offset = 0;
+      // Løkka avslutter normalt når en side ikke er full, eller når mappa er
+      // tom. Begge forutsetter at remove() faktisk fjerner det den fikk. Gjør
+      // den ikke det — en rettighetsfeil som likevel svarer uten error — ville
+      // vi lest samme side i det uendelige. I en serverless-funksjon betyr det
+      // en kjøring som går til den blir drept. Taket gjør det umulig.
+      let rounds = 0;
+      const MAX_ROUNDS = 100; // 100 000 filer per bøtte; ingen ekte bruker er i nærheten
 
       // Paginer til mappa er tom. Vi lister på nytt fra samme offset etter hver
       // sletting ville vært feil — derfor sletter vi først når hele siden er
       // lest, og går videre bare hvis siden var full.
       for (;;) {
+        if (++rounds > MAX_ROUNDS) {
+          failures.push({
+            bucket,
+            message: `avbrutt etter ${MAX_ROUNDS} runder — slettingen ser ut til å ikke gjøre framgang`
+          });
+          break;
+        }
         const { data, error } = await api.list(userId, { limit: PAGE_SIZE, offset });
         if (error) {
           failures.push({ bucket, message: error.message });

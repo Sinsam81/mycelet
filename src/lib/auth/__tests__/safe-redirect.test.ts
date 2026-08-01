@@ -89,6 +89,29 @@ describe('getSafeNext', () => {
     // Resultatet skal komme fra URL-parseren, ikke fra inputen.
     expect(getSafeNext('/forum/../map')).toBe('/map');
   });
+
+  describe('stien som kommer UT må også være trygg', () => {
+    // Origin-sjekken ser på den PARSEDE URL-en, men vi returnerer pathname.
+    // «/..//evil.com» normaliseres til pathname «//evil.com» med origin fortsatt
+    // internal.invalid — sjekken passerer, og det vi gir fra oss er en
+    // protokoll-relativ URL. router.push('//evil.com') går ut av domenet.
+    const dotDotAttacks = [
+      '/..//evil.com',
+      '/../..//evil.com',
+      '/a/..//evil.com',
+      '/./..//evil.com',
+      '/..///evil.com',
+      '/..//evil.com/logg-inn'
+    ];
+
+    it.each(dotDotAttacks)('%s gir ikke en protokoll-relativ sti', (input) => {
+      expect(getSafeNext(input).startsWith('//')).toBe(false);
+    });
+
+    it.each(dotDotAttacks)('%s havner ikke utenfor domenet', (input) => {
+      expect(isExternal(getSafeNext(input))).toBe(false);
+    });
+  });
 });
 
 describe('readSafeNext', () => {

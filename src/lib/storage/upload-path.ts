@@ -7,7 +7,7 @@
  * appen leser bildene via getPublicUrl(). Det betyr at den som kjenner stien,
  * kan hente bildet — også for et funn brukeren har merket som PRIVAT.
  *
- * Den gamle stien var `${user.id}/${Date.now()}.jpg`, og begge delene var
+ * FUNN-bilder brukte `${user.id}/${Date.now()}.jpg`, og begge delene var
  * gjettbare:
  *   • user_id ligger åpent i public_findings for alle som har lagt ut ett
  *     eneste offentlig funn.
@@ -15,7 +15,13 @@
  *     er søkerommet sekunder, ikke millisekunder.
  *
  * Til sammen var et privat funns bilde praktisk gjettbart for en som ville
- * målrette én bruker. Med en tilfeldig UUID er det ikke det.
+ * målrette én bruker. Det er det ikke lenger.
+ *
+ * FORUM-bilder hadde allerede et tilfeldig ledd
+ * (`${Date.now()}-${Math.random().toString(36).slice(2)}`) og var ikke like
+ * utsatt. De går nå gjennom samme funksjon, dels for å ha én regel, dels fordi
+ * Math.random() ikke er en kryptografisk kilde og ikke bør bære en
+ * tilgangskontroll i det hele tatt.
  *
  * MERK at dette bare gjelder framover. Bilder som allerede ligger der, beholder
  * sine gamle stier — å endre dem ville brutt URL-ene som er lagret i

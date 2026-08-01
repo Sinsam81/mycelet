@@ -79,6 +79,37 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Bytte fra én betalt plan til en annen går ikke gjennom her.
+    //
+    // Denne ruta oppretter alltid et NYTT Stripe-abonnement. Gjorde en aktiv
+    // Premium-kunde et bytte til Sesongpass, satt de igjen med to aktive
+    // abonnement og ble belastet for begge — og webhooken, som nøkler på
+    // user_id, ville latt neste hendelse fra det gamle abonnementet skrive over
+    // det nye. Dobbeltbelastning og feil tilgangsnivå.
+    //
+    // Den ordentlige løsningen er stripe.subscriptions.update() med en avklart
+    // proratering, men det er en betalingsendring som må avgjøres og testes mot
+    // Stripe før den slippes løs på ekte kunder.
+    //
+    // Inntil da: si det rett ut. Å si opp koster brukeren ingenting — de
+    // beholder tilgangen ut perioden de har betalt for (hasPaidAccess krever
+    // active/trialing, så status «canceled» slipper dem gjennom denne sjekken
+    // med en gang), og kan kjøpe den andre planen når de vil.
+    if (existingCapabilities.paid) {
+      userLog.info('billing.checkout.plan_change_blocked', {
+        fromTier: existingCapabilities.tier,
+        toTier: plan
+      });
+      return NextResponse.json(
+        {
+          error: 'Du må avslutte den nåværende planen først',
+          details:
+            'Du har allerede et aktivt abonnement. Vi kan ikke sette i gang et nytt før det er avsluttet, fordi du da ville blitt belastet for begge. Avslutt abonnementet under kontoinnstillinger — du beholder tilgangen ut perioden du har betalt for — og kjøp den nye planen etterpå.'
+        },
+        { status: 409 }
+      );
+    }
+
     let customerId = existing?.stripe_customer_id ?? null;
     if (!customerId) {
       const customer = await stripe.customers.create({
@@ -131,6 +162,10 @@ export async function POST(request: NextRequest) {
     // Denne skrivingen skjer FØR brukeren har betalt, og må derfor aldri
     // forringe en plan som allerede er betalt for. Regelen — og historien om
     // hvorfor den finnes — ligger i planCheckoutWrite.
+    //
+    // Med planbytte-sperren over er hasPaidPlan alltid false her i dag.
+    // Regelen beholdes likevel: den er sikkerhetsnettet som gjør at sperren kan
+    // løftes trygt den dagen stripe.subscriptions.update() er på plass.
     const write = planCheckoutWrite({
       hasPaidPlan: existingCapabilities.paid,
       userId: user.id,

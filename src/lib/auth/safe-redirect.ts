@@ -56,12 +56,30 @@ export function getSafeNext(raw: string | null | undefined, fallback = '/'): str
     return fallback;
   }
 
-  // Kjernen: klarte inputen å flytte oss vekk fra basen, er den et angrep.
+  // Klarte inputen å flytte oss vekk fra basen, er den et angrep.
   if (parsed.origin !== INTERNAL_BASE) return fallback;
 
   // Bygg stien opp igjen fra de parsede delene, ikke fra råstrengen — da er
   // det den normaliserte formen som sendes videre.
-  return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+  const path = `${parsed.pathname}${parsed.search}${parsed.hash}`;
+
+  // OG SÅ SJEKK RESULTATET PÅ NYTT. Dette er ikke overflødig.
+  //
+  // Sjekken over ser på den parsede URL-en, men det vi gir fra oss er
+  // `pathname`. De to kan peke ulike steder: «/..//evil.com» normaliseres til
+  // pathname «//evil.com» mens origin fortsatt er internal.invalid. Første
+  // sjekk passerer altså, og det vi returnerer er en protokoll-relativ URL som
+  // router.push() sender rett ut av domenet.
+  //
+  // Å løse stien opp mot basen én gang til fanger det, uten at vi må gjette
+  // hvilke former en «egentlig ekstern» sti kan ha.
+  try {
+    if (new URL(path, INTERNAL_BASE).origin !== INTERNAL_BASE) return fallback;
+  } catch {
+    return fallback;
+  }
+
+  return path;
 }
 
 /**

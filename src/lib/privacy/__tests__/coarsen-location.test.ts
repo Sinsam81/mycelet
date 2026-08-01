@@ -84,6 +84,41 @@ describe('coarsenLocation', () => {
     }
   });
 
+  describe('gir alltid et gyldig koordinat ut', () => {
+    // Uten klemming ga nøyaktig 90 resultatet 90,05 — et koordinat som ikke
+    // finnes, sendt videre til en tredjepart.
+    it.each([
+      [90, 0],
+      [-90, 0],
+      [0, 180],
+      [0, -180],
+      [90, 180],
+      [-90, -180],
+      [89.99, 179.99]
+    ])('lat=%s lon=%s', (lat, lon) => {
+      const c = coarsenLocation(lat, lon)!;
+      expect(c).not.toBeNull();
+      expect(c.latitude).toBeGreaterThanOrEqual(-90);
+      expect(c.latitude).toBeLessThanOrEqual(90);
+      expect(c.longitude).toBeGreaterThanOrEqual(-180);
+      expect(c.longitude).toBeLessThanOrEqual(180);
+    });
+  });
+
+  describe('koordinater på en rutegrense', () => {
+    // 0.3 / 0.1 er 2.9999999999999996 i flyttall, så Math.floor sendte punktet
+    // én rute for lavt. Ingen personvernkonsekvens, men feil rute er feil rute.
+    it.each([
+      [0.3, 0.35],
+      [0.7, 0.75],
+      [59.3, 59.35],
+      [60.1, 60.15],
+      [2.9, 2.95]
+    ])('%s havner i ruta som starter der, ikke i den under', (value, expected) => {
+      expect(coarsenLocation(value, 10)!.latitude).toBeCloseTo(expected, 4);
+    });
+  });
+
   it('lekker ikke flere desimaler enn ruta rettferdiggjør', () => {
     const coarse = coarsenLocation(59.913912345, 10.752298765)!;
     expect(String(coarse.latitude).split('.')[1]?.length ?? 0).toBeLessThanOrEqual(4);

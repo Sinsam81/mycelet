@@ -28,15 +28,45 @@ describe('spiselighet i AI-resultatet', () => {
     expect(source).toContain("t('notFoodAssessed')");
   });
 
-  it('bruker ikke isHazardSpecies her — det ville sluppet ukjente arter gjennom', () => {
-    // isHazardSpecies dekker bare toxic/deadly. Brukt her ville 'unknown' fått
-    // «ikke matvurdert», mens SafetyWarning behandler nettopp unknown som farlig.
+  // MERK: denne påstanden ville også passert på koden FØR endringen, siden
+  // isHazardSpecies aldri sto her. Den beviser altså ingenting om denne
+  // endringen — den er en vakt mot at noen SENERE bytter predikat, fordi
+  // isHazardSpecies dekker bare toxic/deadly og ville gitt «ikke matvurdert»
+  // til ukjente arter, som SafetyWarning behandler som farlige.
+  it('bytter ikke til isHazardSpecies senere — det ville sluppet ukjente arter gjennom', () => {
     const withoutComments = source.replace(/\{\/\*[\s\S]*?\*\/\}/g, '');
     expect(withoutComments).not.toContain('isHazardSpecies');
   });
 
-  it('merker treffet som bildelikhet, ikke som en vurdering', () => {
-    expect(source).toContain("t('matchLabel')");
+  it('kaller treffet bildelikhet, ikke «treff»', () => {
+    // Å sjekke at t('matchLabel') finnes ville vært tomt — nøkkelen fantes før
+    // også. Det som endret seg er VERDIEN: «treff» leses som en vurdering av
+    // soppen, «bildelikhet» sier hva tallet faktisk måler.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const fs = require('node:fs') as typeof import('node:fs');
+    for (const [locale, expected] of [
+      ['nb', 'bildelikhet'],
+      ['sv', 'bildlikhet']
+    ] as const) {
+      const messages = JSON.parse(
+        fs.readFileSync(new URL(`../../../../messages/${locale}.json`, import.meta.url), 'utf8')
+      );
+      expect(messages.IdentifyResult.matchLabel).toBe(expected);
+      expect(messages.IdentifyResult.matchLabel).not.toBe('treff');
+    }
+  });
+
+  it('har «ikke matvurdert» i begge språk', () => {
+    // Uten den svenske ville svenske brukere fått en tom merking der den
+    // norske sier noe viktig.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const fs = require('node:fs') as typeof import('node:fs');
+    for (const locale of ['nb', 'sv']) {
+      const messages = JSON.parse(
+        fs.readFileSync(new URL(`../../../../messages/${locale}.json`, import.meta.url), 'utf8')
+      );
+      expect(messages.IdentifyResult.notFoodAssessed).toBeTruthy();
+    }
   });
 });
 
