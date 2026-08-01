@@ -11,6 +11,7 @@ import { LegalLinks } from '@/components/profile/LegalLinks';
 import { createClient } from '@/lib/supabase/server';
 import { getBillingCapabilities, getUserBillingSubscription } from '@/lib/billing/subscription';
 import type { Edibility } from '@/types/species';
+import { intlLocale } from '@/lib/utils/intl-locale';
 
 interface UserStats {
   total_findings: number;
@@ -94,7 +95,7 @@ export default async function ProfilePage() {
   const isAdmin = roleRow?.role === 'admin' || roleRow?.role === 'moderator';
 
   const memberSince = profile?.created_at
-    ? new Date(profile.created_at).toLocaleDateString('nb-NO', { year: 'numeric', month: 'long' })
+    ? new Date(profile.created_at).toLocaleDateString(intlLocale(locale), { year: 'numeric', month: 'long' })
     : null;
 
   const TierIcon = billing.tier === 'premium' ? Crown : billing.tier === 'season_pass' ? Leaf : null;
@@ -171,7 +172,7 @@ export default async function ProfilePage() {
                     <MapPin className="h-3 w-3" />
                     {f.location_name ?? t('unknownLocation')}
                     <span>·</span>
-                    {new Date(f.found_at).toLocaleDateString('nb-NO')}
+                    {new Date(f.found_at).toLocaleDateString(intlLocale(locale))}
                   </p>
                   {f.notes ? <p className="mt-1 text-sm text-gray-800">{f.notes}</p> : null}
                 </li>
@@ -191,7 +192,7 @@ export default async function ProfilePage() {
                   <Link href={`/forum/${p.id}`} className="block rounded-lg border border-gray-100 p-2 hover:border-forest-700">
                     <p className="truncate font-medium">{p.title}</p>
                     <p className="mt-1 text-xs text-gray-600">
-                      {CATEGORY_LABELS[p.category] ?? p.category} · {new Date(p.created_at).toLocaleDateString('nb-NO')} · {t('commentsCount', { count: p.comments_count })} · {t('likesCount', { count: p.likes_count })}
+                      {CATEGORY_LABELS[p.category] ?? p.category} · {new Date(p.created_at).toLocaleDateString(intlLocale(locale))} · {t('commentsCount', { count: p.comments_count })} · {t('likesCount', { count: p.likes_count })}
                     </p>
                   </Link>
                 </li>

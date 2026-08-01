@@ -1,12 +1,13 @@
 'use client';
 
 import { FormEvent, useMemo, useState } from 'react';
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import { Button } from '@/components/ui/Button';
 import { ForumComment, ReportReason } from '@/types/forum';
 import { ReportButton } from '@/components/forum/ReportButton';
 import { BlockUserButton } from '@/components/forum/BlockUserButton';
 import { forumBadgeClass, getForumBadge } from '@/lib/utils/forumBadge';
+import { intlLocale } from '@/lib/utils/intl-locale';
 
 interface CommentListProps {
   comments: ForumComment[];
@@ -35,6 +36,7 @@ function CommentCard({
   isReply?: boolean;
 }) {
   const t = useTranslations('CommentList');
+  const locale = useLocale();
   const author = comment.profiles?.display_name || comment.profiles?.username || t('unknownUser');
   const badge = getForumBadge(comment.profiles);
   const isOwner = currentUserId === comment.user_id;
@@ -96,7 +98,7 @@ function CommentCard({
         <p className="mt-1 text-sm text-gray-800">{comment.content}</p>
       )}
 
-      <p className="mt-1 text-xs text-gray-500">{new Date(comment.created_at).toLocaleString('nb-NO')}</p>
+      <p className="mt-1 text-xs text-gray-500">{new Date(comment.created_at).toLocaleString(intlLocale(locale))}</p>
 
       <div className="mt-2 flex flex-wrap items-center gap-2">
         {onReply ? (

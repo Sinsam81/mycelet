@@ -13,6 +13,7 @@ import { BILLING_PLANS } from '@/lib/billing/plans';
 import { FLAGS } from '@/lib/flags';
 import type { Edibility } from '@/types/species';
 import { getSpeciesDisplayName } from '@/lib/utils/species-name';
+import { intlLocale } from '@/lib/utils/intl-locale';
 
 type HomeTranslator = Awaited<ReturnType<typeof getTranslations<'Home'>>>;
 
@@ -52,7 +53,7 @@ function formatTimeAgo(iso: string, t: HomeTranslator, locale: string) {
   if (days === 1) return t('timeAgoYesterday');
   if (days < 7) return t('timeAgoDays', { days });
   if (days < 30) return t('timeAgoWeeks', { weeks: Math.round(days / 7) });
-  return new Date(iso).toLocaleDateString(locale === 'sv' ? 'sv-SE' : 'nb-NO', { day: '2-digit', month: 'short' });
+  return new Date(iso).toLocaleDateString(intlLocale(locale), { day: '2-digit', month: 'short' });
 }
 
 function getMonthName(month: number, t: HomeTranslator) {
@@ -136,7 +137,7 @@ export default async function HomePage() {
       (a, b) =>
         Number(atPeak(b)) - Number(atPeak(a)) ||
         commonalityRank(a.commonality) - commonalityRank(b.commonality) ||
-        getSpeciesDisplayName(a, locale).localeCompare(getSpeciesDisplayName(b, locale), locale === 'sv' ? 'sv-SE' : 'nb-NO')
+        getSpeciesDisplayName(a, locale).localeCompare(getSpeciesDisplayName(b, locale), intlLocale(locale))
     )
     .slice(0, 6);
   const dangerousInSeason = species.filter((s) => (s.edibility === 'toxic' || s.edibility === 'deadly') && isInMonth(month, s.season_start, s.season_end));

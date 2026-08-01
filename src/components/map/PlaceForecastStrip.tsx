@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
 import { X } from 'lucide-react';
+import { intlLocale } from '@/lib/utils/intl-locale';
 
 interface ForecastDay {
   date: string;
@@ -58,7 +59,7 @@ export function PlaceForecastStrip({ place, onClear }: PlaceForecastStripProps) 
   }, [place.lat, place.lng]);
 
   const dayFormatter = useMemo(
-    () => new Intl.DateTimeFormat(locale === 'sv' ? 'sv-SE' : 'nb-NO', { weekday: 'short', timeZone: 'UTC' }),
+    () => new Intl.DateTimeFormat(intlLocale(locale), { weekday: 'short', timeZone: 'UTC' }),
     [locale]
   );
   const days = data?.days ?? [];

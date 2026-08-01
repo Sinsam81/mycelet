@@ -1,4 +1,5 @@
 import type { Locale } from '@/i18n/config';
+import { intlLocale } from './intl-locale';
 
 export interface LocalizedSpeciesName {
   // Begge er valgfrie: joinede rader fra PostgREST kan mangle feltet helt, og
@@ -50,6 +51,6 @@ export function compareSpeciesByDisplayName(
 ): number {
   return getSpeciesDisplayName(a, locale).localeCompare(
     getSpeciesDisplayName(b, locale),
-    locale === 'sv' ? 'sv-SE' : 'nb-NO'
+    intlLocale(locale)
   );
 }

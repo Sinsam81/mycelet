@@ -28,6 +28,7 @@ import {
   saveOfflineAreas
 } from '@/lib/utils/offlineMap';
 import { buildExplanation } from '@/lib/utils/prediction-explanation';
+import { intlLocale } from '@/lib/utils/intl-locale';
 import { colorForScore } from '@/lib/utils/condition-colors';
 import { scoreToCondition } from '@/lib/utils/prediction';
 import { getSpeciesDisplayName } from '@/lib/utils/species-name';
@@ -928,8 +929,8 @@ export function MushroomMap() {
     const zoom = map.getZoom();
     const now = new Date();
     const generatedName = t('generatedAreaName', {
-      date: now.toLocaleDateString('nb-NO'),
-      time: now.toLocaleTimeString('nb-NO', {
+      date: now.toLocaleDateString(intlLocale(locale)),
+      time: now.toLocaleTimeString(intlLocale(locale), {
         hour: '2-digit',
         minute: '2-digit'
       })

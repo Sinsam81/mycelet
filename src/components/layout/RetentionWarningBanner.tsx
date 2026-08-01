@@ -3,7 +3,8 @@
 import { useEffect, useState } from 'react';
 import { AlertTriangle, Loader2, X } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
+import { intlLocale } from '@/lib/utils/intl-locale';
 
 interface DeletionWarning {
   warnedAt: string;
@@ -26,6 +27,7 @@ interface DeletionWarning {
  */
 export function RetentionWarningBanner() {
   const t = useTranslations('RetentionWarningBanner');
+  const locale = useLocale();
   const [warning, setWarning] = useState<DeletionWarning | null>(null);
   const [loading, setLoading] = useState(false);
   const [dismissed, setDismissed] = useState(false);
@@ -69,7 +71,7 @@ export function RetentionWarningBanner() {
   if (!warning || dismissed) return null;
 
   const scheduled = new Date(warning.scheduledDeletionAt);
-  const formattedDate = scheduled.toLocaleDateString('nb-NO', {
+  const formattedDate = scheduled.toLocaleDateString(intlLocale(locale), {
     day: '2-digit',
     month: 'long',
     year: 'numeric'

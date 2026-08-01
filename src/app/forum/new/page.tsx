@@ -2,7 +2,7 @@
 
 import { ChangeEvent, FormEvent, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import { Camera, X } from 'lucide-react';
 import { PageWrapper } from '@/components/layout/PageWrapper';
 import { Button } from '@/components/ui/Button';
@@ -13,6 +13,7 @@ import { createClient } from '@/lib/supabase/client';
 import { reencodeImageForUpload } from '@/lib/utils/image';
 import { isNativePlatform } from '@/lib/native/platform';
 import { captureNativePhoto } from '@/lib/native/camera';
+import { intlLocale } from '@/lib/utils/intl-locale';
 
 type Category = 'find' | 'question' | 'tip' | 'discussion';
 
@@ -20,6 +21,7 @@ type Category = 'find' | 'question' | 'tip' | 'discussion';
 // export at the bottom wraps NewForumPostInner.
 function NewForumPostInner() {
   const t = useTranslations('ForumNew');
+  const locale = useLocale();
   const tFilter = useTranslations('ContentFilter');
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -231,7 +233,7 @@ function NewForumPostInner() {
               <option value="">{t('noLink')}</option>
               {(findingOptions ?? []).map((finding) => {
                 const speciesName = finding.mushroom_species?.norwegian_name || finding.species_name_override || t('unknownSpecies');
-                const dateLabel = new Date(finding.found_at).toLocaleDateString('nb-NO');
+                const dateLabel = new Date(finding.found_at).toLocaleDateString(intlLocale(locale));
                 const zoneLabel = finding.is_zone_finding ? ` • ${t('zone')}: ${finding.zone_label ?? t('unknown')} (${finding.zone_precision_km ?? 5} km)` : '';
                 return (
                   <option key={finding.id} value={finding.id}>

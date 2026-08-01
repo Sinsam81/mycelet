@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import { Check, Crown, Leaf, Loader2, ShieldCheck, Undo2 } from 'lucide-react';
 import { PageWrapper } from '@/components/layout/PageWrapper';
 import { BILLING_PLANS } from '@/lib/billing/plans';
@@ -18,6 +18,7 @@ import {
   purchaseIapOffer,
   restoreIapPurchases
 } from '@/lib/native/purchases';
+import { intlLocale } from '@/lib/utils/intl-locale';
 
 type BillingStatusResponse = {
   subscription: {
@@ -48,6 +49,7 @@ const SEASON_PER_MONTH = Math.round(SEASON_YEARLY / 12);
 // export at the bottom wraps PricingInner.
 function PricingInner() {
   const t = useTranslations('Pricing');
+  const locale = useLocale();
   const searchParams = useSearchParams();
 
   const TIER_LABELS: Record<'free' | 'premium' | 'season_pass', string> = {
@@ -387,7 +389,7 @@ function PricingInner() {
             <p className="text-sm text-gray-700">
               {STATUS_LABELS[status.capabilities.status] ?? status.capabilities.status}
               {status.subscription?.current_period_end
-                ? ` • ${t('renewsEnds', { date: new Date(status.subscription.current_period_end).toLocaleDateString('nb-NO') })}`
+                ? ` • ${t('renewsEnds', { date: new Date(status.subscription.current_period_end).toLocaleDateString(intlLocale(locale)) })}`
                 : ''}
             </p>
             {!status.capabilities.paid ? (
