@@ -369,7 +369,8 @@
     "viewSpeciesPage": "Se artside",
     "notAGuarantee": "Dette er AI-forslag, ikke en bekreftelse på at soppen er trygg å spise. Få den alltid vurdert av soppkontroll eller en ekspert før du spiser.",
     "acknowledgeLabel": "Jeg forstår at dette ikke er en spiselighetsgaranti, og jeg spiser aldri sopp uten å få den bekreftet av en ekspert.",
-    "matchLabel": "treff"
+    "matchLabel": "bildelikhet",
+    "notFoodAssessed": "Ikke matvurdert"
   },
   "MineSteder": {
     "metaTitle": "Mine steder — Mycelet",
@@ -492,7 +493,7 @@
     "processorVercelNote": "Trafikk kan rutes via servere utenfor EØS under EUs standardavtaler (SCC).",
     "processorStripeDesc": "(betaling på web) — Databehandleravtale:",
     "processorStripeNote": "Stripe kan overføre data til USA under SCC.",
-    "processorKindwiseDesc": "(AI-soppidentifikasjon) — når du bruker foto-ID, sendes bildet og koordinatene til Kindwise for analyse. Personvern:",
+    "processorKindwiseDesc": "(AI-soppidentifikasjon) — når du bruker foto-ID, sendes bildet til Kindwise for analyse. Posisjonen din grovkornes først til en rute på omtrent 11 x 6 km, slik at Kindwise kan vekte artsforslagene mot regionen uten å få vite hvor du står. Vi sender aldri det eksakte punktet. Personvern:",
     "processorGoogleAnalyticsDesc": "(valgfri bruksanalyse) — aktiveres bare etter samtykke og mottar ikke bilder, eksakte posisjoner eller kontodetaljer. Google Analytics' personvern og sikkerhet:",
     "processorAnd": "og",
     "processorMetLabel": "MET Norge (Frost)",

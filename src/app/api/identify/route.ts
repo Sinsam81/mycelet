@@ -7,6 +7,7 @@ import { checkRateLimit } from '@/lib/rate-limit';
 import { getClientKey, rateLimitResponse } from '@/lib/rate-limit/route';
 import { createRequestLogger } from '@/lib/log/request';
 import { seasonFit, rankOrder } from '@/lib/utils/identify-ranking';
+import { coarsenLocation } from '@/lib/privacy/coarsen-location';
 
 const PLANTID_API_URL = 'https://mushroom.kindwise.com/api/v1/identification';
 
@@ -137,8 +138,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Bildet er for stort' }, { status: 400 });
     }
 
+    // Grovkorn posisjonen FØR den forlater oss. Leverandøren bruker den til å
+    // vekte artsforslag regionalt, og trenger derfor ikke å vite mer enn
+    // hvilken landsdel bildet er tatt i. Se src/lib/privacy/coarsen-location.ts
+    // for hvorfor vi snapper til midten av ruta i stedet for å trunkere.
+    const coarseLocation = coarsenLocation(body.latitude, body.longitude);
+
     userLog.debug('identify.calling_plantid', {
-      hasCoordinates: body.latitude != null && body.longitude != null,
+      hasCoordinates: coarseLocation != null,
       tier: capabilities.tier
     });
 
@@ -153,12 +160,7 @@ export async function POST(request: NextRequest) {
         similar_images: true,
         language: 'no',
         details: ['common_names', 'taxonomy', 'description', 'edibility'],
-        ...(body.latitude != null && body.longitude != null
-          ? {
-              latitude: body.latitude,
-              longitude: body.longitude
-            }
-          : {})
+        ...(coarseLocation ?? {})
       })
     });
 

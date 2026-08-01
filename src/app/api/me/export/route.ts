@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { getClientKey, rateLimitResponse } from '@/lib/rate-limit/route';
 import { createRequestLogger } from '@/lib/log/request';
+import { LEGAL_ENTITY } from '@/lib/legal/entity';
 
 /**
  * GDPR Article 15 — right of access.
@@ -12,6 +13,16 @@ import { createRequestLogger } from '@/lib/log/request';
  * for what the user can read. If RLS is missing for some table, that table
  * returns empty here — the fix belongs in the policy, not in this endpoint.
  *
+ * FAIL CLOSED. Every query is checked, and a single failure aborts the whole
+ * export with a 500. Earlier this endpoint did `findings.data ?? []` on each
+ * result, so a query that errored became an empty array inside a file the user
+ * received as a complete answer to their Article 15 request — silently telling
+ * them we hold no findings when we might hold hundreds. A missing export the
+ * user can retry is a far smaller problem than a wrong one they trust.
+ *
+ * Note the distinction: an RLS policy that legitimately returns zero rows is
+ * NOT an error, and still exports as []. Only a failed query aborts.
+ *
  * Out of scope (intentionally not in the export):
  *   - Public reference data (mushroom species, look-alikes, prediction tiles)
  *   - Forum posts / comments by other users (not personal data about caller)
@@ -20,6 +31,9 @@ import { createRequestLogger } from '@/lib/log/request';
  * For "data about you from other users" requests, the user should contact
  * the privacy mailbox; that requires manual review.
  */
+/** Den delen av et Supabase-svar denne ruten faktisk bryr seg om. */
+type QueryResult = { data: unknown; error: { message: string } | null };
+
 export async function GET(request: NextRequest) {
   const log = createRequestLogger(request);
   log.info('account.export.start');
@@ -47,70 +61,94 @@ export async function GET(request: NextRequest) {
 
   // All queries scoped to the authenticated user_id. RLS would also enforce
   // this — the explicit .eq() is defense in depth.
-  const [
-    profile,
-    findings,
-    forumPosts,
-    comments,
-    postLikes,
-    commentLikes,
-    savedPosts,
-    reports,
-    billing,
-    moderatorRole,
-    verifiedForager
-  ] = await Promise.all([
-    supabase.from('profiles').select('*').eq('id', user.id).maybeSingle(),
-    supabase.from('findings').select('*').eq('user_id', user.id),
-    supabase.from('forum_posts').select('*').eq('user_id', user.id),
-    supabase.from('comments').select('*').eq('user_id', user.id),
-    supabase.from('post_likes').select('*').eq('user_id', user.id),
-    supabase.from('comment_likes').select('*').eq('user_id', user.id),
-    supabase.from('saved_posts').select('*').eq('user_id', user.id),
-    supabase.from('reports').select('*').eq('reporter_id', user.id),
-    supabase.from('billing_subscriptions').select('*').eq('user_id', user.id).maybeSingle(),
-    supabase.from('moderator_roles').select('*').eq('user_id', user.id).maybeSingle(),
-    supabase.from('verified_foragers').select('*').eq('user_id', user.id).maybeSingle()
-  ]);
+  //
+  // Keyed rather than positional: the manifest below reports coverage per
+  // dataset, and a positional array made it too easy to add a query without
+  // adding it to the completeness check.
+  // `shape` says what an empty result means for this dataset: a table the user
+  // has many rows in exports as [], a one-per-user row exports as null.
+  const datasets = {
+    profile: { shape: 'one', query: supabase.from('profiles').select('*').eq('id', user.id).maybeSingle() },
+    findings: { shape: 'many', query: supabase.from('findings').select('*').eq('user_id', user.id) },
+    forumPosts: { shape: 'many', query: supabase.from('forum_posts').select('*').eq('user_id', user.id) },
+    comments: { shape: 'many', query: supabase.from('comments').select('*').eq('user_id', user.id) },
+    postLikes: { shape: 'many', query: supabase.from('post_likes').select('*').eq('user_id', user.id) },
+    commentLikes: { shape: 'many', query: supabase.from('comment_likes').select('*').eq('user_id', user.id) },
+    savedPosts: { shape: 'many', query: supabase.from('saved_posts').select('*').eq('user_id', user.id) },
+    reportsFiled: { shape: 'many', query: supabase.from('reports').select('*').eq('reporter_id', user.id) },
+    billing: { shape: 'one', query: supabase.from('billing_subscriptions').select('*').eq('user_id', user.id).maybeSingle() },
+    moderatorRole: { shape: 'one', query: supabase.from('moderator_roles').select('*').eq('user_id', user.id).maybeSingle() },
+    verifiedForager: { shape: 'one', query: supabase.from('verified_foragers').select('*').eq('user_id', user.id).maybeSingle() }
+  };
+
+  type DatasetKey = keyof typeof datasets;
+  const keys = Object.keys(datasets) as DatasetKey[];
+  const settled = await Promise.all(keys.map((k) => datasets[k].query));
+
+  // Normaliser til én form. Supabase returnerer en union (suksess | feil) der
+  // hver gren har sin egen datatype; vi bryr oss bare om «gikk det, og hva kom».
+  const results = Object.fromEntries(
+    keys.map((k, i) => [k, { data: settled[i].data as unknown, error: settled[i].error }])
+  ) as Record<DatasetKey, QueryResult>;
+
+  // Fail closed: any failed query means we cannot honestly call this export
+  // complete, so we send nothing rather than something misleading.
+  const failed = keys.filter((k) => results[k].error);
+  if (failed.length > 0) {
+    userLog.error('account.export.incomplete', undefined, {
+      failedDatasets: failed,
+      // Provider messages can carry schema details — keep them in the log,
+      // never in the response body.
+      firstError: results[failed[0]].error?.message
+    });
+    return NextResponse.json(
+      {
+        error: 'Kunne ikke hente ut alle dataene dine',
+        details:
+          'Eksporten ble avbrutt fordi minst ett datasett ikke kunne leses. Du har IKKE fått en ufullstendig fil. Prøv igjen om litt — vedvarer feilen, kontakt ' +
+          LEGAL_ENTITY.privacyEmail +
+          '.'
+      },
+      { status: 500 }
+    );
+  }
+
+  const rowCount = (value: unknown) => (Array.isArray(value) ? value.length : value == null ? 0 : 1);
+  const generatedAt = new Date().toISOString();
 
   const exportData = {
-    exportedAt: new Date().toISOString(),
-    schemaVersion: 1,
+    exportedAt: generatedAt,
+    schemaVersion: 2,
     account: {
       userId: user.id,
       email: user.email ?? null,
       createdAt: user.created_at,
       lastSignInAt: user.last_sign_in_at ?? null
     },
-    profile: profile.data ?? null,
-    findings: findings.data ?? [],
-    forumPosts: forumPosts.data ?? [],
-    comments: comments.data ?? [],
-    postLikes: postLikes.data ?? [],
-    commentLikes: commentLikes.data ?? [],
-    savedPosts: savedPosts.data ?? [],
-    reportsFiled: reports.data ?? [],
-    billing: billing.data ?? null,
-    moderatorRole: moderatorRole.data ?? null,
-    verifiedForager: verifiedForager.data ?? null,
+    ...(Object.fromEntries(
+      keys.map((k) => [k, results[k].data ?? (datasets[k].shape === 'many' ? [] : null)])
+    ) as Record<DatasetKey, unknown>),
+    _manifest: {
+      generatedAt,
+      // Lets the recipient verify nothing was quietly dropped in transit, and
+      // gives support something concrete to compare against a re-run.
+      datasets: Object.fromEntries(keys.map((k) => [k, rowCount(results[k].data)])),
+      complete: true
+    },
     _notes: {
       gdprArticle: 'GDPR Art. 15 — Right of access.',
       coverage:
         'This export contains all rows in our database tied to your user_id. Public reference data (species, look-alikes, prediction tiles) is intentionally not included since it is not personal data about you.',
-      dataAboutYouFromOthers:
-        'Reports filed BY OTHER USERS about your content are not in this export to protect the reporter. To request that information, contact privacy@mycelet.com — manual review required.'
+      completeness:
+        'Every query behind this file succeeded. If any had failed you would have received an error instead of this file — we never ship a partial export as if it were complete.',
+      dataAboutYouFromOthers: `Reports filed BY OTHER USERS about your content are not in this export to protect the reporter. To request that information, contact ${LEGAL_ENTITY.privacyEmail} — manual review required.`
     }
   };
 
-  const filename = `mycelet-data-export-${user.id}-${new Date().toISOString().slice(0, 10)}.json`;
+  const filename = `mycelet-data-export-${user.id}-${generatedAt.slice(0, 10)}.json`;
 
   userLog.info('account.export.success', {
-    counts: {
-      findings: exportData.findings.length,
-      forumPosts: exportData.forumPosts.length,
-      comments: exportData.comments.length,
-      reportsFiled: exportData.reportsFiled.length
-    }
+    counts: exportData._manifest.datasets
   });
 
   return new NextResponse(JSON.stringify(exportData, null, 2), {
