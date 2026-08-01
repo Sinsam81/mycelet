@@ -10,8 +10,63 @@ import { seasonFit, rankOrder } from '@/lib/utils/identify-ranking';
 import { coarsenLocation } from '@/lib/privacy/coarsen-location';
 import { getSpeciesDisplayName } from '@/lib/utils/species-name';
 import { getUserLocale } from '@/i18n/locale';
+import { DEFAULT_LOCALE, type Locale } from '@/i18n/config';
 
 const PLANTID_API_URL = 'https://mushroom.kindwise.com/api/v1/identification';
+
+/**
+ * Feilmeldingene fra denne ruta genereres server-side, så next-intl dekker dem
+ * ikke — samme felle som prediksjonstekstene og rate-limit-meldingen.
+ *
+ * `code` er like viktig som teksten. Klienten forgrenet tidligere på den norske
+ * delstrengen «ikke aktivert» for å vise AI-deaktivert-panelet; i det serveren
+ * begynner å svare på svensk, slutter den matchingen å virke. Oversettelsen og
+ * kodefeltet MÅ derfor komme sammen — tar man bare det ene, innfører man en feil.
+ */
+const ERRORS = {
+  ai_disabled: {
+    nb: 'AI-identifikasjon er ikke aktivert ennå.',
+    sv: 'AI-identifiering är inte aktiverad ännu.'
+  },
+  unauthenticated: {
+    nb: 'Ikke autentisert',
+    sv: 'Inte autentiserad'
+  },
+  rate_limit_check_failed: {
+    nb: 'Kunne ikke validere rate limit',
+    sv: 'Kunde inte validera hastighetsgränsen'
+  },
+  missing_image: {
+    nb: 'Bilde mangler',
+    sv: 'Bild saknas'
+  },
+  image_too_large: {
+    nb: 'Bildet er for stort',
+    sv: 'Bilden är för stor'
+  },
+  provider_failed: {
+    nb: 'Identifikasjon feilet. Prøv igjen.',
+    sv: 'Identifieringen misslyckades. Försök igen.'
+  },
+  unexpected: {
+    nb: 'En feil oppstod. Prøv igjen.',
+    sv: 'Ett fel uppstod. Försök igen.'
+  }
+} as const satisfies Record<string, Record<Locale, string>>;
+
+type ErrorCode = keyof typeof ERRORS;
+
+/** Kvoten har sin egen, fordi den tar et tall — og den er oppgraderingsteksten. */
+function dailyQuotaMessage(locale: Locale): string {
+  return locale === 'sv'
+    ? `Gratisanvändare har max ${FREE_DAILY_AI_LIMIT} identifieringar per dygn. Uppgradera till Premium eller Säsongspass för obegränsad användning.`
+    : `Gratisbrukere har maks ${FREE_DAILY_AI_LIMIT} identifikasjoner per døgn. Oppgrader til Premium eller Sesongpass for ubegrenset bruk.`;
+}
+
+function errorResponse(code: ErrorCode, status: number, locale: Locale) {
+  return NextResponse.json({ error: ERRORS[code][locale] ?? ERRORS[code][DEFAULT_LOCALE], code }, { status });
+}
+
 
 type PlantIdSuggestion = {
   name: string;
@@ -43,13 +98,22 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   const log = createRequestLogger(request);
   log.info('identify.start');
+
+  // Hentes FØR try-blokken, av to grunner: feilsvarene inni er også tekst
+  // leseren ser og ligger før alt annet i flyten, og catch-blokken nederst
+  // trenger den også. Oppslaget leser cookies og kan kaste utenfor en
+  // request-kontekst — en manglende språkverdi skal ikke ta ned ruta.
+  let locale: Locale = DEFAULT_LOCALE;
+  try {
+    locale = await getUserLocale();
+  } catch {
+    // beholder norsk
+  }
+
   try {
     if (!isAiEnabled()) {
       log.warn('identify.ai_disabled');
-      return NextResponse.json(
-        { error: 'AI-identifikasjon er ikke aktivert ennå.', code: 'ai_disabled' },
-        { status: 503 }
-      );
+      return errorResponse('ai_disabled', 503, locale);
     }
     const apiKey = process.env.PLANTID_API_KEY!;
 
@@ -61,7 +125,7 @@ export async function POST(request: NextRequest) {
 
     if (authError || !user) {
       log.info('identify.unauthenticated');
-      return NextResponse.json({ error: 'Ikke autentisert' }, { status: 401 });
+      return errorResponse('unauthenticated', 401, locale);
     }
 
     const userLog = log.child({ userId: user.id });
@@ -93,7 +157,7 @@ export async function POST(request: NextRequest) {
         if (countError) {
           // Anything other than "table missing" is a real failure.
           if (countError.code !== '42P01') {
-            return NextResponse.json({ error: 'Kunne ikke validere rate limit' }, { status: 500 });
+            return errorResponse('rate_limit_check_failed', 500, locale);
           }
         } else {
           usageCount = count ?? 0;
@@ -112,7 +176,7 @@ export async function POST(request: NextRequest) {
           .eq('ai_used', true)
           .gte('created_at', oneDayAgo);
         if (legacyError) {
-          return NextResponse.json({ error: 'Kunne ikke validere rate limit' }, { status: 500 });
+          return errorResponse('rate_limit_check_failed', 500, locale);
         }
         usageCount = legacy ?? 0;
       }
@@ -120,9 +184,7 @@ export async function POST(request: NextRequest) {
       if (usageCount >= FREE_DAILY_AI_LIMIT) {
         userLog.info('identify.daily_quota_reached', { used: usageCount, limit: FREE_DAILY_AI_LIMIT });
         return NextResponse.json(
-          {
-            error: `Gratisbrukere har maks ${FREE_DAILY_AI_LIMIT} identifikasjoner per døgn. Oppgrader til Premium eller Sesongpass for ubegrenset bruk.`
-          },
+          { error: dailyQuotaMessage(locale), code: 'daily_quota' },
           { status: 429 }
         );
       }
@@ -131,13 +193,13 @@ export async function POST(request: NextRequest) {
     const body = (await request.json()) as IdentifyRequest;
     if (!body.image) {
       userLog.warn('identify.missing_image');
-      return NextResponse.json({ error: 'Bilde mangler' }, { status: 400 });
+      return errorResponse('missing_image', 400, locale);
     }
     // The client sends a ~1500px re-encoded JPEG (well under 2 MB of base64).
     // Reject absurd payloads before paying for a Kindwise call.
     if (typeof body.image !== 'string' || body.image.length > 8_000_000) {
       userLog.warn('identify.image_too_large');
-      return NextResponse.json({ error: 'Bildet er for stort' }, { status: 400 });
+      return errorResponse('image_too_large', 400, locale);
     }
 
     // Grovkorn posisjonen FØR den forlater oss. Leverandøren bruker den til å
@@ -168,7 +230,7 @@ export async function POST(request: NextRequest) {
 
     if (!plantIdResponse.ok) {
       userLog.error('identify.plantid_failed', undefined, { status: plantIdResponse.status });
-      return NextResponse.json({ error: 'Identifikasjon feilet. Prøv igjen.' }, { status: 502 });
+      return errorResponse('provider_failed', 502, locale);
     }
 
     // Record this successful (cost-incurring) call against the free daily cap.
@@ -198,11 +260,6 @@ export async function POST(request: NextRequest) {
 
     const plantIdData = await plantIdResponse.json();
     const suggestionsRaw: PlantIdSuggestion[] = plantIdData?.result?.classification?.suggestions ?? [];
-
-    // Artsnavn kommer fra databasen, ikke fra meldingskatalogen, så de må slås
-    // opp mot leserens språk. Se CLAUDE.md: getSpeciesDisplayName faller stille
-    // tilbake til norsk når swedish_name mangler.
-    const locale = await getUserLocale();
 
     const month = new Date().getMonth() + 1;
 
@@ -471,7 +528,8 @@ export async function POST(request: NextRequest) {
     log.error('identify.unexpected_failure', error);
     return NextResponse.json(
       {
-        error: 'En feil oppstod. Prøv igjen.',
+        error: ERRORS.unexpected[locale] ?? ERRORS.unexpected[DEFAULT_LOCALE],
+        code: 'unexpected',
         details: error instanceof Error ? error.message : 'unknown'
       },
       { status: 500 }

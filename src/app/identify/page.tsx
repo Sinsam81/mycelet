@@ -7,7 +7,7 @@ import { useTranslations } from 'next-intl';
 import { PageWrapper } from '@/components/layout/PageWrapper';
 import { Button } from '@/components/ui/Button';
 import { useGeolocation } from '@/lib/hooks/useGeolocation';
-import { useIdentify } from '@/lib/hooks/useIdentify';
+import { IdentifyError, useIdentify } from '@/lib/hooks/useIdentify';
 import { optimizeImageForIdentification } from '@/lib/utils/image';
 import { isNativePlatform } from '@/lib/native/platform';
 import { captureNativePhoto } from '@/lib/native/camera';
@@ -63,7 +63,11 @@ export default function IdentifyPage() {
           : err instanceof Error
             ? err.message
             : t('identifyFailed');
-      if (message.toLowerCase().includes('ikke aktivert')) {
+      // Forgrener på kode, ikke på tekst. Den forrige varianten leste
+      // `message.toLowerCase().includes('ikke aktivert')` — den virket bare så
+      // lenge serveren alltid svarte norsk, og ville stille sluttet å virke i
+      // det feilmeldingene ble oversatt.
+      if (err instanceof IdentifyError && err.code === 'ai_disabled') {
         setAiDisabled(true);
       } else {
         setError(message);
