@@ -1,8 +1,9 @@
 'use client';
 
 import Link from 'next/link';
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import { MapFinding } from '@/types/finding';
+import { intlLocale } from '@/lib/utils/intl-locale';
 
 interface FindingPopupProps {
   finding: MapFinding;
@@ -19,6 +20,7 @@ interface FindingPopupProps {
 
 export function FindingPopup({ finding, displayName }: FindingPopupProps) {
   const t = useTranslations('FindingPopup');
+  const locale = useLocale();
   const name = displayName ?? finding.norwegian_name ?? t('unknownSpecies');
 
   return (
@@ -31,7 +33,7 @@ export function FindingPopup({ finding, displayName }: FindingPopupProps) {
         <h3 className="font-semibold text-gray-900">{name}</h3>
         <p className="text-xs italic text-gray-600">{finding.latin_name ?? t('notProvided')}</p>
         <p className="mt-1 text-xs text-gray-600">
-          {finding.username} • {new Date(finding.found_at).toLocaleDateString('nb-NO')}
+          {finding.username} • {new Date(finding.found_at).toLocaleDateString(intlLocale(locale))}
         </p>
         {finding.is_zone_finding ? (
           <p className="mt-1 text-xs font-medium text-amber-800">

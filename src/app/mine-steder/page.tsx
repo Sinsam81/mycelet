@@ -5,6 +5,7 @@ import { getJoinedSpeciesName } from '@/lib/utils/species-name';
 import { Camera, ExternalLink, Lock, Map as MapIcon, MapPin } from 'lucide-react';
 import { PageWrapper } from '@/components/layout/PageWrapper';
 import { createClient } from '@/lib/supabase/server';
+import { intlLocale } from '@/lib/utils/intl-locale';
 
 export async function generateMetadata() {
   const t = await getTranslations('MineSteder');
@@ -95,6 +96,7 @@ function groupFindings(
 
 export default async function MineStederPage() {
   const t = await getTranslations('MineSteder');
+  const locale = await getLocale();
   const supabase = createClient();
   const {
     data: { user }
@@ -114,7 +116,7 @@ export default async function MineStederPage() {
   const spots = groupFindings((data ?? []) as unknown as FindingRow[], {
     unknownSpecies: t('unknownSpecies'),
     nearPlace: (lat, lng) => t('nearPlace', { lat, lng })
-  }, await getLocale());
+  }, locale);
   const totalFinds = spots.reduce((sum, s) => sum + s.count, 0);
 
   return (
@@ -178,7 +180,7 @@ export default async function MineStederPage() {
                       </div>
                       <p className="mt-0.5 text-xs text-gray-600">
                         {t('cardStats', { finds: spot.count, species: spot.species.size })}{' '}
-                        {new Date(spot.lastVisit).toLocaleDateString('nb-NO', { day: 'numeric', month: 'short', year: 'numeric' })}
+                        {new Date(spot.lastVisit).toLocaleDateString(intlLocale(locale), { day: 'numeric', month: 'short', year: 'numeric' })}
                         {years.length > 1 ? t('cardSeasons', { seasons: years.length, first: years[years.length - 1], last: years[0] }) : ''}
                       </p>
                       <div className="mt-2 flex flex-wrap gap-1">

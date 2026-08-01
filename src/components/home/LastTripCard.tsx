@@ -1,8 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import { FLAGS } from '@/lib/flags';
+import { intlLocale } from '@/lib/utils/intl-locale';
 
 interface LastTrip {
   count: number;
@@ -16,6 +17,7 @@ interface LastTrip {
  */
 export function LastTripCard() {
   const t = useTranslations('LastTripCard');
+  const locale = useLocale();
   const [trip, setTrip] = useState<LastTrip | null>(null);
 
   useEffect(() => {
@@ -33,7 +35,7 @@ export function LastTripCard() {
   if (!trip || trip.count <= 0) return null;
 
   const date = new Date(trip.at);
-  const when = Number.isNaN(date.getTime()) ? '' : date.toLocaleDateString('nb-NO', { day: 'numeric', month: 'long' });
+  const when = Number.isNaN(date.getTime()) ? '' : date.toLocaleDateString(intlLocale(locale), { day: 'numeric', month: 'long' });
   const speciesText = trip.species.filter(Boolean).join(', ');
 
   return (

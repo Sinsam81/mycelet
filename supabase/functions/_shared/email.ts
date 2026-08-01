@@ -81,6 +81,21 @@ export async function sendEmail(args: SendEmailArgs): Promise<SendEmailResult> {
  * Build the inactive-account warning email. Kept here so the cron
  * function stays focused on logic rather than HTML template plumbing.
  *
+ * BEGGE SPRÅK I SAMME E-POST, norsk først.
+ *
+ * Vi lagrer ikke språk per bruker, og cron-funksjonen kan aldri se
+ * MYCELET_LOCALE-cookien — den kjører uten en request fra brukeren. Å gjette ut
+ * fra e-postdomenet ville truffet feil for enhver svensk bruker med gmail.
+ * Alternativet til begge språk er altså å ta feil for halvparten.
+ *
+ * Dette er den eneste e-posten appen sender selv, og den varsler at kontoen og
+ * alle soppfunn slettes på en gitt dato. Den skal kunne leses av mottakeren.
+ *
+ * Merk også: teksten begrunnet tidligere slettingen i «norsk personvern-
+ * lovgivning». For en svensk bruker peker det feil sted. Grunnen er vår egen
+ * oppbevaringspolicy og prinsippet om lagringsbegrensning — som gjelder begge
+ * land — så det er det som står nå.
+ *
  * Pure function — no I/O. Easy to unit-test if we set up Deno tests
  * later.
  */
@@ -89,7 +104,12 @@ export function buildInactiveWarningEmail(args: {
   appUrl: string;
   scheduledDeletionAt: Date;
 }) {
-  const formattedDate = args.scheduledDeletionAt.toLocaleDateString('nb-NO', {
+  const nb = args.scheduledDeletionAt.toLocaleDateString('nb-NO', {
+    day: '2-digit',
+    month: 'long',
+    year: 'numeric'
+  });
+  const sv = args.scheduledDeletionAt.toLocaleDateString('sv-SE', {
     day: '2-digit',
     month: 'long',
     year: 'numeric'
@@ -104,9 +124,9 @@ export function buildInactiveWarningEmail(args: {
 <html lang="nb">
   <body style="font-family: -apple-system, system-ui, sans-serif; color: #1f2937; max-width: 560px; margin: 24px auto; padding: 0 16px;">
     <h1 style="font-size: 18px; font-weight: 600; color: #1A3409;">Vi savner deg på Mycelet 🍄</h1>
-    <p>Du har ikke logget inn på Mycelet på over 3 år. For å holde brukerdata under kontroll og oppfylle norsk personvern-lovgivning, sletter vi automatisk inaktive kontoer.</p>
+    <p>Du har ikke logget inn på Mycelet på over 3 år. Vi sletter automatisk inaktive kontoer — det følger av vår egen oppbevaringspolicy og av at personopplysninger ikke skal lagres lenger enn nødvendig.</p>
     <p style="background: #fef3c7; padding: 12px; border-radius: 8px; border: 1px solid #fbbf24;">
-      <strong>Kontoen din er planlagt slettet ${formattedDate}</strong> (${daysRemaining} dager igjen).
+      <strong>Kontoen din er planlagt slettet ${nb}</strong> (${daysRemaining} dager igjen).
     </p>
     <p>Hvis du vil beholde kontoen din og soppfunnene dine, logg inn én gang innen denne datoen — så avbryter vi slettingen automatisk.</p>
     <p style="margin-top: 24px;">
@@ -114,9 +134,27 @@ export function buildInactiveWarningEmail(args: {
         Logg inn og behold kontoen
       </a>
     </p>
+
+    <hr style="margin: 32px 0; border: none; border-top: 1px solid #e5e7eb;">
+
+    <h1 style="font-size: 18px; font-weight: 600; color: #1A3409;">Vi saknar dig på Mycelet 🍄</h1>
+    <p>Du har inte loggat in på Mycelet på över 3 år. Vi raderar automatiskt inaktiva konton — det följer av vår egen lagringspolicy och av att personuppgifter inte ska sparas längre än nödvändigt.</p>
+    <p style="background: #fef3c7; padding: 12px; border-radius: 8px; border: 1px solid #fbbf24;">
+      <strong>Ditt konto är planerat att raderas ${sv}</strong> (${daysRemaining} dagar kvar).
+    </p>
+    <p>Vill du behålla ditt konto och dina svampfynd — logga in en gång före detta datum, så avbryter vi raderingen automatiskt.</p>
+    <p style="margin-top: 24px;">
+      <a href="${keepLink}" style="background: #1A3409; color: white; padding: 12px 20px; border-radius: 6px; text-decoration: none; display: inline-block;">
+        Logga in och behåll kontot
+      </a>
+    </p>
+
     <hr style="margin: 32px 0; border: none; border-top: 1px solid #e5e7eb;">
     <p style="font-size: 12px; color: #6b7280;">
       Hvis du ikke ønsker å beholde kontoen, kan du bare ignorere denne e-posten — vi sletter den automatisk på den planlagte datoen. Du kan også slette den selv umiddelbart fra profil-siden.
+    </p>
+    <p style="font-size: 12px; color: #6b7280;">
+      Vill du inte behålla kontot kan du bara ignorera detta mejl — vi raderar det automatiskt på det planerade datumet. Du kan även radera det själv direkt från profilsidan.
     </p>
     <p style="font-size: 12px; color: #6b7280;">Mycelet — sopp-prediksjon for Norge og Sverige</p>
   </body>
@@ -124,15 +162,26 @@ export function buildInactiveWarningEmail(args: {
 
   const text = `Vi savner deg på Mycelet!
 
-Du har ikke logget inn på over 3 år. Kontoen din er planlagt slettet ${formattedDate} (${daysRemaining} dager igjen).
+Du har ikke logget inn på over 3 år. Kontoen din er planlagt slettet ${nb} (${daysRemaining} dager igjen).
 
 For å beholde kontoen og soppfunnene dine — logg inn én gang innen denne datoen:
 ${keepLink}
 
-Hvis du ikke ønsker å beholde kontoen, kan du ignorere denne e-posten.`;
+Hvis du ikke ønsker å beholde kontoen, kan du ignorere denne e-posten.
+
+---
+
+Vi saknar dig på Mycelet!
+
+Du har inte loggat in på över 3 år. Ditt konto är planerat att raderas ${sv} (${daysRemaining} dagar kvar).
+
+För att behålla kontot och dina svampfynd — logga in en gång före detta datum:
+${keepLink}
+
+Vill du inte behålla kontot kan du ignorera detta mejl.`;
 
   return {
-    subject: `Kontoen din slettes ${formattedDate} med mindre du logger inn`,
+    subject: `Kontoen din slettes ${nb} · Ditt konto raderas ${sv}`,
     html,
     text
   };
