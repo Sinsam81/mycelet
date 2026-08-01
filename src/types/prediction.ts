@@ -3,6 +3,13 @@ export interface PredictionHotspot {
   lng: number;
   count: number;
   score: number;
+  /**
+   * Arten scoren gjelder. Rasteret lagrer én flis per art per rute, så et sted
+   * har ett tall per art — «60/100» er 60 for kantarell, ikke for sopp som
+   * sådan. Kartet slår sammen til beste art per rute og navngir den.
+   * Null på fallback-banen, som ikke er artsoppdelt.
+   */
+  speciesId?: number | null;
 }
 
 export interface PredictionTile {
@@ -116,6 +123,21 @@ export interface PredictionResponse {
     recent365d: number;
   };
   hotspots: PredictionHotspot[];
+  /**
+   * Arten som drar `score` når kalleren IKKE ba om en bestemt art. Uten den er
+   * tallet et svar uten spørsmål — panelet setter navnet ved siden av.
+   */
+  leadingSpecies?: {
+    id: number;
+    norwegianName: string;
+    swedishName: string | null;
+    /**
+     * Ferdig lokalisert navn. Settes bare av kartet, som bygger panelet fra
+     * flisene mens API-kallet fortsatt er underveis og allerede har navnene
+     * oversatt. Serveren sender de rå kolonnene og lar panelet velge.
+     */
+    displayName?: string;
+  };
   /** Present when the request included ?speciesId. */
   species?: PredictionSpeciesSummary;
   /** Real forest data at the point (computed_fallback path); null when unavailable. */

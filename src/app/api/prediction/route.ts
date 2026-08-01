@@ -9,6 +9,7 @@ import { computeSeasonalScore, scoreToCondition } from '@/lib/utils/prediction';
 import type { SpeciesContext } from '@/lib/utils/species-scoring';
 import { getForestProperties, buildSpeciesHabitatPreferences } from '@/lib/forest';
 import { computeCellPrediction } from '@/lib/prediction/cell-score';
+import { bestTilePerCell } from '@/lib/prediction/collapse-tiles';
 import { dayOfYearOf } from '@/lib/prediction/phenology';
 import { weightedOccurrenceDensity } from '@/lib/prediction/occurrences';
 import { getElevation } from '@/lib/terrain';
@@ -64,6 +65,8 @@ interface PredictionTileRow {
   center_lat: number;
   center_lng: number;
   score: number;
+  /** Rasteret har én rad per art per rute — se bestTilePerCell. */
+  species_id: number | null;
   confidence: number | null;
   components: {
     vegetation?: number;
@@ -230,7 +233,14 @@ export async function GET(request: NextRequest) {
       hasSpecies: speciesContext !== null
     });
     if (tiles.length > 0) {
-      const weightedTotals = tiles.reduce(
+      // Rasteret har én flis PER ART per rute. Uten artsfilter gir RPC-en derfor
+      // sju rader på samme koordinat, og et snitt over dem er et snitt på tvers
+      // av arter — kantarell 60 og vanlig morkel 2 ble til 19 «svake forhold»
+      // midt i kantarellsesongen. Kollaps til beste art per rute FØR alt annet,
+      // så snittet igjen er et snitt over steder. Med ?speciesId satt filtrerer
+      // RPC-en allerede, og dette er en no-op. Se collapse-tiles.ts.
+      const cells = bestTilePerCell(tiles);
+      const weightedTotals = cells.reduce(
         (acc, tile) => {
           const confidenceWeight = Math.max(0.2, (tile.confidence ?? 50) / 100);
           acc.weightSum += confidenceWeight;
@@ -255,7 +265,7 @@ export async function GET(request: NextRequest) {
       const condition = scoreToCondition(score);
       // Representative forest/habitat for the explanation: the highest-scoring
       // tile that actually has forest data (some cells are water/urban → null).
-      const forestTile = tiles
+      const forestTile = cells
         .filter((t) => t.components?.forest)
         .reduce<PredictionTileRow | null>((best, t) => (!best || t.score > best.score ? t : best), null);
       const seasonal = computeSeasonalScore(new Date().getMonth() + 1);
@@ -281,12 +291,15 @@ export async function GET(request: NextRequest) {
             weatherTrend: toFreeFactor(weatherTrend)
           };
 
-      const hotspotsFull = tiles
+      const hotspotsFull = cells
         .map((tile) => ({
           lat: Number(tile.center_lat.toFixed(5)),
           lng: Number(tile.center_lng.toFixed(5)),
           count: 1,
-          score: tile.score
+          score: tile.score,
+          // Hvilken art tallet gjelder. Uten dette er «60/100» på et sted uten
+          // mening — det er 60 for kantarell, ikke for sopp som sådan.
+          speciesId: tile.species_id ?? null
         }))
         .sort((a, b) => b.score - a.score)
         .slice(0, 20);
@@ -299,11 +312,39 @@ export async function GET(request: NextRequest) {
             score: Math.round(spot.score / 5) * 5
           }));
 
+      // Hvilken art som drar tallet. Uten artsfilter er «57/100» ellers et tall
+      // uten spørsmål: det er 57 for kantarell akkurat nå, ikke for sopp
+      // generelt. Panelet setter navnet ved siden av tallet.
+      //
+      // Slås opp bare når kalleren IKKE ba om en art — da bærer `species`
+      // allerede navnet — og bare når kollapsen faktisk valgte mellom flere.
+      let leadingSpecies: { id: number; norwegianName: string; swedishName: string | null } | null = null;
+      const leadingId = speciesId == null ? (hotspotsFull[0]?.speciesId ?? null) : null;
+      if (leadingId != null) {
+        const { data: leadRow, error: leadErr } = await supabase
+          .from('mushroom_species')
+          .select('id,norwegian_name,swedish_name')
+          .eq('id', leadingId)
+          .maybeSingle();
+        // Feiler oppslaget viser panelet tallet uten navn, som før. Det skal
+        // ikke kunne ta ned prediksjonen.
+        if (leadErr) log.warn('prediction.leading_species_lookup_failed', { message: leadErr.message });
+        if (leadRow) {
+          leadingSpecies = {
+            id: leadRow.id as number,
+            norwegianName: (leadRow.norwegian_name as string | null) ?? '',
+            swedishName: (leadRow.swedish_name as string | null) ?? null
+          };
+        }
+      }
+
       log.info('prediction.success', {
         source: 'prediction_tiles',
         score,
         condition,
         tileCount: tiles.length,
+        cellCount: cells.length,
+        leadingSpeciesId: leadingSpecies?.id ?? null,
         weatherSource: weather?.source ?? 'unavailable'
       });
 
@@ -340,13 +381,17 @@ export async function GET(request: NextRequest) {
             }
           : { temperature: 0, humidity: 0, rain3dMm: 0 },
         counts: {
-          findingsInArea: tiles.length,
+          // Antall STEDER i boksen, ikke antall rader. Før kollapsen var dette
+          // artsantallet ganget med stedsantallet — «14 steder» på Nesodden,
+          // der det i virkeligheten er to ruter med sju arter hver.
+          findingsInArea: cells.length,
           recent30d: 0,
           recent365d: 0
         },
         forest: forestTile?.components?.forest ?? null,
         habitat: forestTile?.components?.habitat ?? undefined,
         hotspots,
+        leadingSpecies: leadingSpecies ?? undefined,
         species: speciesSummary ?? undefined
       });
     }

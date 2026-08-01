@@ -967,6 +967,8 @@
     "calculatingShort": "Beräknar…",
     "mushroomConditions": "Svampförhållanden",
     "conditionsHere": "Svampförhållanden i området",
+    "leadingSpecies": "Bäst nu: {species}",
+    "leadingSpeciesNote": "Siffran gäller den här arten — den som ligger bäst till här nu.",
     "close": "Stäng",
     "speciesNumber": "Art #{id}",
     "allSpecies": "Alla arter",
@@ -1121,7 +1123,9 @@
     "searchPlaceOnly": "Sök plats — t.ex. «Sälen»",
     "forecastToday": "I dag",
     "forecastConditionsThisWeek": "svampförhållanden denna vecka",
-    "hotspotTooltip": "Svampförhållanden {score}/100"
+    "hotspotTooltip": "Svampförhållanden {score}/100",
+    "hotspotTooltipBest": "Bäst nu: {species} {score}/100",
+    "hotspotTooltipSpecies": "{species} {score}/100"
   },
   "OnboardingIntro": {
     "step1Title": "Välkommen till Mycelet",

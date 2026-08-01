@@ -58,6 +58,20 @@ export function HotspotPanel({ speciesId, data, explanations, isLoading, error }
   const credit = data ? sourceCredit(data, t) : null;
   const hotspotCount = data?.hotspots?.length ?? 0;
 
+  // Uten artsfilter er scoren den BESTE arten i området nå, ikke et snitt over
+  // alle. Da må arten stå ved siden av tallet: «57/100 gode forhold» alene
+  // leses som en påstand om sopp generelt, mens det i virkeligheten er 57 for
+  // kantarell og 2 for vanlig morkel på nøyaktig samme rute.
+  // Er det filtrert på art, står navnet allerede i overskriften.
+  const leadingName =
+    !data?.species && data?.leadingSpecies
+      ? data.leadingSpecies.displayName ||
+        getSpeciesDisplayName(
+          { norwegian_name: data.leadingSpecies.norwegianName, swedish_name: data.leadingSpecies.swedishName },
+          locale
+        )
+      : '';
+
   // Collapsed: a compact pill that still shows the verdict at a glance, so the
   // map stays open. Tap to expand the full "hvorfor" + sources.
   if (!open) {
@@ -65,13 +79,18 @@ export function HotspotPanel({ speciesId, data, explanations, isLoading, error }
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="absolute left-3 bottom-20 z-[1000] inline-flex items-center gap-2 rounded-full bg-white/95 px-3 py-2 text-sm shadow-lg backdrop-blur hover:bg-white"
+        className="absolute left-3 bottom-20 z-[1000] inline-flex max-w-[calc(100%-1.5rem)] items-center gap-2 rounded-full bg-white/95 px-3 py-2 text-sm shadow-lg backdrop-blur hover:bg-white"
       >
-        {condition ? <span className={`h-2.5 w-2.5 rounded-full ${condition.dot}`} aria-hidden="true" /> : null}
-        <span className="font-semibold text-gray-900">
+        {condition ? (
+          <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${condition.dot}`} aria-hidden="true" />
+        ) : null}
+        {leadingName ? <span className="truncate font-semibold text-gray-900">{leadingName}</span> : null}
+        <span className="shrink-0 font-semibold text-gray-900">
           {isLoading && !data ? t('calculatingShort') : data ? `${data.score}/100` : t('mushroomConditions')}
         </span>
-        {condition ? <span className={`text-xs font-medium ${condition.text}`}>{t(condition.labelKey)}</span> : null}
+        {condition ? (
+          <span className={`shrink-0 text-xs font-medium ${condition.text}`}>{t(condition.labelKey)}</span>
+        ) : null}
       </button>
     );
   }
@@ -109,6 +128,11 @@ export function HotspotPanel({ speciesId, data, explanations, isLoading, error }
       </div>
       {data?.species ? (
         <p className="text-xs italic text-gray-600">{data.species.latinName}</p>
+      ) : leadingName ? (
+        <>
+          <p className="text-xs font-medium text-gray-700">{t('leadingSpecies', { species: leadingName })}</p>
+          <p className="text-[11px] text-gray-500">{t('leadingSpeciesNote')}</p>
+        </>
       ) : (
         <p className="text-xs text-gray-600">{speciesId ? t('speciesNumber', { id: speciesId }) : t('allSpecies')}</p>
       )}
