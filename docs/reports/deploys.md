@@ -174,3 +174,21 @@ Ingen rollback av kode eller database var nødvendig.
 ### Opprydding
 
 8 worktrees → 1. 96 lokale brancher → 9, 67 eksterne → 7 (kun de med beviselig tom diff mot main ble slettet). 3 stasher (alle byggartefakter) → 0. Ukommittert arbeid fra fire worktrees arkivert i `sopp-appen-arkiv-2026-08-01/` med LES-MEG — to ting der er ikke i main og verdt et blikk, særlig `030_accepted_scientific_names.sql`, som påpeker at omdøping av *Clitocybe rivulosa* og *Inosperma erubescens* uten en synonym-kolonne ville brutt `/api/identify` sitt oppslag for to giftige arter. Hovedmappa sto på `feat/ga4-pwa` og er flyttet til `main` — det var den branchen Codex reviderte, og forklaringen på hvorfor revisjonen leste tre dager gammel kode.
+
+## 2026-08-01 — PR #104 + #105: riktige artsnavn, og en stille datafeil i prediksjonen
+
+- **What:** Hentet opp en migrasjon som lå ukommittert i et worktree siden 30. juli, nummerert 030 mens 030–033 gikk i produksjon uten den. Omnummerert til 034, verifisert på nytt, og utvidet.
+
+1. **Den stille datafeilen — dette var det egentlige funnet.** `gbifMatch()` godtok alt som ikke var `matchType: 'NONE'`. `Agaricus silvaticus` er en ortografisk variant GBIF ikke fører på artsnivå, så oppslaget falt gjennom til `matchType=HIGHERRANK`, `rank=CLASS`, usageKey 186 — **hele klassen Agaricomycetes**. Importen lastet inn alle skivlingsopper i Norden som skogsjampinjong: 8 230 rader, mot kantarell 8 399 og steinsopp 8 400, mens karbol-sjampinjong har 529 og hvit trakttsopp 34. Fenologikurven for arten var bygget på nettopp de radene, og appen fortalte brukerne at skogsjampinjong har høysesong i **midten av april**. Etter reparasjonen: uke 38, midten av september. Feilen var stille hele veien — importen meldte suksess og tallene så friske ut.
+
+2. **Sveip av alle 72 arter mot GBIF** avdekket én den opprinnelige migrasjonen ikke hadde: id 84 `Albatrellus confluens` → `Albatrellopsis confluens` (1 202 forekomster). 68 arter var i orden.
+
+3. **Synonym-kolonnen er hele poenget, ikke en detalj.** En ren omdøping ville vært en sikkerhetsregresjon: `/api/identify` slår opp leverandørens artsnavn med eksakt `ilike` på `latin_name`, og leverandøren bruker de innarbeidede gamle navnene. Mistes treffet, vises en identifikasjon av *Clitocybe rivulosa* (giftig) eller *Inosperma erubescens* (dødelig) uten norsk navn og **uten spiselighetsmerke** — den sikkerhetskritiske halvdelen av svaret. Migrasjonen legger til `synonyms` + generert `synonyms_text`; ruta faller tilbake på den (kun binomialer — et bart slektsnavn ville truffet for bredt), og alle fire artssøkene i appen søker i den.
+
+4. **`Agaricus xanthodermus` beholdes bevisst.** Dyntaxa (SE) aksepterer `xanthoderma`, Nortaxa (NO) og GBIF aksepterer `xanthodermus`, og GBIF treffer `xanthoderma` bare FUZZY. Å følge den svenske autoriteten ville motsagt den norske i en norsk-primær app og nedgradert GBIF-oppslaget fra EXACT til FUZZY. Ført som synonym, med begrunnelsen i `taxonomy_note`.
+
+- **Migrasjoner:** 034 kjørt i produksjon før reparasjonen. Rekkefølgen var bindende: `DELETE` før omdøpingen ville importert klasse-støyen på nytt under det gamle navnet.
+- **Verify:** alle fire omdøpingene landet; alle fem gamle navn (inkl. `Agaricus xanthoderma`) løser via `synonyms_text` til riktig art med spiselighet intakt; forekomster art 41: 8 230 → 0 → 2 389 (710 NO, 1 679 SE). **Kurve-for-kurve-sammenligning av alle 70 fenologikurver: kun art 41 endret seg, de 69 andre er byte-identiske.** Post-deploy: `/species/41` viser `Agaricus sylvaticus` og ikke det gamle navnet; `/species/60` viser `Inosperma erubescens`.
+- **Rollback:** none needed.
+- **Merk om et tall som ikke stemte:** fenologi-headeren gikk fra 315 280 til 316 542 daterte funn selv om reparasjonen fjernet 5 841 rader netto. Den committede fila var utdatert fra før, så regenereringen plukket også opp importer gjort siden sist. Det er derfor kurve-for-kurve-sammenligningen er beviset, ikke headeren.
+- **Herding så det ikke gjentar seg:** `gbifMatch()` krever nå treff på artsnivå. Regelen er trukket ut til `scripts/lib/gbif-match.mjs` med 16 tester bygget på ekte GBIF-svar, inkludert én som fastholder nøyaktig hva den gamle regelen ville sluppet gjennom. Å importere ingenting for en art er bedre enn å importere et annet takson og tro det er arten.
