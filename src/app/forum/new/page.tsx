@@ -8,6 +8,7 @@ import { PageWrapper } from '@/components/layout/PageWrapper';
 import { Button } from '@/components/ui/Button';
 import { checkContent, isProhibitedContentError } from '@/lib/moderation/content-filter';
 import { useCreatePost, useMyFindings } from '@/lib/hooks/useForum';
+import { buildUserUploadPath } from '@/lib/storage/upload-path';
 import { createClient } from '@/lib/supabase/client';
 import { reencodeImageForUpload } from '@/lib/utils/image';
 import { isNativePlatform } from '@/lib/native/platform';
@@ -57,7 +58,7 @@ function NewForumPostInner() {
 
     // EXIF-stripped re-encode — forum photos must not carry GPS metadata.
     const blob = await reencodeImageForUpload(file);
-    const path = `${user.id}/${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`;
+    const path = buildUserUploadPath(user.id);
 
     const { error: uploadError } = await supabase.storage.from('forum-images').upload(path, blob, { upsert: false, contentType: 'image/jpeg' });
     if (uploadError) throw new Error(uploadError.message);

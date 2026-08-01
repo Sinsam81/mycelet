@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Camera } from 'lucide-react';
+import { buildUserUploadPath } from '@/lib/storage/upload-path';
 import { createClient } from '@/lib/supabase/client';
 import { Button } from '@/components/ui/Button';
 import { reencodeImageForUpload } from '@/lib/utils/image';
@@ -99,7 +100,7 @@ export function AddFindingSheet({ latitude, longitude, onClose, onSaved }: AddFi
     // Re-encode via canvas before upload: strips EXIF (incl. GPS), so the
     // photo can't leak the exact spot of an approximate/private find.
     const blob = await reencodeImageForUpload(file);
-    const fileName = `${user.id}/${Date.now()}.jpg`;
+    const fileName = buildUserUploadPath(user.id);
 
     const { error: uploadError } = await supabase.storage.from('finding-images').upload(fileName, blob, {
       upsert: false,

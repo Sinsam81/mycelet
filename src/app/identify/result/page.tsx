@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/Button';
 import toast from 'react-hot-toast';
 import { createClient } from '@/lib/supabase/client';
 import { isDangerousEdibility } from '@/lib/utils/edibility';
+import { buildUserUploadPath } from '@/lib/storage/upload-path';
 import { dataUrlToBlob } from '@/lib/utils/image';
 import { IdentifyResultPayload } from '@/types/identify';
 
@@ -78,7 +79,7 @@ export default function IdentifyResultPage() {
         try {
           // Decode locally — fetch('data:…') is blocked by the CSP's connect-src.
           const blob = dataUrlToBlob(payload.originalImageDataUrl);
-          const fileName = `${user.id}/${Date.now()}.jpg`;
+          const fileName = buildUserUploadPath(user.id);
           const { error: uploadError } = await supabase.storage
             .from('finding-images')
             .upload(fileName, blob, { upsert: false, contentType: blob.type || 'image/jpeg' });
