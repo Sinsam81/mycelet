@@ -201,3 +201,68 @@ Ingen rollback av kode eller database var nødvendig.
 - **Verify:** 14 tester, blant annet én som sjekker at de to tekstene FAKTISK er ulike (ikke norsk med annen tegnsetting) og én som fastholder tilbakefallet når oppslaget kaster. Bygg 53 ruter, typecheck, lint 0 feil, 685 tester.
 - **Verify post-deploy — ÆRLIG BEGRENSNING:** jeg klarte IKKE å fremtvinge en 429 i produksjon. Grensen på /api/places er 60/min per klient, telleren ligger i minnet per serverinstans (dokumentert svakhet, P1-4), og Vercel sprer parallelle kall over instanser. 30 parallelle og 45 sekvensielle kall ga alle 200. Å presse hardere ville vært å misbruke egen produksjon for å bevise en feilmelding. Endringen hviler derfor på enhetstestene, ikke på en produksjonsobservasjon. Health ok etterpå.
 - **Rollback:** none needed.
+
+## 2026-08-01 — PR #107: kartets funn-popup var tom for alle, i fem uker
+
+- **What:** Å klikke en soppmarkør ga en blank hvit boks — ingen artsnavn, intet bilde, ingen dato, ingen lenke — fra 26. juni. Alle brukere, begge språk. Leaflet eier popup-elementet, så `MushroomMap` rendrer `FindingPopup` i en **løsrevet React-rot** via `createRoot()`, og React-kontekst krysser ikke rot-grenser. Den svenske lokaliseringen la `useTranslations()` som komponentens første linje uten å pakke den roten i `NextIntlClientProvider`, så den kastet ved hver render og React lot roten stå tom.
+- **Hvorfor det holdt seg skjult i fem uker:** i produksjonsbygg kaster use-intl med **tom melding**. Ingen synlig feil i konsollen, bare en tom boks.
+- **Verify før fiks, ikke antatt:** rendret komponenten uten provider og bekreftet at den kaster og produserer *ingen* HTML; med provider rendrer den.
+- **Tatt med mens kodestien var åpen:** popupen leste `norwegian_name` rått fra `public_findings`-viewet, som alltid er norsk. Den tar nå det lokaliserte navnet kartet allerede holder.
+- **Verify:** 12 tester. Én fastholder at komponenten *fortsatt kaster* uten provider, så ingen «forenkler» bort innpakningen igjen. En annen rendrer begge veier side om side og sjekker at den upakkede gir tom streng — det er den som gjør de øvrige påstandene meningsfulle. Bygg 53 ruter, typecheck, lint 0 feil, 697 tester.
+- **Funnet ved:** triagering av arkiverte worktree-patcher, ikke av QA-løkka. Verdt å merke seg: `npm run qa` åpner ikke popups.
+- **Rollback:** none needed.
+
+## 2026-08-01 — PR #108: svenske artsnavn i identifiseringen, også de dødelige
+
+- **What:** Advarselssetningen var oversatt. **Navnene inni den var ikke.** En svensk bruker fikk «Kan förväxlas med grønn fluesopp» — korrekt svensk grammatikk rundt det norske navnet på *Amanita phalloides*, som svensker kjenner som **Lömsk flugsvamp**. Katalogens dødeligste art, skrevet slik at leseren ikke kjenner den igjen. *Galerina marginata* heter Gifthätting; ingenting ved det norske navnet antyder det.
+- **Rotårsak:** `/api/identify` slo aldri opp leserens språk i det hele tatt. Både artsoppslaget og forvekslings-joinet valgte bare `norwegian_name`. Dataene har ligget der siden migrasjon 030 — kun oppslaget manglet.
+- **Samme hull i `AddFindingSheet`:** en svensk bruker som skrev «flugsvamp» eller «kremla» fikk **null treff** og måtte gjette det norske navnet for å registrere et funn.
+- **Verify:** seks tester gjennom hele ruta, ikke hjelperen — hjelperen fantes og var testet, ruta kalte den bare aldri. Bekreftet at de ikke er tomme ved å reversere forvekslingslinjen og se den svenske påstanden bli rød mens de andre holdt seg grønne. Bygg 53 ruter, typecheck, lint 0 feil, 703 tester.
+- **Rollback:** none needed.
+
+## 2026-08-01 — PR #109: artsnavn på leserens språk i forum, profil og Mine steder
+
+- **What:** CLAUDE.md navngir denne feilklassen eksplisitt — «Species names come from the database, not the message catalog» — og den sto fortsatt åpen på tre av appens mest brukte flater. En svensk bruker så «Steinsopp» på sin egen profil der databasen har «Karljohanssvamp». Seks spørringer valgte aldri `swedish_name`; seks visningssteder leste `norwegian_name` rått.
+- **`getJoinedSpeciesName` lagt til:** PostgREST returnerer en relasjon som objekt, som array-med-ett-element, eller som null avhengig av hvordan joinet er skrevet. Hvert kallsted måtte ellers håndtert alle tre — og i praksis gjorde ingen av dem det. Returnerer **tom streng**, ikke en fallback-tekst, så kallstedene faller videre på `species_name_override` (brukerens eget navn på funnet) før de lander på «ukjent art». Den rekkefølgen er eksisterende oppførsel og er bevart.
+- **Verify:** 10 tester over alle tre PostgREST-formene, det norske tilbakefallet, en rad helt uten navn, og tom-streng-så-override-vinner-rekkefølgen kallstedene er avhengige av. Bygg 53 ruter, typecheck, lint 0 feil, 712 tester.
+- **Rollback:** none needed.
+
+## 2026-08-01 — PR #110: identifiseringens feilmeldinger på leserens språk, og forgrening på kode i stedet for norsk prosa
+
+- **What:** To endringer som **måtte lande sammen**. Hver for seg innfører de en feil.
+- De åtte feilstrengene i `/api/identify` var hardkodet norske. Den som koster penger er dagskvoten — det er oppgraderingsmeldingen, og en svensk gratisbruker leste «Oppgrader til Premium eller Sesongpass».
+- Men `identify/page.tsx` avgjorde om AI-avslått-panelet skulle vises med `message.toLowerCase().includes('ikke aktivert')`. Det virket bare fordi serveren alltid svarte norsk. **Oversetter du meldingene uten å fikse forgreningen, mister svenske brukere panelet helt** — de får en naken feilstreng der en designet reserve skulle stått.
+- **Alle** feilsvar bærer nå en kode, ikke bare den klienten tilfeldigvis forgrener på i dag. Neste forgrening skal slippe å utlede den fra prosa på nytt.
+- **Språket hentes før `try`-blokken:** feilsvarene kommer tidligere i flyten enn alt annet, og `catch` nederst trenger det også. Oppslaget leser cookies og kan kaste utenfor request-kontekst, så det er pakket inn — manglende språk skal ikke ta ned ruta.
+- **Verify:** 11 tester. Én sjekker at den svenske meldingen **ikke** inneholder delstrengen den gamle klienten lette etter. Bygg 53 ruter, typecheck, lint 0 feil, 719 tester.
+- **Rollback:** none needed.
+
+## 2026-08-01 — PR #111: datoer lokalisert, og slettevarselet sendt på begge språk
+
+- **What:** Appen snakker `nb` og `sv`; `Intl` trenger `nb-NO` og `sv-SE`. Den oversettelsen var skrevet ut for hånd fire steder og glemt sytten andre, så en svensk **betalende** bruker leste «Medlem siden desember 2025» på profilen og «15. august» i slettevarselet. Samlet i `intlLocale()` og brukt på hver brukervendt flate. De fire som står igjen hardkodet er admin- og moderasjonssider, som er norske av natur.
+- **Slettevarselet** — appens eneste egensendte e-post, og den varsler at kontoen og hvert eneste soppfunn slettes på en gitt dato — gikk ut kun på norsk. Nå på **begge språk, norsk først**. Det er riktig svar her, ikke et lat et: vi lagrer ikke språk per bruker, og cron-funksjonen ser aldri `MYCELET_LOCALE`-cookien — den kjører uten en forespørsel fra noen. Å gjette ut fra e-postdomenet ville vært feil for hver svensk bruker med gmail-adresse.
+- **Rettet en påstand i den:** teksten begrunnet slettingen med «norsk personvern-lovgivning», som peker en svensk leser mot feil land. Det faktiske grunnlaget er vår egen lagringspolicy, som gjelder i begge.
+- **Verify:** 10 tester. De som betyr noe sjekker at utdataene **faktisk er ulike** — august vs augusti, 15.8.2026 vs 2026-08-15 — fordi en hjelper kan returnere riktig streng og likevel være koblet til ingenting. Bygg 53 ruter, typecheck, lint 0 feil, 727 tester.
+- **Rollback:** none needed.
+
+## 2026-08-01 — PR #112: to filer reddet fra arkivet før det ble slettet
+
+- **What:** Sjekket arkivmappa mot main før sletting i stedet for å stole på gjennomgangen. **To filer var ikke duplikater.**
+- `docs/svensk-lokalisering-restanser.md` — en analyse av de to svenske hullene som **ikke kan lukkes i kode**: Supabase sine Auth-e-postmaler (passord-tilbakestilling, registreringsbekreftelse) ligger i dashbordet og er kun norske, med ferdige tospråklige maler til å lime inn; og artsside-innholdet (`description`, `toxin_info`, `symptoms`, `habitat`), som ikke har svenske kolonner i det hele tatt.
+- `src/lib/__tests__/messages.test.ts` — flater ut begge katalogene til punktseparerte stier og sjekker at de definerer **nøyaktig** de samme nøklene. Vakten mot en nøkkel som finnes på norsk og mangler på svensk, noe next-intl ikke feiler høylytt på. Arkivversjonen importerte fra feil mappedybde og samlet derfor stille **null tester**; rettet.
+- **Ærlig om gjennomgangen:** 12 agenter gikk gjennom arkivet og konkluderte med sju funn. En siste filsystemsjekk fant to til. Verifisering slår tillit, også til eget arbeid.
+- **Verify:** bygg 53 ruter, typecheck, lint 0 feil, 730 tester.
+- **Rollback:** none needed.
+
+## 2026-08-01 — PR #113: kartet viste den DÅRLIGSTE soppen på hvert sted
+
+- **What:** Sindre sendte to skjermbilder av samme sted på Nesodden: «Soppforhold 2/100» utzoomet, «12/100» innzoomet, og merket sa «19/100 Svake forhold». Tre tall, ett sted. Spurte produksjonsdatabasen om hvilket som var riktig. **Ingen av dem.**
+- **Rotårsak:** rasteret lagrer **én flis per art per rute**. Uten artsfilter returnerer RPC-en alle, så én rute kommer tilbake som sju rader på nøyaktig samme koordinat — hele landet, nøyaktig 7,0 artsrader per posisjon.
+- **Feil 1 — kartet tegnet alle sju oppå hverandre.** RPC-en sorterer `score DESC` og Leaflet tegner i mottatt rekkefølge, så den **laveste** ble tegnet sist, lå øverst, og var den pekeren traff. Systematisk den dårligste arten. `2/100` var **vanlig morkel, i august**; `12/100` var traktkantarell. **Kantarell på samme rute lå på 60.** Hvilken sirkel du traff avhang av pikselgeometrien ved det zoomnivået — derfor endret tallet seg da han zoomet inn uten å flytte seg.
+- **Feil 2 — `/api/prediction` midlet over stabelen**, altså på tvers av arter. Kantarell 60 midlet med morkel 2 gir 19. Målt mot produksjon for nøyaktig den boksen ruta bygger: 133 rader inn → snitt **19**. Kollapset til beste art per rute: 19 steder → snitt **55**.
+- **Hvorfor snittet aldri kunne bli riktig:** det ligger *alltid* arter utenfor sesong og drar ned, hver dag i året. Tallet var systematisk for lavt uansett årstid. En sopplukker spør «er det verdt å dra ut nå?», og svaret styres av den beste arten som går. Merket leser nå «Kantarell 55/100 Gode forhold», og hver sirkel navngir arten sin.
+- **Ærlighetsrammen holdt:** dette påstår ikke mer om HVOR soppen står — romlig AUC er fortsatt ~0,52. Det flytter tallet vekk fra den svake påstanden og over på den validerte (NÅR en art går, AUC 0,89). Å navngi arten er det som gjør forskjellen synlig.
+- **Verify:** 11 rutetester bygget på produksjonsradene fra den dagen. Skrudde fiksen av igjen og bekreftet at **6 av dem faller** — testen har tenner. 11 til på den rene hjelperen. Bygg 53 ruter, typecheck, lint 0 feil, 752 tester.
+- **Verify post-deploy mot mycelet.com:** score 55 «good», `leadingSpecies` Kantarell, 19 steder, **3 hotspots på 3 unike posisjoner** (ingen stabling). Health 200.
+- **Sveip etter søsken:** `/api/prediction/grid` og `species-spots` navngir allerede arten per sted — de live-beregnede banene gjorde dette riktig, og den eldre forhåndsberegnede rasterbanen ble aldri oppdatert til å følge etter. Det er grunnen til at feilen overlevde. `/api/health/predictions` sjekker bare ferskhet. `/admin/prediction` midler et topp-150-utvalg, men er en diagnosetabell som skriver `species_id` på hver rad; bevisst latt være.
+- **Rollback:** none needed.
