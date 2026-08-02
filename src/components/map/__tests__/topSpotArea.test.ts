@@ -54,8 +54,13 @@ describe('createTopSpotArea', () => {
     expect(options.fillOpacity).toBeLessThanOrEqual(0.25);
     // Kanten skal være svak nok til at den ikke leses som en grense med et
     // fasitpunkt i midten.
-    expect(options.weight).toBeLessThanOrEqual(1);
-    expect(options.opacity).toBeLessThan(0.5);
+    // Kanten skal være SYNLIG — flislaget under er nå et vaskelag uten kant,
+    // og et søkeområde man ikke finner er verdiløst. Men den skal ikke være en
+    // heltrukken grense: stiplingen er det som skiller «let her omkring» fra
+    // «her går en strek». Under 0,7 så den ikke leses som en solid ring.
+    expect(options.weight).toBeLessThanOrEqual(2);
+    expect(options.opacity).toBeLessThan(0.7);
+    expect(options.dashArray, 'kanten må være stiplet, ikke heltrukken').toBeTruthy();
   });
 
   it('gir et lite ankerpunkt, ikke en markør som roper', () => {

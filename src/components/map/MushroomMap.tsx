@@ -251,20 +251,33 @@ export function MushroomMap() {
         // et punkt uten kjent oppløsning.
         const color = colorForScore(spot.score).hex;
         const cellDeg = spot.gridSizeDeg && spot.gridSizeDeg > 0 ? spot.gridSizeDeg : null;
+        // ⚠️ INGEN KANT PÅ DETTE LAGET.
+        //
+        // Størrelsen er riktig — rasteret har 0,06–0,07° mellom målepunktene —
+        // men med `weight: 1` fikk hver celle en synlig strek, og siden cellene
+        // ligger kant i kant ble hele kartet et oransje rutenett. Ærligheten lå
+        // i STØRRELSEN, ikke i streken; streken la bare til en presisjon som
+        // ikke finnes (en grense der ingen grense går) og gjorde kartet
+        // uleselig.
+        //
+        // Uten kant og med lav dekkevne smelter nabocellene sammen til et mykt
+        // varmekart — som er nettopp det et lag med 3–8 km oppløsning bør se ut
+        // som. Oppløsningen står i klartekst i popupen i stedet.
         const shape = cellDeg
           ? leaflet.rectangle(
               [
                 [spot.lat - cellDeg / 2, spot.lng - cellDeg / 2],
                 [spot.lat + cellDeg / 2, spot.lng + cellDeg / 2]
               ],
-              { color, fillColor: color, fillOpacity: 0.18, weight: 1 }
+              { color, fillColor: color, fillOpacity: 0.14, weight: 0, stroke: false }
             )
           : leaflet.circle([spot.lat, spot.lng], {
               radius: Math.max(120, Math.min(450, 90 + spot.score * 3)),
               color,
               fillColor: color,
               fillOpacity: 0.2,
-              weight: 1
+              weight: 0,
+              stroke: false
             });
 
         // Si hvilken art tallet gjelder. «60/100» på et sted er meningsløst
