@@ -8,6 +8,7 @@ import { Check, Crown, Leaf, Loader2, ShieldCheck, Undo2 } from 'lucide-react';
 import { PageWrapper } from '@/components/layout/PageWrapper';
 import { BILLING_PLANS } from '@/lib/billing/plans';
 import { canPurchasePlan, getBlockingPaidPlan, getPlanViewState } from '@/lib/billing/plan-state';
+import { seasonPriceComesFromStore, showsStorePrices } from '@/lib/billing/store-pricing';
 import { useIsNative } from '@/lib/hooks/useIsNative';
 import { trackEvent } from '@/lib/analytics';
 import { createClient } from '@/lib/supabase/client';
@@ -73,6 +74,43 @@ function PricingInner() {
     inactive: t('statusInactive')
   };
 
+  const [loadingPlan, setLoadingPlan] = useState<'premium' | 'season_pass' | null>(null);
+  const [openingPortal, setOpeningPortal] = useState(false);
+  const [status, setStatus] = useState<BillingStatusResponse | null>(null);
+  const [statusError, setStatusError] = useState<string | null>(null);
+  // Distance-selling consent: the customer must accept immediate delivery + that
+  // the 14-day withdrawal right then lapses, before checkout (angrerettloven /
+  // distansavtalslagen digital-content exception). Without it, the right extends.
+  const [agreedToPurchaseTerms, setAgreedToPurchaseTerms] = useState(false);
+  // On iOS, digital subscriptions must go through Apple IAP, not Stripe (App
+  // Store rule 3.1.1). The native shell buys via RevenueCat; the web keeps the
+  // full Stripe flow. If the RevenueCat key isn't configured (or the shell is
+  // an old build without the plugin), the purchase section degrades to an
+  // informational message instead of broken buttons.
+  const native = useIsNative();
+  const [iapOffers, setIapOffers] = useState<IapOffer[] | null>(null);
+  const [iapNeedsLogin, setIapNeedsLogin] = useState(false);
+  const [iapBusy, setIapBusy] = useState<'purchase' | 'restore' | null>(null);
+  const [iapNotice, setIapNotice] = useState<string | null>(null);
+  // Unmount guard shared by the IAP effect and the post-purchase poll, so no
+  // fetch/setState survives navigation away from the page.
+  const unmountedRef = useRef(false);
+  useEffect(() => {
+    unmountedRef.current = false;
+    return () => {
+      unmountedRef.current = true;
+    };
+  }, []);
+
+  const iapReady = (iapOffers?.length ?? 0) > 0;
+
+  // Er det App Store som setter prisen, kan ikke teksten rundt kortet fortsette
+  // å love Stripe-prisen i norske kroner. Da hadde det stått «kr 269,00 /år» i
+  // kortet, «Tilsvarer 21 kr/mnd» rett under og «(249 kr)» i FAQ-en — tre
+  // priser på samme skjerm, og feil valuta for en svensk App Store-konto.
+  const storePrices = showsStorePrices({ native, offers: iapOffers });
+  const seasonPriceFromStore = seasonPriceComesFromStore({ native, offers: iapOffers });
+
   const planCards = [
     {
       id: 'free',
@@ -111,7 +149,7 @@ function PricingInner() {
       period: t('perYear'),
       lead: t('seasonLead'),
       features: [
-        t('seasonFeature1', { perMonth: SEASON_PER_MONTH }),
+        seasonPriceFromStore ? t('seasonFeature1Native') : t('seasonFeature1', { perMonth: SEASON_PER_MONTH }),
         t('seasonFeature2'),
         t('seasonFeature3')
       ],
@@ -122,7 +160,7 @@ function PricingInner() {
   const faqItems = [
     {
       q: t('faq1Q'),
-      a: t('faq1A', { yearly: SEASON_YEARLY })
+      a: seasonPriceFromStore ? t('faq1ANative') : t('faq1A', { yearly: SEASON_YEARLY })
     },
     {
       q: t('faq2Q'),
@@ -137,36 +175,6 @@ function PricingInner() {
       a: t('faq4A')
     }
   ];
-
-  const [loadingPlan, setLoadingPlan] = useState<'premium' | 'season_pass' | null>(null);
-  const [openingPortal, setOpeningPortal] = useState(false);
-  const [status, setStatus] = useState<BillingStatusResponse | null>(null);
-  const [statusError, setStatusError] = useState<string | null>(null);
-  // Distance-selling consent: the customer must accept immediate delivery + that
-  // the 14-day withdrawal right then lapses, before checkout (angrerettloven /
-  // distansavtalslagen digital-content exception). Without it, the right extends.
-  const [agreedToPurchaseTerms, setAgreedToPurchaseTerms] = useState(false);
-  // On iOS, digital subscriptions must go through Apple IAP, not Stripe (App
-  // Store rule 3.1.1). The native shell buys via RevenueCat; the web keeps the
-  // full Stripe flow. If the RevenueCat key isn't configured (or the shell is
-  // an old build without the plugin), the purchase section degrades to an
-  // informational message instead of broken buttons.
-  const native = useIsNative();
-  const [iapOffers, setIapOffers] = useState<IapOffer[] | null>(null);
-  const [iapNeedsLogin, setIapNeedsLogin] = useState(false);
-  const [iapBusy, setIapBusy] = useState<'purchase' | 'restore' | null>(null);
-  const [iapNotice, setIapNotice] = useState<string | null>(null);
-  // Unmount guard shared by the IAP effect and the post-purchase poll, so no
-  // fetch/setState survives navigation away from the page.
-  const unmountedRef = useRef(false);
-  useEffect(() => {
-    unmountedRef.current = false;
-    return () => {
-      unmountedRef.current = true;
-    };
-  }, []);
-
-  const iapReady = (iapOffers?.length ?? 0) > 0;
 
   useEffect(() => {
     if (!native || !isIapAvailable()) return;
@@ -581,7 +589,7 @@ function PricingInner() {
         ) : null}
 
         <p className="text-center text-xs text-gray-500">
-          {t('priceNote')}
+          {storePrices ? t('priceNoteNative') : t('priceNote')}
         </p>
 
         <article className="rounded-2xl bg-white p-4 shadow-card">
