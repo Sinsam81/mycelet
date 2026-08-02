@@ -1,3 +1,9 @@
+> ⚠️ **AVLØST 2. august 2026.** Denne rapporten ble skrevet mot branch-commit `c9ef78b`, ikke
+> mot main, og en etterkontroll av alle 39 konkrete funn ga: 13 fortsatt sanne, 11 allerede
+> fikset, 6 uverifiserbare, 2 utdaterte og **7 som aldri var sanne** — tre av dem med
+> henvisninger til filer som ikke finnes. Beholdt som historikk og sammenligningsgrunnlag.
+> Gjeldende revisjon: `docs/lanseringsrevisjon-funn.md`, `-inventar.md`, `-beslutning.md`.
+
 # SoppJakt produkt V2 – roadmap
 
 **Dato:** 1. august 2026  
