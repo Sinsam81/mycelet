@@ -12,7 +12,7 @@
     "swedish": "Svenska"
   },
   "AdminAuditLog": {
-    "metaTitle": "Audit-logg — Mycelet admin",
+    "metaTitle": "Audit-logg — admin",
     "metaDescription": "Spårbara admin-åtgärder och kontoraderingar.",
     "actionVerifiedForagerUpsert": "Verifierad plockare — skapad/ändrad",
     "actionVerifiedForagerDelete": "Verifierad plockare — borttagen",
@@ -38,7 +38,9 @@
     "colTarget": "Mål",
     "colDetails": "Detaljer",
     "colIp": "IP",
-    "footerNote": "Visar maximalt de 100 senaste posterna. För äldre poster, exportera via Supabase SQL Editor."
+    "footerNote": "Visar maximalt de 100 senaste posterna. För äldre poster, exportera via Supabase SQL Editor.",
+    "accessValidationErrorTitle": "Kunde inte verifiera din behörighet",
+    "accessValidationErrorBody": "Uppslaget mot moderator_roles misslyckades — det betyder inte att du saknar behörighet. Försök ladda om sidan. Teknisk detalj: {message}"
   },
   "AdminForumTrust": {
     "roleTrustedForager": "Verifierad plockare",
@@ -67,7 +69,7 @@
     "noUsers": "Inga användare hittades."
   },
   "Admin": {
-    "metaTitle": "Statistik — Mycelet admin",
+    "metaTitle": "Statistik — admin",
     "metaDescription": "Översikt över användare, fynd, community, moderering och artkatalog.",
     "mustBeLoggedIn": "Du måste vara inloggad för att se den här sidan.",
     "noAccessTitle": "Ingen åtkomst",
@@ -127,7 +129,10 @@
     "edibilityConditional": "Villkorlig",
     "edibilityInedible": "Oätlig",
     "edibilityToxic": "Giftig",
-    "edibilityDeadly": "Dödlig"
+    "edibilityDeadly": "Dödlig",
+    "accessValidationErrorTitle": "Kunde inte verifiera din behörighet",
+    "accessValidationErrorBody": "Uppslaget mot moderator_roles misslyckades — det betyder inte att du saknar behörighet. Försök ladda om sidan. Teknisk detalj: {message}",
+    "usersWithProfile": "Med profil"
   },
   "AdminPrediction": {
     "title": "Prediction Tiles (Admin)",
@@ -147,9 +152,9 @@
     "statTiles": "Rutor",
     "statAvgScore": "Snittscore",
     "statHighScore": "Score ≥ 70",
-    "statAvgConfidence": "Snitt confidence",
+    "statAvgConfidence": "Snitt datatäckning",
     "colScore": "Score",
-    "colConfidence": "Confidence",
+    "colConfidence": "Datatäckning",
     "colCoordinate": "Koordinat",
     "colRegion": "Region",
     "colSpeciesId": "Art-ID",
@@ -196,7 +201,7 @@
     "haveAccount": "Har du redan ett konto?",
     "login": "Logga in",
     "loading": "Laddar...",
-    "acceptPrefix": "Jag är minst 18 år (eller har samtycke från en vårdnadshavare) och godkänner",
+    "acceptPrefix": "Jag är minst 13 år, och har samtycke från en vårdnadshavare om jag är under 18. Jag godkänner",
     "acceptTerms": "användarvillkoren",
     "acceptAnd": "och",
     "acceptPrivacy": "integritetspolicyn"
@@ -241,7 +246,7 @@
     "monthDec": "dec"
   },
   "Datakilder": {
-    "metaTitle": "Datakällor — Mycelet",
+    "metaTitle": "Datakällor",
     "metaDescription": "Öppna datakällor och licenser som driver Mycelets svampkarta och prediktioner.",
     "heading": "Datakällor",
     "intro": "Mycelet är byggt på öppna, offentliga data. Svampkartan och prediktionerna hade inte varit möjliga utan dessa källor — stort tack till institutionerna och alla som rapporterar fynd. Här är vad vi använder, och under vilka licenser.",
@@ -262,7 +267,7 @@
   },
   "ForumModeration": {
     "title": "Moderering",
-    "accessHint": "Om denna sida ger åtkomstfel saknar användaren moderatorrättigheter/RLS-policy för globala rapporter.",
+    "noAccess": "Du har inte behörighet till modereringssidan. Din roll måste vara moderator eller admin.",
     "loading": "Laddar rapporter...",
     "loadError": "Kunde inte hämta rapporter (sannolikt RLS-begränsning).",
     "statusLabel": "Status:",
@@ -351,7 +356,10 @@
     "analyzing": "Analyserar bild...",
     "identifyFailed": "Identifieringen misslyckades",
     "couldNotGetImage": "Kunde inte hämta bild.",
-    "networkError": "Kunde inte nå servern. Kontrollera täckningen och försök igen."
+    "networkError": "Kunde inte nå servern. Kontrollera täckningen och försök igen.",
+    "quotaHeading": "Du har använt upp dagens gratis AI-identifieringar",
+    "quotaComeBackTomorrow": "Vänta till i morgon — kvoten nollställs efter 24 timmar",
+    "quotaSeePlans": "Se abonnemang"
   },
   "IdentifyResult": {
     "errorNotLoggedIn": "Du måste vara inloggad för att spara fynd.",
@@ -377,16 +385,23 @@
     "acknowledgeLabel": "Jag förstår att detta inte är en ätlighetsgaranti, och jag äter aldrig svamp utan att få den bekräftad av en expert.",
     "matchLabel": "bildlikhet",
     "notFoodAssessed": "Inte matbedömd",
-    "safetyDataIncomplete": "Vi kunde inte hämta säkerhetsdatan för de här förslagen just nu. Att det inte står någon varning här betyder därför INTE att arten är säker — det betyder att vi inte fick kontrollerat. Öppna artsidan och kontrollera förväxlingsarter manuellt, eller försök igen om en stund."
+    "safetyDataIncomplete": "Vi kunde inte hämta säkerhetsdatan för de här förslagen just nu. Att det inte står någon varning här betyder därför INTE att arten är säker — det betyder att vi inte fick kontrollerat. Öppna artsidan och kontrollera förväxlingsarter manuellt, eller försök igen om en stund.",
+    "sharingLevel": "Delningsnivå",
+    "sharingPublic": "Exakt punkt (offentlig)",
+    "sharingApproximate": "Ungefärlig (±500m)",
+    "sharingPrivate": "Privat",
+    "sharingHelp": "Så hamnar fyndet på kartan. ”Ungefärlig” visas för alla, men flyttat upp till 500 m från den riktiga platsen. ”Privat” visas bara för dig."
   },
   "MineSteder": {
-    "metaTitle": "Mina platser — Mycelet",
+    "metaTitle": "Mina platser",
     "unknownSpecies": "Okänd art",
     "nearPlace": "Plats nära {lat}, {lng}",
     "onlyVisibleToYou": "Bara synlig för dig",
     "heading": "Mina platser",
     "intro": "Dina svampplatser, samlade på ett ställe — även de hemliga.",
     "summary": "{finds} fynd fördelade på {places} platser.",
+    "loadErrorHeading": "Kunde inte ladda dina platser",
+    "loadErrorBody": "Något gick fel när vi hämtade dina fynd. Platserna är inte borta — ladda om sidan om en stund.",
     "emptyHeading": "Inga platser ännu",
     "emptyBody": "När du loggar fynd bygger Mycelet automatiskt din privata översikt över var du hittar svamp — år efter år.",
     "identifyFinding": "Identifiera ett fynd",
@@ -461,7 +476,8 @@
     "inSeasonAtPeak": "toppsäsong",
     "inSeasonInSeason": "i säsong",
     "inSeasonSeeAll": "Se alla →",
-    "inSeasonDangerous": "{count, plural, =1 {# giftig art är också i säsong nu} other {# giftiga arter är också i säsong nu}} — läs på innan du plockar"
+    "inSeasonDangerous": "{count, plural, =1 {# giftig art är också i säsong nu} other {# giftiga arter är också i säsong nu}} — läs på innan du plockar",
+    "communityUnverifiedNote": "Arterna är uppgivna av den som lade in fyndet och är inte kontrollerade av Mycelet."
   },
   "Personvern": {
     "title": "Integritetspolicy",
@@ -477,7 +493,7 @@
     "collectUsageTerm": "Användningsdata",
     "collectUsageDesc": "Svampfynd du registrerar (koordinater, art, datum, bilder, anteckningar), foruminlägg, kommentarer, gillamarkeringar, sparade inlägg.",
     "collectLocationTerm": "Positionsdata",
-    "collectLocationDesc": "GPS-koordinater från din mobil när du registrerar fynd, samt valfri hemregion. Vi visar endast grovt randomiserade eller rutnätsfästa koordinater för andra användare — aldrig exakt fyndplats.",
+    "collectLocationDesc": "GPS-koordinater från din mobil när du registrerar fynd, samt valfri hemregion. Hur exakt ett fynd visas för andra bestämmer du själv när du sparar det: ”Exakt punkt (offentlig)” visar din exakta punkt, ”Ungefärlig” flyttar punkten slumpmässigt upp till ±500 m, ”Zonfynd” fäster den mot ett grovt rutnät (1–50 km) och ”Privat” visas inte för andra alls. Väljer du exakt punkt delas alltså den exakta positionen — välj ungefärlig eller zon om du vill hålla platsen för dig själv.",
     "collectTechnicalTerm": "Tekniska data",
     "collectTechnicalDesc": "IP-adress, webbläsare och inloggningstidpunkt (samlas in av Supabase Auth för säkerhet och upptäckt av missbruk). Om du samtycker till analys samlar Google Analytics även in sidvisningar, ungefärlig plats (stads-/landsnivå), enhetstyp och utvalda användarhändelser. Bilder, exakta positioner, e-post och fritext skickas inte till Analytics.",
     "collectPaymentTerm": "Betalningsdata",
@@ -509,7 +525,9 @@
     "processorNibioLabel": "NIBIO (Norge)",
     "processorCorineLabel": "CORINE / EEA (Europa)",
     "processorForestDesc": "(skogs- och markdata för prediktion) — endast koordinater skickas, ingen användarinformation.",
-    "processorWikimediaDesc": "vi använder endast offentliga bild-URL:er; ingen användardata skickas.",
+    "processorMapTilesLabel": "Kartverket, OpenStreetMap-bidragsgivarna och Esri/ArcGIS Online",
+    "processorMapTilesDesc": "(bakgrundskartor: topografisk karta, gatukarta och satellitbilder) — kartrutorna hämtas direkt av din webbläsare, inte av våra servrar. Leverantören ser därför din IP-adress och vilket kartutsnitt du tittar på, inklusive utsnittet runt din egen position när kartan centreras på GPS. Vi skickar inte namn, konto eller dina fynd. Esri är amerikanskt; överföringen dit sker under EU:s standardavtalsklausuler (SCC).",
+    "processorWikimediaDesc": "artbilderna hämtas direkt av din webbläsare från Wikimedia, som då ser din IP-adress och vilken bild du öppnar. Vi skickar inga konto- eller positionsdata.",
     "retentionHeading": "5. Hur länge vi lagrar data",
     "retentionActiveLabel": "Aktivt konto:",
     "retentionActiveDesc": "så länge du har ett konto kan du själv radera enskilda fynd, foruminlägg och kommentarer.",
@@ -551,12 +569,15 @@
     "cookiesIntro": "Mycelet använder dessa strikt nödvändiga kakor:",
     "cookiesSessionLabel": "Inloggningssession (Supabase):",
     "cookiesSessionDesc": "kommer ihåg att du är inloggad så att du inte behöver logga in på varje sida.",
+    "cookiesLocaleLabel": "Språkval (MYCELET_LOCALE):",
+    "cookiesLocaleDesc": "kommer ihåg om du vill ha Mycelet på svenska eller norska. Sätts när du väljer språk och gäller i 12 månader.",
     "cookiesStripeLabel": "Stripe (endast vid betalning):",
-    "cookiesStripeDesc": "säkrar betalningsflödet och förhindrar bedrägeri.",
+    "cookiesStripeDesc": "vi sätter ingen Stripe-kaka på mycelet.com. Ska du betala skickas du till Stripes egen betalsida (checkout.stripe.com) — det är där Stripe sätter sina kakor, för att säkra betalningen och förhindra bedrägeri.",
     "cookiesOptionalIntro": "Om du väljer «Tillåt analys» använder vi dessutom:",
     "cookiesAnalyticsLabel": "Google Analytics (_ga):",
     "cookiesAnalyticsDesc": "hjälper oss att förstå sidvisningar och centrala produktflöden. Kakan löper ut senast efter 13 månader. Google Analytics laddas inte och inga analysdata skickas innan du samtycker.",
     "cookiesMarketing": "Vi använder inte marknadsföringskakor, annonspersonalisering eller Google Signals.",
+    "cookiesLocalStorage": "Dessutom sparar appen några praktiska val lokalt i din webbläsare (lokal lagring, inte kakor — de skickas aldrig till oss): ditt analysval, om du har sett introduktionen och karttipset, listan över fynd på turen du är på just nu, och vilka kartområden du har laddat ner för offlinebruk. Du tar bort dem genom att rensa webbläsardata för mycelet.com.",
     "cookiesManage": "Ändra analysval",
     "securityHeading": "9. Säkerhet",
     "securityHttps": "All trafik är krypterad med HTTPS.",
@@ -573,7 +594,7 @@
     "contactEmergencyBefore": "Vid akuta säkerhetshändelser, ring",
     "contactEmergencyAfter": "(dygnet runt).",
     "backToHome": "Tillbaka till startsidan",
-    "metaTitle": "Integritet — Mycelet",
+    "metaTitle": "Integritet",
     "metaDescription": "Hur Mycelet samlar in, använder och skyddar dina personuppgifter. Dina GDPR-rättigheter och vem du kan kontakta.",
     "supervisoryAuthorityName": "IMY (Integritetsskyddsmyndigheten)",
     "supervisoryAuthorityUrl": "https://www.imy.se",
@@ -583,7 +604,8 @@
     "processorAppleDesc": "(App Store) är säljare och betalningsmottagare för köp som görs i iOS-appen. Apple behandlar dina betalningsuppgifter som självständigt personuppgiftsansvarig enligt sin egen integritetspolicy, och vi tar aldrig emot kortuppgifter. Se:",
     "processorAppleNote": "Gäller endast köp som görs i appen. Köp på mycelet.com sker via Stripe.",
     "controllerNameEnk": "Sindre Øverås, som driver Mycelet genom den enskilda firman {legalName} (org.nr {orgNr}).",
-    "controllerNameAs": "{legalName} (org.nr {orgNr})."
+    "controllerNameAs": "{legalName} (org.nr {orgNr}).",
+    "cookiesNativeNoAnalytics": "I appen från App Store är analysverktyg helt avstängda, så det finns ingenting att välja bort här. Valet ovan gäller mycelet.com i webbläsare."
   },
   "Pricing": {
     "tierFree": "Gratis",
@@ -598,7 +620,7 @@
     "statusIncompleteExpired": "Utgången",
     "statusInactive": "Inaktiv",
     "freeTagline": "Kom igång tryggt",
-    "freeFeature1": "5 AI-identifieringar per dygn",
+    "freeFeature1": "{limit} AI-identifieringar per dygn",
     "freeFeature2": "Artbibliotek med förväxlingsvarningar",
     "freeFeature3": "Svampkarta, svampvarning, kalender och forum",
     "premiumTagline": "Flexibelt månad för månad",
@@ -612,14 +634,16 @@
     "perYear": "/år",
     "seasonLead": "Allt i Premium, plus:",
     "seasonFeature1": "Motsvarar {perMonth} kr/mån",
+    "seasonFeature1Native": "Lägre pris per månad än Premium",
     "seasonFeature2": "Billigare än en svampsäsong med Premium",
     "seasonFeature3": "Förnyas årligen — avsluta när som helst",
     "faq1Q": "Vad är skillnaden på Premium och Säsongspass?",
     "faq1A": "Funktionerna är desamma. Premium betalas månadsvis och kan stoppas efter en månad. Säsongspass är ett belopp om året ({yearly} kr) — billigare än att betala Premium genom hela svampsäsongen, och du slipper tänka på det resten av året.",
+    "faq1ANative": "Funktionerna är desamma. Premium betalas månadsvis och kan stoppas efter en månad. Säsongspass är ett belopp om året — billigare än att betala Premium genom hela svampsäsongen, och du slipper tänka på det resten av året. Priset står på kortet ovan, så som App Store visar det för ditt konto.",
     "faq2Q": "Kan jag avsluta när som helst?",
     "faq2A": "Ja. Du hanterar prenumerationen själv från den här sidan (”Hantera prenumeration”). Åtkomsten gäller ut perioden du redan har betalat för, och du debiteras inte mer.",
     "faq3Q": "Vad får jag gratis?",
-    "faq3A": "Kärnan i Mycelet är gratis: artbiblioteket med förväxlingsvarningar, svampkartan, svampvarningen, kalendern, forumet — och 5 AI-identifieringar per dygn.",
+    "faq3A": "Kärnan i Mycelet är gratis: artbiblioteket med förväxlingsvarningar, svampkartan, svampvarningen, kalendern, forumet — och {limit} AI-identifieringar per dygn.",
     "faq4Q": "Fungerar Mycelet i Sverige?",
     "faq4A": "Ja. Karta, väderdata, fynd och prediktion täcker både Norge och Sverige.",
     "checkoutSuccess": "Betalning slutförd. Uppdaterar prenumeration...",
@@ -654,6 +678,7 @@
     "planNeedsPayment": "Betalningen för {plan} gick inte igenom, så åtkomsten är pausad. Uppdatera betalkortet under ”Hantera prenumeration”, eller välj en plan nedan.",
     "choosePlan": "Välj {plan}",
     "priceNote": "Priserna är i norska kronor och inkluderar moms. Du kan byta eller avsluta när som helst.",
+    "priceNoteNative": "Priset sätts av App Store i den valuta ditt konto använder och inkluderar moms. Du kan byta eller avsluta när som helst under Prenumerationer i App Store.",
     "faqHeading": "Vanliga frågor",
     "goToProfile": "Gå till din profil →",
     "loading": "Laddar...",
@@ -720,7 +745,7 @@
     "seeAlsoPrefix": "Se även:",
     "privacyLinkText": "Integritetspolicyn",
     "seeAlsoSuffix": "för hur vi behandlar dina uppgifter.",
-    "metaTitle": "Säkerhet och ansvar — Mycelet",
+    "metaTitle": "Säkerhet och ansvar",
     "metaDescription": "Så använder du Mycelet säkert. Kontaktinfo till Giftinformationscentralen och svampkontroll vid behov."
   },
   "SpeciesDetail": {
@@ -761,7 +786,9 @@
     "noImage": "Ingen bild",
     "dangerPrefix": "Fara:",
     "howToTellApart": "Hur man skiljer:",
-    "lookAlikesUnavailable": "Vi kunde inte hämta förväxlingsarterna för den här arten just nu. Att det inte står några farliga förväxlingar här betyder därför INTE att det inte finns några. Ladda om sidan, eller låt svampen bedömas av svampkontroll innan du äter den."
+    "lookAlikesUnavailable": "Vi kunde inte hämta förväxlingsarterna för den här arten just nu. Att det inte står några farliga förväxlingar här betyder därför INTE att det inte finns några. Ladda om sidan, eller låt svampen bedömas av svampkontroll innan du äter den.",
+    "seasonNote": "Säsongsfönstret visar när arten normalt går att hitta i Norden — det säger ingenting om förhållandena just nu. Kartan bedömer dagens förhållanden där du är.",
+    "lookAlikesNoneRecorded": "Vi har ännu inte fört in några förväxlingsarter för den här arten. Att det inte står någon varning här betyder INTE att arten är säker att plocka — det betyder att vi inte har någon täckning att lova. Låt alltid svampen bedömas av svampkontroll eller en expert innan du äter."
   },
   "Species": {
     "edibilityAll": "Alla",
@@ -777,7 +804,9 @@
     "inSeasonOnly": "Endast i säsong nu",
     "loading": "Laddar arter...",
     "loadError": "Kunde inte hämta arter.",
-    "noMatches": "Inga arter matchar dina filter."
+    "noMatches": "Inga arter matchar dina filter.",
+    "edibilityConditional": "Villkorligt ätlig",
+    "edibilityInedible": "Oätlig"
   },
   "SeasonNow": {
     "peakSeason": "Toppsäsong",
@@ -990,18 +1019,21 @@
     "allSpecies": "Alla arter",
     "calculatingConditions": "Beräknar förhållanden...",
     "predictionError": "Kunde inte hämta prediktion.",
-    "freeLimited": "Gratis visar förenklad prediktion.",
-    "upgradeVegetation": "Uppgradera för fullständig vegetationsanalys",
+    "freeLimited": "Premium ger lovande platser med motivering, svampbilder på kartan och offlinekarta.",
+    "upgradeVegetation": "Se vad Premium ger",
     "why": "Varför",
-    "hotspotsMarked": "{count, plural, =1 {# starkt område markerat på kartan (de ljusa fälten).} other {# starka områden markerade på kartan (de ljusa fälten).}}",
+    "hotspotsMarked": "{count, plural, =1 {# område markerat på kartan (de ljusa fälten).} other {# områden markerade på kartan (de ljusa fälten).}}",
     "noHotspots": "Inga tydliga hotspots i valt område.",
     "sources": "Källor: {credit}",
+    "noPlaceData": "Vi har varken skogsdata eller en förberäknad karta för just den här platsen. Siffran vilar därför bara på väder och säsong — inte på vilken mark du står på.",
     "habitatDisclaimer": "Områden som matchar habitat och väderfönster — ingen garanti för att det finns svamp där.",
     "hideTechnicalDetails": "Dölj tekniska detaljer",
     "showTechnicalDetails": "Visa tekniska detaljer",
-    "environment": "Miljö: {value}",
-    "history": "Historik: {value}",
-    "season": "Säsong: {value}",
+    "environment": "Miljö: {value}/{max}",
+    "history": "Historik: {value}/{max}",
+    "season": "Säsong: {value}/{max}",
+    "componentsNote": "Modellens tre delvärden, vart och ett med sitt eget maxvärde. Historik räknar registrerade fynd nära punkten — den är ofta 0 även om det finns gamla observationer i området. Delvärdena summerar inte till siffran ovan.",
+    "componentsUnavailable": "Uppdelningen är inte tillgänglig för det här svaret — kartan visar bara den lagrade totalen per ruta.",
     "model": "Modell: {version}",
     "scaleNote": "av 100 · räknas ut på annat sätt än siffran på startsidan, så de kan inte jämföras direkt"
   },
@@ -1010,7 +1042,8 @@
     "activeCount": "{count} aktiva",
     "closeFilters": "Stäng filter",
     "searchPlace": "Sök efter plats",
-    "searchPlacePlaceholder": "Nordmarka, Trondheim …",
+    "searchPlacePlaceholder": "Tiveden, Göteborg …",
+    "noPlaceResults": "Hittade inga platser. Mycelet täcker Norge och Sverige.",
     "speciesSearch": "Art (sök)",
     "speciesSearchPlaceholder": "Kantarell",
     "resetSpecies": "Återställ art",
@@ -1063,6 +1096,9 @@
     "monthDec": "dec.",
     "mushroomFallback": "Svamp",
     "registeredFinding": "Registrerat fynd",
+    "speciesEdibility": "Arten räknas som: {label}",
+    "speciesEdibilityNote": "Gäller arten — inte svampen du eventuellt hittar här. Artbestäm alltid själv, och ät aldrig svamp du är osäker på.",
+    "historicalFindingNote": "Historisk observation — säger inte att det står svamp här nu.",
     "openInMap": "📍 Öppna i karta",
     "tripDoneWithSpecies": "Fin tur! Du registrerade {count} fynd 🍄 ({species})",
     "tripDone": "Fin tur! Du registrerade {count} fynd 🍄",
@@ -1080,7 +1116,7 @@
     "hideFindingsAtLeast": "Dölj fynd (minst {count})",
     "findingsTruncated": "Vi har hämtat {count} fynd här — det finns fler. Zooma in för att se alla. Filtren gäller bara de hämtade fynden.",
     "hideFindings": "Dölj fynd",
-    "findingsButton": "📍 Fynd",
+    "findingsButton": "📍 Visa fynd",
     "searching": "Söker…",
     "hideSpots": "Dölj platser",
     "promisingSpotsButton": "⭐ Lovande platser",
@@ -1114,12 +1150,16 @@
     "goTo": "Gå till",
     "delete": "Radera",
     "noSavedAreas": "Inga sparade områden än.",
+    "storageUsage": "Mycelet använder ungefär {mb} MB på den här enheten (kartrutor och appdata).",
+    "storageUsageUnknown": "Webbläsaren uppger inte hur mycket lagring appen använder.",
+    "clearTileCache": "Töm kartcachen",
+    "offlineCacheCleared": "Kartcachen är tömd. Sparade områden måste laddas ner på nytt inför nästa tur.",
     "openOfflineMap": "Öppna offlinekartan",
     "offlineShellHint": "Utan täckning öppnar appen offlinekartan av sig själv, med de sparade områdena.",
     "findMyPosition": "Hitta min position",
     "addFinding": "Lägg till fynd",
     "introTitle": "👋 Välkommen till svampkartan!",
-    "introFindings": "<b>Visa registrerade fynd</b> — äkta svampfynd, färgkodade efter ätlighet (🟢 ätlig, 🔴 giftig).",
+    "introFindings": "<b>Visa fynd</b> (knappen högst upp) — över 300 000 äkta, registrerade svampfynd från Artdatabanken/GBIF, färgkodade efter ätlighet (🟢 ätlig, 🔴 giftig). Lagret är avstängt tills du slår på det.",
     "introSpots": "<b>Lovande platser</b> — där förhållanden, säsong och skogstyp passar bäst just nu (utifrån data, inte ett facit), med motivering.",
     "introSatellite": "Byt till <b>Satellit</b> (uppe till höger) för att se skogen ovanifrån.",
     "introLocate": "📍-knappen längst ner till höger hittar <b>din position</b>.",
@@ -1139,13 +1179,15 @@
     "groupPlaces": "Platser",
     "forecastLoading": "Hämtar utsikten …",
     "forecastBestDay": "Bäst {day}: {score}/100",
+    "forecastEvenWeek": "Jämnt hela veckan: {score}/100 — ingen dag sticker ut.",
     "forecastUnavailable": "Hittade ingen utsikt för denna plats.",
     "searchPlaceOnly": "Sök plats — t.ex. «Sälen»",
     "forecastToday": "I dag",
     "forecastConditionsThisWeek": "svampförhållanden denna vecka",
     "hotspotTooltip": "Svampförhållanden {score}/100",
     "hotspotTooltipBest": "Bäst nu: {species} {score}/100",
-    "hotspotTooltipSpecies": "{species} {score}/100"
+    "hotspotTooltipSpecies": "{species} {score}/100",
+    "hotspotTooltipArea": "Gäller hela rutan — inte en bestämd punkt i den."
   },
   "OnboardingIntro": {
     "step1Title": "Välkommen till Mycelet",
@@ -1238,7 +1280,8 @@
     "notProvided": "Ej angivet",
     "zoneFinding": "Zonfynd ({km} km rutnät)",
     "zoneFindingLabeled": "Zonfynd: {label} ({km} km rutnät)",
-    "seeMore": "Se mer"
+    "seeMore": "Se mer",
+    "unverifiedClaim": "Uppgiven art — inte verifierad"
   },
   "MushroomMapLazy": {
     "loadingMap": "Laddar karta..."
@@ -1261,8 +1304,30 @@
     "title": "Din senaste svamptur",
     "found": "{count} fynd"
   },
+  "NotFound": {
+    "title": "Sidan hittades inte",
+    "body": "Länken kan vara inaktuell, eller så finns sidan inte längre. Prova startsidan eller sök i svampbiblioteket.",
+    "goHome": "Till startsidan",
+    "goSpecies": "Till svampbiblioteket"
+  },
+  "ErrorPage": {
+    "title": "Något gick fel",
+    "body": "Vi kunde inte visa den här sidan. Försök igen — fungerar det fortfarande inte, prova om en stund.",
+    "retry": "Försök igen",
+    "goHome": "Till startsidan",
+    "reference": "Felreferens: {digest}"
+  },
+  "SafetyNote": {
+    "badgeMeansSpecies": "Ätlighetsmärket gäller arten — inte svampen du håller i. Artbestäm alltid säkert själv, och låt kontrollera den om du är osäker.",
+    "readSafety": "Läs säkerhetsråden"
+  },
   "Safety": {
     "poisonTel": "112",
+    "poisonAcuteLabel": "112 (akut)",
+    "poisonTelDirect": "+46104566700",
+    "poisonDirectLabel": "010-456 67 00",
+    "poisonOr": "eller",
+    "poisonName": "Giftinformationscentralen",
     "poisonNumber": "112 (akut) eller 010-456 67 00",
     "poisonDisplay": "Giftinformationscentralen: 112 (akut) eller 010-456 67 00",
     "emergencyTel": "112",
@@ -1375,7 +1440,7 @@
     "forestMeadowSpecies": "Parasollskivling och champinjoner — se upp för vit flugsvamp!",
     "pricingHeading": "Priser",
     "planFree": "Gratis",
-    "planFreeF1": "5 AI-identifieringar per dygn",
+    "planFreeF1": "{limit} AI-identifieringar per dygn",
     "planFreeF2": "Svampkarta, prognos och kalender",
     "planFreeF3": "Artbibliotek med varningar",
     "planPremium": "Premium",
@@ -1394,7 +1459,7 @@
     "safetyBody": "Ät aldrig svamp du inte är 100 % säker på. Mycelet är ett hjälpmedel, inte ett facit — AI-förslag ska alltid dubbelkollas, och appen visar alltid farliga förväxlingsarter. Är du osäker, ta med svampen till en svampkonsulent.",
     "faqHeading": "Frågor och svar",
     "faqFreeQ": "Är appen gratis?",
-    "faqFreeA": "Ja — du kan använda svampkarta, prognos, kalender, artbibliotek och 5 AI-identifieringar per dygn helt gratis, utan kortuppgifter. Premium ger obegränsad AI, full prediktion och offlinekartor.",
+    "faqFreeA": "Ja — du kan använda svampkarta, prognos, kalender, artbibliotek och {limit} AI-identifieringar per dygn helt gratis, utan kortuppgifter. Premium ger obegränsad AI, full prediktion och offlinekartor.",
     "faqSwedenQ": "Fungerar den i Sverige?",
     "faqSwedenA": "Ja! Väderdata från SMHI, svenska skogsdata och svenskt språk i appen. Kartan och prognosen fungerar i hela Sverige och Norge.",
     "faqAiQ": "Kan jag lita blint på AI-identifieringen?",
@@ -1468,7 +1533,13 @@
     "termsLink": "Användarvillkor",
     "purchaseTermsLink": "Köpvillkor",
     "privacyLink": "Integritetspolicy",
-    "metaTitle": "Kontakt — Mycelet",
+    "metaTitle": "Kontakt",
     "metaDescription": "Kontaktuppgifter och företagsinformation för Mycelet."
+  },
+  "ForumBadge": {
+    "expert": "Expert",
+    "community": "Gemenskapsverifierad",
+    "moderator": "Moderator",
+    "trusted": "Verifierad plockare"
   }
 }

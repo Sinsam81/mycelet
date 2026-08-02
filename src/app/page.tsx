@@ -15,6 +15,7 @@ import type { Edibility } from '@/types/species';
 import { getSpeciesDisplayName } from '@/lib/utils/species-name';
 import { baseSeasonMask, isMonthInMask, peakMask } from '@/lib/utils/season-region';
 import { intlLocale } from '@/lib/utils/intl-locale';
+import { logger } from '@/lib/log';
 
 type HomeTranslator = Awaited<ReturnType<typeof getTranslations<'Home'>>>;
 
@@ -145,12 +146,18 @@ export default async function HomePage() {
 
   let userStats: { total: number; species: number } | null = null;
   if (user) {
-    const { data: myFindings } = await supabase
+    const { data: myFindings, error: myFindingsError } = await supabase
       .from('findings')
       .select('species_id')
       .eq('user_id', user.id)
       .eq('is_negative_observation', false)
       .limit(1000);
+    // Statistikkortet forsvinner uansett hvis spørringa feiler (userStats
+    // forblir null), men da skal det i det minste stå i loggen — ellers ser en
+    // spørrefeil nøyaktig ut som «brukeren har ingen funn».
+    if (myFindingsError) {
+      logger.error('home.user_findings_failed', { userId: user.id, message: myFindingsError.message });
+    }
     const rows = (myFindings ?? []) as { species_id: number | null }[];
     if (rows.length > 0) {
       userStats = {
@@ -369,6 +376,10 @@ export default async function HomePage() {
                 </li>
               ))}
             </ul>
+            {/* Spiselighetsmerket over kommer fra artskatalogen, altså «arten
+                som ble OPPGITT er spiselig» — ikke «dette funnet er riktig
+                bestemt». Ingenting kontrollerer artspåstanden i dag. */}
+            <p className="mt-3 text-xs text-gray-500">{t('communityUnverifiedNote')}</p>
           </article>
         ) : null}
 

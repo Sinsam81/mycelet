@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { timingSafeEqual, createHash } from 'crypto';
 import { createAdminClient } from '@/lib/supabase/admin';
 import {
   RevenueCatWebhookBody,
@@ -13,6 +12,7 @@ import {
 } from '@/lib/billing/revenuecat';
 import { hasPaidAccess, BillingStatus, BillingTier } from '@/lib/billing/plans';
 import { createRequestLogger } from '@/lib/log/request';
+import { secretsMatch } from '@/lib/security/secret-compare';
 
 /**
  * RevenueCat webhook — IAP purchases (Apple now, Google later) land in the
@@ -47,13 +47,9 @@ import { createRequestLogger } from '@/lib/log/request';
 export const runtime = 'nodejs';
 
 function authorized(request: NextRequest): boolean {
-  const expected = process.env.REVENUECAT_WEBHOOK_AUTH;
-  if (!expected) return false;
-  const received = request.headers.get('authorization') ?? '';
-  // Hash both sides: constant compare length regardless of input length.
-  const a = createHash('sha256').update(received).digest();
-  const b = createHash('sha256').update(expected).digest();
-  return timingSafeEqual(a, b);
+  // Konstant tid, felles hjelper — samme sjekk som cron-rutene bruker.
+  // Se src/lib/security/secret-compare.ts.
+  return secretsMatch(request.headers.get('authorization'), process.env.REVENUECAT_WEBHOOK_AUTH);
 }
 
 interface ExistingBillingRow {

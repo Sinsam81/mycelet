@@ -23,7 +23,7 @@
 | Stripe webhook-events (`billing_webhook_events`) | **2 år**                          | Debug-historikk; sjelden trengt etter et år               |
 | Backups (Supabase point-in-time)        | **30 dager** (Supabase-default)          | Recovery-vindu for ulykker; ikke aktiv lagring             |
 | Server-logger (Vercel)                  | **30 dager** (Vercel-default)            | Standard for incident-debugging                            |
-| `prediction_tiles` (genererte)          | **Roller daglig** — overskrives          | Ikke persondata, ingen bevarings-grunn                     |
+| `prediction_tiles` (genererte)          | **30 dager** — eldre rader slettes av `/api/cron/generate-tiles` | Ikke persondata. Bare dagens dato leses; vinduet finnes for feilsøking |
 | Geolokasjon ved funn                    | **`display_latitude/longitude`** (jittered til ±500 m) brukes til API-respons | Råkoordinater kun synlig for eier — privacy-by-design |
 
 ## Tre beslutninger — låst 9. mai 2026

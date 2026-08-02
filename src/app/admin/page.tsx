@@ -77,11 +77,31 @@ export default async function AdminDashboardPage() {
     );
   }
 
-  const { data: roleRow } = await supabase
+  const { data: roleRow, error: roleError } = await supabase
     .from('moderator_roles')
     .select('role')
     .eq('user_id', user.id)
     .maybeSingle();
+
+  // En forbigående spørrefeil er ikke det samme som «du er ikke admin». Uten
+  // denne grenen fikk en ekte admin «du trenger en rad i moderator_roles», og
+  // feilsøkingen startet dermed på helt feil sted. Mønsteret er hentet fra
+  // admin/prediction/page.tsx, som gjorde dette riktig fra før.
+  if (roleError) {
+    return (
+      <PageWrapper>
+        <article className="rounded-xl border-2 border-red-300 bg-red-50 p-4">
+          <div className="flex items-start gap-3">
+            <ShieldAlert className="h-6 w-6 shrink-0 text-red-700" />
+            <div>
+              <p className="text-base font-bold text-red-900">{t('accessValidationErrorTitle')}</p>
+              <p className="text-sm text-red-900">{t('accessValidationErrorBody', { message: roleError.message })}</p>
+            </div>
+          </div>
+        </article>
+      </PageWrapper>
+    );
+  }
 
   const role = roleRow?.role ?? null;
   if (role !== 'admin' && role !== 'moderator') {
@@ -138,6 +158,37 @@ export default async function AdminDashboardPage() {
   const WEEK = iso(7 * 864e5);
   const MONTH = iso(30 * 864e5);
 
+  /**
+   * Kontoer, telt der de faktisk finnes: auth.users.
+   *
+   * «Brukere totalt» var `count(profiles)`. Profilraden lages av appen etter
+   * registrering, ikke av Postgres, så en konto uten profilrad ble usynlig —
+   * i den ENESTE tavla som skulle avslørt at slike kontoer finnes. Kohortene
+   * («nye denne uken/måneden») var verre: de telte profiles.created_at, som kan
+   * ligge uker etter selve registreringen.
+   *
+   * Vi teller derfor auth.users her, og viser profiles-tallet ved siden av som
+   * «med profil» — da blir et avvik et varsel i stedet for en skjult feil.
+   */
+  const fetchAccounts = async () => {
+    const perPage = 1000;
+    const createdAt: string[] = [];
+    // Bevisst tak: 50 000 kontoer. Ved den grensen skal dette uansett være en
+    // SQL-spørring mot auth.users, ikke sidevis henting i en sidevisning.
+    for (let page = 1; page <= 50; page++) {
+      const { data, error } = await admin.auth.admin.listUsers({ page, perPage });
+      if (error) return null;
+      const users = data?.users ?? [];
+      for (const u of users) if (u.created_at) createdAt.push(u.created_at);
+      if (users.length < perPage) break;
+    }
+    return {
+      total: createdAt.length,
+      week: createdAt.filter((d) => d >= WEEK).length,
+      month: createdAt.filter((d) => d >= MONTH).length
+    };
+  };
+
   const fetchBilling = async () => {
     const { data } = await admin.from('billing_subscriptions').select('tier,status');
     const rows = data ?? [];
@@ -190,9 +241,8 @@ export default async function AdminDashboardPage() {
   };
 
   const [
-    usersTotal,
-    usersWeek,
-    usersMonth,
+    accounts,
+    profilesTotal,
     findTotal,
     findWeek,
     findMonth,
@@ -219,9 +269,8 @@ export default async function AdminDashboardPage() {
     forumCategories,
     topSpecies
   ] = await Promise.all([
+    fetchAccounts(),
     c('profiles'),
-    c('profiles', (q) => q.gte('created_at', WEEK)),
-    c('profiles', (q) => q.gte('created_at', MONTH)),
     c('findings'),
     c('findings', (q) => q.gte('created_at', WEEK)),
     c('findings', (q) => q.gte('created_at', MONTH)),
@@ -270,10 +319,22 @@ export default async function AdminDashboardPage() {
 
         <Section title={t('sectionUsers')} icon={Users}>
           <Grid>
-            <StatCard label={t('usersTotal')} value={usersTotal} />
-            <StatCard label={t('newWeek')} value={usersWeek} />
-            <StatCard label={t('newMonth')} value={usersMonth} />
+            <StatCard label={t('usersTotal')} value={accounts?.total ?? null} />
+            <StatCard label={t('newWeek')} value={accounts?.week ?? null} />
+            <StatCard label={t('newMonth')} value={accounts?.month ?? null} />
             <StatCard label={t('paying')} value={billing.paid} tone={billing.paid > 0 ? 'good' : 'default'} />
+          </Grid>
+          {/* Avviket skal være synlig. Hver konto SKAL ha en profilrad; står
+              det et lavere tall her, er det kontoer registreringen ikke fikk
+              fullført — og de er ellers usynlige overalt i appen. */}
+          <Grid>
+            <StatCard
+              label={t('usersWithProfile')}
+              value={profilesTotal}
+              tone={
+                accounts != null && profilesTotal != null && profilesTotal < accounts.total ? 'warn' : 'default'
+              }
+            />
           </Grid>
           <Grid>
             <StatCard label={t('premium')} value={billing.byTier.premium ?? 0} icon={CreditCard} />

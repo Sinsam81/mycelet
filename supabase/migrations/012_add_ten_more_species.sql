@@ -18,6 +18,22 @@
 BEGIN;
 
 -- ---------------------------------------------------------------
+-- 0a. Kolonnen INSERT-en under skriver til, men som ingen migrasjon oppretter.
+--
+--     `primary_image_url` ble lagt til for hånd i SQL-editoren i produksjon og
+--     ble aldri skrevet ned som en migrasjon. Den finnes derfor i den levende
+--     basen, men IKKE i CREATE TABLE i 001. En ny base bygget 001→038 stoppet
+--     her med «column "primary_image_url" of relation "mushroom_species" does
+--     not exist» — som rammer katastrofegjenoppretting, enhver framtidig
+--     staging-instans og en overlevering til en annen utvikler.
+--
+--     IF NOT EXISTS gjør dette til et null-operativt trinn mot produksjon, der
+--     kolonnen allerede finnes. Samme setning står øverst i 017, som skriver
+--     til den samme kolonnen.
+-- ---------------------------------------------------------------
+ALTER TABLE mushroom_species ADD COLUMN IF NOT EXISTS primary_image_url TEXT;
+
+-- ---------------------------------------------------------------
 -- 0. Data fix: the existing "Sandsopp" row is actually Suillus bovinus,
 --    whose correct Norwegian name is "Seig kusopp". The real Sandsopp
 --    (Suillus variegatus) is added below.

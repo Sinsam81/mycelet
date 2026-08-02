@@ -6,8 +6,10 @@ import { useSearchParams } from 'next/navigation';
 import { useLocale, useTranslations } from 'next-intl';
 import { Check, Crown, Leaf, Loader2, ShieldCheck, Undo2 } from 'lucide-react';
 import { PageWrapper } from '@/components/layout/PageWrapper';
-import { BILLING_PLANS } from '@/lib/billing/plans';
+import { BILLING_PLANS, FREE_DAILY_AI_LIMIT } from '@/lib/billing/plans';
 import { canPurchasePlan, getBlockingPaidPlan, getPlanViewState } from '@/lib/billing/plan-state';
+import { seasonPriceComesFromStore, showsStorePrices } from '@/lib/billing/store-pricing';
+import { statusLabel, tierLabel } from '@/lib/billing/labels';
 import { useIsNative } from '@/lib/hooks/useIsNative';
 import { trackEvent } from '@/lib/analytics';
 import { createClient } from '@/lib/supabase/client';
@@ -56,87 +58,12 @@ function PricingInner() {
   const locale = useLocale();
   const searchParams = useSearchParams();
 
+  // Nøklene ligger i src/lib/billing/labels.ts, delt med profilsiden.
   const TIER_LABELS: Record<'free' | 'premium' | 'season_pass', string> = {
-    free: t('tierFree'),
-    premium: t('tierPremium'),
-    season_pass: t('tierSeasonPass')
+    free: tierLabel('free', t),
+    premium: tierLabel('premium', t),
+    season_pass: tierLabel('season_pass', t)
   };
-
-  const STATUS_LABELS: Record<string, string> = {
-    active: t('statusActive'),
-    trialing: t('statusTrialing'),
-    past_due: t('statusPastDue'),
-    canceled: t('statusCanceled'),
-    unpaid: t('statusUnpaid'),
-    incomplete: t('statusIncomplete'),
-    incomplete_expired: t('statusIncompleteExpired'),
-    inactive: t('statusInactive')
-  };
-
-  const planCards = [
-    {
-      id: 'free',
-      title: t('tierFree'),
-      tagline: t('freeTagline'),
-      price: '0 kr',
-      period: '',
-      lead: null,
-      features: [
-        t('freeFeature1'),
-        t('freeFeature2'),
-        t('freeFeature3')
-      ],
-      highlight: false
-    },
-    {
-      id: 'premium',
-      title: t('tierPremium'),
-      tagline: t('premiumTagline'),
-      price: `${PREMIUM_MONTHLY} kr`,
-      period: t('perMonth'),
-      lead: t('premiumLead'),
-      features: [
-        t('premiumFeature1'),
-        t('premiumFeature2'),
-        t('premiumFeature3'),
-        t('premiumFeature4')
-      ],
-      highlight: false
-    },
-    {
-      id: 'season_pass',
-      title: t('tierSeasonPass'),
-      tagline: t('seasonTagline'),
-      price: `${SEASON_YEARLY} kr`,
-      period: t('perYear'),
-      lead: t('seasonLead'),
-      features: [
-        t('seasonFeature1', { perMonth: SEASON_PER_MONTH }),
-        t('seasonFeature2'),
-        t('seasonFeature3')
-      ],
-      highlight: true
-    }
-  ] as const;
-
-  const faqItems = [
-    {
-      q: t('faq1Q'),
-      a: t('faq1A', { yearly: SEASON_YEARLY })
-    },
-    {
-      q: t('faq2Q'),
-      a: t('faq2A')
-    },
-    {
-      q: t('faq3Q'),
-      a: t('faq3A')
-    },
-    {
-      q: t('faq4Q'),
-      a: t('faq4A')
-    }
-  ];
 
   const [loadingPlan, setLoadingPlan] = useState<'premium' | 'season_pass' | null>(null);
   const [openingPortal, setOpeningPortal] = useState(false);
@@ -167,6 +94,78 @@ function PricingInner() {
   }, []);
 
   const iapReady = (iapOffers?.length ?? 0) > 0;
+
+  // Er det App Store som setter prisen, kan ikke teksten rundt kortet fortsette
+  // å love Stripe-prisen i norske kroner. Da hadde det stått «kr 269,00 /år» i
+  // kortet, «Tilsvarer 21 kr/mnd» rett under og «(249 kr)» i FAQ-en — tre
+  // priser på samme skjerm, og feil valuta for en svensk App Store-konto.
+  const storePrices = showsStorePrices({ native, offers: iapOffers });
+  const seasonPriceFromStore = seasonPriceComesFromStore({ native, offers: iapOffers });
+
+  const planCards = [
+    {
+      id: 'free',
+      title: t('tierFree'),
+      tagline: t('freeTagline'),
+      price: '0 kr',
+      period: '',
+      lead: null,
+      features: [
+        t('freeFeature1', { limit: FREE_DAILY_AI_LIMIT }),
+        t('freeFeature2'),
+        t('freeFeature3')
+      ],
+      highlight: false
+    },
+    {
+      id: 'premium',
+      title: t('tierPremium'),
+      tagline: t('premiumTagline'),
+      price: `${PREMIUM_MONTHLY} kr`,
+      period: t('perMonth'),
+      lead: t('premiumLead'),
+      features: [
+        t('premiumFeature1'),
+        t('premiumFeature2'),
+        t('premiumFeature3'),
+        t('premiumFeature4')
+      ],
+      highlight: false
+    },
+    {
+      id: 'season_pass',
+      title: t('tierSeasonPass'),
+      tagline: t('seasonTagline'),
+      price: `${SEASON_YEARLY} kr`,
+      period: t('perYear'),
+      lead: t('seasonLead'),
+      features: [
+        seasonPriceFromStore ? t('seasonFeature1Native') : t('seasonFeature1', { perMonth: SEASON_PER_MONTH }),
+        t('seasonFeature2'),
+        t('seasonFeature3')
+      ],
+      highlight: true
+    }
+  ] as const;
+
+  const faqItems = [
+    {
+      q: t('faq1Q'),
+      a: seasonPriceFromStore ? t('faq1ANative') : t('faq1A', { yearly: SEASON_YEARLY })
+    },
+    {
+      q: t('faq2Q'),
+      a: t('faq2A')
+    },
+    {
+      q: t('faq3Q'),
+      a: t('faq3A', { limit: FREE_DAILY_AI_LIMIT })
+    },
+    {
+      q: t('faq4Q'),
+      a: t('faq4A')
+    }
+  ];
 
   useEffect(() => {
     if (!native || !isIapAvailable()) return;
@@ -416,7 +415,7 @@ function PricingInner() {
             <p className="text-xs uppercase tracking-wide text-gray-500">{t('yourPlan')}</p>
             <p className="mt-1 text-lg font-semibold text-forest-900">{TIER_LABELS[planView.activeTier]}</p>
             <p className="text-sm text-gray-700">
-              {STATUS_LABELS[status.capabilities.status] ?? status.capabilities.status}
+              {statusLabel(status.capabilities.status, t)}
               {status.subscription?.current_period_end
                 ? ` • ${t('renewsEnds', { date: new Date(status.subscription.current_period_end).toLocaleDateString(intlLocale(locale)) })}`
                 : ''}
@@ -581,7 +580,7 @@ function PricingInner() {
         ) : null}
 
         <p className="text-center text-xs text-gray-500">
-          {t('priceNote')}
+          {storePrices ? t('priceNoteNative') : t('priceNote')}
         </p>
 
         <article className="rounded-2xl bg-white p-4 shadow-card">

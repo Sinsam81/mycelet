@@ -6,6 +6,7 @@ const base: WeatherSummary = {
   source: 'met_frost',
   temperatureC: 15,
   humidityPct: 85,
+  humidityEstimated: false,
   rain3dMm: 1,
   rain7dMm: 2,
   rain14dMm: 3,

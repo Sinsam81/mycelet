@@ -29,8 +29,11 @@ test.describe('Tilgangskontroll — beskyttede sider sender til innlogging', () 
   const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? '';
   const isLocalDev = baseURL.includes('localhost') || baseURL.includes('127.0.0.1');
 
-  // /mine-steder gater på side-nivå (server `redirect()`) → virker i dev OG prod.
-  for (const path of ['/mine-steder']) {
+  // Disse gater på SIDE-nivå (server `redirect()`) → virker i dev OG prod.
+  // /map kom hit da den fikk sin egen vakt: gatingen hang tidligere utelukkende
+  // i middleware-matcheren, som er den ene låsen ingen av de andre beskyttede
+  // sidene stoler på alene.
+  for (const path of ['/mine-steder', '/map']) {
     test(`${path} redirecter uinnlogget til /auth/login`, async ({ page }) => {
       await page.goto(path);
       await expect(page).toHaveURL(/\/auth\/login/);
@@ -40,7 +43,7 @@ test.describe('Tilgangskontroll — beskyttede sider sender til innlogging', () 
   // Disse gater via middleware. Next/Turbopack kjører IKKE middleware i lokal dev
   // (verifisert: virker i prod). Derfor sjekkes de mot prod (npm run qa:prod) og
   // hoppes over lokalt — ellers falsk rød.
-  for (const path of ['/profile', '/map', '/forum/new', '/admin']) {
+  for (const path of ['/profile', '/forum/new', '/admin']) {
     test(`${path} redirecter uinnlogget til /auth/login`, async ({ page }) => {
       test.skip(
         isLocalDev,

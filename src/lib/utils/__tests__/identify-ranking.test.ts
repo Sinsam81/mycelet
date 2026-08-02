@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { monthInWindow, seasonFit, nearbyBoost, rankOrder } from '@/lib/utils/identify-ranking';
+import {
+  monthInWindow,
+  seasonFit,
+  seasonFitForSpecies,
+  nearbyBoost,
+  rankOrder
+} from '@/lib/utils/identify-ranking';
+import { SEASON_WINDOWS } from '@/lib/utils/season-window-data';
+import { isMonthInMask } from '@/lib/utils/season-region';
 
 describe('monthInWindow', () => {
   it('handles a normal window', () => {
@@ -29,6 +37,91 @@ describe('seasonFit', () => {
   });
   it('is neutral when the season is unknown', () => {
     expect(seasonFit(1, null, null, null, null)).toMatchObject({ inSeason: true, factor: 1 });
+  });
+});
+
+describe('seasonFitForSpecies — samme vindu som kalenderen', () => {
+  // Piggsopp (id 7). Katalogvinduet er sep–nov, men det empiriske vinduet fra
+  // 4305 daterte funn er jul–okt: 1219 av funnene er gjort i august.
+  const piggsopp = {
+    id: 7,
+    edibility: 'edible',
+    season_start: 9,
+    season_end: 11,
+    peak_season_start: 9,
+    peak_season_end: 10
+  };
+  const AUGUST = 8;
+
+  it('katalogvinduet alene sier august = utenom sesong', () => {
+    // Regresjonsvakt: dette var oppførselen ruta hadde, og grunnen til fiksen.
+    const raw = seasonFit(AUGUST, piggsopp.season_start, piggsopp.season_end, 9, 10);
+    expect(raw.inSeason).toBe(false);
+    expect(raw.factor).toBeLessThan(1);
+  });
+
+  it('et korrekt piggsoppforslag i august merkes IKKE «utenom sesong»', () => {
+    const fit = seasonFitForSpecies(AUGUST, piggsopp);
+    expect(fit.inSeason).toBe(true);
+    expect(fit.factor).toBeGreaterThanOrEqual(1);
+  });
+
+  it('det empiriske vinduet dekker faktisk august for piggsopp', () => {
+    // Beviser at testen over hviler på data, ikke på et tall vi fant på.
+    expect(isMonthInMask(SEASON_WINDOWS['7'].all, AUGUST)).toBe(true);
+  });
+
+  it('vinteren er fortsatt utenfor sesong for en høstsopp', () => {
+    const fit = seasonFitForSpecies(2, piggsopp);
+    expect(fit.inSeason).toBe(false);
+    expect(fit.factor).toBeLessThan(1);
+  });
+
+  it('topp-sesong slår fortsatt gjennom', () => {
+    const fit = seasonFitForSpecies(9, piggsopp);
+    expect(fit).toMatchObject({ inSeason: true, peakSeason: true });
+    expect(fit.factor).toBeGreaterThan(1);
+  });
+
+  it('ukjent sesong er nøytral', () => {
+    expect(
+      seasonFitForSpecies(1, {
+        id: 999999,
+        edibility: 'edible',
+        season_start: null,
+        season_end: null,
+        peak_season_start: null,
+        peak_season_end: null
+      })
+    ).toMatchObject({ inSeason: true, factor: 1 });
+  });
+
+  it('en art uten empirisk kurve faller tilbake på katalogvinduet', () => {
+    const ukjent = {
+      id: 999999,
+      edibility: 'edible',
+      season_start: 7,
+      season_end: 9,
+      peak_season_start: null,
+      peak_season_end: null
+    };
+    expect(seasonFitForSpecies(8, ukjent).inSeason).toBe(true);
+    expect(seasonFitForSpecies(1, ukjent).inSeason).toBe(false);
+  });
+
+  it('vinduet blir aldri smalere enn katalogvinduet', () => {
+    for (const id of Object.keys(SEASON_WINDOWS)) {
+      const species = {
+        id: Number(id),
+        edibility: 'edible',
+        season_start: 8,
+        season_end: 9,
+        peak_season_start: null,
+        peak_season_end: null
+      };
+      expect(seasonFitForSpecies(8, species).inSeason).toBe(true);
+      expect(seasonFitForSpecies(9, species).inSeason).toBe(true);
+    }
   });
 });
 

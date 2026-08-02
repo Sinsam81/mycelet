@@ -75,7 +75,16 @@ export function MushroomDayCard() {
     setAreaLabel(label);
     setUsingDefault(isDefault);
     try {
-      const res = await fetch(`/api/mushroom-forecast?lat=${lat}&lon=${lon}`, { cache: 'no-store' });
+      // Grovkorn til ~1 km FØR posisjonen legges i en URL. Hjemskjermen lastes
+      // hver gang appen åpnes, og en URL med meterpresis GPS havner i
+      // infrastrukturens forespørselslogg — over en sesong blir det et
+      // bevegelsesspor vi ikke har bruk for. Ruta runder uansett selv til to
+      // desimaler for cache-nøkkelen sin, og værdataene er regionale, så svaret
+      // er identisk.
+      const res = await fetch(
+        `/api/mushroom-forecast?lat=${lat.toFixed(2)}&lon=${lon.toFixed(2)}`,
+        { cache: 'no-store' }
+      );
       setData(res.ok ? ((await res.json()) as Forecast) : null);
     } catch {
       setData(null);

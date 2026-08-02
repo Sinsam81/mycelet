@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useLocale } from 'next-intl';
 import { createClient } from '@/lib/supabase/client';
 import { baseSeasonMask, isMonthInMask } from '@/lib/utils/season-region';
+import { matchesHabitat } from '@/lib/species/habitat-filter';
 import { compareSpeciesByDisplayName } from '@/lib/utils/species-name';
 import type { Edibility, Species } from '@/types/species';
 
@@ -57,9 +58,9 @@ export function useSpecies(filters: SpeciesFilters) {
         // Samme kalibrerte sesongvindu som kalenderen, ellers svarer «i sesong
         // nå» ulikt på to sider i samme app.
         if (filters.inSeasonNow && !isMonthInMask(baseSeasonMask(item), month)) return false;
-        if (filters.habitat.trim() && !(item.habitat ?? []).some((h) => h.toLowerCase().includes(filters.habitat.toLowerCase()))) {
-          return false;
-        }
+        // Habitatverdiene i basen er norske. matchesHabitat kjenner de svenske
+        // skrivemåtene, ellers ga «barrskog» null treff for svenske brukere.
+        if (!matchesHabitat(item.habitat, filters.habitat)) return false;
         return true;
       }).sort((a, b) => compareSpeciesByDisplayName(a, b, locale));
     }

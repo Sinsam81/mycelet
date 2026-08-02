@@ -117,10 +117,16 @@ Ikke samlet: Diagnostics, Usage Data, Browsing History, Contacts, Financial Info
 
 **Subscription Group:** `Mycelet Premium` (én gruppe, begge produkter på samme nivå)
 
+> ✅ **ALLEREDE OPPRETTET 2026-07-27** — ikke lag dem på nytt. Produkt-ID-ene under
+> er de faktiske, og de kan ikke endres i App Store Connect etter opprettelse.
+> Koden er enig: `src/lib/billing/revenuecat.ts` bruker nøyaktig disse to som
+> standardverdier bak `REVENUECAT_PRODUCT_*`. (Dette dokumentet oppga tidligere
+> `no.mycelet.app.…` — med `.app.` — i strid med `docs/launch-critical-path.md`.)
+
 | Felt | Produkt 1 | Produkt 2 |
 |---|---|---|
 | Referansenavn | `Premium månedlig` | `Sesongpass årlig` |
-| Produkt-ID | `no.mycelet.app.premium.monthly` | `no.mycelet.app.seasonpass.yearly` |
+| Produkt-ID | `no.mycelet.premium.monthly` | `no.mycelet.seasonpass.yearly` |
 | Varighet | 1 måned | 1 år |
 | Pris (Norge) | **79 NOK** (velg nærmeste prispunkt) | **249 NOK** (velg nærmeste prispunkt) |
 | Visningsnavn (nb-NO) | `Premium` | `Sesongpass` |

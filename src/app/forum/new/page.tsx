@@ -14,6 +14,7 @@ import { reencodeImageForUpload } from '@/lib/utils/image';
 import { isNativePlatform } from '@/lib/native/platform';
 import { captureNativePhoto } from '@/lib/native/camera';
 import { intlLocale } from '@/lib/utils/intl-locale';
+import { getJoinedSpeciesName } from '@/lib/utils/species-name';
 
 type Category = 'find' | 'question' | 'tip' | 'discussion';
 
@@ -93,7 +94,7 @@ function NewForumPostInner() {
       return;
     }
     try {
-      const file = await captureNativePhoto();
+      const file = await captureNativePhoto(locale);
       if (file) addFiles([file]);
     } catch (err) {
       setError(err instanceof Error ? err.message : t('couldNotGetImage'));
@@ -232,7 +233,15 @@ function NewForumPostInner() {
             >
               <option value="">{t('noLink')}</option>
               {(findingOptions ?? []).map((finding) => {
-                const speciesName = finding.mushroom_species?.norwegian_name || finding.species_name_override || t('unknownSpecies');
+                // Spørringa (useForum.ts) henter både norwegian_name og
+                // swedish_name; her ble bare det norske lest. Resultatet var at
+                // en svensk bruker valgte funnet sitt under norsk navn i
+                // nedtrekket og så det med svensk navn i PostCard rett etterpå
+                // — samme funn, to navn, i samme flyt.
+                const speciesName =
+                  getJoinedSpeciesName(finding.mushroom_species, locale) ||
+                  finding.species_name_override ||
+                  t('unknownSpecies');
                 const dateLabel = new Date(finding.found_at).toLocaleDateString(intlLocale(locale));
                 const zoneLabel = finding.is_zone_finding ? ` • ${t('zone')}: ${finding.zone_label ?? t('unknown')} (${finding.zone_precision_km ?? 5} km)` : '';
                 return (

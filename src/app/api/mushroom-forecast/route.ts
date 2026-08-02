@@ -46,14 +46,34 @@ const WEEKDAYS: Record<Locale, string[]> = {
 };
 const TODAY_LABEL: Record<Locale, string> = { nb: 'I dag', sv: 'I dag' };
 
+// Feilstrengene vises rått i grensesnittet, som resten av kroppen.
+const COPY: Record<Locale, { badCoordinates: string; noWeather: string; failed: string }> = {
+  nb: {
+    badCoordinates: 'Mangler eller ugyldige koordinater',
+    noWeather: 'Værdata ikke tilgjengelig for området',
+    failed: 'Kunne ikke hente soppvarsel'
+  },
+  sv: {
+    badCoordinates: 'Saknade eller ogiltiga koordinater',
+    noWeather: 'Väderdata är inte tillgängliga för området',
+    failed: 'Kunde inte hämta svampprognosen'
+  }
+};
+
 export async function GET(request: NextRequest) {
   const log = createRequestLogger(request);
   const url = new URL(request.url);
   const lat = num(url.searchParams.get('lat'));
   const lon = num(url.searchParams.get('lon'));
 
+  // The payload carries user-facing text (verdict, flush banner, weekday
+  // labels), so the reader's language is part of the cache identity — og
+  // feilteksten under er like brukervendt, så språket hentes før valideringen.
+  const locale = await getUserLocale();
+  const copy = COPY[locale] ?? COPY[DEFAULT_LOCALE];
+
   if (!Number.isFinite(lat) || !Number.isFinite(lon) || lat < -90 || lat > 90 || lon < -180 || lon > 180) {
-    return NextResponse.json({ error: 'Mangler eller ugyldige koordinater' }, { status: 400 });
+    return NextResponse.json({ error: copy.badCoordinates }, { status: 400 });
   }
 
   const rl = checkRateLimit(`mushroom-forecast:${getClientKey(request, null)}`, 20, 60);
@@ -61,9 +81,6 @@ export async function GET(request: NextRequest) {
     return rateLimitResponse(rl);
   }
 
-  // The payload carries user-facing text (verdict, flush banner, weekday
-  // labels), so the reader's language is part of the cache identity.
-  const locale = await getUserLocale();
   const now = new Date();
   const todayKey = now.toISOString().slice(0, 10);
   const month = now.getMonth() + 1;
@@ -79,7 +96,7 @@ export async function GET(request: NextRequest) {
       fetchDailyForecast({ lat, lon })
     ]);
     if (!observed) {
-      return NextResponse.json({ error: 'Værdata ikke tilgjengelig for området' }, { status: 502 });
+      return NextResponse.json({ error: copy.noWeather }, { status: 502 });
     }
 
     const future = (forecast ?? []).filter((d) => d.date > todayKey).slice(0, 6);
@@ -116,7 +133,10 @@ export async function GET(request: NextRequest) {
         soilMoistureIndex: observed.soilMoistureIndex
       },
       month,
-      locale
+      locale,
+      // Dagen i måneden gjør sesongleddet glatt over månedsskiftet, så stripen
+      // ikke faller et hakk ved midnatt med uendret vær. Se mushroom-day.ts.
+      now.getDate()
     );
 
     const weekdays = WEEKDAYS[locale] ?? WEEKDAYS[DEFAULT_LOCALE];
@@ -183,7 +203,8 @@ export async function GET(request: NextRequest) {
           soilMoistureIndex
         },
         dayDate.getUTCMonth() + 1,
-        locale
+        locale,
+        dayDate.getUTCDate()
       );
       days.push({
         date: d.date,
@@ -221,9 +242,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(payload);
   } catch (error) {
     log.error('mushroom_forecast.failed', error);
-    return NextResponse.json(
-      { error: 'Kunne ikke hente soppvarsel', details: error instanceof Error ? error.message : 'unknown' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: copy.failed }, { status: 500 });
   }
 }

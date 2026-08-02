@@ -1,9 +1,13 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  OfflineArea,
   OSM_TILE_TEMPLATE,
   SATELLITE_TILE_TEMPLATE,
+  TERRAIN_TILE_TEMPLATE,
   getTileUrlsForBounds,
-  latLngToTile
+  latLngToTile,
+  offlineAreaTileUrls,
+  removeOfflineAreaTiles
 } from '../offlineMap';
 
 const OSLO_BOUNDS = { south: 59.85, west: 10.6, north: 59.96, east: 10.9 };
@@ -70,5 +74,73 @@ describe('offline map helpers', () => {
     expect(urls.length).toBeGreaterThan(0);
     expect(urls[0]).toContain('server.arcgisonline.com');
     expect(urls[0]).toContain('/World_Imagery/MapServer/tile/11/');
+  });
+});
+
+/**
+ * «Slett» på et lagret område frigjorde NULL lagring: removeOfflineAreaById rørte
+ * bare localStorage, så området forsvant fra lista mens flisene ble liggende i
+ * CacheStorage for alltid. En Kartverket-topoflis er rundt 74 kB og hver lagring
+ * tar inntil 550 av dem — åtte områder er flere hundre megabyte brukeren verken
+ * kunne se eller rydde.
+ */
+const AREA: OfflineArea = {
+  id: 'omraade-1',
+  name: 'Nordmarka',
+  centerLat: 59.91,
+  centerLng: 10.75,
+  zoom: 11,
+  bounds: OSLO_BOUNDS,
+  cachedTiles: 40,
+  failedTiles: 0,
+  createdAt: '2026-08-01T10:00:00Z',
+  tileTemplate: TERRAIN_TILE_TEMPLATE,
+  zoomLevels: [10, 11, 12]
+};
+
+describe('offlineAreaTileUrls', () => {
+  it('regner ut nøyaktig de flisene området lagret', () => {
+    const urls = offlineAreaTileUrls(AREA);
+    const forventet = new Set(
+      [10, 11, 12].flatMap((z) => getTileUrlsForBounds(OSLO_BOUNDS, z, TERRAIN_TILE_TEMPLATE))
+    );
+    expect(new Set(urls)).toEqual(forventet);
+    for (const url of urls) expect(url).toContain('cache.kartverket.no');
+  });
+
+  it('rydder gamle områder uten lagret mal med alle tre bakgrunnskartene', () => {
+    // Områder lagret før malen ble skrevet ned kan ha brukt hvilken som helst av
+    // dem. Å slette en URL som ikke ligger i cachen er en no-op.
+    const legacy = { ...AREA, tileTemplate: undefined, zoomLevels: undefined };
+    const urls = offlineAreaTileUrls(legacy);
+    expect(urls.some((u) => u.includes('cache.kartverket.no'))).toBe(true);
+    expect(urls.some((u) => u.includes('tile.openstreetmap.org'))).toBe(true);
+    expect(urls.some((u) => u.includes('server.arcgisonline.com'))).toBe(true);
+  });
+});
+
+describe('removeOfflineAreaTiles', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('sletter flisene fra CacheStorage, ikke bare linja i lista', async () => {
+    const deleted: string[] = [];
+    const cache = {
+      delete: vi.fn(async (url: string) => {
+        deleted.push(url);
+        return true;
+      })
+    };
+    vi.stubGlobal('caches', { open: vi.fn(async () => cache) });
+    vi.stubGlobal('window', { caches: {} });
+
+    const count = await removeOfflineAreaTiles(AREA);
+    expect(count).toBe(offlineAreaTileUrls(AREA).length);
+    expect(count).toBeGreaterThan(0);
+    expect(new Set(deleted)).toEqual(new Set(offlineAreaTileUrls(AREA)));
+  });
+
+  it('kaster ikke når CacheStorage ikke finnes', async () => {
+    vi.stubGlobal('window', {});
+    await expect(removeOfflineAreaTiles(AREA)).resolves.toBe(0);
   });
 });

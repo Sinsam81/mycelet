@@ -9,12 +9,18 @@ export interface BillingSubscription {
   cancel_at_period_end: boolean;
   stripe_customer_id: string | null;
   stripe_subscription_id: string | null;
+  /**
+   * Fritt formet. Feltene som betyr noe: `checkout_session_id` (den påbegynte
+   * Checkout-sesjonen, skrevet av planCheckoutWrite), `provider` og
+   * `source` (hvem som eier raden — se stripe-webhook-decision.ts).
+   */
+  metadata?: Record<string, unknown> | null;
 }
 
 export async function getUserBillingSubscription(supabase: SupabaseClient, userId: string) {
   const { data, error } = await supabase
     .from('billing_subscriptions')
-    .select('user_id,tier,status,current_period_end,cancel_at_period_end,stripe_customer_id,stripe_subscription_id')
+    .select('user_id,tier,status,current_period_end,cancel_at_period_end,stripe_customer_id,stripe_subscription_id,metadata')
     .eq('user_id', userId)
     .maybeSingle();
 

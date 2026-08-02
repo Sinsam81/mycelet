@@ -12,6 +12,9 @@ import { createClient } from '@/lib/supabase/server';
 import { getBillingCapabilities, getUserBillingSubscription } from '@/lib/billing/subscription';
 import type { Edibility } from '@/types/species';
 import { intlLocale } from '@/lib/utils/intl-locale';
+import { formatMemberSince } from '@/lib/utils/member-since';
+import { statusLabel, tierLabel } from '@/lib/billing/labels';
+import { logger } from '@/lib/log';
 
 interface UserStats {
   total_findings: number;
@@ -48,6 +51,9 @@ function categoryLabels(t: Awaited<ReturnType<typeof getTranslations>>): Record<
 
 export default async function ProfilePage() {
   const t = await getTranslations('Profile');
+  // Abonnementsnavnene bor i Pricing-seksjonen; profilen låner dem i stedet for
+  // å lage en andre fremstilling av de samme verdiene.
+  const tPricing = await getTranslations('Pricing');
   const locale = await getLocale();
   const supabase = createClient();
   const {
@@ -63,7 +69,7 @@ export default async function ProfilePage() {
     );
   }
 
-  const [{ data: profile }, statsRes, findingsRes, postsRes, subscription, { data: roleRow }] = await Promise.all([
+  const [{ data: profile }, statsRes, findingsRes, postsRes, subscription, roleRes] = await Promise.all([
     supabase.from('profiles').select('username,display_name,bio,location,created_at,avatar_url').eq('id', user.id).maybeSingle(),
     supabase.rpc('get_user_stats', { p_user_id: user.id }),
     supabase
@@ -89,14 +95,24 @@ export default async function ProfilePage() {
     total_posts: 0,
     total_likes_received: 0
   };
+  // Feilene her er alle «fail closed» — lista blir tom, admin-lenken forsvinner
+  // — så de er ikke farlige, men de er STILLE. Uten disse linjene ser en
+  // spørrefeil ut nøyaktig som «brukeren har ingen funn» / «er ikke admin»,
+  // og det er ikke mulig å finne igjen i loggen etterpå.
+  if (findingsRes.error) {
+    logger.error('profile.findings_failed', { userId: user.id, message: findingsRes.error.message });
+  }
+  if (roleRes.error) {
+    logger.warn('profile.role_lookup_failed', { userId: user.id, message: roleRes.error.message });
+  }
+
   const findings = (findingsRes.data ?? []) as unknown as FindingRow[];
   const posts = (postsRes.data ?? []) as PostRow[];
   const billing = getBillingCapabilities(subscription);
-  const isAdmin = roleRow?.role === 'admin' || roleRow?.role === 'moderator';
+  const isAdmin = roleRes.data?.role === 'admin' || roleRes.data?.role === 'moderator';
 
-  const memberSince = profile?.created_at
-    ? new Date(profile.created_at).toLocaleDateString(intlLocale(locale), { year: 'numeric', month: 'long' })
-    : null;
+  // Kontoens dato, ikke profilradens — se src/lib/utils/member-since.ts.
+  const memberSince = formatMemberSince(user, profile ?? null, locale);
 
   const TierIcon = billing.tier === 'premium' ? Crown : billing.tier === 'season_pass' ? Leaf : null;
   const CATEGORY_LABELS = categoryLabels(t);
@@ -139,9 +155,11 @@ export default async function ProfilePage() {
           </div>
           <div className="mt-2 flex items-center gap-2 text-sm">
             {TierIcon ? <TierIcon className="h-4 w-4 text-forest-800" /> : null}
-            <span className="font-medium capitalize">{billing.tier.replace('_', ' ')}</span>
+            {/* Samme navn som på prissiden — «Sesongpass · Forfalt betaling»,
+                ikke «Season pass · past_due». */}
+            <span className="font-medium">{tierLabel(billing.tier, tPricing)}</span>
             <span className="text-gray-500">·</span>
-            <span className="text-gray-700">{billing.status}</span>
+            <span className="text-gray-700">{statusLabel(billing.status, tPricing)}</span>
           </div>
           {!billing.paid && billing.aiDailyLimit !== null ? (
             <p className="mt-1 text-xs text-gray-600">{t('aiQuota', { limit: billing.aiDailyLimit })}</p>

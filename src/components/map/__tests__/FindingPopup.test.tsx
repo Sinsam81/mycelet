@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { renderToString } from 'react-dom/server';
 import { NextIntlClientProvider } from 'next-intl';
+import { timeZoneForLocale } from '@/i18n/config';
 import { FindingPopup } from '../FindingPopup';
 import nb from '../../../../messages/nb.json';
 import sv from '../../../../messages/sv.json';
@@ -44,7 +45,14 @@ const finding = {
 
 const render = (node: React.ReactElement, locale: 'nb' | 'sv' = 'nb') =>
   renderToString(
-    <NextIntlClientProvider locale={locale} messages={locale === 'sv' ? sv : nb}>
+    // timeZone speiler MushroomMap: uten den logger next-intl
+    // ENVIRONMENT_FALLBACK ved hver rendring, og støyen i testkjøringen ser
+    // ut som om appen mangler oppsettet.
+    <NextIntlClientProvider
+      locale={locale}
+      timeZone={timeZoneForLocale(locale)}
+      messages={locale === 'sv' ? sv : nb}
+    >
       {node}
     </NextIntlClientProvider>
   );
@@ -106,6 +114,27 @@ describe('artsnavnet følger leserens språk', () => {
     const medBilde = { ...(finding as object), thumbnail_url: 'https://example.test/a.jpg' } as never;
     const html = render(<FindingPopup finding={medBilde} displayName="Karljohan" />, 'sv');
     expect(html).toContain('alt="Karljohan"');
+  });
+});
+
+describe('artspåstanden er ikke en bestemmelse', () => {
+  // Markørfargen settes av artskatalogens spiselighet (grønn = edible), og
+  // kartintroen lærer brukeren nettopp det. Uten en tekst som sier at arten
+  // bare er OPPGITT, leses en feilbestemt hvit fluesopp lagret som
+  // sjampinjong som en grønn, godkjent matsopp for alle andre.
+  it('merker ubekreftede funn som oppgitt art — på begge språk', () => {
+    expect(render(<FindingPopup finding={finding} />)).toContain(nb.FindingPopup.unverifiedClaim);
+    expect(render(<FindingPopup finding={finding} />, 'sv')).toContain(sv.FindingPopup.unverifiedClaim);
+  });
+
+  it('lar merket falle bort når funnet faktisk er verifisert', () => {
+    const verifisert = { ...(finding as object), verification_status: 'verified' } as never;
+    expect(render(<FindingPopup finding={verifisert} />)).not.toContain(nb.FindingPopup.unverifiedClaim);
+  });
+
+  it('merker også funn uten verification_status i det hele tatt', () => {
+    const utenStatus = { ...(finding as object), verification_status: null } as never;
+    expect(render(<FindingPopup finding={utenStatus} />)).toContain(nb.FindingPopup.unverifiedClaim);
   });
 });
 

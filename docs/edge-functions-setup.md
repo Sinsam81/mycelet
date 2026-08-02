@@ -81,7 +81,9 @@ supabase secrets set APP_URL=https://mycelet.no
 
 `APP_URL` brukes i e-postens "Behold konto"-link. Hvis du har annen prod-domene, sett den der i stedet for mycelet.no.
 
-Hvis Resend-keyene ikke er satt, fortsetter cron-jobben uten å sende e-post — warning-rader skrives fortsatt til DB, og brukere får banner i appen ved innlogging. E-post er bonus for å nå brukere som ikke logger inn.
+**Resend er ikke valgfritt for slettingen.** Personvernerklæringen lover «vi sender en e-post-advarsel og sletter kontoen automatisk 90 dager senere». Derfor sletter `purge-inactive-accounts` INGEN konto før varselet faktisk er sendt (`warning_email_sent = true`). Er nøklene ikke satt, skrives varselradene fortsatt til DB og brukeren får banner i appen ved innlogging — men ingen konto slettes, og kvitteringen fra funksjonen viser `awaitingEmail: N`. Når nøklene kommer på plass, sendes de ventende varslene ved neste kjøring, og 90-dagersfristen starter da.
+
+Sjekk `awaitingEmail` i svaret fra funksjonen: står det høyere enn 0 over tid, er e-post ikke satt opp, og lagringstiden i erklæringen holdes ikke.
 
 ### Steg 5 — Deploy alle tre funksjonene
 

@@ -4,7 +4,10 @@ import { Cookie, Database, FileDown, Lock, Mail, Trash2, Users } from 'lucide-re
 import { getLocale, getTranslations } from 'next-intl/server';
 import { entityFormSuffix, entityMessageValues } from '@/lib/legal/entity';
 import { PageWrapper } from '@/components/layout/PageWrapper';
+import { PoisonHotlineLinks } from '@/components/safety/PoisonHotlineLinks';
 import { AnalyticsPreferencesButton } from '@/components/analytics/AnalyticsPreferencesButton';
+import { NonNativeOnly } from '@/components/native/NonNativeOnly';
+import { NativeOnly } from '@/components/native/NativeOnly';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations('Personvern');
@@ -21,7 +24,6 @@ export async function generateMetadata(): Promise<Metadata> {
 
 export default async function PersonvernPage() {
   const t = await getTranslations('Personvern');
-  const s = await getTranslations('Safety');
   // Who the data controller is changes with the company form: for a sole
   // proprietorship it is the owner personally, for an AS it is the company.
   const locale = await getLocale();
@@ -216,6 +218,15 @@ export default async function PersonvernPage() {
               <span className="font-medium">{t('processorNibioLabel')}</span> {t('processorAnd')} <span className="font-medium">{t('processorCorineLabel')}</span>{' '}
               {t('processorForestDesc')}
             </li>
+            {/* Karttjenestene hentes av NETTLESEREN, ikke av serveren vår (se
+                connect-src/img-src i next.config.js). De får derfor IP-adressen
+                din og hvilket kartutsnitt du ser på — inkludert utsnittet rundt
+                din egen posisjon når kartet sentreres på GPS. Det er en annen
+                situasjon enn MET/SMHI/NIBIO over, der bare koordinater sendes
+                fra serveren, og det måtte stå her. */}
+            <li>
+              <span className="font-medium">{t('processorMapTilesLabel')}</span> {t('processorMapTilesDesc')}
+            </li>
             <li>
               <span className="font-medium">Wikimedia Commons</span> — {t('processorWikimediaDesc')}
             </li>
@@ -336,6 +347,12 @@ export default async function PersonvernPage() {
             <li>
               <span className="font-medium">{t('cookiesSessionLabel')}</span> {t('cookiesSessionDesc')}
             </li>
+            {/* Språk-cookien settes både i middleware og av språkvelgeren, og
+                sto ikke i denne lista — §8 er nettopp den delen som skal være
+                uttømmende. */}
+            <li>
+              <span className="font-medium">{t('cookiesLocaleLabel')}</span> {t('cookiesLocaleDesc')}
+            </li>
             <li>
               <span className="font-medium">{t('cookiesStripeLabel')}</span> {t('cookiesStripeDesc')}
             </li>
@@ -347,7 +364,19 @@ export default async function PersonvernPage() {
             </li>
           </ul>
           <p className="text-sm text-gray-700">{t('cookiesMarketing')}</p>
-          <AnalyticsPreferencesButton label={t('cookiesManage')} />
+          <p className="text-sm text-gray-700">{t('cookiesLocalStorage')}</p>
+          {/* Knappen dispatcher et vindusevent som BARE CookieNotice lytter på,
+              og CookieNotice er pakket i NonNativeOnly i rot-layouten. I
+              App Store-bygget fantes altså knappen uten lytter: et trykk gjorde
+              ingenting, uten feilmelding — på nettopp den siden en Apple-
+              reviewer leser. Ingen data sto på spill (GA er bevisst av i det
+              native bygget), men en død kontroll her er den dyreste av alle. */}
+          <NonNativeOnly>
+            <AnalyticsPreferencesButton label={t('cookiesManage')} />
+          </NonNativeOnly>
+          <NativeOnly>
+            <p className="text-sm text-gray-700">{t('cookiesNativeNoAnalytics')}</p>
+          </NativeOnly>
         </article>
 
         {/* === 9. Sikkerhet === */}
@@ -394,9 +423,7 @@ export default async function PersonvernPage() {
           </p>
           <p className="text-sm text-forest-900">
             {t('contactEmergencyBefore')}{' '}
-            <a href={`tel:${s('poisonTel')}`} className="font-medium underline">
-              {s('poisonDisplay')}
-            </a>{' '}
+            <PoisonHotlineLinks withName className="font-medium underline" />{' '}
             {t('contactEmergencyAfter')}
           </p>
         </article>

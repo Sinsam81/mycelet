@@ -9,6 +9,7 @@ import type { Explanation } from '@/lib/utils/prediction-explanation';
 import { PredictionExplanation } from '@/components/prediction/PredictionExplanation';
 import { NonNativeOnly } from '@/components/native/NonNativeOnly';
 import { getSpeciesDisplayName } from '@/lib/utils/species-name';
+import { COMPONENT_MAX } from '@/lib/utils/prediction';
 
 interface HotspotPanelProps {
   speciesId: number | null;
@@ -98,6 +99,11 @@ export function HotspotPanel({ speciesId, data, explanations, isLoading, error }
   // hvilken. Det ærlige er å si at arten mangler og at tallet derfor ikke kan
   // stilles opp mot et som bærer et artsnavn.
   const unnamedSpecies = Boolean(data) && !data?.species && !leadingName && !speciesId;
+
+  // Ingen forhåndsberegnet flis OG ingen skogdata i punktet: da er det ingenting
+  // igjen i tallet som handler om STEDET — bare vær og sesong. Gjelder hele
+  // Sverige og alt av Norge utenfor de fem rasterregionene.
+  const noPlaceData = Boolean(data) && data?.source === 'computed_fallback' && !data?.forest;
 
   // Collapsed: a compact pill that still shows the verdict at a glance, so the
   // map stays open. Tap to expand the full "hvorfor" + sources.
@@ -212,6 +218,17 @@ export function HotspotPanel({ speciesId, data, explanations, isLoading, error }
 
           {credit ? <p className="mt-2 text-[11px] text-gray-500">{t('sources', { credit })}</p> : null}
 
+          {/* Rasteret dekker fem norske byområder og ingenting i Sverige. Uten
+              fliser OG uten skogdata i punktet hviler tallet på vær og sesong
+              alene — den validerte (tids-)delen av modellen, men uten noe som
+              helst om STEDET. Det så tidligere nøyaktig ut som et tall bygget på
+              ekte skog- og rasterdata. Si det høyt i stedet. */}
+          {noPlaceData ? (
+            <p className="mt-2 rounded border border-gray-200 bg-gray-50 px-2 py-1.5 text-[11px] text-gray-700">
+              {t('noPlaceData')}
+            </p>
+          ) : null}
+
           <p className="mt-1 text-[11px] italic text-gray-500">
             {t('habitatDisclaimer')}
           </p>
@@ -227,11 +244,29 @@ export function HotspotPanel({ speciesId, data, explanations, isLoading, error }
 
           {showDetails ? (
             <div className="mt-1 space-y-1 text-[11px] text-gray-600">
-              <div className="grid grid-cols-3 gap-2">
-                <div className="rounded bg-forest-50 p-1.5">{t('environment', { value: data.components.environment })}</div>
-                <div className="rounded bg-forest-50 p-1.5">{t('history', { value: data.components.historical })}</div>
-                <div className="rounded bg-forest-50 p-1.5">{t('season', { value: data.components.seasonal })}</div>
-              </div>
+              {/* NEVNEREN MÅ MED. «Sesong: 15» på en augustdag er MAKSVERDIEN,
+                  men leses som 15 av 100 ved siden av et hovedtall på 0-100.
+                  Skalaene er faste og ulike (miljø 0-50, historikk 0-35, sesong
+                  0-15), og leddene summerer heller ikke til hovedtallet på
+                  flisbanen — det er et snitt over ruter. Begge deler står nå. */}
+              {data.components ? (
+                <>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="rounded bg-forest-50 p-1.5">
+                      {t('environment', { value: data.components.environment, max: COMPONENT_MAX.environment })}
+                    </div>
+                    <div className="rounded bg-forest-50 p-1.5">
+                      {t('history', { value: data.components.historical, max: COMPONENT_MAX.historical })}
+                    </div>
+                    <div className="rounded bg-forest-50 p-1.5">
+                      {t('season', { value: data.components.seasonal, max: COMPONENT_MAX.seasonal })}
+                    </div>
+                  </div>
+                  <p className="text-gray-500">{t('componentsNote')}</p>
+                </>
+              ) : (
+                <p className="text-gray-500">{t('componentsUnavailable')}</p>
+              )}
               {data.model?.version ? <p className="text-gray-400">{t('model', { version: data.model.version })}</p> : null}
             </div>
           ) : null}

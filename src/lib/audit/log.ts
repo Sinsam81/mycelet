@@ -38,6 +38,23 @@ export interface AuditLogEntry {
   request?: NextRequest;
 }
 
+/**
+ * Handlinger som ALDRI skal lagre IP-adresse og nettleserstreng.
+ *
+ * admin_audit_log kan ingen slette fra — triggerne i migrasjon 008 blokkerer
+ * både UPDATE og DELETE, også for tjenesterollen. En rad her er i praksis evig.
+ *
+ * `account.self_delete` skrives i det øyeblikket brukeren har bedt om å bli
+ * glemt etter GDPR art. 17. Å legge igjen IP-adressen og nettleserstrengen
+ * deres i nettopp den tabellen er det motsatte av det de ba om — og den
+ * opplysningen tilfører ingenting: raden har allerede bruker-ID-en, som er hele
+ * poenget med sporet.
+ *
+ * Merk at dette er en regel i selve hjelperen, ikke bare på kallstedet. Da kan
+ * ikke en fremtidig ny kaller gjeninnføre lagringen ved uhell.
+ */
+const ACTIONS_WITHOUT_CLIENT_CONTEXT = new Set(['account.self_delete']);
+
 function getIpFromRequest(req: NextRequest): string | null {
   // Vercel and most reverse proxies set X-Forwarded-For; the first hop is
   // the original client. X-Real-IP is the fallback header some setups use.
@@ -58,8 +75,9 @@ export async function logAdminAction(entry: AuditLogEntry): Promise<void> {
     return;
   }
 
-  const ipAddress = entry.request ? getIpFromRequest(entry.request) : null;
-  const userAgent = entry.request?.headers.get('user-agent') ?? null;
+  const captureClientContext = !ACTIONS_WITHOUT_CLIENT_CONTEXT.has(entry.action);
+  const ipAddress = entry.request && captureClientContext ? getIpFromRequest(entry.request) : null;
+  const userAgent = (captureClientContext ? entry.request?.headers.get('user-agent') : null) ?? null;
 
   const { error } = await admin.from('admin_audit_log').insert({
     actor_id: entry.actorId,

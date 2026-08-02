@@ -44,20 +44,33 @@ export async function getCorineForest(query: HabitatQuery): Promise<ForestProper
     if (!res.ok) return null;
 
     const json = (await res.json()) as { results?: { attributes?: Record<string, string> }[] };
-    let code: string | undefined;
+
+    // `tolerance: 2` betyr at endepunktet returnerer ALT innenfor ~110 m av
+    // punktet, ikke bare polygonet punktet står i — typisk 3-4 rader i
+    // vilkårlig rekkefølge. Vi brøt tidligere på FØRSTE rad med en Code_18, og
+    // en åkerkant (211) på nabocella slo dermed ut barskogen (312) i samme
+    // svar: cella ble levert som «ingen skogsignal», rutenettet hoppet over
+    // den, og brukeren fikk «fant ingen lovende steder» midt i skogen.
+    // Rammer bare Sverige og resten av Europa — Norge bruker SR16.
+    //
+    // Vi ser derfor gjennom alle treffene og foretrekker en skogsklasse.
+    // Ikke-skog vinner bare når INGEN av treffene er skog.
+    let forestType: ForestType | undefined;
+    let sawAnyCode = false;
     for (const result of json.results ?? []) {
       const value =
         result.attributes?.['Code_18'] ??
         result.attributes?.['CODE_18'] ??
         result.attributes?.['Raster.CODE_18'];
-      if (value) {
-        code = String(value);
+      if (!value) continue;
+      sawAnyCode = true;
+      const match = CLC_TO_FOREST[String(value)];
+      if (match) {
+        forestType = match;
         break;
       }
     }
-    if (!code) return null;
-
-    const forestType = CLC_TO_FOREST[code];
+    if (!sawAnyCode) return null;
     if (!forestType) return null; // non-forest land cover → no forest signal
 
     return { forestType, ageYears: null, productivity: null, volumePerHa: null, source: 'corine' };

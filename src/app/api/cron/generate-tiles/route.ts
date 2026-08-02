@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { fetchWeatherSummary } from '@/lib/weather';
-import { getForestProperties, buildSpeciesHabitatPreferences } from '@/lib/forest';
+import { getForestProperties, buildSpeciesHabitatPreferences, computeHabitatScore } from '@/lib/forest';
 import { computeCellPrediction } from '@/lib/prediction/cell-score';
 import { dayOfYearOf } from '@/lib/prediction/phenology';
 import {
@@ -9,8 +9,10 @@ import {
   predictionTileGridCells
 } from '@/lib/prediction/tile-regions';
 import { PREDICTION_SPECIES_LATIN_NAMES } from '@/lib/prediction/prediction-species';
+import { computeTileDataCoverage } from '@/lib/prediction/tile-data-coverage';
 import type { SpeciesContext } from '@/lib/utils/species-scoring';
 import { createRequestLogger } from '@/lib/log/request';
+import { bearerSecretMatches } from '@/lib/security/secret-compare';
 
 /**
  * Daily prediction-tile generator.
@@ -26,6 +28,13 @@ import { createRequestLogger } from '@/lib/log/request';
  */
 
 export const maxDuration = 300; // seconds (Vercel Pro); localhost is unbounded
+
+/**
+ * Hvor lenge genererte fliser beholdes. Ingenting leser eldre datoer; vinduet
+ * finnes bare for feilsøking. Verdien er den som skal stå i
+ * docs/retention-policy.md — hold dem i takt.
+ */
+const TILE_RETENTION_DAYS = 30;
 
 interface SpeciesRow {
   id: number;
@@ -56,8 +65,7 @@ async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promis
 export async function POST(request: NextRequest) {
   const log = createRequestLogger(request);
 
-  const cronSecret = process.env.CRON_SECRET;
-  if (!cronSecret || request.headers.get('authorization') !== `Bearer ${cronSecret}`) {
+  if (!bearerSecretMatches(request.headers.get('authorization'), process.env.CRON_SECRET)) {
     log.warn('generate_tiles.unauthorized');
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
@@ -118,6 +126,16 @@ export async function POST(request: NextRequest) {
       // route (grid/route.ts). Neutral fallback values are appropriate for an
       // on-demand summary, but not enough evidence to publish a hotspot tile.
       if (!forest) return [];
+      // Datadekning er per CELLE — den avhenger av skogkilden og værserien, ikke
+      // av hvilken art raden gjelder. Regnes én gang og gjenbrukes for alle
+      // artsradene på cellen. Se src/lib/prediction/tile-data-coverage.ts.
+      const dataCoverage = computeTileDataCoverage({
+        forestSource: forest.source,
+        productivity: forest.productivity,
+        volumePerHa: forest.volumePerHa,
+        soilMoistureIndex: weather.soilMoistureIndex,
+        precipDailyMm: weather.precipDailyMm
+      });
       return species.map((sp) => {
         const speciesCtx: SpeciesContext = {
           speciesId: sp.id,
@@ -128,6 +146,10 @@ export async function POST(request: NextRequest) {
           peakSeasonStart: sp.peak_season_start,
           peakSeasonEnd: sp.peak_season_end
         };
+        const speciesHabitat = buildSpeciesHabitatPreferences({
+          mycorrhizalPartners: sp.mycorrhizal_partners,
+          habitat: sp.habitat
+        });
         const prediction = computeCellPrediction({
           lat: cell.lat,
           lon: cell.lng,
@@ -136,11 +158,14 @@ export async function POST(request: NextRequest) {
           weather: weatherInput,
           forest,
           species: speciesCtx,
-          speciesHabitat: buildSpeciesHabitatPreferences({
-            mycorrhizalPartners: sp.mycorrhizal_partners,
-            habitat: sp.habitat
-          })
+          speciesHabitat
         });
+        // Flisene skrives én gang for alle lesere, så begrunnelsen må lagres i
+        // BEGGE språk — ellers får en svensk leser én norsk setning midt i en
+        // ellers svensk forklaringsliste (flisbanen i /api/prediction leser
+        // strengen rått). computeHabitatScore er ren og lokal: samme score,
+        // bare annen tekst. Ingen ekstra nettverkskall.
+        const habitatSv = computeHabitatScore(forest, speciesHabitat, 'sv');
         return {
           tile_date: tileDate,
           species_id: sp.id,
@@ -149,7 +174,11 @@ export async function POST(request: NextRequest) {
           center_lng: cell.lng,
           radius_meters: 500,
           score: prediction.score,
-          confidence: 70, // forest is guaranteed non-null here (no-forest cells skipped above)
+          // Kolonnen heter fortsatt `confidence` i basen, men innholdet er
+          // DATADEKNING: hvor mange av kildene vi ønsker oss som svarte for
+          // cellen. Den sier ingenting om treffsikkerhet — den ærlige romlige
+          // AUC-en er ~0,52. Før dette sto det literalen 70 i hver eneste rad.
+          confidence: dataCoverage,
           components: {
             vegetation: prediction.factors.vegetation,
             moisture: prediction.factors.moisture,
@@ -168,7 +197,11 @@ export async function POST(request: NextRequest) {
                 }
               : null,
             habitat: prediction.habitat
-              ? { score: prediction.habitat.score, reasons: prediction.habitat.reasons }
+              ? {
+                  score: prediction.habitat.score,
+                  reasons: prediction.habitat.reasons,
+                  reasonsSv: habitatSv.reasons
+                }
               : null
           },
           metadata: { region: region.name, grid_size_deg: region.step }
@@ -209,7 +242,38 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  return NextResponse.json({ ok: true, tileDate, species: species.length, generated });
+  // ── Opprydding ───────────────────────────────────────────────────────
+  // docs/retention-policy.md sier at prediction_tiles «ruller daglig —
+  // overskrives». Det gjorde den ikke: cron-ruta over sletter bare DAGENS
+  // rader for regionen den regenererer, så tabellen vokste med ~763 rader per
+  // døgn og hadde historikk helt tilbake til april. Ingen leser gamle datoer —
+  // både kartet og /api/prediction filtrerer på tile_date.
+  //
+  // Vinduet er bevisst romslig (ikke 1 dag): et par ukers historikk er verdt
+  // mye ved feilsøking av «hvorfor var scoren lav forrige helg», og ingen av
+  // radene er persondata. Sletting skjer sist, etter at nye fliser er skrevet,
+  // så en feilet kjøring aldri etterlater tabellen tom.
+  const cutoff = new Date(Date.now() - TILE_RETENTION_DAYS * 86_400_000).toISOString().slice(0, 10);
+  const { error: pruneErr, count: pruned } = await supabase
+    .from('prediction_tiles')
+    .delete({ count: 'exact' })
+    .lt('tile_date', cutoff);
+  if (pruneErr) {
+    // Opprydding er ikke kritisk — dagens fliser er allerede skrevet. Logg og
+    // svar OK, slik at et RLS-/rettighetsproblem her ikke ser ut som at
+    // flisgenereringen feilet.
+    log.warn('generate_tiles.prune_failed', { cutoff, message: pruneErr.message });
+  } else {
+    log.info('generate_tiles.pruned', { cutoff, deleted: pruned ?? 0 });
+  }
+
+  return NextResponse.json({
+    ok: true,
+    tileDate,
+    species: species.length,
+    generated,
+    pruned: pruneErr ? null : pruned ?? 0
+  });
 }
 
 // Vercel Cron sends GET (with CRON_SECRET as a bearer when the env var is set).

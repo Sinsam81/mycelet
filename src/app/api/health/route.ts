@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { checkRateLimit } from '@/lib/rate-limit';
+import { getClientKey, rateLimitResponse } from '@/lib/rate-limit/route';
 import { createRequestLogger } from '@/lib/log/request';
 
 /**
@@ -20,9 +22,15 @@ import { createRequestLogger } from '@/lib/log/request';
  * Each check is reported individually so a probe can decide what to alert
  * on. We never return secrets or PII; only "is it set" booleans.
  *
- * NB: This route is intentionally PUBLIC. No auth, no rate limiting.
- * Health probes need to hit it constantly; auth-gating would defeat the
- * purpose. We don't expose anything sensitive in the response.
+ * NB: This route is intentionally PUBLIC and unauthenticated — health probes
+ * need to hit it constantly, and auth-gating would defeat the purpose. We don't
+ * expose anything sensitive in the response.
+ *
+ * Den har likevel en bremse. Uten `?fast=1` gjør hvert kall to spørringer mot
+ * databasen, og ruta er offentlig og trivielt gjettbar — en løkke mot den var
+ * en vei til å presse ut Supabase-poolen for ekte brukere. Grensen er satt
+ * romslig (120/min per klient = 2 i sekundet); enhver reell oppetidsprobe
+ * ligger flere størrelsesordener under.
  */
 
 export const runtime = 'nodejs';
@@ -120,6 +128,11 @@ function getNextVersion(): string {
 export async function GET(request: NextRequest) {
   const log = createRequestLogger(request);
   const fast = new URL(request.url).searchParams.get('fast') === '1';
+
+  const rl = checkRateLimit(`health:${getClientKey(request, null)}`, 120, 60);
+  if (!rl.allowed) {
+    return rateLimitResponse(rl);
+  }
 
   const envVarsCheck = checkEnvVars();
 

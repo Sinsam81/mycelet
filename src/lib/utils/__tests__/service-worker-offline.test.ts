@@ -20,12 +20,19 @@ type SwEvent = {
   respondWith?: (response: Promise<Response> | Response) => void;
 };
 
+/**
+ * Nøkkelen en ekte Cache lagrer under er en Request med ABSOLUTT url —
+ * cache.add('/offline') blir til origin + '/offline'. Fakeen gjør det samme,
+ * ellers ville beskjæringens unntak for precachede ressurser (som sammenligner
+ * absolutte URL-er) ikke blitt testet slik den faktisk kjører.
+ */
 function keyOf(request: unknown): string {
-  if (typeof request === 'string') return request;
-  return (request as { url: string }).url;
+  const raw = typeof request === 'string' ? request : (request as { url: string }).url;
+  return new URL(raw, ORIGIN).href;
 }
 
 class FakeCache {
+  // Map bevarer innsettingsrekkefølgen — samme garanti som Cache.keys() gir.
   private entries = new Map<string, Response>();
 
   constructor(private readonly fetcher: (request: unknown) => Promise<Response>) {}
@@ -46,6 +53,14 @@ class FakeCache {
 
   async match(request: unknown) {
     return this.entries.get(keyOf(request));
+  }
+
+  async keys() {
+    return Array.from(this.entries.keys(), (url) => ({ url }));
+  }
+
+  async delete(request: unknown) {
+    return this.entries.delete(keyOf(request));
   }
 }
 
@@ -171,6 +186,47 @@ describe('service worker: en side som kan åpnes uten nett', () => {
     if (!responded) return;
 
     expect(await (await responded).text()).toBe('OMDIRIGERING');
+  });
+
+  it('lar ikke STATIC_CACHE vokse i det uendelige over utrullinger', async () => {
+    // Filnavnene under /_next/static/ er innholdshashet: hver deploy legger inn
+    // et helt nytt sett og lar det gamle ligge. Uten beskjæring deler den døde
+    // vekten lagringskvote med kartflisene brukeren har betalt for.
+    const worker = loadServiceWorker();
+    await install(worker);
+
+    for (let i = 0; i < 200; i++) {
+      const responded = dispatchFetch(worker, {
+        method: 'GET',
+        url: `${ORIGIN}/_next/static/chunks/deploy-${i}.js`
+      });
+      await responded;
+    }
+
+    const staticCache = await worker.caches.open('mycelet-static-v3');
+    const keys = await staticCache.keys();
+    expect(keys.length, 'cachen vokste forbi taket').toBeLessThanOrEqual(80);
+  });
+
+  it('beskjærer aldri bort offline-skallet', async () => {
+    // Skallet precaches FØRST og ligger derfor eldst i cachen. En naiv
+    // «kast de eldste»-regel ville tatt nettopp det brukeren trenger i skogen.
+    const worker = loadServiceWorker();
+    await install(worker);
+
+    for (let i = 0; i < 200; i++) {
+      await dispatchFetch(worker, {
+        method: 'GET',
+        url: `${ORIGIN}/_next/static/chunks/deploy-${i}.js`
+      });
+    }
+
+    const staticCache = await worker.caches.open('mycelet-static-v3');
+    expect(await staticCache.match('/offline'), 'offline-skallet ble beskåret bort').toBeDefined();
+    expect(
+      await staticCache.match('/offline/offline-map.js'),
+      'skallets skript ble beskåret bort'
+    ).toBeDefined();
   });
 
   it('serverer lagrede kartfliser fra cachen uten dekning', async () => {

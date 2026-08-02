@@ -6,6 +6,7 @@ import { createRequestLogger } from '@/lib/log/request';
 import { fetchWeatherSummary } from '@/lib/weather';
 import { getForestProperties } from '@/lib/forest';
 import { bestEffortFieldContext } from '@/lib/findings/field-context';
+import { roundForProviderLookup } from '@/lib/privacy/provider-precision';
 
 /**
  * "Etter at du besøkte stedet: fant du sopp?" — one tap of ground truth per
@@ -64,9 +65,12 @@ export async function POST(request: NextRequest) {
     }
 
     const capturedAt = new Date().toISOString();
+    // Samme grep som i /api/findings: leverandørene får områdepresisjon, ikke
+    // det eksakte punktet brukeren sto på.
+    const lookupPoint = roundForProviderLookup(lat, lng);
     const { weather, forest } = await bestEffortFieldContext(
-      fetchWeatherSummary({ lat, lon: lng }),
-      getForestProperties({ lat, lon: lng })
+      fetchWeatherSummary(lookupPoint),
+      getForestProperties(lookupPoint)
     );
 
     const { error } = await supabase.from('spot_feedback').insert({

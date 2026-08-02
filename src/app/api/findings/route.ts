@@ -8,6 +8,7 @@ import {
   deriveHabitatTags
 } from '@/lib/findings/field-context';
 import { parseFindingRequest } from '@/lib/findings/request';
+import { roundForProviderLookup } from '@/lib/privacy/provider-precision';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { getClientKey, rateLimitResponse } from '@/lib/rate-limit/route';
 import { createRequestLogger } from '@/lib/log/request';
@@ -43,9 +44,13 @@ export async function POST(request: NextRequest) {
 
     const finding = parsed.data;
     const capturedAt = new Date().toISOString();
+    // Det EKSAKTE punktet lagres hos oss, men forlater oss aldri i full
+    // oppløsning: vær- og skogoppslagene er områdeoppslag, og gir samme svar
+    // på 3 desimaler. Se src/lib/privacy/provider-precision.ts.
+    const lookupPoint = roundForProviderLookup(finding.latitude, finding.longitude);
     const { weather, forest } = await bestEffortFieldContext(
-      fetchWeatherSummary({ lat: finding.latitude, lon: finding.longitude }),
-      getForestProperties({ lat: finding.latitude, lon: finding.longitude })
+      fetchWeatherSummary(lookupPoint),
+      getForestProperties(lookupPoint)
     );
 
     const insertFinding = () =>

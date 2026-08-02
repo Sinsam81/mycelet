@@ -5,6 +5,20 @@ export interface WeatherSummary {
   source: 'met_frost' | 'smhi' | 'openweather' | 'open_meteo' | 'unavailable';
   temperatureC: number;
   humidityPct: number;
+  /**
+   * True når `humidityPct` IKKE er en måling, men NEUTRAL_HUMIDITY_PCT fordi
+   * nærmeste stasjon mangler fuktsensor.
+   *
+   * Uten dette flagget ble fallbacken skrevet ut i klartekst som «75 %
+   * luftfuktighet — moderat», altså et målt tall som aldri ble målt. Nesodden
+   * er ikke et kanttilfelle: den er standardposisjonen i eksemplene. Flagget
+   * lar forklaringslaget la være å påstå en måling vi ikke har.
+   *
+   * Scoringen bruker fortsatt den nøytrale verdien — det er et bevisst valg
+   * (en manglende sensor skal verken belønne eller straffe cella), dokumentert
+   * ved NEUTRAL_HUMIDITY_PCT.
+   */
+  humidityEstimated: boolean;
   rain3dMm: number;
   rain7dMm: number;
   rain14dMm: number | null;
@@ -280,6 +294,7 @@ async function fetchFrost({ lat, lon }: WeatherFetchOptions): Promise<WeatherSum
     source: 'met_frost',
     temperatureC,
     humidityPct: latestValue(humidSeries) ?? NEUTRAL_HUMIDITY_PCT,
+    humidityEstimated: latestValue(humidSeries) == null,
     rain3dMm: frostSumWithinDays(precipSeries, 3, now),
     rain7dMm: frostSumWithinDays(precipSeries, 7, now),
     rain14dMm: precipSeries.length ? frostSumWithinDays(precipSeries, 14, now) : null,
@@ -564,6 +579,7 @@ async function fetchSmhi({ lat, lon }: WeatherFetchOptions): Promise<WeatherSumm
     source: 'smhi',
     temperatureC,
     humidityPct: latestNumeric(humidData) ?? NEUTRAL_HUMIDITY_PCT,
+    humidityEstimated: latestNumeric(humidData) == null,
     rain3dMm: sumWithinDays(rainData, 3, now),
     rain7dMm: sumWithinDays(rainData, 7, now),
     rain14dMm: sumWithinDays(rainData, 14, now),
@@ -595,6 +611,7 @@ async function fetchOpenWeather({ lat, lon }: WeatherFetchOptions): Promise<Weat
       source: 'openweather',
       temperatureC: Number(first?.main?.temp ?? 0),
       humidityPct: Number(first?.main?.humidity ?? NEUTRAL_HUMIDITY_PCT),
+      humidityEstimated: !Number.isFinite(Number(first?.main?.humidity)),
       rain3dMm: list.slice(0, 24).reduce((sum: number, item: any) => sum + Number(item?.rain?.['3h'] ?? 0), 0),
       rain7dMm: list.slice(0, 56).reduce((sum: number, item: any) => sum + Number(item?.rain?.['3h'] ?? 0), 0),
       rain14dMm: null,
@@ -659,6 +676,7 @@ async function fetchOpenMeteo({ lat, lon }: WeatherFetchOptions): Promise<Weathe
       source: 'open_meteo',
       temperatureC: Number.isFinite(temperatureC) ? temperatureC : 0,
       humidityPct: Number.isFinite(currentHumidity) ? currentHumidity : NEUTRAL_HUMIDITY_PCT,
+      humidityEstimated: !Number.isFinite(currentHumidity),
       rain3dMm: sumLastN(precip, 3),
       rain7dMm: sumLastN(precip, 7),
       rain14dMm: precip.length ? sumLastN(precip, 14) : null,

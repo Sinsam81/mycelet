@@ -12,7 +12,7 @@
     "swedish": "Svenska"
   },
   "AdminAuditLog": {
-    "metaTitle": "Audit-log — Mycelet admin",
+    "metaTitle": "Audit-log — admin",
     "metaDescription": "Sporbare admin-handlinger og kontosletteinger.",
     "actionVerifiedForagerUpsert": "Verifisert plukker — opprettet/endret",
     "actionVerifiedForagerDelete": "Verifisert plukker — fjernet",
@@ -38,7 +38,9 @@
     "colTarget": "Mål",
     "colDetails": "Detaljer",
     "colIp": "IP",
-    "footerNote": "Viser maksimalt 100 nyeste poster. For eldre poster, eksporter via Supabase SQL Editor."
+    "footerNote": "Viser maksimalt 100 nyeste poster. For eldre poster, eksporter via Supabase SQL Editor.",
+    "accessValidationErrorTitle": "Kunne ikke verifisere tilgangen din",
+    "accessValidationErrorBody": "Oppslaget mot moderator_roles feilet — det betyr ikke at du mangler tilgang. Prøv å laste siden på nytt. Teknisk detalj: {message}"
   },
   "AdminForumTrust": {
     "roleTrustedForager": "Verifisert plukker",
@@ -67,7 +69,7 @@
     "noUsers": "Ingen brukere funnet."
   },
   "Admin": {
-    "metaTitle": "Statistikk — Mycelet admin",
+    "metaTitle": "Statistikk — admin",
     "metaDescription": "Oversikt over brukere, funn, samfunn, moderering og artskatalog.",
     "mustBeLoggedIn": "Du må være logget inn for å se denne siden.",
     "noAccessTitle": "Ingen tilgang",
@@ -127,7 +129,10 @@
     "edibilityConditional": "Betinget",
     "edibilityInedible": "Uspiselig",
     "edibilityToxic": "Giftig",
-    "edibilityDeadly": "Dødelig"
+    "edibilityDeadly": "Dødelig",
+    "accessValidationErrorTitle": "Kunne ikke verifisere tilgangen din",
+    "accessValidationErrorBody": "Oppslaget mot moderator_roles feilet — det betyr ikke at du mangler tilgang. Prøv å laste siden på nytt. Teknisk detalj: {message}",
+    "usersWithProfile": "Med profil"
   },
   "AdminPrediction": {
     "title": "Prediction Tiles (Admin)",
@@ -147,9 +152,9 @@
     "statTiles": "Fliser",
     "statAvgScore": "Snittscore",
     "statHighScore": "Score ≥ 70",
-    "statAvgConfidence": "Snitt confidence",
+    "statAvgConfidence": "Snitt datadekning",
     "colScore": "Score",
-    "colConfidence": "Confidence",
+    "colConfidence": "Datadekning",
     "colCoordinate": "Koordinat",
     "colRegion": "Region",
     "colSpeciesId": "Art ID",
@@ -196,7 +201,7 @@
     "haveAccount": "Har du allerede konto?",
     "login": "Logg inn",
     "loading": "Laster...",
-    "acceptPrefix": "Jeg er minst 18 år (eller har samtykke fra en foresatt) og godtar",
+    "acceptPrefix": "Jeg er minst 13 år, og har samtykke fra en foresatt hvis jeg er under 18. Jeg godtar",
     "acceptTerms": "vilkårene",
     "acceptAnd": "og",
     "acceptPrivacy": "personvernerklæringen"
@@ -241,7 +246,7 @@
     "monthDec": "des"
   },
   "Datakilder": {
-    "metaTitle": "Datakilder — Mycelet",
+    "metaTitle": "Datakilder",
     "metaDescription": "Åpne datakilder og lisenser som driver Mycelets soppkart og prediksjoner.",
     "heading": "Datakilder",
     "intro": "Mycelet er bygget på åpne, offentlige data. Soppkartet og prediksjonene hadde ikke vært mulige uten disse kildene — tusen takk til institusjonene og alle som rapporterer funn. Her er hva vi bruker, og under hvilke lisenser.",
@@ -262,7 +267,7 @@
   },
   "ForumModeration": {
     "title": "Moderasjon",
-    "accessHint": "Hvis denne siden gir tilgangsfeil, mangler brukeren moderatorrettigheter/RLS-policy for globale rapporter.",
+    "noAccess": "Du har ikke tilgang til moderasjonssiden. Rollen din må være moderator eller admin.",
     "loading": "Laster rapporter...",
     "loadError": "Kunne ikke hente rapporter (sannsynligvis RLS-begrensning).",
     "statusLabel": "Status:",
@@ -351,7 +356,10 @@
     "analyzing": "Analyserer bilde...",
     "identifyFailed": "Identifikasjon feilet",
     "couldNotGetImage": "Kunne ikke hente bilde.",
-    "networkError": "Fikk ikke kontakt med serveren. Sjekk dekningen og prøv igjen."
+    "networkError": "Fikk ikke kontakt med serveren. Sjekk dekningen og prøv igjen.",
+    "quotaHeading": "Du har brukt opp dagens gratis AI-identifikasjoner",
+    "quotaComeBackTomorrow": "Vente til i morgen — kvoten nullstilles etter 24 timer",
+    "quotaSeePlans": "Se abonnement"
   },
   "IdentifyResult": {
     "errorNotLoggedIn": "Du må være logget inn for å lagre funn.",
@@ -377,16 +385,23 @@
     "acknowledgeLabel": "Jeg forstår at dette ikke er en spiselighetsgaranti, og jeg spiser aldri sopp uten å få den bekreftet av en ekspert.",
     "matchLabel": "bildelikhet",
     "notFoodAssessed": "Ikke matvurdert",
-    "safetyDataIncomplete": "Vi klarte ikke å hente sikkerhetsdataene for disse forslagene akkurat nå. At det ikke står noen advarsel her betyr derfor IKKE at arten er trygg — det betyr at vi ikke fikk sjekket. Åpne artssiden og sjekk forvekslingsarter manuelt, eller prøv igjen om litt."
+    "safetyDataIncomplete": "Vi klarte ikke å hente sikkerhetsdataene for disse forslagene akkurat nå. At det ikke står noen advarsel her betyr derfor IKKE at arten er trygg — det betyr at vi ikke fikk sjekket. Åpne artssiden og sjekk forvekslingsarter manuelt, eller prøv igjen om litt.",
+    "sharingLevel": "Delingsnivå",
+    "sharingPublic": "Eksakt punkt (offentlig)",
+    "sharingApproximate": "Omtrentlig (±500m)",
+    "sharingPrivate": "Privat",
+    "sharingHelp": "Slik havner funnet på kartet. «Omtrentlig» vises for alle, men flyttet inntil 500 m fra det ekte stedet. «Privat» vises bare for deg."
   },
   "MineSteder": {
-    "metaTitle": "Mine steder — Mycelet",
+    "metaTitle": "Mine steder",
     "unknownSpecies": "Ukjent art",
     "nearPlace": "Sted nær {lat}, {lng}",
     "onlyVisibleToYou": "Bare synlig for deg",
     "heading": "Mine steder",
     "intro": "Soppstedene dine, samlet på ett sted — også de hemmelige.",
     "summary": "{finds} funn fordelt på {places} steder.",
+    "loadErrorHeading": "Kunne ikke laste stedene dine",
+    "loadErrorBody": "Noe gikk galt da vi hentet funnene dine. Stedene er ikke borte — last siden på nytt om litt.",
     "emptyHeading": "Ingen steder ennå",
     "emptyBody": "Når du logger funn, bygger Mycelet automatisk din private oversikt over hvor du finner sopp — år etter år.",
     "identifyFinding": "Identifiser et funn",
@@ -461,7 +476,8 @@
     "inSeasonAtPeak": "toppsesong",
     "inSeasonInSeason": "i sesong",
     "inSeasonSeeAll": "Se alle →",
-    "inSeasonDangerous": "{count, plural, =1 {# giftig art er også i sesong nå} other {# giftige arter er også i sesong nå}} — les deg opp før du plukker"
+    "inSeasonDangerous": "{count, plural, =1 {# giftig art er også i sesong nå} other {# giftige arter er også i sesong nå}} — les deg opp før du plukker",
+    "communityUnverifiedNote": "Artene er oppgitt av den som la inn funnet, og er ikke kontrollert av Mycelet."
   },
   "Personvern": {
     "title": "Personvernerklæring",
@@ -477,7 +493,7 @@
     "collectUsageTerm": "Bruksdata",
     "collectUsageDesc": "Soppfunn du registrerer (koordinater, art, dato, bilder, notater), forum-innlegg, kommentarer, likes, lagrede innlegg.",
     "collectLocationTerm": "Posisjonsdata",
-    "collectLocationDesc": "GPS-koordinater fra mobilen din når du registrerer funn, og valgfri hjemstedsregion. Vi viser kun grov-randomiserte eller gridd-snappede koordinater til andre brukere — aldri eksakt funn-sted.",
+    "collectLocationDesc": "GPS-koordinater fra mobilen din når du registrerer funn, og valgfri hjemstedsregion. Hvor nøyaktig et funn vises for andre, bestemmer du selv når du lagrer det: «Eksakt punkt (offentlig)» viser det nøyaktige punktet ditt, «Omtrentlig» flytter punktet tilfeldig inntil ±500 m, «Sone-funn» snapper det til et grovt rutenett (1–50 km), og «Privat» vises ikke for andre i det hele tatt. Velger du eksakt punkt, deles altså den nøyaktige posisjonen — velg omtrentlig eller sone hvis du vil holde stedet for deg selv.",
     "collectTechnicalTerm": "Teknisk data",
     "collectTechnicalDesc": "IP-adresse, nettleser og innloggings-tidspunkt (samlet av Supabase Auth for sikkerhet og misbruks-deteksjon). Hvis du samtykker til analyse, samler Google Analytics også inn sidevisninger, omtrentlig plassering (by-/landsnivå), enhetstype og utvalgte brukshendelser. Bilder, eksakte posisjoner, e-post og fritekst sendes ikke til Analytics.",
     "collectPaymentTerm": "Betalingsdata",
@@ -509,7 +525,9 @@
     "processorNibioLabel": "NIBIO (Norge)",
     "processorCorineLabel": "CORINE / EEA (Europa)",
     "processorForestDesc": "(skog- og arealdata for prediksjon) — kun koordinater sendes, ingen brukerinformasjon.",
-    "processorWikimediaDesc": "vi bruker bare offentlige bilde-URL-er; ingen brukerdata sendes.",
+    "processorMapTilesLabel": "Kartverket, OpenStreetMap-bidragsyterne og Esri/ArcGIS Online",
+    "processorMapTilesDesc": "(bakgrunnskart: topografisk kart, gatekart og satellittbilder) — kartrutene hentes direkte av nettleseren din, ikke av serverne våre. Leverandøren ser derfor IP-adressen din og hvilket kartutsnitt du ser på, inkludert utsnittet rundt din egen posisjon når kartet sentreres på GPS. Vi sender ikke navn, konto eller funnene dine. Esri er amerikansk; overføringen dit skjer under EUs standardavtaler (SCC).",
+    "processorWikimediaDesc": "artsbildene hentes direkte av nettleseren din fra Wikimedia, som da ser IP-adressen din og hvilket bilde du åpner. Vi sender ingen konto- eller posisjonsdata.",
     "retentionHeading": "5. Hvor lenge vi lagrer data",
     "retentionActiveLabel": "Aktiv konto:",
     "retentionActiveDesc": "så lenge du har konto, kan du selv slette enkeltfunn, forum-innlegg og kommentarer.",
@@ -551,12 +569,15 @@
     "cookiesIntro": "Mycelet bruker disse strengt nødvendige cookies:",
     "cookiesSessionLabel": "Innloggings-sesjon (Supabase):",
     "cookiesSessionDesc": "husker at du er logget inn slik at du ikke trenger å logge inn på hver side.",
+    "cookiesLocaleLabel": "Språkvalg (MYCELET_LOCALE):",
+    "cookiesLocaleDesc": "husker om du vil ha Mycelet på norsk eller svensk. Settes når du velger språk, og varer i 12 måneder.",
     "cookiesStripeLabel": "Stripe (kun ved betaling):",
-    "cookiesStripeDesc": "sikrer betalings-flyten og forhindrer svindel.",
+    "cookiesStripeDesc": "vi setter ingen Stripe-cookie på mycelet.com. Skal du betale, sendes du til Stripes egen betalingsside (checkout.stripe.com) — det er der Stripe setter sine cookies, for å sikre betalingen og hindre svindel.",
     "cookiesOptionalIntro": "Hvis du velger «Tillat analyse», bruker vi i tillegg:",
     "cookiesAnalyticsLabel": "Google Analytics (_ga):",
     "cookiesAnalyticsDesc": "hjelper oss å forstå sidevisninger og sentrale produktflyter. Cookien utløper senest etter 13 måneder. Google Analytics lastes ikke, og ingen analysedata sendes, før du samtykker.",
     "cookiesMarketing": "Vi bruker ikke markedsføringscookies, annonsepersonalisering eller Google Signals.",
+    "cookiesLocalStorage": "I tillegg lagrer appen noen praktiske valg lokalt i nettleseren din (lokal lagring, ikke cookies — de sendes aldri til oss): analysevalget ditt, om du har sett introduksjonen og kart-tipset, listen over funn på turen du er på nå, og hvilke kartområder du har lastet ned til offline bruk. Du fjerner dem ved å tømme nettleserdata for mycelet.com.",
     "cookiesManage": "Endre analysevalg",
     "securityHeading": "9. Sikkerhet",
     "securityHttps": "All trafikk er kryptert med HTTPS.",
@@ -573,7 +594,7 @@
     "contactEmergencyBefore": "For akutte sikkerhetshendelser, ring",
     "contactEmergencyAfter": "(døgnåpent).",
     "backToHome": "Tilbake til forsiden",
-    "metaTitle": "Personvern — Mycelet",
+    "metaTitle": "Personvern",
     "metaDescription": "Hvordan Mycelet samler inn, bruker og beskytter personopplysningene dine. GDPR-rettighetene dine og hvem du kan kontakte.",
     "supervisoryAuthorityName": "Datatilsynet",
     "supervisoryAuthorityUrl": "https://www.datatilsynet.no",
@@ -583,7 +604,8 @@
     "processorAppleDesc": "(App Store) er selger og betalingsmottaker for kjøp gjort i iOS-appen. Apple behandler betalingsopplysningene dine som selvstendig behandlingsansvarlig etter sin egen personvernerklæring, og vi mottar aldri kortopplysninger. Se:",
     "processorAppleNote": "Gjelder bare kjøp gjort i appen. Kjøp på mycelet.com går via Stripe.",
     "controllerNameEnk": "Sindre Øverås, som driver Mycelet gjennom enkeltpersonforetaket {legalName} (org.nr {orgNr}).",
-    "controllerNameAs": "{legalName} (org.nr {orgNr})."
+    "controllerNameAs": "{legalName} (org.nr {orgNr}).",
+    "cookiesNativeNoAnalytics": "I appen fra App Store er analyseverktøy slått helt av, så det finnes ingenting å velge bort her. Valget over gjelder mycelet.com i nettleser."
   },
   "Pricing": {
     "tierFree": "Gratis",
@@ -598,7 +620,7 @@
     "statusIncompleteExpired": "Utløpt",
     "statusInactive": "Inaktiv",
     "freeTagline": "Kom trygt i gang",
-    "freeFeature1": "5 AI-identifikasjoner per døgn",
+    "freeFeature1": "{limit} AI-identifikasjoner per døgn",
     "freeFeature2": "Artsbibliotek med forvekslingsadvarsler",
     "freeFeature3": "Soppkart, soppvarsel, kalender og forum",
     "premiumTagline": "Fleksibelt måned for måned",
@@ -612,14 +634,16 @@
     "perYear": "/år",
     "seasonLead": "Alt i Premium, pluss:",
     "seasonFeature1": "Tilsvarer {perMonth} kr/mnd",
+    "seasonFeature1Native": "Lavere pris per måned enn Premium",
     "seasonFeature2": "Billigere enn én soppsesong med Premium",
     "seasonFeature3": "Fornyes årlig — avslutt når som helst",
     "faq1Q": "Hva er forskjellen på Premium og Sesongpass?",
     "faq1A": "Funksjonene er de samme. Premium betales månedlig og kan stoppes etter en måned. Sesongpass er ett beløp i året ({yearly} kr) — billigere enn å betale Premium gjennom hele soppsesongen, og du slipper å tenke på det resten av året.",
+    "faq1ANative": "Funksjonene er de samme. Premium betales månedlig og kan stoppes etter en måned. Sesongpass er ett beløp i året — billigere enn å betale Premium gjennom hele soppsesongen, og du slipper å tenke på det resten av året. Prisen står på kortet over, slik App Store viser den for kontoen din.",
     "faq2Q": "Kan jeg avslutte når som helst?",
     "faq2A": "Ja. Du administrerer abonnementet selv fra denne siden («Administrer abonnement»). Tilgangen varer ut perioden du allerede har betalt for, og du belastes ikke videre.",
     "faq3Q": "Hva får jeg gratis?",
-    "faq3A": "Kjernen i Mycelet er gratis: artsbiblioteket med forvekslingsadvarsler, soppkartet, soppvarselet, kalenderen, forumet — og 5 AI-identifikasjoner per døgn.",
+    "faq3A": "Kjernen i Mycelet er gratis: artsbiblioteket med forvekslingsadvarsler, soppkartet, soppvarselet, kalenderen, forumet — og {limit} AI-identifikasjoner per døgn.",
     "faq4Q": "Fungerer Mycelet i Sverige?",
     "faq4A": "Ja. Kart, værdata, funn og prediksjon dekker både Norge og Sverige.",
     "checkoutSuccess": "Betaling fullført. Oppdaterer abonnement...",
@@ -654,6 +678,7 @@
     "planNeedsPayment": "Vi fikk ikke gjennomført betalingen for {plan}, så tilgangen er satt på pause. Oppdater betalingskortet under «Administrer abonnement», eller velg en plan under.",
     "choosePlan": "Velg {plan}",
     "priceNote": "Prisene er i norske kroner og inkluderer mva. Du kan bytte eller avslutte når som helst.",
+    "priceNoteNative": "Prisen settes av App Store i valutaen kontoen din bruker, og inkluderer mva. Du kan bytte eller avslutte når som helst under Abonnementer i App Store.",
     "faqHeading": "Vanlige spørsmål",
     "goToProfile": "Gå til profilen din →",
     "loading": "Laster...",
@@ -720,7 +745,7 @@
     "seeAlsoPrefix": "Se også:",
     "privacyLinkText": "Personvernerklæringen",
     "seeAlsoSuffix": "for hvordan vi behandler dataene dine.",
-    "metaTitle": "Sikkerhet og ansvar — Mycelet",
+    "metaTitle": "Sikkerhet og ansvar",
     "metaDescription": "Slik bruker du Mycelet trygt. Kontaktinfo til Soppkontrollen og Giftinformasjonen ved behov."
   },
   "SpeciesDetail": {
@@ -761,7 +786,9 @@
     "noImage": "Ingen bilde",
     "dangerPrefix": "Fare:",
     "howToTellApart": "Hvordan skille:",
-    "lookAlikesUnavailable": "Vi klarte ikke å hente forvekslingsartene for denne arten akkurat nå. At det ikke står noen farlige forvekslinger her betyr derfor IKKE at det ikke finnes noen. Last siden på nytt, eller få soppen vurdert av soppkontroll før du spiser den."
+    "lookAlikesUnavailable": "Vi klarte ikke å hente forvekslingsartene for denne arten akkurat nå. At det ikke står noen farlige forvekslinger her betyr derfor IKKE at det ikke finnes noen. Last siden på nytt, eller få soppen vurdert av soppkontroll før du spiser den.",
+    "seasonNote": "Sesongvinduet viser når arten normalt er å finne i Norden — det sier ingenting om forholdene akkurat nå. Kartet vurderer dagens forhold der du er.",
+    "lookAlikesNoneRecorded": "Vi har ikke ført inn forvekslingsarter for denne arten ennå. At det ikke står noen advarsel her, betyr IKKE at arten er trygg å plukke — det betyr at vi ikke har dekning å love. Få alltid soppen vurdert av soppkontroll eller en ekspert før du spiser."
   },
   "Species": {
     "edibilityAll": "Alle",
@@ -777,7 +804,9 @@
     "inSeasonOnly": "Kun i sesong nå",
     "loading": "Laster arter...",
     "loadError": "Kunne ikke hente arter.",
-    "noMatches": "Ingen arter matcher filtrene dine."
+    "noMatches": "Ingen arter matcher filtrene dine.",
+    "edibilityConditional": "Betinget spiselig",
+    "edibilityInedible": "Uspiselig"
   },
   "SeasonNow": {
     "peakSeason": "Topp-sesong",
@@ -990,18 +1019,21 @@
     "allSpecies": "Alle arter",
     "calculatingConditions": "Beregner forhold...",
     "predictionError": "Kunne ikke hente prediksjon.",
-    "freeLimited": "Gratis viser forenklet prediksjon.",
-    "upgradeVegetation": "Oppgrader for full vegetasjonsanalyse",
+    "freeLimited": "Premium gir lovende steder med begrunnelse, soppbilder på kartet og offline-kart.",
+    "upgradeVegetation": "Se hva Premium gir",
     "why": "Hvorfor",
-    "hotspotsMarked": "{count, plural, =1 {# sterkt område markert på kartet (de lyse feltene).} other {# sterke områder markert på kartet (de lyse feltene).}}",
+    "hotspotsMarked": "{count, plural, =1 {# område markert på kartet (de lyse feltene).} other {# områder markert på kartet (de lyse feltene).}}",
     "noHotspots": "Ingen tydelige hotspots i valgt område.",
     "sources": "Kilder: {credit}",
+    "noPlaceData": "Vi har verken skogdata eller forhåndsberegnet kart for akkurat dette stedet. Tallet hviler derfor bare på vær og sesong — ikke på hva slags mark du står på.",
     "habitatDisclaimer": "Områder som matcher habitat og værvindu — ingen garanti for at det er sopp der.",
     "hideTechnicalDetails": "Skjul tekniske detaljer",
     "showTechnicalDetails": "Vis tekniske detaljer",
-    "environment": "Miljø: {value}",
-    "history": "Historikk: {value}",
-    "season": "Sesong: {value}",
+    "environment": "Miljø: {value}/{max}",
+    "history": "Historikk: {value}/{max}",
+    "season": "Sesong: {value}/{max}",
+    "componentsNote": "Modellens tre råledd, hver med sin egen maksverdi. Historikk teller registrerte funn nær punktet — den er ofte 0 selv om det finnes gamle observasjoner i området. Leddene summerer ikke til tallet over.",
+    "componentsUnavailable": "Oppdelingen er ikke tilgjengelig for dette svaret — kartet viser bare den lagrede totalen per rute.",
     "model": "Modell: {version}",
     "scaleNote": "av 100 · regnes ut annerledes enn tallet på forsiden, så de kan ikke sammenlignes direkte"
   },
@@ -1011,6 +1043,7 @@
     "closeFilters": "Lukk filtre",
     "searchPlace": "Søk etter sted",
     "searchPlacePlaceholder": "Nordmarka, Trondheim …",
+    "noPlaceResults": "Fant ingen steder. Mycelet dekker Norge og Sverige.",
     "speciesSearch": "Art (søk)",
     "speciesSearchPlaceholder": "Kantarell",
     "resetSpecies": "Nullstill art",
@@ -1063,6 +1096,9 @@
     "monthDec": "des.",
     "mushroomFallback": "Sopp",
     "registeredFinding": "Registrert funn",
+    "speciesEdibility": "Arten regnes som: {label}",
+    "speciesEdibilityNote": "Gjelder arten — ikke soppen du eventuelt finner her. Bestem alltid selv, og spis aldri sopp du er i tvil om.",
+    "historicalFindingNote": "Historisk observasjon — sier ikke at det står sopp her nå.",
     "openInMap": "📍 Åpne i kart",
     "tripDoneWithSpecies": "Fin tur! Du registrerte {count} funn 🍄 ({species})",
     "tripDone": "Fin tur! Du registrerte {count} funn 🍄",
@@ -1080,7 +1116,7 @@
     "hideFindingsAtLeast": "Skjul funn (minst {count})",
     "findingsTruncated": "Vi har hentet {count} funn her — det finnes flere. Zoom inn for å se alle. Filtrene gjelder bare de hentede funnene.",
     "hideFindings": "Skjul funn",
-    "findingsButton": "📍 Funn",
+    "findingsButton": "📍 Vis funn",
     "searching": "Søker…",
     "hideSpots": "Skjul steder",
     "promisingSpotsButton": "⭐ Lovende steder",
@@ -1114,12 +1150,16 @@
     "goTo": "Gå til",
     "delete": "Slett",
     "noSavedAreas": "Ingen lagrede områder ennå.",
+    "storageUsage": "Mycelet bruker omtrent {mb} MB på denne enheten (kartfliser og appdata).",
+    "storageUsageUnknown": "Nettleseren oppgir ikke hvor mye lagring appen bruker.",
+    "clearTileCache": "Tøm kartcachen",
+    "offlineCacheCleared": "Kartcachen er tømt. Lagrede områder må lastes ned på nytt før neste tur.",
     "openOfflineMap": "Åpne offline-kartet",
     "offlineShellHint": "Uten dekning åpner appen offline-kartet av seg selv, med de lagrede områdene.",
     "findMyPosition": "Finn min posisjon",
     "addFinding": "Legg til funn",
     "introTitle": "👋 Velkommen til soppkartet!",
-    "introFindings": "<b>Vis registrerte funn</b> — ekte soppfunn, fargekodet etter spiselighet (🟢 spiselig, 🔴 giftig).",
+    "introFindings": "<b>Vis funn</b> (knappen øverst) — over 300 000 ekte, registrerte soppfunn fra Artsdatabanken/GBIF, fargekodet etter spiselighet (🟢 spiselig, 🔴 giftig). Laget er avslått til du slår det på.",
     "introSpots": "<b>Lovende steder</b> — hvor forhold, sesong og skogtype passer best akkurat nå (ut fra data, ikke en fasit), med begrunnelse.",
     "introSatellite": "Bytt til <b>Satellitt</b> (oppe til høyre) for å se skogen ovenfra.",
     "introLocate": "📍-knappen nederst til høyre finner <b>din posisjon</b>.",
@@ -1139,13 +1179,15 @@
     "groupPlaces": "Steder",
     "forecastLoading": "Henter utsikten …",
     "forecastBestDay": "Best {day}: {score}/100",
+    "forecastEvenWeek": "Jevnt hele uka: {score}/100 — ingen dag skiller seg ut.",
     "forecastUnavailable": "Fant ikke utsikt for dette stedet.",
     "searchPlaceOnly": "Søk sted — f.eks. «Hamar»",
     "forecastToday": "I dag",
     "forecastConditionsThisWeek": "soppforhold denne uka",
     "hotspotTooltip": "Soppforhold {score}/100",
     "hotspotTooltipBest": "Best nå: {species} {score}/100",
-    "hotspotTooltipSpecies": "{species} {score}/100"
+    "hotspotTooltipSpecies": "{species} {score}/100",
+    "hotspotTooltipArea": "Gjelder hele ruta — ikke et bestemt punkt i den."
   },
   "OnboardingIntro": {
     "step1Title": "Velkommen til Mycelet",
@@ -1238,7 +1280,8 @@
     "notProvided": "Ikke angitt",
     "zoneFinding": "Sone-funn ({km} km grid)",
     "zoneFindingLabeled": "Sone-funn: {label} ({km} km grid)",
-    "seeMore": "Se mer"
+    "seeMore": "Se mer",
+    "unverifiedClaim": "Oppgitt art — ikke verifisert"
   },
   "MushroomMapLazy": {
     "loadingMap": "Laster kart..."
@@ -1261,8 +1304,30 @@
     "title": "Din siste sopptur",
     "found": "{count} funn"
   },
+  "NotFound": {
+    "title": "Fant ikke siden",
+    "body": "Lenken kan være utdatert, eller så finnes ikke siden lenger. Prøv forsiden eller søk i soppbiblioteket.",
+    "goHome": "Til forsiden",
+    "goSpecies": "Til soppbiblioteket"
+  },
+  "ErrorPage": {
+    "title": "Noe gikk galt",
+    "body": "Vi klarte ikke å vise denne siden. Prøv på nytt — går det fortsatt ikke, prøv igjen om litt.",
+    "retry": "Prøv igjen",
+    "goHome": "Til forsiden",
+    "reference": "Feilreferanse: {digest}"
+  },
+  "SafetyNote": {
+    "badgeMeansSpecies": "Spiselighetsmerket gjelder arten — ikke soppen du står med. Bestem alltid arten sikkert selv, og få den sjekket ved tvil.",
+    "readSafety": "Les sikkerhetsrådene"
+  },
   "Safety": {
     "poisonTel": "+4722591300",
+    "poisonAcuteLabel": "22 59 13 00",
+    "poisonTelDirect": "+4722591300",
+    "poisonDirectLabel": "22 59 13 00",
+    "poisonOr": "eller",
+    "poisonName": "Giftinformasjonen",
     "poisonNumber": "22 59 13 00",
     "poisonDisplay": "Giftinformasjonen 22 59 13 00",
     "emergencyTel": "113",
@@ -1375,7 +1440,7 @@
     "forestMeadowSpecies": "Parasollsopp og sjampinjonger — se opp for hvit fluesopp!",
     "pricingHeading": "Priser",
     "planFree": "Gratis",
-    "planFreeF1": "5 AI-identifiseringer per døgn",
+    "planFreeF1": "{limit} AI-identifiseringer per døgn",
     "planFreeF2": "Soppkart, varsel og kalender",
     "planFreeF3": "Artsbibliotek med advarsler",
     "planPremium": "Premium",
@@ -1394,7 +1459,7 @@
     "safetyBody": "Spis aldri sopp du ikke er 100 % sikker på. Mycelet er et hjelpemiddel, ikke en fasit — AI-forslag skal alltid dobbeltsjekkes, og appen viser deg alltid farlige forvekslingsarter. Er du i tvil, ta med soppen til soppkontroll hos Norges sopp- og nyttevekstforbund.",
     "faqHeading": "Spørsmål og svar",
     "faqFreeQ": "Er appen gratis?",
-    "faqFreeA": "Ja — du kan bruke soppkart, varsel, kalender, artsbibliotek og 5 AI-identifiseringer per døgn helt gratis, uten kortopplysninger. Premium gir ubegrenset AI, full prediksjon og offline-kart.",
+    "faqFreeA": "Ja — du kan bruke soppkart, varsel, kalender, artsbibliotek og {limit} AI-identifiseringer per døgn helt gratis, uten kortopplysninger. Premium gir ubegrenset AI, full prediksjon og offline-kart.",
     "faqSwedenQ": "Fungerer den i Sverige?",
     "faqSwedenA": "Ja! Værdata fra SMHI, svenske skogdata og svensk språk i appen. Kartet og varselet fungerer i hele Norge og Sverige.",
     "faqAiQ": "Kan jeg stole blindt på AI-identifiseringen?",
@@ -1468,7 +1533,13 @@
     "termsLink": "Vilkår for bruk",
     "purchaseTermsLink": "Kjøpsvilkår",
     "privacyLink": "Personvernerklæring",
-    "metaTitle": "Kontakt — Mycelet",
+    "metaTitle": "Kontakt",
     "metaDescription": "Kontaktopplysninger og foretaksinformasjon for Mycelet."
+  },
+  "ForumBadge": {
+    "expert": "Ekspert",
+    "community": "Fellesskapsverifisert",
+    "moderator": "Moderator",
+    "trusted": "Verifisert plukker"
   }
 }

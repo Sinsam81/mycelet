@@ -1,3 +1,5 @@
+import { readLocalJson, writeLocal } from './safe-storage';
+
 export interface OfflineAreaBounds {
   south: number;
   west: number;
@@ -15,6 +17,15 @@ export interface OfflineArea {
   cachedTiles: number;
   failedTiles: number;
   createdAt: string;
+  /**
+   * Hvilket bakgrunnskart og hvilke zoomnivåer som faktisk ble lagret. Uten
+   * disse kan ikke sletting regne ut igjen hvilke fliser området eier — og da
+   * ble «Slett» bare en fjerning fra lista, mens flisene ble liggende i
+   * CacheStorage for alltid. Valgfrie: områder lagret før dette mangler dem, og
+   * ryddes da med alle tre malene (se removeOfflineAreaTiles).
+   */
+  tileTemplate?: string;
+  zoomLevels?: number[];
 }
 
 export interface CacheAreaResult {
@@ -119,28 +130,99 @@ export function getTileUrlsForBounds(
 }
 
 export function readOfflineAreas(): OfflineArea[] {
-  if (typeof window === 'undefined') return [];
-
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed as OfflineArea[];
-  } catch {
-    return [];
-  }
+  const parsed = readLocalJson<unknown>(STORAGE_KEY);
+  if (!Array.isArray(parsed)) return [];
+  return parsed as OfflineArea[];
 }
 
 export function saveOfflineAreas(areas: OfflineArea[]) {
-  if (typeof window === 'undefined') return;
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(areas));
+  writeLocal(STORAGE_KEY, JSON.stringify(areas));
+}
+
+/**
+ * Flis-URL-ene ETT område eier.
+ *
+ * Kjenner vi malen og zoomnivåene (lagret fra og med denne versjonen), regner vi
+ * ut nøyaktig det settet. Gjør vi ikke det — gamle områder — tar vi alle tre
+ * bakgrunnskartene på zoom−1/zoom/zoom+1, som er akkurat det lagringen den gang
+ * kunne ha brukt. Å slette en URL som ikke ligger i cachen er en no-op, så det
+ * brede settet koster ingenting utover litt tid.
+ */
+export function offlineAreaTileUrls(area: OfflineArea): string[] {
+  const zoomLevels =
+    area.zoomLevels && area.zoomLevels.length > 0
+      ? area.zoomLevels
+      : Array.from(new Set([Math.max(8, area.zoom - 1), area.zoom, Math.min(18, area.zoom + 1)]));
+  const templates = area.tileTemplate
+    ? [area.tileTemplate]
+    : [TERRAIN_TILE_TEMPLATE, OSM_TILE_TEMPLATE, SATELLITE_TILE_TEMPLATE];
+
+  const urls = new Set<string>();
+  for (const template of templates) {
+    for (const zoom of zoomLevels) {
+      for (const url of getTileUrlsForBounds(area.bounds, zoom, template)) urls.add(url);
+    }
+  }
+  return Array.from(urls);
+}
+
+/**
+ * Slett områdets fliser fra CacheStorage.
+ *
+ * Uten denne frigjorde «Slett» null lagring: removeOfflineAreaById rørte bare
+ * localStorage, så området forsvant fra lista mens flisene ble liggende. En
+ * Kartverket-topoflis er rundt 74 kB og hver lagring tar inntil 550 av dem, så
+ * en sesong med lagrede områder bygger opp hundrevis av megabyte brukeren ikke
+ * kan se eller rydde. På iOS øker det sjansen for at WKWebView kaster HELE
+ * originens lagring under press — inkludert kartene han betalte for.
+ *
+ * Returnerer antall fliser som faktisk lå der og ble fjernet.
+ */
+export async function removeOfflineAreaTiles(area: OfflineArea): Promise<number> {
+  if (typeof window === 'undefined' || !('caches' in window)) return 0;
+  try {
+    const cache = await caches.open(CACHE_NAME);
+    const results = await Promise.all(
+      offlineAreaTileUrls(area).map(async (url) => {
+        try {
+          return (await cache.delete(url)) ? 1 : 0;
+        } catch {
+          return 0;
+        }
+      })
+    );
+    return results.reduce((sum: number, n) => sum + n, 0);
+  } catch {
+    return 0;
+  }
 }
 
 export function removeOfflineAreaById(id: string): OfflineArea[] {
   const next = readOfflineAreas().filter((area) => area.id !== id);
   saveOfflineAreas(next);
   return next;
+}
+
+/** Tøm hele flis-cachen. Tjenestearbeideren fyller den også på ved vanlig bruk. */
+export async function clearMapTileCache(): Promise<boolean> {
+  if (typeof window === 'undefined' || !('caches' in window)) return false;
+  try {
+    return await caches.delete(CACHE_NAME);
+  } catch {
+    return false;
+  }
+}
+
+/** Omtrentlig lagringsbruk for hele originen, i megabyte. Null når ukjent. */
+export async function estimateStorageMb(): Promise<number | null> {
+  try {
+    if (typeof navigator === 'undefined' || !navigator.storage?.estimate) return null;
+    const { usage } = await navigator.storage.estimate();
+    if (usage == null) return null;
+    return Math.round((usage / (1024 * 1024)) * 10) / 10;
+  } catch {
+    return null;
+  }
 }
 
 function uniqueTileUrls(bounds: OfflineAreaBounds, zoomLevels: number[], template: string) {
