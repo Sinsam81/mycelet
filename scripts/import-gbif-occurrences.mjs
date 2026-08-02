@@ -18,6 +18,7 @@
 // habitat validation.
 
 import { createClient } from '@supabase/supabase-js';
+import { insideNordicBox } from './lib/nordic-bounds.mjs';
 import { evaluateGbifMatch } from './lib/gbif-match.mjs';
 
 const HELP = new Set(['-h', '--help']);
@@ -153,11 +154,13 @@ function emptySkipStats() {
     geospatialIssue: 0,
     notPresent: 0,
     disallowedBasisOfRecord: 0,
+    outsideNordicBox: 0,
     impreciseDate: 0,
     unknownCoordinateUncertainty: 0,
     highCoordinateUncertainty: 0
   };
 }
+
 
 function mergeSkipStats(target, source) {
   for (const [key, value] of Object.entries(source)) target[key] = (target[key] ?? 0) + value;
@@ -200,6 +203,10 @@ function normalizeOccurrence(r, skipStats) {
   const longitude = Number(r.decimalLongitude);
   if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || Math.abs(latitude) > 90 || Math.abs(longitude) > 180) {
     skipStats.badCoordinates += 1;
+    return null;
+  }
+  if (!insideNordicBox(latitude, longitude)) {
+    skipStats.outsideNordicBox += 1;
     return null;
   }
   if (r.hasGeospatialIssues === true) {

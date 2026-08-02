@@ -43,7 +43,13 @@ export function PlaceForecastStrip({ place, onClear }: PlaceForecastStripProps) 
     setData(null);
     (async () => {
       try {
-        const res = await fetch(`/api/mushroom-forecast?lat=${place.lat}&lon=${place.lng}`, { cache: 'no-store' });
+        // Grovkorn til ~1 km før posisjonen legges i en URL — se samme
+        // kommentar i MushroomDayCard. Ruta runder selv til to desimaler for
+        // cache-nøkkelen, og været er regionalt, så svaret er identisk.
+        const res = await fetch(
+          `/api/mushroom-forecast?lat=${place.lat.toFixed(2)}&lon=${place.lng.toFixed(2)}`,
+          { cache: 'no-store' }
+        );
         if (!res.ok) throw new Error('forecast failed');
         const json = (await res.json()) as ForecastResponse;
         if (!cancelled) setData(json);

@@ -15,6 +15,7 @@
 import { getRegion } from '@/lib/utils/region';
 import { getForestProperties as getNorwegianForestProperties } from '@/lib/nibio';
 import { getCorineForest } from '@/lib/corine';
+import { PointCache } from '@/lib/cache/point-cache';
 import type {
   ForestProperties,
   ForestType,
@@ -22,12 +23,43 @@ import type {
   SpeciesHabitatPreferences
 } from '@/lib/nibio/types';
 
+/**
+ * Skogtypen i et punkt endrer seg ikke mellom to knappetrykk, men rutenettene i
+ * /api/prediction/grid og /api/prediction/species-spots slo den opp på nytt hver
+ * gang: 49 kall per forsøk, og klienten prøver fire radier etter hverandre. Se
+ * src/lib/cache/point-cache.ts for hvorfor og hva denne cachen IKKE er.
+ *
+ * Null caches også — en celle over sjø eller by svarer null hver gang, og det
+ * er nettopp de cellene radius-utvidelsen tramper gjennom flest av.
+ */
+const forestCache = new PointCache<ForestProperties | null>({
+  ttlMs: 24 * 60 * 60 * 1000,
+  maxEntries: 5000
+});
+/**
+ * Kort levetid for «ingen skogdata». Null kan være ekte (sjø, by, utenfor
+ * Norden), men det kan også være NIBIO eller CORINE som var nede i det
+ * øyeblikket — og et blaff skal ikke stå som en sannhet et helt døgn.
+ */
+const NULL_TTL_MS = 10 * 60 * 1000;
+
 export async function getForestProperties(query: HabitatQuery): Promise<ForestProperties | null> {
+  const cached = forestCache.get(query.lat, query.lon);
+  if (cached.hit) return cached.value;
+
   const region = getRegion(query.lat, query.lon);
-  if (region === 'NO') return getNorwegianForestProperties(query);
+  let result: ForestProperties | null = null;
+  if (region === 'NO') result = await getNorwegianForestProperties(query);
   // Sweden: CORINE Land Cover (forest type only).
-  if (region === 'SE') return getCorineForest(query);
-  return null;
+  else if (region === 'SE') result = await getCorineForest(query);
+
+  forestCache.set(query.lat, query.lon, result, result == null ? NULL_TTL_MS : undefined);
+  return result;
+}
+
+/** Kun for tester. */
+export function clearForestCache(): void {
+  forestCache.clear();
 }
 
 /** Minimal shape from a mushroom_species row needed to score habitat. */

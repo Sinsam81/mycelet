@@ -1,7 +1,14 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { checkRateLimit } from '@/lib/rate-limit';
+import { getClientKey, rateLimitResponse } from '@/lib/rate-limit/route';
 import { PREDICTION_TILE_REGIONS } from '@/lib/prediction/tile-regions';
-import { assessTileFreshness, type RegionTileState } from '@/lib/prediction/tile-freshness';
+import {
+  assessTileFreshness,
+  previousDate,
+  withinCronGraceWindow,
+  type RegionTileState
+} from '@/lib/prediction/tile-freshness';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -11,8 +18,20 @@ export const dynamic = 'force-dynamic';
  * app availability. A stale tile batch should alert operators without making
  * the whole application look offline to deployment health checks.
  */
-export async function GET() {
-  const expectedDate = new Date().toISOString().slice(0, 10);
+export async function GET(request: NextRequest) {
+  // Ett kall = fem spørringer mot prediction_tiles MED tjenestenøkkelen, uten
+  // innlogging. Ruta er offentlig og gjettbar, så en løkke mot den kunne presse
+  // Supabase-poolen for ekte brukere. 10/min holder for enhver overvåkingsprobe.
+  const rl = checkRateLimit(`health-predictions:${getClientKey(request, null)}`, 10, 60);
+  if (!rl.allowed) {
+    return rateLimitResponse(rl);
+  }
+
+  const now = new Date();
+  const expectedDate = now.toISOString().slice(0, 10);
+  // Mellom midnatt UTC og cron-en har kjørt finnes det ingen fliser for dagens
+  // dato. Det er normalt, ikke degradert — se tile-freshness.ts.
+  const graceDate = withinCronGraceWindow(now) ? previousDate(expectedDate) : null;
   const supabase = createAdminClient();
 
   const states = await Promise.all(
@@ -36,11 +55,14 @@ export async function GET() {
     })
   );
 
-  const assessment = assessTileFreshness(states, expectedDate);
+  const assessment = assessTileFreshness(states, expectedDate, graceDate);
   return NextResponse.json(
     {
       status: assessment.fresh ? 'ok' : 'degraded',
       expectedDate,
+      // Står her når gårsdagens fliser fortsatt teller som ferske, så en
+      // operatør ser hvorfor svaret er 200 uten dagens dato i regions.
+      acceptedFallbackDate: graceDate,
       schedule: '15 1 * * * (UTC)',
       regions: assessment.regions
     },

@@ -20,16 +20,35 @@ import { isRecommendableSpecies } from '@/lib/prediction/recommendable';
 import { DEFAULT_LOCALE, type Locale } from '@/i18n/config';
 
 // Surfaced verbatim as toasts on the map, so they follow the reader's language.
-const COPY: Record<Locale, { premiumRequired: string; noWeather: string; speciesFallback: string }> = {
+const COPY: Record<
+  Locale,
+  {
+    premiumRequired: string;
+    noWeather: string;
+    speciesFallback: string;
+    badCoordinates: string;
+    zoomIn: string;
+    notAuthenticated: string;
+    failed: string;
+  }
+> = {
   nb: {
     premiumRequired: 'Detaljert heatmap krever Premium eller Sesongpass',
     noWeather: 'Værdata ikke tilgjengelig for området',
-    speciesFallback: 'Sopp'
+    speciesFallback: 'Sopp',
+    badCoordinates: 'Ugyldige koordinater',
+    zoomIn: 'Zoom inn for å lage heatmap (område for stort)',
+    notAuthenticated: 'Ikke innlogget',
+    failed: 'Kunne ikke lage heatmap'
   },
   sv: {
     premiumRequired: 'Detaljerad heatmap kräver Premium eller Säsongspass',
     noWeather: 'Väderdata är inte tillgängliga för området',
-    speciesFallback: 'Svamp'
+    speciesFallback: 'Svamp',
+    badCoordinates: 'Ogiltiga koordinater',
+    zoomIn: 'Zooma in för att skapa heatmap (området är för stort)',
+    notAuthenticated: 'Inte inloggad',
+    failed: 'Kunde inte skapa heatmap'
   }
 };
 
@@ -99,6 +118,10 @@ function inSeason(month: number, start: number, end: number): boolean {
 export async function GET(request: NextRequest) {
   const log = createRequestLogger(request);
   const url = new URL(request.url);
+  // Kartet viser feilstrengene rått som toast (MushroomMap.tsx), så språket må
+  // hentes FØR valideringen — ellers får en svensk bruker norsk feiltekst.
+  const locale = await getUserLocale();
+  const copy = COPY[locale] ?? COPY[DEFAULT_LOCALE];
   const minLat = num(url.searchParams.get('minLat'));
   const minLng = num(url.searchParams.get('minLng'));
   const maxLat = num(url.searchParams.get('maxLat'));
@@ -110,22 +133,20 @@ export async function GET(request: NextRequest) {
   const top = Number.isFinite(topParam) && topParam > 0 ? Math.min(20, topParam) : null;
 
   if (![minLat, minLng, maxLat, maxLng].every(Number.isFinite) || maxLat <= minLat || maxLng <= minLng) {
-    return NextResponse.json({ error: 'Ugyldige koordinater' }, { status: 400 });
+    return NextResponse.json({ error: copy.badCoordinates }, { status: 400 });
   }
   // Guard against absurd areas — a country-sized box would make cells meaningless.
   if (maxLat - minLat > 1.5 || maxLng - minLng > 3) {
-    return NextResponse.json({ error: 'Zoom inn for å lage heatmap (område for stort)' }, { status: 400 });
+    return NextResponse.json({ error: copy.zoomIn }, { status: 400 });
   }
 
   try {
-    // Explanation text is generated server-side, so it follows the reader's language.
-    const locale = await getUserLocale();
     const supabase = createClient();
     const {
       data: { user }
     } = await supabase.auth.getUser();
     if (!user) {
-      return NextResponse.json({ error: 'Ikke autentisert' }, { status: 401 });
+      return NextResponse.json({ error: copy.notAuthenticated }, { status: 401 });
     }
 
     // Many forest lookups per call → tighter bucket than the point endpoint.
@@ -143,7 +164,7 @@ export async function GET(request: NextRequest) {
     // spots, and no "why" — the upsell is seeing the value, not a 403.
     if (!paid && !top) {
       return NextResponse.json(
-        { error: (COPY[locale] ?? COPY[DEFAULT_LOCALE]).premiumRequired, upsell: true },
+        { error: copy.premiumRequired, upsell: true },
         { status: 403 }
       );
     }
@@ -196,7 +217,7 @@ export async function GET(request: NextRequest) {
     const weatherSource = weatherSourceSummary(weatherSamples);
 
     if (!centerWeather) {
-      return NextResponse.json({ error: (COPY[locale] ?? COPY[DEFAULT_LOCALE]).noWeather }, { status: 502 });
+      return NextResponse.json({ error: copy.noWeather }, { status: 502 });
     }
 
     const speciesContext: SpeciesContext | null = speciesRes?.data
@@ -226,11 +247,15 @@ export async function GET(request: NextRequest) {
       habitat: ReturnType<typeof buildSpeciesHabitatPreferences>;
     }[] = [];
     if (effectiveTop && paid && !speciesId) {
-      const { data: rows } = await supabase
+      // Svelget feil ga tom artsliste og dermed «lovende steder» uten et eneste
+      // artsnavn — for en betalende kunde, uten at noe ble logget. Feilen skal
+      // i det minste stå i loggen; svaret får stå (stedene er fortsatt ekte).
+      const { data: rows, error: rowsErr } = await supabase
         .from('mushroom_species')
         .select(
           'id,norwegian_name,swedish_name,latin_name,genus,season_start,season_end,peak_season_start,peak_season_end,habitat,mycorrhizal_partners,edibility'
         );
+      if (rowsErr) log.error('prediction.grid.species_query_failed', rowsErr);
       topSpeciesCandidates = (rows ?? [])
         .filter(
           (s) =>
@@ -244,7 +269,7 @@ export async function GET(request: NextRequest) {
         .map((s) => ({
           name:
             getSpeciesDisplayName(s as { norwegian_name: string | null; swedish_name: string | null }, locale) ||
-            (COPY[locale] ?? COPY[DEFAULT_LOCALE]).speciesFallback,
+            copy.speciesFallback,
           ctx: {
             speciesId: s.id as number,
             latinName: (s.latin_name as string | null) ?? null,
@@ -437,9 +462,6 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     log.error('prediction.grid.failed', error);
-    return NextResponse.json(
-      { error: 'Kunne ikke lage heatmap', details: error instanceof Error ? error.message : 'unknown' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: copy.failed }, { status: 500 });
   }
 }

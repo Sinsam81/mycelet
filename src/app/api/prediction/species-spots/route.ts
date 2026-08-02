@@ -39,13 +39,21 @@ const EMPTY_MESSAGES = {
     noSpeciesInSeason: 'Ingen arter med bilde er i sesong nå.',
     littleForestData: 'Fant lite skogdata her — prøv et område med mer skog.',
     premiumRequired: 'Soppbilder på kartet krever Premium eller Sesongpass',
-    noWeather: 'Værdata ikke tilgjengelig for området'
+    noWeather: 'Værdata ikke tilgjengelig for området',
+    badCoordinates: 'Ugyldige koordinater',
+    zoomIn: 'Zoom inn (område for stort)',
+    notAuthenticated: 'Ikke innlogget',
+    failed: 'Kunne ikke hente soppbilder'
   },
   sv: {
     noSpeciesInSeason: 'Inga arter med bild är i säsong just nu.',
     littleForestData: 'För lite skogsdata här — prova ett område med mer skog.',
     premiumRequired: 'Svampbilder på kartan kräver Premium eller Säsongspass',
-    noWeather: 'Väderdata är inte tillgängliga för området'
+    noWeather: 'Väderdata är inte tillgängliga för området',
+    badCoordinates: 'Ogiltiga koordinater',
+    zoomIn: 'Zooma in (området är för stort)',
+    notAuthenticated: 'Inte inloggad',
+    failed: 'Kunde inte hämta svampbilder'
   }
 } as const;
 
@@ -96,6 +104,11 @@ function inSeason(month: number, start: number, end: number): boolean {
 export async function GET(request: NextRequest) {
   const log = createRequestLogger(request);
   const url = new URL(request.url);
+  // Kartet viser feilstrengene rått som toast (MushroomMap.tsx), så språket må
+  // hentes FØR valideringen — ellers får en svensk bruker norsk feiltekst midt
+  // i et ellers svensk grensesnitt.
+  const locale = await getUserLocale();
+  const copy = EMPTY_MESSAGES[locale] ?? EMPTY_MESSAGES.nb;
   const minLat = num(url.searchParams.get('minLat'));
   const minLng = num(url.searchParams.get('minLng'));
   const maxLat = num(url.searchParams.get('maxLat'));
@@ -103,21 +116,19 @@ export async function GET(request: NextRequest) {
   const n = Math.max(3, Math.min(MAX_N, Math.round(Number(url.searchParams.get('n'))) || DEFAULT_N));
 
   if (![minLat, minLng, maxLat, maxLng].every(Number.isFinite) || maxLat <= minLat || maxLng <= minLng) {
-    return NextResponse.json({ error: 'Ugyldige koordinater' }, { status: 400 });
+    return NextResponse.json({ error: copy.badCoordinates }, { status: 400 });
   }
   if (maxLat - minLat > 1.5 || maxLng - minLng > 3) {
-    return NextResponse.json({ error: 'Zoom inn (område for stort)' }, { status: 400 });
+    return NextResponse.json({ error: copy.zoomIn }, { status: 400 });
   }
 
   try {
-    // Explanation text is generated server-side, so it follows the reader's language.
-    const locale = await getUserLocale();
     const supabase = createClient();
     const {
       data: { user }
     } = await supabase.auth.getUser();
     if (!user) {
-      return NextResponse.json({ error: 'Ikke autentisert' }, { status: 401 });
+      return NextResponse.json({ error: copy.notAuthenticated }, { status: 401 });
     }
 
     const rl = checkRateLimit(`prediction-species-spots:${getClientKey(request, user.id)}`, 10, 60);
@@ -128,18 +139,26 @@ export async function GET(request: NextRequest) {
     const subscription = await getUserBillingSubscription(supabase, user.id);
     const billing = getBillingCapabilities(subscription);
     if (!billing.paid) {
-      return NextResponse.json({ error: EMPTY_MESSAGES[locale].premiumRequired, upsell: true }, { status: 403 });
+      return NextResponse.json({ error: copy.premiumRequired, upsell: true }, { status: 403 });
     }
 
     const month = new Date().getMonth() + 1;
     const dayOfYear = dayOfYearOf(new Date());
 
-    const { data: speciesRows } = await supabase
+    // Feilen MÅ leses. Uten den ble speciesRows null, candidates [], og ruta
+    // svarte 200 med «Ingen arter med bilde er i sesong nå» til en betalende
+    // kunde midt i høysesongen — en påstand som er usann i alle tilfellene den
+    // kan oppstå. Feil åpent i stedet: si at det gikk galt.
+    const { data: speciesRows, error: speciesErr } = await supabase
       .from('mushroom_species')
       .select(
         'id,norwegian_name,swedish_name,latin_name,genus,season_start,season_end,peak_season_start,peak_season_end,habitat,mycorrhizal_partners,primary_image_url,edibility'
       )
       .not('primary_image_url', 'is', null);
+    if (speciesErr) {
+      log.error('prediction.species_spots.species_query_failed', speciesErr);
+      return NextResponse.json({ error: copy.failed }, { status: 500 });
+    }
 
     const candidates = (speciesRows ?? [])
       .filter(
@@ -154,7 +173,7 @@ export async function GET(request: NextRequest) {
       .slice(0, MAX_SPECIES);
 
     if (candidates.length === 0) {
-      return NextResponse.json({ spots: [], message: EMPTY_MESSAGES[locale].noSpeciesInSeason });
+      return NextResponse.json({ spots: [], message: copy.noSpeciesInSeason });
     }
 
     const centerLat = (minLat + maxLat) / 2;
@@ -164,7 +183,7 @@ export async function GET(request: NextRequest) {
     const centerWeather = nearestWeatherSample(weatherSamples, centerLat, centerLng)?.weather ?? null;
     const weatherSource = weatherSourceSummary(weatherSamples);
     if (!centerWeather) {
-      return NextResponse.json({ error: EMPTY_MESSAGES[locale].noWeather }, { status: 502 });
+      return NextResponse.json({ error: copy.noWeather }, { status: 502 });
     }
 
     // Real occurrences in the bounds (all species), grouped per species so each
@@ -234,7 +253,7 @@ export async function GET(request: NextRequest) {
     const cells = forested.filter((c): c is NonNullable<typeof c> => c !== null);
 
     if (cells.length === 0) {
-      return NextResponse.json({ spots: [], message: EMPTY_MESSAGES[locale].littleForestData });
+      return NextResponse.json({ spots: [], message: copy.littleForestData });
     }
 
     const weatherInput = (weather: NonNullable<typeof centerWeather>) => ({
@@ -369,9 +388,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ spots, weatherSource, weatherSamples: weatherSamples.length });
   } catch (error) {
     log.error('prediction.species_spots.failed', error);
-    return NextResponse.json(
-      { error: 'Kunne ikke hente soppbilder', details: error instanceof Error ? error.message : 'unknown' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: copy.failed }, { status: 500 });
   }
 }

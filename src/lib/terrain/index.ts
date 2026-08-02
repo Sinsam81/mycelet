@@ -6,6 +6,9 @@
  *   → { punkter: [{ z: <elevation m>, terreng: "<class>", ... }] }
  */
 
+import { getRegion } from '@/lib/utils/region';
+import { PointCache } from '@/lib/cache/point-cache';
+
 export interface ElevationResult {
   /** Metres above sea level, or null over sea / no DTM coverage. */
   elevationM: number | null;
@@ -13,7 +16,43 @@ export interface ElevationResult {
   terrainClass: string | null;
 }
 
+/**
+ * Høyden i et punkt endrer seg aldri, men rutenettene slo den opp på nytt ved
+ * hvert knappetrykk. Se src/lib/cache/point-cache.ts.
+ */
+const elevationCache = new PointCache<ElevationResult | null>({
+  ttlMs: 24 * 60 * 60 * 1000,
+  maxEntries: 5000
+});
+/** Kort levetid for «ingen data» — det kan være en tjeneste som var nede. */
+const NULL_TTL_MS = 10 * 60 * 1000;
+
+/** Kun for tester. */
+export function clearElevationCache(): void {
+  elevationCache.clear();
+}
+
 export async function getElevation({ lat, lon }: { lat: number; lon: number }): Promise<ElevationResult | null> {
+  // Kartverkets DTM dekker bare Norge. Uten denne vakten sendte rutenettene
+  // (49-196 celler per «Lovende steder»-trykk) like mange kall til Geonorge for
+  // svenske koordinater — hvert med 3 sekunders timeout-budsjett — og fikk
+  // garantert {z: null} tilbake. Ren ventetid for brukeren og ren belastning på
+  // en offentlig norsk tjeneste. Samme mønster som getForestProperties, som
+  // gjør regionsjekken selv, slik at kallstedene slipper å vite noe.
+  if (getRegion(lat, lon) !== 'NO') return null;
+
+  const cached = elevationCache.get(lat, lon);
+  if (cached.hit) return cached.value;
+
+  const result = await fetchElevation(lat, lon);
+  // Et null-svar kan være ekte «ingen DTM-dekning», men det kan også være at
+  // Geonorge var nede i det øyeblikket. Hold det kort, så et blaff ikke blir
+  // stående som en sannhet et helt døgn.
+  elevationCache.set(lat, lon, result, result == null ? NULL_TTL_MS : undefined);
+  return result;
+}
+
+async function fetchElevation(lat: number, lon: number): Promise<ElevationResult | null> {
   try {
     const res = await fetch(
       `https://ws.geonorge.no/hoydedata/v1/punkt?koordsys=4258&nord=${lat}&ost=${lon}`,

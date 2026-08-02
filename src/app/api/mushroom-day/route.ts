@@ -6,6 +6,22 @@ import { getClientKey, rateLimitResponse } from '@/lib/rate-limit/route';
 import { createRequestLogger } from '@/lib/log/request';
 import { getUserLocale } from '@/i18n/locale';
 import { observedRainWindows } from '@/lib/weather/windows';
+import { DEFAULT_LOCALE, type Locale } from '@/i18n/config';
+
+// Feilstrengene vises rått i grensesnittet, så de følger leserens språk —
+// kroppen i samme rute er allerede oversatt.
+const COPY: Record<Locale, { badCoordinates: string; noWeather: string; failed: string }> = {
+  nb: {
+    badCoordinates: 'Mangler eller ugyldige koordinater (lat/lon)',
+    noWeather: 'Værdata ikke tilgjengelig for området',
+    failed: 'Kunne ikke vurdere soppforhold'
+  },
+  sv: {
+    badCoordinates: 'Saknade eller ogiltiga koordinater (lat/lon)',
+    noWeather: 'Väderdata är inte tillgängliga för området',
+    failed: 'Kunde inte bedöma svampförhållandena'
+  }
+};
 
 /**
  * "Perfekt soppdag" endpoint — returns today's mushroom-foraging verdict for a
@@ -36,8 +52,14 @@ export async function GET(request: NextRequest) {
   const lat = num(url.searchParams.get('lat'));
   const lon = num(url.searchParams.get('lon'));
 
+  // Verdict + reasons are user-facing text, so the language is part of the
+  // cache identity — otherwise the first caller's language wins for everyone.
+  // Hentes før valideringen, siden feilteksten også er brukervendt.
+  const locale = await getUserLocale();
+  const copy = COPY[locale] ?? COPY[DEFAULT_LOCALE];
+
   if (!Number.isFinite(lat) || !Number.isFinite(lon) || lat < -90 || lat > 90 || lon < -180 || lon > 180) {
-    return NextResponse.json({ error: 'Mangler eller ugyldige koordinater (lat/lon)' }, { status: 400 });
+    return NextResponse.json({ error: copy.badCoordinates }, { status: 400 });
   }
 
   const rl = checkRateLimit(`mushroom-day:${getClientKey(request, null)}`, 30, 60);
@@ -45,11 +67,12 @@ export async function GET(request: NextRequest) {
     return rateLimitResponse(rl);
   }
 
-  // Verdict + reasons are user-facing text, so the language is part of the
-  // cache identity — otherwise the first caller's language wins for everyone.
-  const locale = await getUserLocale();
-  const month = new Date().getMonth() + 1;
-  const cacheKey = `${lat.toFixed(2)},${lon.toFixed(2)},${month},${locale}`;
+  const now = new Date();
+  const month = now.getMonth() + 1;
+  const dayOfMonth = now.getDate();
+  // Datoen, ikke bare måneden, er del av cache-nøkkelen: sesongleddet glir nå
+  // fra dag til dag (se mushroom-day.ts), så et svar fra i går er et annet svar.
+  const cacheKey = `${lat.toFixed(2)},${lon.toFixed(2)},${now.toISOString().slice(0, 10)},${locale}`;
   const cached = dayCache.get(cacheKey);
   if (cached && Date.now() - cached.at < CACHE_TTL_MS) {
     return NextResponse.json(cached.payload);
@@ -58,7 +81,7 @@ export async function GET(request: NextRequest) {
   try {
     const weather = await fetchWeatherSummary({ lat, lon });
     if (!weather) {
-      return NextResponse.json({ error: 'Værdata ikke tilgjengelig for området' }, { status: 502 });
+      return NextResponse.json({ error: copy.noWeather }, { status: 502 });
     }
 
     const assessment = assessMushroomDay(
@@ -75,7 +98,8 @@ export async function GET(request: NextRequest) {
         soilMoistureIndex: weather.soilMoistureIndex
       },
       month,
-      locale
+      locale,
+      dayOfMonth
     );
 
     const payload = { ...assessment, weatherSource: weather.source };
@@ -92,9 +116,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(payload);
   } catch (error) {
     log.error('mushroom_day.failed', error);
-    return NextResponse.json(
-      { error: 'Kunne ikke vurdere soppforhold', details: error instanceof Error ? error.message : 'unknown' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: copy.failed }, { status: 500 });
   }
 }

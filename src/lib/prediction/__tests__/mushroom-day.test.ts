@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { assessMushroomDay } from '@/lib/prediction/mushroom-day';
+import { assessMushroomDay, seasonWeight } from '@/lib/prediction/mushroom-day';
 import type { ExplanationWeather } from '@/lib/utils/prediction-explanation';
 
 const base: ExplanationWeather = {
@@ -68,6 +68,78 @@ describe('assessMushroomDay — language', () => {
 
   it('defaults to Norwegian when no locale is given', () => {
     expect(assessMushroomDay(base, 1).title).toBe('Soppforhold i dag');
+  });
+});
+
+/**
+ * Sesongleddet var en trapp: 35 for aug-okt, 22 for jul/nov, 10 for juni, 0
+ * ellers. Med IDENTISK vær ga det et sprang på 13-22 poeng ved midnatt hver 1. i
+ * måneden — 31. okt 100, 1. nov 87; 30. nov 87, 1. des 65, og overskriften byttet
+ * fra «Perfekt soppdag i dag!» til «Soppforhold i dag». Sju-dagersstripen krysser
+ * et månedsskifte seks dager i måneden.
+ */
+describe('sesongleddet over månedsskiftet', () => {
+  it('gir de gamle tallene midt i måneden', () => {
+    expect(seasonWeight(9, 15)).toBe(35);
+    expect(seasonWeight(7, 15)).toBe(22);
+    expect(seasonWeight(6, 15)).toBe(10);
+    expect(seasonWeight(2, 15)).toBe(0);
+  });
+
+  it('gir de gamle tallene når dagen ikke oppgis (uendret for gamle kallere)', () => {
+    for (let m = 1; m <= 12; m++) {
+      expect(seasonWeight(m)).toBe(seasonWeight(m, 15));
+    }
+  });
+
+  it('holder nivået gjennom hele høysesongen', () => {
+    // Midten av august til midten av oktober er 35 hele veien.
+    expect(seasonWeight(8, 15)).toBe(35);
+    expect(seasonWeight(8, 31)).toBe(35);
+    expect(seasonWeight(9, 1)).toBe(35);
+    expect(seasonWeight(9, 30)).toBe(35);
+    expect(seasonWeight(10, 1)).toBe(35);
+    expect(seasonWeight(10, 15)).toBe(35);
+  });
+
+  it('har ikke lenger et sprang ved midnatt 31. okt → 1. nov', () => {
+    const step = Math.abs(seasonWeight(11, 1) - seasonWeight(10, 31));
+    expect(step).toBeLessThan(1);
+  });
+
+  it('har ikke lenger et sprang ved noe månedsskifte', () => {
+    const daysInMonth = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+    for (let m = 1; m <= 12; m++) {
+      const next = (m % 12) + 1;
+      const step = Math.abs(seasonWeight(next, 1) - seasonWeight(m, daysInMonth[m - 1]));
+      expect(step, `månedsskiftet ${m} → ${next}`).toBeLessThan(1.5);
+    }
+  });
+
+  it('stiger monotont inn i høysesongen og faller monotont ut av den', () => {
+    // 1. juli → 15. august: bare oppover.
+    const rising = [
+      seasonWeight(7, 1),
+      seasonWeight(7, 20),
+      seasonWeight(8, 1),
+      seasonWeight(8, 15)
+    ];
+    for (let i = 1; i < rising.length; i++) expect(rising[i]).toBeGreaterThan(rising[i - 1]);
+
+    // 15. oktober → 15. desember: bare nedover.
+    const falling = [
+      seasonWeight(10, 15),
+      seasonWeight(11, 1),
+      seasonWeight(11, 20),
+      seasonWeight(12, 15)
+    ];
+    for (let i = 1; i < falling.length; i++) expect(falling[i]).toBeLessThan(falling[i - 1]);
+  });
+
+  it('fjerner det synlige spranget i selve dagvurderingen', () => {
+    const oct31 = assessMushroomDay(base, 10, 'nb', 31).score;
+    const nov1 = assessMushroomDay(base, 11, 'nb', 1).score;
+    expect(Math.abs(oct31 - nov1)).toBeLessThanOrEqual(1);
   });
 });
 
