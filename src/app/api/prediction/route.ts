@@ -17,22 +17,56 @@ import { isRecommendableSpecies } from '@/lib/prediction/recommendable';
 import { dayOfYearOf } from '@/lib/prediction/phenology';
 import { weightedOccurrenceDensity, OCCURRENCE_FETCH_LIMIT } from '@/lib/prediction/occurrences';
 import { getElevation } from '@/lib/terrain';
+import { previousDate, withinCronGraceWindow } from '@/lib/prediction/tile-freshness';
 import { createRequestLogger } from '@/lib/log/request';
 import { getUserLocale } from '@/i18n/locale';
 import { DEFAULT_LOCALE, type Locale } from '@/i18n/config';
 
 // The client renders these verbatim (it prefers the server string over its own
 // translated fallback), so they follow the reader's language.
-const COPY: Record<Locale, { upsell: string; noWeather: string }> = {
+const COPY: Record<
+  Locale,
+  {
+    upsell: string;
+    noWeather: string;
+    badCoordinates: string;
+    badSpeciesId: string;
+    failed: string;
+  }
+> = {
   nb: {
-    upsell: 'Gratis viser forenklet heatmap. Oppgrader for full detalj.',
-    noWeather: 'Værdata ikke tilgjengelig for disse koordinatene (mangler API-nøkkel eller stasjonsdata)'
+    // Det romlige laget er IKKE bak betalingsmuren — migrasjon 036 sier det
+    // uttrykkelig, og en innlogget gratisbruker henter rasteret rett fra RPC-en
+    // og ser nøyaktig de samme feltene som en betalende. Den gamle teksten
+    // («Gratis viser forenklet heatmap. Oppgrader for full detalj.») lovet
+    // dermed noe leseren allerede hadde. Denne beskriver det premium faktisk
+    // gir på kartet.
+    upsell: 'Premium gir lovende steder med begrunnelse, soppbilder på kartet og offline-kart.',
+    noWeather: 'Værdata ikke tilgjengelig for disse koordinatene (mangler API-nøkkel eller stasjonsdata)',
+    badCoordinates: 'Mangler eller ugyldige koordinater (lat/lon)',
+    badSpeciesId: 'Ugyldig artsnummer',
+    failed: 'Kunne ikke beregne soppforhold'
   },
   sv: {
-    upsell: 'Gratisversionen visar en förenklad heatmap. Uppgradera för full detalj.',
-    noWeather: 'Väderdata är inte tillgängliga för dessa koordinater (saknar API-nyckel eller stationsdata)'
+    upsell: 'Premium ger lovande platser med motivering, svampbilder på kartan och offlinekarta.',
+    noWeather: 'Väderdata är inte tillgängliga för dessa koordinater (saknar API-nyckel eller stationsdata)',
+    badCoordinates: 'Saknade eller ogiltiga koordinater (lat/lon)',
+    badSpeciesId: 'Ogiltigt artnummer',
+    failed: 'Kunde inte beräkna svampförhållandena'
   }
 };
+
+/**
+ * Number(null) er 0, og Number.isFinite(0) er sant — så en manglende parameter
+ * slapp gjennom valideringen som en gyldig koordinat på 0°N 0°Ø. Ruta svarte da
+ * 200 med en troverdig score for et punkt i Atlanterhavet. Samme vakt som
+ * /api/mushroom-day og /api/mushroom-forecast allerede har.
+ */
+function num(value: string | null): number {
+  if (value == null || value.trim() === '') return NaN;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : NaN;
+}
 
 // This route calls two slow, no-SLA external providers (weather + NIBIO forest)
 // in series. Pin the runtime and give it real headroom so a slow provider ends
@@ -98,8 +132,32 @@ interface PredictionTileRow {
     environment?: number;
     seasonal?: number;
     forest?: { forestType: string; productivity: number | null; volumePerHa: number | null; source: string } | null;
-    habitat?: { score: number; reasons: string[] } | null;
+    /**
+     * Begrunnelsen er lagret ferdig formulert i flisa (cron-jobben skriver den
+     * én gang for alle lesere), derfor én liste per språk. `reasonsSv` mangler
+     * på fliser generert før PR-en som la den til — se habitatReasonsFor.
+     */
+    habitat?: { score: number; reasons: string[]; reasonsSv?: string[] } | null;
   } | null;
+}
+
+/**
+ * Habitatbegrunnelsen i leserens språk, hentet fra flisa.
+ *
+ * Flisbanen kan ikke regne begrunnelsen på nytt: flisa lagrer ikke `ageYears`,
+ * så en ny beregning ville gitt en annen score enn den som ligger i flisa.
+ * Derfor lagrer generatoren begge språk. Er den svenske lista ikke der (en flis
+ * fra før endringen), utelates begrunnelsen for svenske lesere heller enn å
+ * vises på norsk — panelet får da habitatscoren uten setningen, og gapet lukkes
+ * ved neste nattlige kjøring.
+ */
+function habitatReasonsFor(
+  habitat: { score: number; reasons: string[]; reasonsSv?: string[] } | null | undefined,
+  locale: Locale
+): { score: number; reasons: string[] } | undefined {
+  if (!habitat) return undefined;
+  if (locale === 'sv') return { score: habitat.score, reasons: habitat.reasonsSv ?? [] };
+  return { score: habitat.score, reasons: habitat.reasons };
 }
 
 function clamp(value: number, min: number, max: number) {
@@ -113,17 +171,34 @@ function toFreeFactor(value: number) {
 export async function GET(request: NextRequest) {
   const log = createRequestLogger(request);
   const url = new URL(request.url);
-  const lat = Number(url.searchParams.get('lat'));
-  const lon = Number(url.searchParams.get('lon'));
+  // Feilmeldingene under vises rått i grensesnittet, så språket må hentes før
+  // valideringen — ikke først inne i try-blokka.
+  const locale = await getUserLocale();
+  const copy = COPY[locale] ?? COPY[DEFAULT_LOCALE];
+  const lat = num(url.searchParams.get('lat'));
+  const lon = num(url.searchParams.get('lon'));
   // Clamp: an unbounded/NaN radius would build a country-sized (or NaN) bounding
   // box that the RPCs then scan. 1-50 km covers every legitimate use.
   const radiusKm = Math.min(50, Math.max(1, Number(url.searchParams.get('radiusKm')) || 15));
   const speciesIdParam = url.searchParams.get('speciesId');
   const speciesId = speciesIdParam ? Number(speciesIdParam) : null;
 
-  if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+  if (!Number.isFinite(lat) || !Number.isFinite(lon) || lat < -90 || lat > 90 || lon < -180 || lon > 180) {
     log.warn('prediction.bad_coordinates', { lat, lon });
-    return NextResponse.json({ error: 'Ugyldige koordinater' }, { status: 400 });
+    return NextResponse.json({ error: copy.badCoordinates }, { status: 400 });
+  }
+
+  // Artsnummeret går rett inn i en int-parameter i RPC-en. Uten denne vakten
+  // ble «1e308», «1.5» og «999999999999999999999» til en PostgreSQL-feil som
+  // ruta svarte 500 med — og feilteksten avslørte kolonnetypen. En ugyldig
+  // parameter fra klienten er 400, ikke 500.
+  // Merk taket: Number.isInteger(1e308) er SANT (det er et heltallsverdi-
+  // flyttall), men Postgres' int4 stopper på 2147483647 — det var nettopp 1e308
+  // som ga «invalid input syntax for type integer» i produksjon.
+  const PG_INT4_MAX = 2147483647;
+  if (speciesId != null && (!Number.isInteger(speciesId) || speciesId <= 0 || speciesId > PG_INT4_MAX)) {
+    log.warn('prediction.bad_species_id', { speciesIdParam });
+    return NextResponse.json({ error: copy.badSpeciesId }, { status: 400 });
   }
 
   // Coarse (~1 km) on purpose — server logs must not hold a position trail.
@@ -138,8 +213,8 @@ export async function GET(request: NextRequest) {
   const maxLng = lon + lonDelta;
 
   try {
-    // Explanation text is generated server-side, so it follows the reader's language.
-    const locale = await getUserLocale();
+    // Explanation text is generated server-side, so it follows the reader's
+    // language — `locale`/`copy` are resolved above, before validation.
     const supabase = createClient();
     const {
       data: { user }
@@ -158,7 +233,8 @@ export async function GET(request: NextRequest) {
     const subscription = user ? await getUserBillingSubscription(supabase, user.id) : null;
     const billing = getBillingCapabilities(subscription);
     const premiumPrediction = billing.paid;
-    const tileDate = new Date().toISOString().slice(0, 10);
+    const requestedAt = new Date();
+    const tileDate = requestedAt.toISOString().slice(0, 10);
 
     // Fetch tiles, current weather, and (if a species is requested) species
     // details all in parallel. The tile-path uses weather as informational only
@@ -242,13 +318,48 @@ export async function GET(request: NextRequest) {
       : null;
 
     if (tileRes.error) {
+      // Databasens egen feiltekst hører hjemme i loggen, ikke i svaret til en
+      // uautentisert kaller — den avslørte kolonnetyper og at laget under er
+      // PostgreSQL. log.error over har hele meldingen.
       log.error('prediction.tile_rpc_failed', tileRes.error);
-      return NextResponse.json({ error: tileRes.error.message }, { status: 500 });
+      return NextResponse.json({ error: copy.failed }, { status: 500 });
     }
 
-    const tiles = (tileRes.data ?? []) as PredictionTileRow[];
+    let tiles = (tileRes.data ?? []) as PredictionTileRow[];
+    let servedTileDate = tileDate;
+
+    // `tileDate` er UTC-datoen, mens cron-en kjører 01:15 UTC. Mellom midnatt
+    // og da finnes det ingen fliser for «i dag», og ruta falt til den nøytrale
+    // fallback-formelen — annen modell, tomt hotspot-lag, ingen skogdata — hver
+    // eneste natt. Samme skjer hele døgnet hvis nattens jobb har feilet.
+    //
+    // Prøv gårsdagens raster før vi gir opp. Skogen, habitatet og sesongen i en
+    // flis endrer seg ikke over natten; bare værleddet er et døgn gammelt, og
+    // det er et bedre svar enn tre nøytrale 50-ere. Vi går ETT døgn tilbake, så
+    // en flis kan aldri bli mer enn drøyt et døgn gammel, og datoen følger med
+    // ut i svaret.
+    if (tiles.length === 0 && withinCronGraceWindow(requestedAt)) {
+      const yesterday = previousDate(tileDate);
+      const retry = await tileClient.rpc('get_prediction_tiles_in_bounds', {
+        min_lat: minLat,
+        min_lng: minLng,
+        max_lat: maxLat,
+        max_lng: maxLng,
+        p_tile_date: yesterday,
+        p_species_id: speciesId
+      });
+      if (retry.error) {
+        log.warn('prediction.tile_rpc_retry_failed', { message: retry.error.message });
+      } else if ((retry.data ?? []).length > 0) {
+        tiles = retry.data as PredictionTileRow[];
+        servedTileDate = yesterday;
+        log.info('prediction.tiles_from_previous_day', { tileDate: yesterday });
+      }
+    }
+
     log.debug('prediction.fetched', {
       tileCount: tiles.length,
+      tileDate: servedTileDate,
       hasWeather: weather !== null,
       hasSpecies: speciesContext !== null
     });
@@ -378,6 +489,9 @@ export async function GET(request: NextRequest) {
 
       return NextResponse.json({
         source: 'prediction_tiles',
+        // Hvilken dags raster tallet faktisk er bygget på. Normalt i dag; i det
+        // korte vinduet før nattens jobb har kjørt, gårsdagens.
+        tileDate: servedTileDate,
         access: premiumPrediction ? 'premium_full' : 'free_limited',
         upsellMessage: premiumPrediction ? undefined : (COPY[locale] ?? COPY[DEFAULT_LOCALE]).upsell,
         score,
@@ -423,7 +537,7 @@ export async function GET(request: NextRequest) {
         forest: nearestForest?.tile.components?.forest
           ? { ...nearestForest.tile.components.forest, distanceKm: Number(nearestForest.distanceKm.toFixed(2)) }
           : null,
-        habitat: forestTile?.components?.habitat ?? undefined,
+        habitat: habitatReasonsFor(forestTile?.components?.habitat, locale),
         hotspots,
         leadingSpecies: leadingSpecies ?? undefined,
         species: speciesSummary ?? undefined
@@ -502,7 +616,7 @@ export async function GET(request: NextRequest) {
 
     if (findingsRes.error) {
       log.error('prediction.findings_rpc_failed', findingsRes.error);
-      return NextResponse.json({ error: findingsRes.error.message }, { status: 500 });
+      return NextResponse.json({ error: copy.failed }, { status: 500 });
     }
 
     const now = Date.now();
@@ -727,12 +841,6 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     log.error('prediction.unexpected_failure', error);
-    return NextResponse.json(
-      {
-        error: 'Prediksjon feilet',
-        details: error instanceof Error ? error.message : 'unknown'
-      },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: copy.failed }, { status: 500 });
   }
 }

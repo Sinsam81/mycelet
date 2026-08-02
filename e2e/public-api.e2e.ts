@@ -52,6 +52,29 @@ test.describe('Prediksjon / Lovende steder', () => {
     expect(res.status()).toBe(400);
   });
 
+  // Number(null) er 0, så en manglende parameter slapp gjennom som en gyldig
+  // koordinat på 0°N 0°Ø — ruta svarte 200 med en troverdig score for et punkt i
+  // Atlanterhavet, og ingenting i svaret sa at inndata var tomme.
+  test('manglende koordinater gir 400, ikke en score for 0°N 0°Ø', async ({ request }) => {
+    expect((await request.get('/api/prediction')).status()).toBe(400);
+    expect((await request.get('/api/prediction?lat=59.91')).status()).toBe(400);
+    expect((await request.get('/api/prediction?lon=10.75')).status()).toBe(400);
+  });
+
+  test('koordinater utenfor jorden gir 400', async ({ request }) => {
+    expect((await request.get('/api/prediction?lat=91&lon=10.75')).status()).toBe(400);
+    expect((await request.get('/api/prediction?lat=59.91&lon=200')).status()).toBe(400);
+  });
+
+  // Artsnummeret gikk rått inn i en int-parameter i RPC-en, så ruta svarte 500
+  // med PostgreSQLs egen feiltekst — og avslørte kolonnetypen bak parameteren.
+  test('ugyldig artsnummer gir 400 uten databasens feiltekst', async ({ request }) => {
+    const res = await request.get('/api/prediction?lat=59.91&lon=10.75&speciesId=1.5');
+    expect(res.status()).toBe(400);
+    const body = await res.json();
+    expect(String(body.error ?? '')).not.toMatch(/integer|syntax|postgres/i);
+  });
+
   test('GET /api/mushroom-day svarer med score', async ({ request }) => {
     const res = await request.get(`/api/mushroom-day?lat=${OSLO.lat}&lon=${OSLO.lon}`);
     expect([200, 502], `uventet status ${res.status()}`).toContain(res.status());

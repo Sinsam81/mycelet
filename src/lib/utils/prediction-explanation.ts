@@ -118,6 +118,16 @@ interface ExplanationCopy {
   months: string[];
   forestTypes: Record<string, string>;
   forestFallback: string;
+  /**
+   * `mushroom_species.habitat` og `.mycorrhizal_partners` er NORSKE ord i
+   * databasen ('barskog', 'bjørk'). De limes rett inn i setningsmalene, så uten
+   * disse tabellene fikk en svensk leser «Föredraget habitat: barskog,
+   * blandingsskog, mose» og «Följer gran/furu/bjørk/eik» — «bjørk» kan ikke
+   * engang skrives på svensk. Tom tabell for nb: der ER verdiene allerede
+   * riktige, og utdataene forblir byte-identiske.
+   */
+  habitatTerms: Record<string, string>;
+  partnerTerms: Record<string, string>;
   rainWindow: { d14: string; d7: string; d3: string };
 
   speciesOutOfSeason: (name: string, from: string, to: string) => string;
@@ -186,6 +196,9 @@ const COPY: Record<Locale, ExplanationCopy> = {
       apent: 'åpent landskap'
     },
     forestFallback: 'skog',
+    // Verdiene i databasen er allerede norske.
+    habitatTerms: {},
+    partnerTerms: {},
     rainWindow: { d14: '14 dager', d7: '7 dager', d3: '3 dager' },
 
     speciesOutOfSeason: (name, from, to) => `${name} er utenfor sesong nå (sesong: ${from}–${to})`,
@@ -255,6 +268,60 @@ const COPY: Record<Locale, ExplanationCopy> = {
       apent: 'öppet landskap'
     },
     forestFallback: 'skog',
+    // Habitat-taggene slik de er skrevet i mushroom_species.habitat. Ukjente
+    // verdier faller gjennom uendret — samme oppførsel som før tabellen fantes.
+    habitatTerms: {
+      barskog: 'barrskog',
+      granskog: 'granskog',
+      furuskog: 'tallskog',
+      lauvskog: 'lövskog',
+      løvskog: 'lövskog',
+      eikeskog: 'ekskog',
+      lerkeskog: 'lärkskog',
+      blandingsskog: 'blandskog',
+      fjellbjørkeskog: 'fjällbjörkskog',
+      'fuktig skog': 'fuktig skog',
+      'eldre bestand': 'äldre bestånd',
+      kantsoner: 'kantzoner',
+      lysninger: 'gläntor',
+      brannfelt: 'brandfält',
+      skog: 'skog',
+      eng: 'äng',
+      beite: 'betesmark',
+      beitemark: 'betesmark',
+      gress: 'gräs',
+      gressmark: 'gräsmark',
+      plen: 'gräsmatta',
+      hage: 'trädgård',
+      park: 'park',
+      myr: 'myr',
+      mose: 'mossa',
+      moserik: 'mossrik',
+      fuktig: 'fuktig',
+      kalkrik: 'kalkrik',
+      sandgrunn: 'sandmark',
+      'sur jord': 'sur jord',
+      sti: 'stig'
+    },
+    // Vertstrærne slik de er skrevet i mushroom_species.mycorrhizal_partners.
+    partnerTerms: {
+      gran: 'gran',
+      furu: 'tall',
+      bjørk: 'björk',
+      bjork: 'björk',
+      eik: 'ek',
+      bøk: 'bok',
+      ask: 'ask',
+      alm: 'alm',
+      osp: 'asp',
+      or: 'al',
+      selje: 'sälg',
+      rogn: 'rönn',
+      hassel: 'hassel',
+      lind: 'lind',
+      lerk: 'lärk',
+      contorta: 'contortatall'
+    },
     rainWindow: { d14: '14 dagarna', d7: '7 dagarna', d3: '3 dagarna' },
 
     speciesOutOfSeason: (name, from, to) => `${name} är utanför säsong nu (säsong: ${from}–${to})`,
@@ -322,6 +389,15 @@ function inMonth(month: number, start: number, end: number): boolean {
 
 function forestLabel(forestType: string, copy: ExplanationCopy): string {
   return copy.forestTypes[forestType] ?? copy.forestFallback;
+}
+
+/**
+ * Oversett de norske DB-verdiene til leserens språk. Ukjente verdier slippes
+ * gjennom uendret — bedre et norsk ord enn en manglende linje, og for nb er
+ * tabellen tom, så utdataene er uendret.
+ */
+function localizeTerms(values: string[], table: Record<string, string>): string[] {
+  return values.map((value) => table[value.trim().toLowerCase()] ?? value);
 }
 
 /** Credit the right data source in the habitat line. CORINE for Sweden/Europe,
@@ -556,7 +632,7 @@ export function buildExplanation(input: ExplanationInput): Explanation[] {
     lines.push({
       level: 'neutral',
       category: 'habitat',
-      text: copy.preferredHabitat(input.species.habitat.join(', '))
+      text: copy.preferredHabitat(localizeTerms(input.species.habitat, copy.habitatTerms).join(', '))
     });
   }
 
@@ -565,7 +641,9 @@ export function buildExplanation(input: ExplanationInput): Explanation[] {
     lines.push({
       level: 'neutral',
       category: 'mycorrhizal',
-      text: copy.mycorrhizalPartners(input.species.mycorrhizalPartners.join('/'))
+      text: copy.mycorrhizalPartners(
+        localizeTerms(input.species.mycorrhizalPartners, copy.partnerTerms).join('/')
+      )
     });
   }
 

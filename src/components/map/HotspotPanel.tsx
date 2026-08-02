@@ -99,6 +99,11 @@ export function HotspotPanel({ speciesId, data, explanations, isLoading, error }
   // stilles opp mot et som bærer et artsnavn.
   const unnamedSpecies = Boolean(data) && !data?.species && !leadingName && !speciesId;
 
+  // Ingen forhåndsberegnet flis OG ingen skogdata i punktet: da er det ingenting
+  // igjen i tallet som handler om STEDET — bare vær og sesong. Gjelder hele
+  // Sverige og alt av Norge utenfor de fem rasterregionene.
+  const noPlaceData = Boolean(data) && data?.source === 'computed_fallback' && !data?.forest;
+
   // Collapsed: a compact pill that still shows the verdict at a glance, so the
   // map stays open. Tap to expand the full "hvorfor" + sources.
   if (!open) {
@@ -211,6 +216,17 @@ export function HotspotPanel({ speciesId, data, explanations, isLoading, error }
           )}
 
           {credit ? <p className="mt-2 text-[11px] text-gray-500">{t('sources', { credit })}</p> : null}
+
+          {/* Rasteret dekker fem norske byområder og ingenting i Sverige. Uten
+              fliser OG uten skogdata i punktet hviler tallet på vær og sesong
+              alene — den validerte (tids-)delen av modellen, men uten noe som
+              helst om STEDET. Det så tidligere nøyaktig ut som et tall bygget på
+              ekte skog- og rasterdata. Si det høyt i stedet. */}
+          {noPlaceData ? (
+            <p className="mt-2 rounded border border-gray-200 bg-gray-50 px-2 py-1.5 text-[11px] text-gray-700">
+              {t('noPlaceData')}
+            </p>
+          ) : null}
 
           <p className="mt-1 text-[11px] italic text-gray-500">
             {t('habitatDisclaimer')}

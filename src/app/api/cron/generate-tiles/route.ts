@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { fetchWeatherSummary } from '@/lib/weather';
-import { getForestProperties, buildSpeciesHabitatPreferences } from '@/lib/forest';
+import { getForestProperties, buildSpeciesHabitatPreferences, computeHabitatScore } from '@/lib/forest';
 import { computeCellPrediction } from '@/lib/prediction/cell-score';
 import { dayOfYearOf } from '@/lib/prediction/phenology';
 import {
@@ -128,6 +128,10 @@ export async function POST(request: NextRequest) {
           peakSeasonStart: sp.peak_season_start,
           peakSeasonEnd: sp.peak_season_end
         };
+        const speciesHabitat = buildSpeciesHabitatPreferences({
+          mycorrhizalPartners: sp.mycorrhizal_partners,
+          habitat: sp.habitat
+        });
         const prediction = computeCellPrediction({
           lat: cell.lat,
           lon: cell.lng,
@@ -136,11 +140,14 @@ export async function POST(request: NextRequest) {
           weather: weatherInput,
           forest,
           species: speciesCtx,
-          speciesHabitat: buildSpeciesHabitatPreferences({
-            mycorrhizalPartners: sp.mycorrhizal_partners,
-            habitat: sp.habitat
-          })
+          speciesHabitat
         });
+        // Flisene skrives én gang for alle lesere, så begrunnelsen må lagres i
+        // BEGGE språk — ellers får en svensk leser én norsk setning midt i en
+        // ellers svensk forklaringsliste (flisbanen i /api/prediction leser
+        // strengen rått). computeHabitatScore er ren og lokal: samme score,
+        // bare annen tekst. Ingen ekstra nettverkskall.
+        const habitatSv = computeHabitatScore(forest, speciesHabitat, 'sv');
         return {
           tile_date: tileDate,
           species_id: sp.id,
@@ -168,7 +175,11 @@ export async function POST(request: NextRequest) {
                 }
               : null,
             habitat: prediction.habitat
-              ? { score: prediction.habitat.score, reasons: prediction.habitat.reasons }
+              ? {
+                  score: prediction.habitat.score,
+                  reasons: prediction.habitat.reasons,
+                  reasonsSv: habitatSv.reasons
+                }
               : null
           },
           metadata: { region: region.name, grid_size_deg: region.step }

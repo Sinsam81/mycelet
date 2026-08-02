@@ -37,6 +37,60 @@ function cumulativeRain(weather: ExplanationWeather): number {
 }
 
 /**
+ * Sesongleddets vekt (0-35) per måned — nivået, ikke trappen.
+ *
+ * August–oktober er høysesong; juli og november er skuldre; juni er såvidt i
+ * gang. Verdiene er de samme som før; det er OVERGANGEN mellom dem som er ny.
+ */
+const SEASON_WEIGHT_BY_MONTH = [0, 0, 0, 0, 0, 10, 22, 35, 35, 35, 22, 0];
+
+/** Dagen midt i hver måned, som dag-i-året (ikke-skuddår). Ankerpunktene. */
+const MID_MONTH_DAY_OF_YEAR = [15, 46, 74, 105, 135, 166, 196, 227, 258, 288, 319, 349];
+
+/**
+ * Glatt sesongvekt for en gitt dag i måneden.
+ *
+ * FØR var dette en trapp: `month >= 8 && month <= 10 → 35`, ellers 22, 10 eller
+ * 0. Med identisk vær ga det et sprang på 13-22 poeng ved midnatt hver 1. i
+ * måneden — 31. okt 100, 1. nov 87; 30. nov 87, 1. des 65. Sju-dagersstripen
+ * krysser et månedsskifte seks dager i måneden, så brukeren så stripen falle et
+ * helt hakk uten at noe i været hadde endret seg. Det er nøyaktig samme feilklasse
+ * som regnvindus-spranget Sindre allerede har meldt fra om én gang (se
+ * headeren i src/app/api/mushroom-forecast/route.ts).
+ *
+ * Nå interpoleres det lineært mellom månedenes MIDTPUNKTER. To konsekvenser
+ * som er verdt å kjenne:
+ *  - Midt i måneden er verdien nøyaktig den gamle, så nivået i høysesongen står.
+ *    Kallere som bare oppgir måned (ingen `dayOfMonth`) behandles som midt i
+ *    måneden og får derfor eksakt samme tall som før.
+ *  - På skulderdagene glir tallet. Første halvdel av august ligger noen poeng
+ *    lavere enn før, siste halvdel av juli noen poeng høyere — som er det
+ *    interpolasjonen betyr: 2. august ligner mer på slutten av juli enn på
+ *    midten av september.
+ */
+export function seasonWeight(month: number, dayOfMonth?: number): number {
+  const m = Math.max(1, Math.min(12, Math.round(month)));
+  if (dayOfMonth == null) return SEASON_WEIGHT_BY_MONTH[m - 1];
+
+  const anchor = MID_MONTH_DAY_OF_YEAR[m - 1];
+  const day = MID_MONTH_DAY_OF_YEAR[m - 1] + (Math.round(dayOfMonth) - 15);
+
+  // Hvilke to måneder dagen ligger mellom, og hvor langt (0-1) mellom dem.
+  const goingForward = day >= anchor;
+  const otherMonth = goingForward ? (m % 12) + 1 : ((m + 10) % 12) + 1;
+  let otherAnchor = MID_MONTH_DAY_OF_YEAR[otherMonth - 1];
+  // Året går rundt: desember → januar og januar → desember.
+  if (goingForward && otherAnchor < anchor) otherAnchor += 365;
+  if (!goingForward && otherAnchor > anchor) otherAnchor -= 365;
+
+  const span = Math.abs(otherAnchor - anchor);
+  const t = span === 0 ? 0 : Math.min(1, Math.abs(day - anchor) / span);
+  const from = SEASON_WEIGHT_BY_MONTH[m - 1];
+  const to = SEASON_WEIGHT_BY_MONTH[otherMonth - 1];
+  return from + (to - from) * t;
+}
+
+/**
  * User-facing copy per language. These strings are served straight to the client
  * (home card, push notification), so the caller must pass the reader's locale —
  * a Swedish user seeing Norwegian here was the bug this table fixes.
@@ -66,14 +120,17 @@ const COPY: Record<Locale, DayCopy> = {
 export function assessMushroomDay(
   weather: ExplanationWeather,
   month: number,
-  locale: Locale = DEFAULT_LOCALE
+  locale: Locale = DEFAULT_LOCALE,
+  /**
+   * Dagen i måneden (1-31). Uten den behandles dagen som midt i måneden, som
+   * gir nøyaktig de gamle tallene — se seasonWeight.
+   */
+  dayOfMonth?: number
 ): MushroomDayAssessment {
   let score = 0;
 
-  // Season (0–35) — the strongest gate.
-  if (month >= 8 && month <= 10) score += 35;
-  else if (month === 7 || month === 11) score += 22;
-  else if (month === 6) score += 10;
+  // Season (0–35) — the strongest gate. Glatt over månedsskiftet, se seasonWeight.
+  score += seasonWeight(month, dayOfMonth);
 
   // Cumulative rain (0–30) — a moist base is what drives fruiting.
   const rain = cumulativeRain(weather);

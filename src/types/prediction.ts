@@ -94,6 +94,12 @@ export interface PredictionHabitat {
 export interface PredictionResponse {
   source?: 'prediction_tiles' | 'computed_fallback';
   /**
+   * Hvilken dags forhåndsberegnede raster tallet står på. Bare satt på
+   * flisbanen. Normalt dagens UTC-dato; i vinduet før nattens cron har kjørt,
+   * gårsdagens.
+   */
+  tileDate?: string;
+  /**
    * Weather provider behind the snapshot — for source credit in the UI.
    * Must stay in sync with WeatherSummary['source'] in src/lib/weather/index.ts.
    * 'open_meteo' manglet her, og fordi UI-oppslaget var et Record<string, string>
