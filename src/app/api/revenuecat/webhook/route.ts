@@ -4,7 +4,12 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import {
   RevenueCatWebhookBody,
   mapRevenueCatEvent,
-  resolveSupabaseUserId
+  resolveSupabaseUserId,
+  readManualGrant,
+  isManualGrantActive,
+  serializeManualGrant,
+  applyManualGrantFloor,
+  MANUAL_GRANT_SOURCE
 } from '@/lib/billing/revenuecat';
 import { hasPaidAccess, BillingStatus, BillingTier } from '@/lib/billing/plans';
 import { createRequestLogger } from '@/lib/log/request';
@@ -20,6 +25,10 @@ import { createRequestLogger } from '@/lib/log/request';
  * RevenueCat-owned or not currently paid — an old Apple expiry/refund can
  * never clobber a subscription the user actively pays via Stripe. The Stripe
  * webhook enforces the mirror-image rule.
+ *
+ * Manual grants: a row an operator wrote by hand (metadata.source =
+ * 'manual_grant' — founder pass, App Review demo account, customer service) is
+ * a floor no store event can lower. See applyManualGrantFloor.
  *
  * Ordering: RevenueCat delivers at-least-once WITHOUT ordering. Every applied
  * event stores its event_timestamp_ms in metadata; an older event arriving
@@ -51,7 +60,9 @@ interface ExistingBillingRow {
   user_id: string;
   tier: string;
   status: string;
+  current_period_start: string | null;
   current_period_end: string | null;
+  cancel_at_period_end: boolean | null;
   metadata: Record<string, unknown> | null;
 }
 
@@ -168,7 +179,7 @@ export async function POST(request: NextRequest) {
     // a RevenueCat retry gives the read another chance.
     const { data: existing, error: existingError } = await admin
       .from('billing_subscriptions')
-      .select('user_id,tier,status,current_period_end,metadata')
+      .select('user_id,tier,status,current_period_start,current_period_end,cancel_at_period_end,metadata')
       .eq('user_id', userId)
       .maybeSingle<ExistingBillingRow>();
     if (existingError) {
@@ -190,32 +201,65 @@ export async function POST(request: NextRequest) {
       return await ackIgnored('stale_event');
     }
 
+    // Manuelt tildelt tilgang — founder-passet, App Review-demokontoen,
+    // kundeservice-pass. Ikke et kjøp, og butikken eier den ikke.
+    const manualGrant = readManualGrant(existing);
+    const manualGrantActive = isManualGrantActive(manualGrant);
+
     // Ownership: modify/revoke only touch rows RevenueCat owns (or unpaid
     // rows). A paid row written by Stripe (subscription OR one-time season
     // pass) is off-limits for anything except a fresh grant.
     if (decision.kind !== 'grant' && rowIsPaid && !rowOwnedByRevenueCat) {
-      log.info('revenuecat.webhook.skipped_foreign_provider', { eventType, userId, kind: decision.kind });
-      return await ackIgnored('foreign_provider_active');
+      const reason = manualGrantActive ? 'manual_grant_active' : 'foreign_provider_active';
+      log.info('revenuecat.webhook.skipped_foreign_provider', { eventType, userId, kind: decision.kind, reason });
+      return await ackIgnored(reason);
     }
+
+    // Gulvet: et gyldig manuelt pass kan ikke senkes av en butikkhendelse.
+    // Rekkefølgen betyr noe — dette kjører ETTER eierskapsvakten, så et aktivt
+    // Stripe-abonnement fortsatt bare blir ACK-et og latt i fred.
+    const { update: write, floorApplied } = applyManualGrantFloor(decision.update, manualGrant);
+    if (floorApplied) {
+      log.warn('revenuecat.webhook.manual_grant_floor', {
+        eventType,
+        userId,
+        kind: decision.kind,
+        environment: event.environment ?? null,
+        grantTier: manualGrant?.tier ?? null,
+        grantEnd: manualGrant?.currentPeriodEnd ?? null
+      });
+    }
+
+    const rcMetadata = {
+      store: event.store ?? null,
+      rc_product_id: event.product_id ?? null,
+      rc_event_type: eventType,
+      rc_event_timestamp_ms: eventTs,
+      rc_environment: event.environment ?? null
+    };
+    // Passet følger raden uansett hvem som eier den, slik at det kan leses
+    // tilbake senere. Når gulvet gjelder, eier passet raden — da holder
+    // eierskapsvakten over senere EXPIRATION/refusjon unna den helt.
+    const metadata = manualGrant
+      ? {
+          ...rcMetadata,
+          provider: floorApplied ? MANUAL_GRANT_SOURCE : 'revenuecat',
+          ...(floorApplied ? { source: MANUAL_GRANT_SOURCE, note: manualGrant.note } : {}),
+          manual_grant: serializeManualGrant(manualGrant)
+        }
+      : { ...rcMetadata, provider: 'revenuecat' };
 
     // Upsert ONLY the shared billing columns — the stripe_* identifier
     // columns are left untouched so a web subscription's ids survive.
     const { error: upsertError } = await admin.from('billing_subscriptions').upsert(
       {
         user_id: userId,
-        tier: decision.update.tier,
-        status: decision.update.status,
-        current_period_start: decision.update.currentPeriodStart,
-        current_period_end: decision.update.currentPeriodEnd,
-        cancel_at_period_end: decision.update.cancelAtPeriodEnd,
-        metadata: {
-          provider: 'revenuecat',
-          store: event.store ?? null,
-          rc_product_id: event.product_id ?? null,
-          rc_event_type: eventType,
-          rc_event_timestamp_ms: eventTs,
-          rc_environment: event.environment ?? null
-        }
+        tier: write.tier,
+        status: write.status,
+        current_period_start: write.currentPeriodStart,
+        current_period_end: write.currentPeriodEnd,
+        cancel_at_period_end: write.cancelAtPeriodEnd,
+        metadata
       },
       { onConflict: 'user_id' }
     );
@@ -228,9 +272,10 @@ export async function POST(request: NextRequest) {
     log.info('revenuecat.webhook.processed', {
       eventType,
       userId,
-      tier: decision.update.tier,
-      status: decision.update.status,
-      kind: decision.kind
+      tier: write.tier,
+      status: write.status,
+      kind: decision.kind,
+      manualGrantFloor: floorApplied
     });
     return NextResponse.json({ received: true });
   } catch (error) {

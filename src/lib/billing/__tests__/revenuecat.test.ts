@@ -1,7 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  BillingUpdate,
+  ManualGrant,
   RevenueCatEvent,
+  applyManualGrantFloor,
+  isManualGrantActive,
   mapRevenueCatEvent,
+  readManualGrant,
   resolveSupabaseUserId,
   resolveTierByRcProductId
 } from '../revenuecat';
@@ -189,5 +194,123 @@ describe('mapRevenueCatEvent — informational events are ACKed, never retried',
   it('event with no type at all is still acked', () => {
     const decision = mapRevenueCatEvent(baseEvent({ type: undefined }));
     expect(decision.action).toBe('ack');
+  });
+});
+
+describe('manuelt tildelt pass — gulvet', () => {
+  const inYears = (n: number) => new Date(Date.now() + n * 365 * 24 * 60 * 60 * 1000).toISOString();
+  const agoYears = (n: number) => new Date(Date.now() - n * 365 * 24 * 60 * 60 * 1000).toISOString();
+
+  const purchase = (overrides: Partial<BillingUpdate> = {}): BillingUpdate => ({
+    tier: 'premium',
+    status: 'active',
+    currentPeriodStart: new Date().toISOString(),
+    currentPeriodEnd: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+    cancelAtPeriodEnd: false,
+    ...overrides
+  });
+
+  it('leser passet fra radens egne kolonner når metadata.source er satt', () => {
+    const grant = readManualGrant({
+      tier: 'season_pass',
+      status: 'active',
+      current_period_start: agoYears(1),
+      current_period_end: inYears(2),
+      cancel_at_period_end: false,
+      metadata: { source: 'manual_grant', note: 'Apple App Review demo account' }
+    });
+    expect(grant).toMatchObject({ tier: 'season_pass', note: 'Apple App Review demo account' });
+    expect(isManualGrantActive(grant)).toBe(true);
+  });
+
+  it('leser passet fra metadata.manual_grant når et kjøp eier raden', () => {
+    const grant = readManualGrant({
+      tier: 'premium',
+      status: 'active',
+      current_period_end: inYears(1),
+      metadata: {
+        provider: 'revenuecat',
+        manual_grant: { tier: 'season_pass', status: 'active', current_period_end: inYears(2) }
+      }
+    });
+    expect(grant?.tier).toBe('season_pass');
+  });
+
+  it('finner ikke noe pass på en vanlig kjøpsrad', () => {
+    expect(readManualGrant({ tier: 'premium', status: 'active', metadata: { provider: 'revenuecat' } })).toBeNull();
+    expect(readManualGrant(null)).toBeNull();
+  });
+
+  it('leser ikke et pass uten lesbar tier eller status — tvil gir intet gulv', () => {
+    expect(readManualGrant({ tier: 'free', status: 'active', metadata: { source: 'manual_grant' } })).toBeNull();
+    expect(readManualGrant({ tier: 'premium', metadata: { source: 'manual_grant' } })).toBeNull();
+    expect(readManualGrant({ metadata: { source: 'manual_grant', manual_grant: 'ikke et objekt' } })).toBeNull();
+  });
+
+  it('et utløpt eller kansellert pass er ikke noe gulv', () => {
+    const utlopt = readManualGrant({
+      tier: 'season_pass',
+      status: 'active',
+      current_period_end: agoYears(1),
+      metadata: { source: 'manual_grant' }
+    });
+    const kansellert = readManualGrant({
+      tier: 'season_pass',
+      status: 'canceled',
+      current_period_end: inYears(1),
+      metadata: { source: 'manual_grant' }
+    });
+    expect(isManualGrantActive(utlopt)).toBe(false);
+    expect(isManualGrantActive(kansellert)).toBe(false);
+  });
+
+  const activeGrant: ManualGrant = {
+    tier: 'season_pass',
+    status: 'active',
+    currentPeriodStart: agoYears(1),
+    currentPeriodEnd: inYears(2),
+    cancelAtPeriodEnd: false,
+    note: 'Apple App Review demo account'
+  };
+
+  it('et kortere sandkassekjøp faller til gulvet', () => {
+    const { update, floorApplied } = applyManualGrantFloor(purchase(), activeGrant);
+    expect(floorApplied).toBe(true);
+    expect(update).toMatchObject({
+      tier: 'season_pass',
+      status: 'active',
+      currentPeriodEnd: activeGrant.currentPeriodEnd
+    });
+  });
+
+  it('en revoke faller til gulvet', () => {
+    const { update, floorApplied } = applyManualGrantFloor(
+      purchase({ status: 'canceled', currentPeriodEnd: new Date().toISOString(), cancelAtPeriodEnd: true }),
+      activeGrant
+    );
+    expect(floorApplied).toBe(true);
+    expect(update.status).toBe('active');
+    expect(update.tier).toBe('season_pass');
+  });
+
+  it('et kjøp som varer lenger enn passet får eie raden', () => {
+    const longer = purchase({ tier: 'season_pass', currentPeriodEnd: inYears(3) });
+    const { update, floorApplied } = applyManualGrantFloor(longer, activeGrant);
+    expect(floorApplied).toBe(false);
+    expect(update).toBe(longer);
+  });
+
+  it('et pass uten sluttdato slår selv et kjøp uten sluttdato', () => {
+    const evig = { ...activeGrant, currentPeriodEnd: null };
+    expect(applyManualGrantFloor(purchase({ currentPeriodEnd: null }), evig).floorApplied).toBe(true);
+  });
+
+  it('uten pass, eller med utløpt pass, endres ingenting', () => {
+    const rc = purchase({ status: 'canceled' });
+    expect(applyManualGrantFloor(rc, null)).toEqual({ update: rc, floorApplied: false });
+    expect(applyManualGrantFloor(rc, { ...activeGrant, currentPeriodEnd: agoYears(1) })).toEqual({
+      update: rc,
+      floorApplied: false
+    });
   });
 });
