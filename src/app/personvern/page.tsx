@@ -336,6 +336,12 @@ export default async function PersonvernPage() {
             <li>
               <span className="font-medium">{t('cookiesSessionLabel')}</span> {t('cookiesSessionDesc')}
             </li>
+            {/* Språk-cookien settes både i middleware og av språkvelgeren, og
+                sto ikke i denne lista — §8 er nettopp den delen som skal være
+                uttømmende. */}
+            <li>
+              <span className="font-medium">{t('cookiesLocaleLabel')}</span> {t('cookiesLocaleDesc')}
+            </li>
             <li>
               <span className="font-medium">{t('cookiesStripeLabel')}</span> {t('cookiesStripeDesc')}
             </li>
@@ -347,6 +353,7 @@ export default async function PersonvernPage() {
             </li>
           </ul>
           <p className="text-sm text-gray-700">{t('cookiesMarketing')}</p>
+          <p className="text-sm text-gray-700">{t('cookiesLocalStorage')}</p>
           <AnalyticsPreferencesButton label={t('cookiesManage')} />
         </article>
 
