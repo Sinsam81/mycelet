@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { renderToString } from 'react-dom/server';
 import { NextIntlClientProvider } from 'next-intl';
+import { timeZoneForLocale } from '@/i18n/config';
 import { YearTable } from '../YearTable';
 import type { CalendarSpecies } from '../SeasonNow';
 import nb from '../../../../messages/nb.json';
@@ -59,7 +60,11 @@ const rodFlueSopp: CalendarSpecies = {
 
 function render(species: CalendarSpecies[], locale: 'nb' | 'sv' = 'nb') {
   return renderToString(
-    <NextIntlClientProvider locale={locale} messages={locale === 'sv' ? sv : nb}>
+    <NextIntlClientProvider
+      locale={locale}
+      timeZone={timeZoneForLocale(locale)}
+      messages={locale === 'sv' ? sv : nb}
+    >
       <YearTable species={species} locale={locale} currentMonth={8} />
     </NextIntlClientProvider>
   );
