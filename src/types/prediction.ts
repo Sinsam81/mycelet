@@ -7,7 +7,8 @@ export interface PredictionHotspot {
    * Arten scoren gjelder. Rasteret lagrer én flis per art per rute, så et sted
    * har ett tall per art — «60/100» er 60 for kantarell, ikke for sopp som
    * sådan. Kartet slår sammen til beste art per rute og navngir den.
-   * Null på fallback-banen, som ikke er artsoppdelt.
+   * Null på fallback-banen: der er punktene funnklynger på tvers av arter, ikke
+   * artsfliser. (Fallback-bane-SCOREN er artsoppdelt — se `leadingSpecies`.)
    */
   speciesId?: number | null;
 }
@@ -131,6 +132,12 @@ export interface PredictionResponse {
   /**
    * Arten som drar `score` når kalleren IKKE ba om en bestemt art. Uten den er
    * tallet et svar uten spørsmål — panelet setter navnet ved siden av.
+   *
+   * Settes av BEGGE banene: flisbanen tar den beste arten per rute fra
+   * rasteret, fallback-banen regner samme artsliste live. Er den likevel tom
+   * (oppslaget feilet, eller ingen art overlevde filteret), er tallet et
+   * generelt forholdstall for stedet — en annen størrelse enn artstallet, og
+   * panelet MÅ da si det i stedet for å la tallet stå alene.
    */
   leadingSpecies?: {
     id: number;
