@@ -293,6 +293,18 @@ export async function POST(request: NextRequest) {
           peakSeason?: boolean;
           nearbyFindings: number;
           seasonFactor: number;
+          /**
+           * Hvorfor tre tilstander og ikke to: en art UTEN registrerte
+           * forvekslingsrader rendret tidligere nøyaktig likt som en art vi
+           * har sjekket og funnet trygg. 24 av 45 spiselige arter i katalogen
+           * har null rader — for dem var et rent resultat ikke til å skille
+           * fra «ingen farlige forvekslinger finnes».
+           *   present        — vi har data, og her er de
+           *   none_recorded  — arten finnes hos oss, men ingen er ført inn ennå
+           *   unavailable    — vi vet ikke: spørringen feilet, eller arten er
+           *                    ikke i katalogen vår i det hele tatt
+           */
+          lookAlikeData?: 'present' | 'none_recorded' | 'unavailable';
           dangerousLookAlikes?: Array<{
             name: string;
             danger: string;
@@ -458,6 +470,20 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Hva VET vi om forvekslingsarter for hvert forslag? Må settes etter joinet,
+    // og også når joinet feilet — derfor utenfor if-en over.
+    for (const s of suggestions) {
+      if (safetyDataIncomplete || s.speciesId == null) {
+        // Spørringen feilet, eller arten er ikke i katalogen vår. Uansett: vi
+        // har ingen dekning å love.
+        s.lookAlikeData = 'unavailable';
+      } else if ((s.dangerousLookAlikes?.length ?? 0) > 0) {
+        s.lookAlikeData = 'present';
+      } else {
+        s.lookAlikeData = 'none_recorded';
+      }
+    }
+
     // Count recent nearby finds (privacy-safe display coords from public_findings),
     // then re-rank by local relevance. The re-rank can never bury a poisonous match.
     if (body.latitude != null && body.longitude != null && speciesIds.length > 0) {
@@ -508,7 +534,8 @@ export async function POST(request: NextRequest) {
         inSeason: s.inSeason,
         peakSeason: s.peakSeason,
         nearbyFindings: s.nearbyFindings,
-        dangerousLookAlikes: s.dangerousLookAlikes
+        dangerousLookAlikes: s.dangerousLookAlikes,
+        lookAlikeData: s.lookAlikeData
       };
     });
 

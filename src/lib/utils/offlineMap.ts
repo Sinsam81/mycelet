@@ -64,12 +64,30 @@ function normalizeLng(lng: number) {
   return value;
 }
 
+/**
+ * Breddegrad/lengdegrad → flis-koordinat i Web Mercator (EPSG:3857), samme
+ * projeksjon Leaflet og Kartverket bruker.
+ *
+ * ⚠️ NEVNEREN ER 2π, IKKE π. Det var feilen: `ln((1+sin φ)/(1−sin φ))` er
+ * *to ganger* `atanh(sin φ)`, så uten halvparten blir y-forskyvningen dobbelt så
+ * stor. Hver nordisk breddegrad havnet da på 80–86 °N, og Tromsø regnet ut
+ * y = −384 og ble klemt til Nordpolen.
+ *
+ * Konsekvensen var ikke synlig i appen, for Leaflet regner selv ut flisene den
+ * VISER. Bare offline-nedlastingen brukte denne funksjonen — så «Lagre
+ * kartområde» hentet tomt hav, og kvitteringen sa «550 kartfliser klare
+ * offline». Målt for Oslo på zoom 12: den gamle formelen ga flis y=335, som er
+ * 854 bytes tomt Nordishav. Riktig flis er y=1191 og 111 250 bytes med kart i.
+ *
+ * Den gamle testen sjekket `tile.y >= 0`, som er sant for enhver breddegrad —
+ * også en gal. Se __tests__/offlineMap.test.ts for den som faktisk kan feile.
+ */
 export function latLngToTile(lat: number, lng: number, zoom: number) {
   const normalizedLng = normalizeLng(lng);
   const sinLat = Math.sin((lat * Math.PI) / 180);
   const n = 2 ** zoom;
   const x = Math.floor(((normalizedLng + 180) / 360) * n);
-  const y = Math.floor(((1 - Math.log((1 + sinLat) / (1 - sinLat)) / Math.PI) / 2) * n);
+  const y = Math.floor(((1 - Math.log((1 + sinLat) / (1 - sinLat)) / (2 * Math.PI)) / 2) * n);
 
   return {
     x: clamp(x, 0, n - 1),
