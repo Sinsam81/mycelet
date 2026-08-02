@@ -3,6 +3,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useLocale } from 'next-intl';
 import { createClient } from '@/lib/supabase/client';
+import { baseSeasonMask, isMonthInMask } from '@/lib/utils/season-region';
 import { compareSpeciesByDisplayName } from '@/lib/utils/species-name';
 import type { Edibility, Species } from '@/types/species';
 
@@ -15,11 +16,6 @@ interface SpeciesFilters {
 
 function currentMonth() {
   return new Date().getMonth() + 1;
-}
-
-function isInSeason(month: number, start: number, end: number) {
-  if (start <= end) return month >= start && month <= end;
-  return month >= start || month <= end;
 }
 
 export function useSpecies(filters: SpeciesFilters) {
@@ -58,7 +54,9 @@ export function useSpecies(filters: SpeciesFilters) {
       const month = currentMonth();
       return (data ?? []).filter((item) => {
         if (filters.edibility !== 'all' && item.edibility !== filters.edibility) return false;
-        if (filters.inSeasonNow && !isInSeason(month, item.season_start, item.season_end)) return false;
+        // Samme kalibrerte sesongvindu som kalenderen, ellers svarer «i sesong
+        // nå» ulikt på to sider i samme app.
+        if (filters.inSeasonNow && !isMonthInMask(baseSeasonMask(item), month)) return false;
         if (filters.habitat.trim() && !(item.habitat ?? []).some((h) => h.toLowerCase().includes(filters.habitat.toLowerCase()))) {
           return false;
         }

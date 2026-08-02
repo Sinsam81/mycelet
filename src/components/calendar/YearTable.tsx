@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { EdibilityBadge } from '@/components/ui/EdibilityBadge';
 import { getSpeciesDisplayName } from '@/lib/utils/species-name';
+import { baseSeasonMask, isMonthInMask, peakMask } from '@/lib/utils/season-region';
 import type { Edibility } from '@/types/species';
 import type { CalendarSpecies } from './SeasonNow';
 
@@ -24,11 +25,6 @@ const DANGEROUS_EDIBILITY: readonly Edibility[] = ['toxic', 'deadly'];
 
 export function isDangerousToEat(edibility: Edibility): boolean {
   return DANGEROUS_EDIBILITY.includes(edibility);
-}
-
-export function isInMonth(month: number, start: number, end: number) {
-  if (start <= end) return month >= start && month <= end;
-  return month >= start || month <= end;
 }
 
 function markerClass(inSeason: boolean, peak: boolean, dangerous: boolean) {
@@ -80,6 +76,12 @@ export function YearTable({ species, locale, currentMonth }: YearTableProps) {
           <tbody>
             {species.map((s) => {
               const dangerous = isDangerousToEat(s.edibility);
+              // Samme kalibrerte vindu som «i sesong nå» over tabellen — ellers
+              // ville de to panelene på samme side motsi hverandre. Tabellen
+              // rendres på server uten posisjon, så den bruker det
+              // regionuavhengige (og videste) vinduet.
+              const season = baseSeasonMask(s);
+              const peak = peakMask(s);
               return (
                 <tr key={s.id} className="border-t border-gray-100">
                   <td className="sticky left-0 bg-white py-1 pr-2 font-medium">
@@ -92,14 +94,11 @@ export function YearTable({ species, locale, currentMonth }: YearTableProps) {
                   </td>
                   {MONTH_KEYS.map((_, idx) => {
                     const m = idx + 1;
-                    const inSeason = isInMonth(m, s.season_start, s.season_end);
-                    const peak =
-                      s.peak_season_start !== null &&
-                      s.peak_season_end !== null &&
-                      isInMonth(m, s.peak_season_start, s.peak_season_end);
                     return (
                       <td key={m} className={`px-1 py-1 ${m === currentMonth ? 'bg-forest-50' : ''}`}>
-                        <div className={`mx-auto h-3 w-3 rounded-sm ${markerClass(inSeason, peak, dangerous)}`} />
+                        <div
+                          className={`mx-auto h-3 w-3 rounded-sm ${markerClass(isMonthInMask(season, m), isMonthInMask(peak, m), dangerous)}`}
+                        />
                       </td>
                     );
                   })}
