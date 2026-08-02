@@ -38,7 +38,9 @@
     "colTarget": "Mål",
     "colDetails": "Detaljer",
     "colIp": "IP",
-    "footerNote": "Visar maximalt de 100 senaste posterna. För äldre poster, exportera via Supabase SQL Editor."
+    "footerNote": "Visar maximalt de 100 senaste posterna. För äldre poster, exportera via Supabase SQL Editor.",
+    "accessValidationErrorTitle": "Kunde inte verifiera din behörighet",
+    "accessValidationErrorBody": "Uppslaget mot moderator_roles misslyckades — det betyder inte att du saknar behörighet. Försök ladda om sidan. Teknisk detalj: {message}"
   },
   "AdminForumTrust": {
     "roleTrustedForager": "Verifierad plockare",
@@ -127,7 +129,9 @@
     "edibilityConditional": "Villkorlig",
     "edibilityInedible": "Oätlig",
     "edibilityToxic": "Giftig",
-    "edibilityDeadly": "Dödlig"
+    "edibilityDeadly": "Dödlig",
+    "accessValidationErrorTitle": "Kunde inte verifiera din behörighet",
+    "accessValidationErrorBody": "Uppslaget mot moderator_roles misslyckades — det betyder inte att du saknar behörighet. Försök ladda om sidan. Teknisk detalj: {message}"
   },
   "AdminPrediction": {
     "title": "Prediction Tiles (Admin)",
@@ -387,6 +391,8 @@
     "heading": "Mina platser",
     "intro": "Dina svampplatser, samlade på ett ställe — även de hemliga.",
     "summary": "{finds} fynd fördelade på {places} platser.",
+    "loadErrorHeading": "Kunde inte ladda dina platser",
+    "loadErrorBody": "Något gick fel när vi hämtade dina fynd. Platserna är inte borta — ladda om sidan om en stund.",
     "emptyHeading": "Inga platser ännu",
     "emptyBody": "När du loggar fynd bygger Mycelet automatiskt din privata översikt över var du hittar svamp — år efter år.",
     "identifyFinding": "Identifiera ett fynd",
@@ -1261,6 +1267,23 @@
     "title": "Din senaste svamptur",
     "found": "{count} fynd"
   },
+  "NotFound": {
+    "title": "Sidan hittades inte",
+    "body": "Länken kan vara inaktuell, eller så finns sidan inte längre. Prova startsidan eller sök i svampbiblioteket.",
+    "goHome": "Till startsidan",
+    "goSpecies": "Till svampbiblioteket"
+  },
+  "ErrorPage": {
+    "title": "Något gick fel",
+    "body": "Vi kunde inte visa den här sidan. Försök igen — fungerar det fortfarande inte, prova om en stund.",
+    "retry": "Försök igen",
+    "goHome": "Till startsidan",
+    "reference": "Felreferens: {digest}"
+  },
+  "SafetyNote": {
+    "badgeMeansSpecies": "Ätlighetsmärket gäller arten — inte svampen du håller i. Artbestäm alltid säkert själv, och låt kontrollera den om du är osäker.",
+    "readSafety": "Läs säkerhetsråden"
+  },
   "Safety": {
     "poisonTel": "112",
     "poisonNumber": "112 (akut) eller 010-456 67 00",
@@ -1470,5 +1493,11 @@
     "privacyLink": "Integritetspolicy",
     "metaTitle": "Kontakt — Mycelet",
     "metaDescription": "Kontaktuppgifter och företagsinformation för Mycelet."
+  },
+  "ForumBadge": {
+    "expert": "Expert",
+    "community": "Gemenskapsverifierad",
+    "moderator": "Moderator",
+    "trusted": "Verifierad plockare"
   }
 }

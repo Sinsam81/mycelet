@@ -38,7 +38,9 @@
     "colTarget": "Mål",
     "colDetails": "Detaljer",
     "colIp": "IP",
-    "footerNote": "Viser maksimalt 100 nyeste poster. For eldre poster, eksporter via Supabase SQL Editor."
+    "footerNote": "Viser maksimalt 100 nyeste poster. For eldre poster, eksporter via Supabase SQL Editor.",
+    "accessValidationErrorTitle": "Kunne ikke verifisere tilgangen din",
+    "accessValidationErrorBody": "Oppslaget mot moderator_roles feilet — det betyr ikke at du mangler tilgang. Prøv å laste siden på nytt. Teknisk detalj: {message}"
   },
   "AdminForumTrust": {
     "roleTrustedForager": "Verifisert plukker",
@@ -127,7 +129,9 @@
     "edibilityConditional": "Betinget",
     "edibilityInedible": "Uspiselig",
     "edibilityToxic": "Giftig",
-    "edibilityDeadly": "Dødelig"
+    "edibilityDeadly": "Dødelig",
+    "accessValidationErrorTitle": "Kunne ikke verifisere tilgangen din",
+    "accessValidationErrorBody": "Oppslaget mot moderator_roles feilet — det betyr ikke at du mangler tilgang. Prøv å laste siden på nytt. Teknisk detalj: {message}"
   },
   "AdminPrediction": {
     "title": "Prediction Tiles (Admin)",
@@ -387,6 +391,8 @@
     "heading": "Mine steder",
     "intro": "Soppstedene dine, samlet på ett sted — også de hemmelige.",
     "summary": "{finds} funn fordelt på {places} steder.",
+    "loadErrorHeading": "Kunne ikke laste stedene dine",
+    "loadErrorBody": "Noe gikk galt da vi hentet funnene dine. Stedene er ikke borte — last siden på nytt om litt.",
     "emptyHeading": "Ingen steder ennå",
     "emptyBody": "Når du logger funn, bygger Mycelet automatisk din private oversikt over hvor du finner sopp — år etter år.",
     "identifyFinding": "Identifiser et funn",
@@ -1261,6 +1267,23 @@
     "title": "Din siste sopptur",
     "found": "{count} funn"
   },
+  "NotFound": {
+    "title": "Fant ikke siden",
+    "body": "Lenken kan være utdatert, eller så finnes ikke siden lenger. Prøv forsiden eller søk i soppbiblioteket.",
+    "goHome": "Til forsiden",
+    "goSpecies": "Til soppbiblioteket"
+  },
+  "ErrorPage": {
+    "title": "Noe gikk galt",
+    "body": "Vi klarte ikke å vise denne siden. Prøv på nytt — går det fortsatt ikke, prøv igjen om litt.",
+    "retry": "Prøv igjen",
+    "goHome": "Til forsiden",
+    "reference": "Feilreferanse: {digest}"
+  },
+  "SafetyNote": {
+    "badgeMeansSpecies": "Spiselighetsmerket gjelder arten — ikke soppen du står med. Bestem alltid arten sikkert selv, og få den sjekket ved tvil.",
+    "readSafety": "Les sikkerhetsrådene"
+  },
   "Safety": {
     "poisonTel": "+4722591300",
     "poisonNumber": "22 59 13 00",
@@ -1470,5 +1493,11 @@
     "privacyLink": "Personvernerklæring",
     "metaTitle": "Kontakt — Mycelet",
     "metaDescription": "Kontaktopplysninger og foretaksinformasjon for Mycelet."
+  },
+  "ForumBadge": {
+    "expert": "Ekspert",
+    "community": "Fellesskapsverifisert",
+    "moderator": "Moderator",
+    "trusted": "Verifisert plukker"
   }
 }

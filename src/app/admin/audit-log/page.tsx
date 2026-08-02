@@ -120,11 +120,28 @@ export default async function AuditLogPage() {
     );
   }
 
-  const { data: roleRow } = await supabase
+  const { data: roleRow, error: roleError } = await supabase
     .from('moderator_roles')
     .select('role')
     .eq('user_id', user.id)
     .maybeSingle();
+
+  // Samme skille som på /admin: feilet oppslag ≠ manglende rolle.
+  if (roleError) {
+    return (
+      <PageWrapper>
+        <article className="rounded-xl border-2 border-red-300 bg-red-50 p-4">
+          <div className="flex items-start gap-3">
+            <ShieldAlert className="h-6 w-6 shrink-0 text-red-700" />
+            <div>
+              <p className="text-base font-bold text-red-900">{t('accessValidationErrorTitle')}</p>
+              <p className="text-sm text-red-900">{t('accessValidationErrorBody', { message: roleError.message })}</p>
+            </div>
+          </div>
+        </article>
+      </PageWrapper>
+    );
+  }
 
   const role = roleRow?.role ?? null;
   if (role !== 'admin' && role !== 'moderator') {

@@ -9,7 +9,8 @@ import { ReportButton } from '@/components/forum/ReportButton';
 import { BlockUserButton } from '@/components/forum/BlockUserButton';
 import { SharePostButton } from '@/components/forum/SharePostButton';
 import { ForumPostDetail, ReportReason } from '@/types/forum';
-import { forumBadgeClass, getForumBadge } from '@/lib/utils/forumBadge';
+import { forumBadgeClass } from '@/lib/utils/forumBadge';
+import { useForumBadge } from '@/lib/hooks/useForumBadge';
 
 interface PostDetailProps {
   post: ForumPostDetail;
@@ -32,7 +33,7 @@ export function PostDetail({ post, onToggleLike, onReport, onEdit, onDelete, lik
     discussion: t('categoryDiscussion')
   };
   const author = post.profiles?.display_name || post.profiles?.username || t('unknownUser');
-  const badge = getForumBadge(post.profiles);
+  const badge = useForumBadge()(post.profiles);
   const findingName =
     getJoinedSpeciesName(post.finding?.mushroom_species, locale) || post.finding?.species_name_override || null;
   const zoneLabel = post.finding?.is_zone_finding ? post.finding?.zone_label : null;

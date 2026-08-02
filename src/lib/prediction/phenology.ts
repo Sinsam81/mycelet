@@ -24,6 +24,35 @@ function weekIndex(dayOfYear: number): number {
   return Math.max(0, Math.min(WEEKS - 1, Math.floor((dayOfYear - 1) / 7)));
 }
 
+/**
+ * Første og siste dag i året kurvene faktisk er bygget på.
+ *
+ * Generatoren (scripts/phenology-core.mjs, FRUITING_MONTH_MIN/MAX) kaster ALLE
+ * observasjoner utenfor april–november før kurvene bygges. Filteret er der av
+ * en god grunn — GBIF-poster med bare årstall får sentineldatoen 01-01 og laget
+ * en kunstig januartopp — men det gjør at hver eneste kurve i
+ * phenology-data.ts har en HARDKODET null i januar og februar og nesten null i
+ * desember. Det er fravær av data, ikke en måling av at ingenting vokser.
+ *
+ * For høstartene spiller det ingen rolle. For vinterartene er det direkte feil:
+ * vintersopp (vindu 10–12, topp 11–12), judasøre (vindu 1–12) og blåtutt
+ * (vindu 9–12) er hele grunnen til å åpne appen i desember, og kurven ga dem
+ * ~0 nettopp da. Med seasonality ≈ 0 kollapser computeSpeciesAdjustment til
+ * ~0,05 — altså «finnes ikke her» — mens artssiden og kalenderen i samme app
+ * sier topp-sesong.
+ *
+ * Vi returnerer derfor null utenfor vinduet kurven er bygget på. Null betyr
+ * «ingen empirisk kurve for denne datoen», og kallstedene faller da tilbake på
+ * det håndsatte månedsvinduet fra artskatalogen — som er riktig for både
+ * vintersopp (i sesong) og kantarell (ute av sesong, 0,05 som før).
+ *
+ * Fjern gaten først når phenology-data.ts er regenerert med et presist
+ * sentinelfilter (dropp observed_at som slutter på -01-01) i stedet for fire
+ * hele måneder — og backtest kjørt på nytt.
+ */
+const CURVE_FIRST_DOY = CUM_DAYS[3] + 1; // 1. april
+const CURVE_LAST_DOY = CUM_DAYS[11]; // 30. november
+
 /** Mid-month day-of-year, for callers that only know the month (1-12). */
 export function dayOfYearFromMonth(month: number): number {
   const m = Math.max(1, Math.min(12, Math.round(month)));
@@ -40,7 +69,8 @@ export function dayOfYearOf(date: Date): number {
  * Empirical seasonal weight 0..1 (peak week = 1) for a species at a latitude
  * and day-of-year. Uses the latitude-band curve when present, else the
  * species' all-Nordic curve. Returns null when we have no curve for this
- * species — the caller then keeps the hand-coded month logic.
+ * species OR for this date (see CURVE_FIRST_DOY) — the caller then keeps the
+ * hand-coded month logic.
  */
 export function phenologyFactor(
   speciesId: number | null | undefined,
@@ -48,6 +78,8 @@ export function phenologyFactor(
   dayOfYear: number
 ): number | null {
   if (speciesId == null) return null;
+  // Desember–mars er ikke målt, bare filtrert bort. Se kommentaren over.
+  if (dayOfYear < CURVE_FIRST_DOY || dayOfYear > CURVE_LAST_DOY) return null;
   const entry: SpeciesPhenology | undefined = PHENOLOGY[String(speciesId)];
   if (!entry) return null;
   const curve = entry[bandKey(lat)] ?? entry.all;
