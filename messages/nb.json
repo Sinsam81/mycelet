@@ -641,6 +641,7 @@
     "iapManageOnApple": "Administrer abonnement (App Store)",
     "iapActivationDelayed": "Kjøpet er registrert hos Apple — tilgangen aktiveres om kort tid. Prøv «Gjenopprett kjøp» om den ikke dukker opp.",
     "iapLoginToBuy": "Logg inn for å kjøpe abonnement",
+    "iapPlanChangeBlocked": "Du har allerede et aktivt abonnement ({plan}). Kjøper du en plan til her, betaler du to steder samtidig — og Apple refunderer det ikke automatisk. Avslutt abonnementet du har først: kjøpte du det i appen, gjør du det under Abonnementer i App Store; kjøpte du det på mycelet.com, administrerer du det der. Du beholder tilgangen ut perioden du allerede har betalt for, og kan kjøpe den nye planen etterpå.",
     "yourPlan": "Din plan",
     "renewsEnds": "Fornyes/slutter: {date}",
     "aiQuota": "AI-kvote: {limit} per døgn",

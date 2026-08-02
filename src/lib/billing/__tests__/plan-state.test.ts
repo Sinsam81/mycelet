@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { BillingStatus, BillingTier } from '../plans';
 import { getBillingCapabilities, BillingSubscription } from '../subscription';
-import { canPurchasePlan, getPlanViewState } from '../plan-state';
+import { canPurchasePlan, getBlockingPaidPlan, getPlanViewState } from '../plan-state';
 
 const ALL_STATUSES: BillingStatus[] = [
   'inactive',
@@ -134,5 +134,31 @@ describe('canPurchasePlan', () => {
   it('tilbyr aldri gratisplanen som et kjøp', () => {
     expect(canPurchasePlan(viewFor(null), 'free')).toBe(false);
     expect(canPurchasePlan(viewFor(row('premium', 'canceled')), 'free')).toBe(false);
+  });
+});
+
+describe('getBlockingPaidPlan', () => {
+  it('navngir planen som sperrer for et nytt kjøp — samme regel som 409-en i checkout', () => {
+    for (const tier of PAID_TIERS) {
+      for (const status of ['active', 'trialing'] as BillingStatus[]) {
+        expect(getBlockingPaidPlan(viewFor(row(tier, status))), `${tier}/${status}`).toBe(tier);
+      }
+    }
+  });
+
+  it('sperrer ikke når abonnementet ikke lenger gir tilgang', () => {
+    const withoutAccess = ALL_STATUSES.filter((status) => status !== 'active' && status !== 'trialing');
+
+    for (const tier of PAID_TIERS) {
+      for (const status of withoutAccess) {
+        expect(getBlockingPaidPlan(viewFor(row(tier, status))), `${tier}/${status}`).toBeNull();
+      }
+    }
+    expect(getBlockingPaidPlan(viewFor(row('premium', 'active', LAST_MONTH)))).toBeNull();
+  });
+
+  it('sperrer ikke for en gratisbruker', () => {
+    expect(getBlockingPaidPlan(viewFor(null))).toBeNull();
+    expect(getBlockingPaidPlan(viewFor(row('free', 'active')))).toBeNull();
   });
 });

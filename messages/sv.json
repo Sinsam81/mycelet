@@ -641,6 +641,7 @@
     "iapManageOnApple": "Hantera prenumeration (App Store)",
     "iapActivationDelayed": "Köpet är registrerat hos Apple — åtkomsten aktiveras inom kort. Prova «Återställ köp» om den inte dyker upp.",
     "iapLoginToBuy": "Logga in för att köpa prenumeration",
+    "iapPlanChangeBlocked": "Du har redan en aktiv prenumeration ({plan}). Köper du ytterligare en plan här betalar du på två ställen samtidigt — och Apple betalar inte tillbaka det automatiskt. Avsluta prenumerationen du har först: köpte du den i appen gör du det under Prenumerationer i App Store, köpte du den på mycelet.com hanterar du den där. Du behåller åtkomsten perioden ut som du redan har betalat för, och kan köpa den nya planen efteråt.",
     "yourPlan": "Din plan",
     "renewsEnds": "Förnyas/slutar: {date}",
     "aiQuota": "AI-kvot: {limit} per dygn",
