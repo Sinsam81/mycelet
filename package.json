@@ -31,6 +31,9 @@
     "cap:android": "cap sync android && cap open android",
     "lint:fix": "eslint . --fix"
   },
+  "engines": {
+    "node": ">=22 <23"
+  },
   "dependencies": {
     "@capacitor/android": "^8.3.4",
     "@capacitor/camera": "^8.2.0",

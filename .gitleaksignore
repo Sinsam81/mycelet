@@ -1,0 +1,18 @@
+# Falske positive fra gitleaks — kontrollert én for én 2. august 2026.
+#
+# src/lib/log/__tests__/pii.test.ts finnes NETTOPP for å bevise at redactPII()
+# fjerner hemmeligheter før de når loggen. Testdataene MÅ derfor se ut som
+# ekte nøkler, ellers beviser testen ingenting. Verdiene er åpenbart oppdiktede
+# (`sk_live_abc123def456`, `whsec_abcdef123456`, `kw_live_abc123def456`) og har
+# aldri vært gyldige noe sted.
+#
+# ⚠️ Merk hva denne fila IKKE er: en generell demping av gitleaks. Hver linje er
+# ett fingeravtrykk for ett funn i én fil. Et nytt funn andre steder feiler
+# fortsatt bygget — og det skal det. Gitleaks meldte SUKSESS i ukevis mens et
+# ekte Apple-review-passord lå i klartekst i en markdown-fil i dette repoet;
+# verktøyet har både falske positive og falske negative, så listen her skal
+# holdes kort og hver oppføring skal ha en grunn.
+27af890ca6bb224f7f01b844018b56065db28579:src/lib/log/__tests__/pii.test.ts:generic-api-key:98
+27af890ca6bb224f7f01b844018b56065db28579:src/lib/log/__tests__/pii.test.ts:generic-api-key:99
+27af890ca6bb224f7f01b844018b56065db28579:src/lib/log/__tests__/pii.test.ts:stripe-access-token:112
+27af890ca6bb224f7f01b844018b56065db28579:src/lib/log/__tests__/pii.test.ts:stripe-access-token:113
