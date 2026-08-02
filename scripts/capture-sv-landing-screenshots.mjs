@@ -34,7 +34,7 @@ async function killBanners() {
   await page.evaluate(() => {
     document.querySelectorAll('body *').forEach((el) => {
       const st = getComputedStyle(el);
-      if (st.position === 'fixed' && /nödvändiga kakor|Hoppa över|lovande platserna nära dig/.test(el.textContent || '')) {
+      if (st.position === 'fixed' && /nödvändiga kakor|Hoppa över|lovande områdena nära dig/.test(el.textContent || '')) {
         el.remove();
       }
     });

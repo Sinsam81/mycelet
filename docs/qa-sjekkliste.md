@@ -36,7 +36,7 @@ Dette er bug-klassen som rammet oss i prod (svensk kart blankt, fast i Oslo, dø
 - [ ] Ingen krasj når siden åpnes uten bilde.
 - [ ] 🖐️ Manuell (kvote-/kostnadsavhengig): last opp ett kjent soppbilde → får forslag + forvekslings-sjekk (look-alike). Kjøres sjelden, ikke i hver loop (Kindwise-kreditter).
 
-## 3. Prediksjon / «Lovende steder»
+## 3. Prediksjon / «Lovende områder»
 
 - [ ] `GET /api/prediction?lat=59.91&lon=10.75` svarer 200 med gyldig JSON (eller dokumentert 502 hvis ingen værkilde — da er det en infra-sak, ikke en kodefeil).
 - [ ] `GET /api/prediction?lat=57.71&lon=11.97` (svensk punkt) svarer 200 (SMHI-ruting fungerer).
