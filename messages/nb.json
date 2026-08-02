@@ -1263,6 +1263,11 @@
   },
   "Safety": {
     "poisonTel": "+4722591300",
+    "poisonAcuteLabel": "22 59 13 00",
+    "poisonTelDirect": "+4722591300",
+    "poisonDirectLabel": "22 59 13 00",
+    "poisonOr": "eller",
+    "poisonName": "Giftinformasjonen",
     "poisonNumber": "22 59 13 00",
     "poisonDisplay": "Giftinformasjonen 22 59 13 00",
     "emergencyTel": "113",

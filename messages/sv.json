@@ -1263,6 +1263,11 @@
   },
   "Safety": {
     "poisonTel": "112",
+    "poisonAcuteLabel": "112 (akut)",
+    "poisonTelDirect": "+46104566700",
+    "poisonDirectLabel": "010-456 67 00",
+    "poisonOr": "eller",
+    "poisonName": "Giftinformationscentralen",
     "poisonNumber": "112 (akut) eller 010-456 67 00",
     "poisonDisplay": "Giftinformationscentralen: 112 (akut) eller 010-456 67 00",
     "emergencyTel": "112",

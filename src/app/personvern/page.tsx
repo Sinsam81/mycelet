@@ -4,6 +4,7 @@ import { Cookie, Database, FileDown, Lock, Mail, Trash2, Users } from 'lucide-re
 import { getLocale, getTranslations } from 'next-intl/server';
 import { entityFormSuffix, entityMessageValues } from '@/lib/legal/entity';
 import { PageWrapper } from '@/components/layout/PageWrapper';
+import { PoisonHotlineLinks } from '@/components/safety/PoisonHotlineLinks';
 import { AnalyticsPreferencesButton } from '@/components/analytics/AnalyticsPreferencesButton';
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -21,7 +22,6 @@ export async function generateMetadata(): Promise<Metadata> {
 
 export default async function PersonvernPage() {
   const t = await getTranslations('Personvern');
-  const s = await getTranslations('Safety');
   // Who the data controller is changes with the company form: for a sole
   // proprietorship it is the owner personally, for an AS it is the company.
   const locale = await getLocale();
@@ -394,9 +394,7 @@ export default async function PersonvernPage() {
           </p>
           <p className="text-sm text-forest-900">
             {t('contactEmergencyBefore')}{' '}
-            <a href={`tel:${s('poisonTel')}`} className="font-medium underline">
-              {s('poisonDisplay')}
-            </a>{' '}
+            <PoisonHotlineLinks withName className="font-medium underline" />{' '}
             {t('contactEmergencyAfter')}
           </p>
         </article>

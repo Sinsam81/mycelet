@@ -142,3 +142,99 @@ describe('giftinformasjonsnummer i meldingskatalogene', () => {
     expect((sv as { Safety: { poisonTel: string } }).Safety.poisonTel).toBe('112');
   });
 });
+
+/**
+ * Det direkte nummeret til giftinformasjonen.
+ *
+ * Sverige har to nummer, og begge sto i lenketeksten — men lenka gikk til
+ * 112 for begge. En svensk bruker som ville ringe Giftinformationscentralen
+ * om noe ikke-akutt trykket på «010-456 67 00» og ringte nødsentralen.
+ * Invarianten under er hele poenget: sifrene i teksten du trykker på må
+ * være sifrene som slås.
+ */
+interface SafetyNumbers {
+  poisonTel: string;
+  poisonAcuteLabel: string;
+  poisonTelDirect: string;
+  poisonDirectLabel: string;
+  poisonNumber: string;
+  poisonName: string;
+}
+
+const safety = (catalog: unknown) => (catalog as { Safety: SafetyNumbers }).Safety;
+
+/** Sifrene i en synlig etikett, uten nasjonal null foran retningsnummeret. */
+function shownDigits(label: string): string {
+  return label.replace(/\D/g, '').replace(/^0/, '');
+}
+
+describe('lenkene til giftinformasjonen', () => {
+  it('slår nøyaktig det nummeret som står i lenketeksten', () => {
+    for (const [locale, catalog] of [
+      ['nb', nb],
+      ['sv', sv]
+    ] as const) {
+      const s = safety(catalog);
+      for (const [tel, label] of [
+        [s.poisonTel, s.poisonAcuteLabel],
+        [s.poisonTelDirect, s.poisonDirectLabel]
+      ] as const) {
+        expect(tel.replace(/\D/g, ''), `${locale}: «${label}» → ${tel}`).toMatch(
+          new RegExp(`${shownDigits(label)}$`)
+        );
+      }
+    }
+  });
+
+  it('gir svensker et klikkbart direktenummer som ikke er nødsentralen', () => {
+    const s = safety(sv);
+    expect(s.poisonTel).toBe('112');
+    expect(s.poisonTelDirect).toBe('+46104566700');
+    expect(s.poisonTelDirect).not.toBe(s.poisonTel);
+    expect(s.poisonDirectLabel).toMatch(SWEDISH_HOTLINE);
+  });
+
+  it('gir nordmenn én lenke — samme nummer to ganger ville sett ut som to linjer', () => {
+    const s = safety(nb);
+    expect(s.poisonTelDirect).toBe(s.poisonTel);
+  });
+
+  it('lar ren tekst-visning fortsatt nevne begge numrene', () => {
+    // poisonNumber brukes der nummeret IKKE er en lenke (identify-siden,
+    // SafetyWarning). Den må derfor fortsatt inneholde begge etikettene.
+    for (const [locale, catalog] of [
+      ['nb', nb],
+      ['sv', sv]
+    ] as const) {
+      const s = safety(catalog);
+      expect(s.poisonNumber, locale).toContain(s.poisonAcuteLabel);
+      expect(s.poisonNumber, locale).toContain(s.poisonDirectLabel);
+    }
+  });
+});
+
+/**
+ * Kildevakt, samme mønster som artssiden over: de tre sidene som RINGER
+ * giftinformasjonen skal gå gjennom PoisonHotlineLinks. Bygger noen en
+ * `tel:`-lenke her igjen, går det svenske direktenummeret tilbake til å
+ * være tekst på en lenke som ringer 112.
+ */
+const LINK_PAGES = [
+  '../../../app/species/[id]/page.tsx',
+  '../../../app/sikkerhet/page.tsx',
+  '../../../app/personvern/page.tsx'
+] as const;
+
+describe('sidene som ringer giftinformasjonen', () => {
+  it('bygger ikke tel:-lenka selv', () => {
+    for (const page of LINK_PAGES) {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const source = (require('node:fs') as typeof import('node:fs')).readFileSync(
+        new URL(page, import.meta.url),
+        'utf8'
+      );
+      expect(source, page).toContain('PoisonHotlineLinks');
+      expect(source, page).not.toContain("tel:${s('poisonTel')}");
+    }
+  });
+});

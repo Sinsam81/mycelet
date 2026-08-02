@@ -5,6 +5,7 @@ import { AlertTriangle, ChevronLeft, Info } from 'lucide-react';
 import { EdibilityBadge } from '@/components/ui/EdibilityBadge';
 import { PageWrapper } from '@/components/layout/PageWrapper';
 import { SpeciesPhotoCarousel } from '@/components/species/SpeciesPhotoCarousel';
+import { PoisonHotlineLinks } from '@/components/safety/PoisonHotlineLinks';
 import { createClient } from '@/lib/supabase/server';
 import { getSpeciesDisplayName } from '@/lib/utils/species-name';
 import { edibilityNoteTone } from '@/lib/species/edibility-note';
@@ -35,7 +36,6 @@ const DANGER_STYLES: Record<string, string> = {
 
 export default async function SpeciesDetailPage({ params }: SpeciesDetailPageProps) {
   const t = await getTranslations('SpeciesDetail');
-  const s = await getTranslations('Safety');
   const locale = await getLocale();
   const { id: idParam } = await params;
   const id = Number(idParam);
@@ -169,12 +169,9 @@ export default async function SpeciesDetailPage({ params }: SpeciesDetailPagePro
                     ) : null}
                     <p className="pt-1 text-sm font-medium">
                       {t('poisonCallPrefix')}{' '}
-                      <a
-                        href={`tel:${s('poisonTel')}`}
+                      <PoisonHotlineLinks
                         className={`underline ${species.edibility === 'deadly' ? 'text-white' : 'text-red-900'}`}
-                      >
-                        {s('poisonNumber')}
-                      </a>{' '}
+                      />{' '}
                       {t('poisonCallSuffix')}
                     </p>
                     <Link
