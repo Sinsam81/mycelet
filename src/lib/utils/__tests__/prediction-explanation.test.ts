@@ -296,6 +296,80 @@ describe('buildExplanation — real forest data (NIBIO)', () => {
   });
 });
 
+/**
+ * Flisebanen i /api/prediction leverer skogdata fra nærmeste rute i rasteret,
+ * og rutene ligger ~7 km fra hverandre. «Skog her» var derfor usant hver gang
+ * tallet kom derfra — et konkret tilfelle var «granskog, bonitet 20» om en
+ * skog 15,5 km unna. Avstanden skal stå i setningen, ikke underforstås.
+ */
+describe('buildExplanation — avstand til skogdataene', () => {
+  const FJERN_SKOG = {
+    forestType: 'gran',
+    productivity: 20,
+    volumePerHa: 428,
+    habitatScore: 0.9,
+    habitatReasons: [],
+    source: 'sr16'
+  };
+
+  it('sier ikke «her» når dataene er hentet 15,5 km unna', () => {
+    const lines = buildExplanation({
+      species: KANTARELL,
+      month: 8,
+      weather: PERFECT_KANTARELL_WEATHER,
+      forest: { ...FJERN_SKOG, distanceKm: 15.5 }
+    });
+    const head = lines.find((l) => l.category === 'habitat' && l.text.includes('bonitet'));
+    expect(head?.text).not.toContain('Skog her');
+    expect(head?.text).toBe('Nærmeste skogdata (NIBIO, 15,5 km unna): granskog, bonitet 20');
+  });
+
+  it('beholder «Skog her» når oppslaget faktisk er gjort i punktet', () => {
+    const lines = buildExplanation({
+      species: KANTARELL,
+      month: 8,
+      weather: PERFECT_KANTARELL_WEATHER,
+      forest: { ...FJERN_SKOG, distanceKm: null }
+    });
+    const head = lines.find((l) => l.category === 'habitat' && l.text.includes('bonitet'));
+    expect(head?.text).toBe('Skog her (NIBIO): granskog, bonitet 20');
+  });
+
+  it('skriver korte avstander i meter, aldri som «0 m»', () => {
+    const lines = buildExplanation({
+      species: KANTARELL,
+      month: 8,
+      weather: PERFECT_KANTARELL_WEATHER,
+      forest: { ...FJERN_SKOG, distanceKm: 0.34 }
+    });
+    const head = lines.find((l) => l.category === 'habitat' && l.text.includes('bonitet'));
+    expect(head?.text).toContain('300 m unna');
+
+    const naerme = buildExplanation({
+      species: KANTARELL,
+      month: 8,
+      weather: PERFECT_KANTARELL_WEATHER,
+      forest: { ...FJERN_SKOG, distanceKm: 0.01 }
+    });
+    const naermeHead = naerme.find((l) => l.category === 'habitat' && l.text.includes('bonitet'));
+    expect(naermeHead?.text).toContain('100 m unna');
+    expect(naermeHead?.text).not.toMatch(/\(NIBIO, 0 m unna\)/);
+  });
+
+  it('sier det på svensk for svenske lesere', () => {
+    const lines = buildExplanation({
+      species: { ...KANTARELL, swedishName: 'Kantarell' },
+      month: 8,
+      weather: PERFECT_KANTARELL_WEATHER,
+      forest: { forestType: 'bar', productivity: null, volumePerHa: null, habitatScore: 0.8, habitatReasons: [], source: 'corine', distanceKm: 3.42 },
+      locale: 'sv'
+    });
+    const head = lines.find((l) => l.category === 'habitat');
+    expect(head?.text).toBe('Närmaste skogsdata (CORINE, 3,4 km härifrån): barrskog');
+    expect(head?.text).not.toContain('Skog här');
+  });
+});
+
 describe('buildExplanation — output ordering', () => {
   it('emits season as the first line (highest signal)', () => {
     const lines = buildExplanation({
