@@ -262,7 +262,7 @@
   },
   "ForumModeration": {
     "title": "Moderering",
-    "accessHint": "Om denna sida ger åtkomstfel saknar användaren moderatorrättigheter/RLS-policy för globala rapporter.",
+    "noAccess": "Du har inte behörighet till modereringssidan. Din roll måste vara moderator eller admin.",
     "loading": "Laddar rapporter...",
     "loadError": "Kunde inte hämta rapporter (sannolikt RLS-begränsning).",
     "statusLabel": "Status:",

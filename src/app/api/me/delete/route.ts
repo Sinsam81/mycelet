@@ -244,12 +244,17 @@ export async function POST(request: NextRequest) {
     uploadedImages: storageResult.removed
   };
 
+  // Ingen `request` her, med vilje: da hentes verken IP-adresse eller
+  // nettleserstreng. admin_audit_log kan ingen slette fra (triggerne i
+  // migrasjon 008 blokkerer DELETE også for tjenesterollen), så alt vi skriver
+  // her blir stående. Sporet trenger at slettingen skjedde og hvem det gjaldt —
+  // ikke hvor brukeren satt da de ba om å bli glemt. logAdminAction håndhever
+  // det samme for denne handlingen uansett hva kallstedet sender.
   await logAdminAction({
     actorId: user.id,
     action: 'account.self_delete',
     targetUserId: user.id,
-    metadata: { counts },
-    request
+    metadata: { counts }
   });
 
   userLog.warn('account.self_delete.success', { counts });

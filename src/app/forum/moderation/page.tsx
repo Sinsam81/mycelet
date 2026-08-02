@@ -1,59 +1,57 @@
-'use client';
-
 import Link from 'next/link';
-import { useTranslations } from 'next-intl';
+import { redirect } from 'next/navigation';
+import { getTranslations } from 'next-intl/server';
 import { PageWrapper } from '@/components/layout/PageWrapper';
-import { useModerationReports, useSetReportStatus } from '@/lib/hooks/useForum';
-import { Button } from '@/components/ui/Button';
+import { createClient } from '@/lib/supabase/server';
+import { ModerationConsole } from './ModerationConsole';
 
-export default function ModerationPage() {
-  const t = useTranslations('ForumModeration');
-  const { data, isLoading, error } = useModerationReports();
-  const setStatus = useSetReportStatus();
+/**
+ * Serverside-vakt foran moderasjonskonsollen.
+ *
+ * Siden var tidligere ren klientkode uten et eneste auth-kall: utlogget ga den
+ * 200 med hele konsollen, knappene og en lenke inn i admin-området. Ingen data
+ * lakk — RLS på `reports` gjelder uansett — men en side som viser
+ * moderatorverktøy til hvem som helst leses som brutt tilgangskontroll, av en
+ * Apple-reviewer så vel som av en nysgjerrig bruker.
+ *
+ * To lag nå, med vilje: middleware (PROTECTED_PATHS) sender utloggede til
+ * innlogging, og denne sjekken hindrer at en innlogget ikke-moderator får
+ * konsollen. Samme mønster som /admin/prediction.
+ */
+export default async function ModerationPage() {
+  const t = await getTranslations('ForumModeration');
+  const supabase = createClient();
+  const {
+    data: { user }
+  } = await supabase.auth.getUser();
 
-  return (
-    <PageWrapper>
-      <section className="space-y-3">
-        <h1 className="text-xl font-semibold">{t('title')}</h1>
+  if (!user) {
+    redirect('/auth/login?redirect=/forum/moderation');
+  }
 
-        <p className="text-sm text-gray-700">
-          {t('accessHint')}
-        </p>
+  const { data: roleRow, error: roleError } = await supabase
+    .from('moderator_roles')
+    .select('role')
+    .eq('user_id', user.id)
+    .maybeSingle();
 
-        {isLoading ? <p className="text-sm text-gray-700">{t('loading')}</p> : null}
-        {error ? <p className="text-sm text-red-600">{t('loadError')}</p> : null}
+  // Feilet oppslaget, vet vi ikke om brukeren er moderator. Da er svaret nei:
+  // en feil skal aldri kunne leses som en tilgangserklæring.
+  const role = roleError ? null : roleRow?.role ?? null;
 
-        <div className="space-y-2">
-          {(data ?? []).map((report) => (
-            <article key={report.id} className="rounded-lg border border-gray-200 bg-white p-3">
-              <p className="text-sm font-medium text-gray-900">{report.reason}</p>
-              <p className="text-sm text-gray-700">{t('statusLabel')} {report.status}</p>
-              {report.description ? <p className="text-sm text-gray-700">{report.description}</p> : null}
-              <p className="mt-1 text-xs text-gray-500">{new Date(report.created_at).toLocaleString('nb-NO')}</p>
-              <div className="mt-2 flex gap-2">
-                <Button size="sm" variant="outline" onClick={() => setStatus.mutate({ reportId: report.id, status: 'reviewed' })}>
-                  {t('markReviewed')}
-                </Button>
-                <Button size="sm" onClick={() => setStatus.mutate({ reportId: report.id, status: 'resolved' })}>
-                  {t('markResolved')}
-                </Button>
-                <Button size="sm" variant="danger" onClick={() => setStatus.mutate({ reportId: report.id, status: 'dismissed' })}>
-                  {t('dismiss')}
-                </Button>
-              </div>
-            </article>
-          ))}
-        </div>
+  if (role !== 'moderator' && role !== 'admin') {
+    return (
+      <PageWrapper>
+        <section className="space-y-3">
+          <h1 className="text-xl font-semibold">{t('title')}</h1>
+          <p className="rounded bg-amber-50 px-3 py-2 text-sm text-amber-800">{t('noAccess')}</p>
+          <Link href="/forum" className="inline-flex text-sm font-medium text-forest-800 hover:underline">
+            {t('backToForum')}
+          </Link>
+        </section>
+      </PageWrapper>
+    );
+  }
 
-        {!isLoading && (data?.length ?? 0) === 0 ? <p className="text-sm text-gray-700">{t('noReports')}</p> : null}
-
-        <Link href="/forum" className="inline-flex text-sm font-medium text-forest-800 hover:underline">
-          {t('backToForum')}
-        </Link>
-        <Link href="/admin/forum-trust" className="inline-flex text-sm font-medium text-forest-800 hover:underline">
-          {t('forumTrustAdmin')}
-        </Link>
-      </section>
-    </PageWrapper>
-  );
+  return <ModerationConsole />;
 }
