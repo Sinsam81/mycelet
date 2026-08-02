@@ -4,7 +4,31 @@ import { logger } from '@/lib/log';
 import { getOrCreateRequestId } from '@/lib/log/request';
 import { LOCALE_COOKIE, isLocale, type Locale } from '@/i18n/config';
 
-const PROTECTED_PATHS = ['/profile', '/forum/new', '/map', '/admin', '/mine-steder'];
+/**
+ * Fasit for hvilke ruter en utlogget besøkende sendes til innlogging fra.
+ *
+ * /forum/moderation og /forum/reports kom med etter lanseringsrevisjonen: de
+ * svarte 200 uten innlogging. Ingen data lakk (RLS på `reports` gjelder
+ * uansett), men en utlogget besøkende — inkludert en Apple-reviewer — fikk en
+ * moderasjonskonsoll med knappene «Marker som løst / Avvis» og en lenke inn i
+ * admin-området. Det ser ut som brutt tilgangskontroll enten det er det eller
+ * ikke. /forum/reports viser dessuten «mine rapporter», som per definisjon
+ * krever en bruker.
+ */
+export const PROTECTED_PATHS = [
+  '/profile',
+  '/forum/new',
+  '/forum/moderation',
+  '/forum/reports',
+  '/map',
+  '/admin',
+  '/mine-steder'
+];
+
+/** Prefiksmatch: /admin dekker /admin/forum-trust, /map dekker /map?lat=… */
+export function isProtectedPath(pathname: string): boolean {
+  return PROTECTED_PATHS.some((path) => pathname === path || pathname.startsWith(`${path}/`));
+}
 
 /**
  * Which language of the static landing page a logged-out visitor should get.
@@ -93,9 +117,7 @@ export async function updateSession(request: NextRequest) {
     data: { user }
   } = await supabase.auth.getUser();
 
-  const isProtectedPath = PROTECTED_PATHS.some((path) => request.nextUrl.pathname.startsWith(path));
-
-  if (isProtectedPath && !user) {
+  if (isProtectedPath(request.nextUrl.pathname) && !user) {
     log.info('middleware.auth_redirect', { from: request.nextUrl.pathname });
     const redirectUrl = new URL('/auth/login', request.url);
     redirectUrl.searchParams.set('redirect', request.nextUrl.pathname);

@@ -13,6 +13,11 @@ type TableResult = { data: unknown; error: { message: string } | null };
 /** Hva hver tabell skal svare i den aktuelle testen. */
 let tableResponses: Record<string, TableResult> = {};
 let currentUser: { id: string; email: string; created_at: string } | null = null;
+/** Hvilke tabeller ble spurt om, og med hvilken klient. */
+let queriedWithSession: string[] = [];
+let queriedWithAdmin: string[] = [];
+/** Simulerer at SUPABASE_SERVICE_ROLE_KEY mangler. */
+let adminClientAvailable = true;
 
 /**
  * Minimal Supabase-etterligning. Query-byggeren er «thenable», så både
@@ -32,9 +37,23 @@ function makeQuery(result: TableResult) {
 vi.mock('@/lib/supabase/server', () => ({
   createClient: () => ({
     auth: { getUser: async () => ({ data: { user: currentUser } }) },
-    from: (table: string) =>
-      makeQuery(tableResponses[table] ?? { data: [], error: null })
+    from: (table: string) => {
+      queriedWithSession.push(table);
+      return makeQuery(tableResponses[table] ?? { data: [], error: null });
+    }
   })
+}));
+
+vi.mock('@/lib/supabase/admin', () => ({
+  createAdminClient: () => {
+    if (!adminClientAvailable) throw new Error('SUPABASE_SERVICE_ROLE_KEY mangler');
+    return {
+      from: (table: string) => {
+        queriedWithAdmin.push(table);
+        return makeQuery(tableResponses[table] ?? { data: [], error: null });
+      }
+    };
+  }
 }));
 
 vi.mock('@/lib/log/request', () => {
@@ -63,6 +82,9 @@ function makeRequest() {
 beforeEach(() => {
   currentUser = { id: `bruker-${requestCounter}`, email: 'test@example.com', created_at: '2026-01-01T00:00:00Z' };
   tableResponses = {};
+  queriedWithSession = [];
+  queriedWithAdmin = [];
+  adminClientAvailable = true;
 });
 
 describe('GET /api/me/export', () => {
@@ -89,10 +111,71 @@ describe('GET /api/me/export', () => {
     expect(body._manifest.datasets.findings).toBe(2);
   });
 
+  /**
+   * spot_feedback er det datasettet med de mest presise koordinatene vi lagrer
+   * om en bruker (fem desimaler ≈ 1 m, utenfor visibility-modellen). Det lå
+   * utenfor eksporten mens fila erklærte seg fullstendig.
+   */
+  describe('dekker alle tabellene som er knyttet til brukeren', () => {
+    it('tar med tilbakemeldinger på steder — koordinatene og alt', async () => {
+      tableResponses = {
+        spot_feedback: {
+          data: [{ id: 'sf1', latitude: 59.91234, longitude: 10.75678, found: true }],
+          error: null
+        }
+      };
+
+      const body = JSON.parse(await (await GET(makeRequest())).text());
+      expect(queriedWithSession).toContain('spot_feedback');
+      expect(body.spotFeedback).toHaveLength(1);
+      expect(body.spotFeedback[0].latitude).toBe(59.91234);
+      expect(body._manifest.datasets.spotFeedback).toBe(1);
+    });
+
+    it('tar med varselet om automatisk sletting', async () => {
+      tableResponses = {
+        account_deletion_warnings: { data: { user_id: 'x', scheduled_deletion_at: '2029-01-01' }, error: null }
+      };
+      const body = JSON.parse(await (await GET(makeRequest())).text());
+      expect(queriedWithSession).toContain('account_deletion_warnings');
+      expect(body.deletionWarning.scheduled_deletion_at).toBe('2029-01-01');
+    });
+
+    it('leser AI-tellerne med tjenesterollen, ikke med øktklienten', async () => {
+      // ai_identifications har RLS på uten policyer. Øktklienten ville gitt en
+      // tom liste som ser ut som et svar.
+      tableResponses = {
+        ai_identifications: { data: [{ id: 1 }, { id: 2 }], error: null }
+      };
+      const body = JSON.parse(await (await GET(makeRequest())).text());
+      expect(queriedWithAdmin).toContain('ai_identifications');
+      expect(queriedWithSession).not.toContain('ai_identifications');
+      expect(body._manifest.datasets.aiIdentifications).toBe(2);
+    });
+
+    it('sier fra i stedet for å levere en fil uten AI-tellerne', async () => {
+      adminClientAvailable = false;
+      const res = await GET(makeRequest());
+      expect(res.status).toBe(500);
+      const body = JSON.parse(await res.text());
+      expect(body._manifest).toBeUndefined();
+      expect(body.details).toMatch(/IKKE fått en ufullstendig fil/);
+    });
+  });
+
   describe('feiler lukket', () => {
     // Én test per tabell som kan feile: poenget er at ingen av dem har lov til
     // å bli stille borte.
-    const tables = ['findings', 'forum_posts', 'comments', 'profiles', 'billing_subscriptions'];
+    const tables = [
+      'findings',
+      'forum_posts',
+      'comments',
+      'profiles',
+      'billing_subscriptions',
+      'spot_feedback',
+      'account_deletion_warnings',
+      'ai_identifications'
+    ];
 
     it.each(tables)('%s som feiler gir 500, ikke en delvis fil', async (table) => {
       tableResponses = {

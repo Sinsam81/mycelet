@@ -9,6 +9,7 @@ import { PageWrapper } from '@/components/layout/PageWrapper';
 import { BILLING_PLANS, FREE_DAILY_AI_LIMIT } from '@/lib/billing/plans';
 import { canPurchasePlan, getBlockingPaidPlan, getPlanViewState } from '@/lib/billing/plan-state';
 import { seasonPriceComesFromStore, showsStorePrices } from '@/lib/billing/store-pricing';
+import { statusLabel, tierLabel } from '@/lib/billing/labels';
 import { useIsNative } from '@/lib/hooks/useIsNative';
 import { trackEvent } from '@/lib/analytics';
 import { createClient } from '@/lib/supabase/client';
@@ -57,21 +58,11 @@ function PricingInner() {
   const locale = useLocale();
   const searchParams = useSearchParams();
 
+  // Nøklene ligger i src/lib/billing/labels.ts, delt med profilsiden.
   const TIER_LABELS: Record<'free' | 'premium' | 'season_pass', string> = {
-    free: t('tierFree'),
-    premium: t('tierPremium'),
-    season_pass: t('tierSeasonPass')
-  };
-
-  const STATUS_LABELS: Record<string, string> = {
-    active: t('statusActive'),
-    trialing: t('statusTrialing'),
-    past_due: t('statusPastDue'),
-    canceled: t('statusCanceled'),
-    unpaid: t('statusUnpaid'),
-    incomplete: t('statusIncomplete'),
-    incomplete_expired: t('statusIncompleteExpired'),
-    inactive: t('statusInactive')
+    free: tierLabel('free', t),
+    premium: tierLabel('premium', t),
+    season_pass: tierLabel('season_pass', t)
   };
 
   const [loadingPlan, setLoadingPlan] = useState<'premium' | 'season_pass' | null>(null);
@@ -424,7 +415,7 @@ function PricingInner() {
             <p className="text-xs uppercase tracking-wide text-gray-500">{t('yourPlan')}</p>
             <p className="mt-1 text-lg font-semibold text-forest-900">{TIER_LABELS[planView.activeTier]}</p>
             <p className="text-sm text-gray-700">
-              {STATUS_LABELS[status.capabilities.status] ?? status.capabilities.status}
+              {statusLabel(status.capabilities.status, t)}
               {status.subscription?.current_period_end
                 ? ` • ${t('renewsEnds', { date: new Date(status.subscription.current_period_end).toLocaleDateString(intlLocale(locale)) })}`
                 : ''}

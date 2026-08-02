@@ -12,6 +12,8 @@ import { createClient } from '@/lib/supabase/server';
 import { getBillingCapabilities, getUserBillingSubscription } from '@/lib/billing/subscription';
 import type { Edibility } from '@/types/species';
 import { intlLocale } from '@/lib/utils/intl-locale';
+import { formatMemberSince } from '@/lib/utils/member-since';
+import { statusLabel, tierLabel } from '@/lib/billing/labels';
 
 interface UserStats {
   total_findings: number;
@@ -48,6 +50,9 @@ function categoryLabels(t: Awaited<ReturnType<typeof getTranslations>>): Record<
 
 export default async function ProfilePage() {
   const t = await getTranslations('Profile');
+  // Abonnementsnavnene bor i Pricing-seksjonen; profilen låner dem i stedet for
+  // å lage en andre fremstilling av de samme verdiene.
+  const tPricing = await getTranslations('Pricing');
   const locale = await getLocale();
   const supabase = createClient();
   const {
@@ -94,9 +99,8 @@ export default async function ProfilePage() {
   const billing = getBillingCapabilities(subscription);
   const isAdmin = roleRow?.role === 'admin' || roleRow?.role === 'moderator';
 
-  const memberSince = profile?.created_at
-    ? new Date(profile.created_at).toLocaleDateString(intlLocale(locale), { year: 'numeric', month: 'long' })
-    : null;
+  // Kontoens dato, ikke profilradens — se src/lib/utils/member-since.ts.
+  const memberSince = formatMemberSince(user, profile ?? null, locale);
 
   const TierIcon = billing.tier === 'premium' ? Crown : billing.tier === 'season_pass' ? Leaf : null;
   const CATEGORY_LABELS = categoryLabels(t);
@@ -139,9 +143,11 @@ export default async function ProfilePage() {
           </div>
           <div className="mt-2 flex items-center gap-2 text-sm">
             {TierIcon ? <TierIcon className="h-4 w-4 text-forest-800" /> : null}
-            <span className="font-medium capitalize">{billing.tier.replace('_', ' ')}</span>
+            {/* Samme navn som på prissiden — «Sesongpass · Forfalt betaling»,
+                ikke «Season pass · past_due». */}
+            <span className="font-medium">{tierLabel(billing.tier, tPricing)}</span>
             <span className="text-gray-500">·</span>
-            <span className="text-gray-700">{billing.status}</span>
+            <span className="text-gray-700">{statusLabel(billing.status, tPricing)}</span>
           </div>
           {!billing.paid && billing.aiDailyLimit !== null ? (
             <p className="mt-1 text-xs text-gray-600">{t('aiQuota', { limit: billing.aiDailyLimit })}</p>
