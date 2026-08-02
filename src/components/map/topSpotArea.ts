@@ -54,9 +54,13 @@ export function createTopSpotArea(
     // omkring», ikke som en ring med et fasitpunkt i midten.
     fillColor: color,
     fillOpacity: 0.16,
-    weight: 1,
-    opacity: 0.3,
-    dashArray: '3 7'
+    // Kanten er stiplet og dempet, men MÅ være synlig: flislaget under er nå et
+    // mykt vaskelag uten kant (se updateHeatLayer), og et søkeområde man ikke
+    // finner er verdiløst. Stiplingen er det som skiller «let her omkring» fra
+    // «her går en grense».
+    weight: 2,
+    opacity: 0.55,
+    dashArray: '4 6'
   });
 
   const center = leaflet.circleMarker([spot.lat, spot.lng], {
