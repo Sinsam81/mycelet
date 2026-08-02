@@ -6,6 +6,7 @@ import { Toaster } from 'react-hot-toast';
 import { RetentionWarningBanner } from './RetentionWarningBanner';
 import { OnboardingIntro } from '@/components/onboarding/OnboardingIntro';
 import { InstallPrompt } from '@/components/pwa/InstallPrompt';
+import { ProfileSelfHeal } from '@/components/auth/ProfileSelfHeal';
 
 interface ProvidersProps {
   children: ReactNode;
@@ -40,6 +41,10 @@ export function Providers({ children }: ProvidersProps) {
 
   return (
     <QueryClientProvider client={queryClient}>
+      {/* Reparerer manglende profilrad for enhver innlogget økt. Må ligge
+          app-vidt: brukere som allerede er logget inn kaller aldri signIn()
+          igjen, og uten profilrad feiler alt som skriver til databasen. */}
+      <ProfileSelfHeal />
       <RetentionWarningBanner />
       <OnboardingIntro />
       <InstallPrompt />
