@@ -21,11 +21,42 @@ const TILE_CACHE = 'mycelet-map-tiles-v1'; // unchanged: users' saved offline ti
 // sopp-app som serverer en gammel side i skogen kan vise utdaterte
 // sikkerhetsopplysninger om en art. Ekte offline-bruk er kartfliser
 // (TILE_CACHE, premium), ikke sider.
-const STATIC_ASSETS = ['/manifest.json', '/icons/icon.svg', '/icons/icon-maskable.svg'];
+//
+// v4 (2026-08-02): ett unntak fra siste avsnitt — offline-skallet.
+//
+// Etter v3 kunne INGEN side åpnes uten nett, mens appen samtidig selger
+// «offline-kart»: flisene lå i TILE_CACHE, men det fantes ikke noe skall å vise
+// dem i. Den lagrede turen var utilgjengelig akkurat der den skulle brukes.
+//
+// '/offline' (public/offline/index.html) løser det uten å gjenåpne noen av
+// problemene over:
+//   • Den er ÅPEN — ikke i PROTECTED_PATHS — så det som precaches er en ekte
+//     side, ikke en omdirigering til innlogging.
+//   • Den er statisk og henter ingen serverdata. Den viser bare det brukerens
+//     egen nettleser allerede har: områder fra localStorage og fliser fra
+//     TILE_CACHE. Ingen artsdata, ingen sikkerhetstekst som kan bli utdatert.
+//   • Navigasjoner går fortsatt til NETTET FØRST. Skallet brukes kun når
+//     fetch() faktisk feiler, så en påkoblet bruker får aldri en gammel side.
+const OFFLINE_SHELL = '/offline';
+const STATIC_ASSETS = [
+  '/manifest.json',
+  '/icons/icon.svg',
+  '/icons/icon-maskable.svg',
+  OFFLINE_SHELL,
+  '/offline/offline-map.js'
+];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(STATIC_CACHE).then((cache) => cache.addAll(STATIC_ASSETS)).catch(() => undefined)
+    caches
+      .open(STATIC_CACHE)
+      .then((cache) =>
+        // Én cache.addAll() forkaster ALT hvis én enkelt ressurs feiler. Da
+        // ville et 404 på et ikon tatt med seg offline-skallet i fallet — og
+        // det oppdages først i skogen. Cach hver ressurs for seg.
+        Promise.all(STATIC_ASSETS.map((asset) => cache.add(asset).catch(() => undefined)))
+      )
+      .catch(() => undefined)
   );
   self.skipWaiting();
 });
@@ -106,7 +137,22 @@ self.addEventListener('fetch', (event) => {
   }
 
   if (requestUrl.origin === self.location.origin) {
-    if (event.request.mode === 'navigate') return;
+    // Nettet først, alltid. Har brukeren dekning, får hen den ferske siden —
+    // en sopp-app skal aldri servere en gammel artsside fra cache. Bare når
+    // fetch() faktisk feiler (ingen dekning) svarer vi med offline-skallet, som
+    // viser de lagrede kartområdene. URL-en i adressefeltet står stille, så
+    // brukeren kommer tilbake til siden hen ba om ved neste forsøk.
+    if (event.request.mode === 'navigate') {
+      event.respondWith(
+        fetch(event.request).catch(async () => {
+          const cache = await caches.open(STATIC_CACHE);
+          const shell = await cache.match(OFFLINE_SHELL);
+          return shell || Response.error();
+        })
+      );
+      return;
+    }
+
     if (!isCacheableStaticRequest(requestUrl)) return;
 
     event.respondWith(
