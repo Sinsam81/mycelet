@@ -1,4 +1,4 @@
--- 039: la tellerne slutte å telle innhold ingen får se.
+-- 041: la tellerne slutte å telle innhold ingen får se.
 --
 -- ⚠️ IKKE KJØRT. Lim inn i Supabase SQL Editor når du vil ha den ute.
 -- Idempotent: trygg å lime inn på nytt.

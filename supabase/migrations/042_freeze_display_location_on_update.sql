@@ -1,4 +1,4 @@
--- 040: Lås grovkorningen til raden ved første stempling.
+-- 042: Lås grovkorningen til raden ved første stempling.
 --
 -- Lanseringsrevisjon, infra/data-funn 6. Ikke en feil i dag — det finnes ingen
 -- oppdateringsvei for funn i appen (ingen .update() mot findings noe sted i
