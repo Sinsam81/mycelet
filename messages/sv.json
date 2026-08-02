@@ -467,7 +467,8 @@
     "inSeasonAtPeak": "toppsäsong",
     "inSeasonInSeason": "i säsong",
     "inSeasonSeeAll": "Se alla →",
-    "inSeasonDangerous": "{count, plural, =1 {# giftig art är också i säsong nu} other {# giftiga arter är också i säsong nu}} — läs på innan du plockar"
+    "inSeasonDangerous": "{count, plural, =1 {# giftig art är också i säsong nu} other {# giftiga arter är också i säsong nu}} — läs på innan du plockar",
+    "communityUnverifiedNote": "Arterna är uppgivna av den som lade in fyndet och är inte kontrollerade av Mycelet."
   },
   "Personvern": {
     "title": "Integritetspolicy",
@@ -1244,7 +1245,8 @@
     "notProvided": "Ej angivet",
     "zoneFinding": "Zonfynd ({km} km rutnät)",
     "zoneFindingLabeled": "Zonfynd: {label} ({km} km rutnät)",
-    "seeMore": "Se mer"
+    "seeMore": "Se mer",
+    "unverifiedClaim": "Uppgiven art — inte verifierad"
   },
   "MushroomMapLazy": {
     "loadingMap": "Laddar karta..."

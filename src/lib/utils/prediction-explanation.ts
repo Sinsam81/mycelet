@@ -61,6 +61,12 @@ export interface SpeciesExplanationContext {
 export interface ExplanationWeather {
   temperatureC: number;
   humidityPct: number;
+  /**
+   * True når humidityPct er den nøytrale fallbacken (stasjonen mangler
+   * fuktsensor), ikke en måling. Da skrives INGEN fuktlinje — et tall vi ikke
+   * har målt skal ikke stå som «75 % luftfuktighet — moderat».
+   */
+  humidityEstimated?: boolean | null;
   rain3dMm: number;
   rain7dMm?: number | null;
   rain14dMm?: number | null;
@@ -518,8 +524,13 @@ export function buildExplanation(input: ExplanationInput): Explanation[] {
   }
 
   // ── Humidity ────────────────────────────────────────────────────────
+  // Ingen fuktlinje når verdien bare er den nøytrale fallbacken. Å utelate
+  // linja er ærlig — å skrive «75 % luftfuktighet — moderat» er å oppgi en
+  // måling ingen stasjon har gjort.
   const hum = Math.round(input.weather.humidityPct);
-  if (input.weather.humidityPct >= 80) {
+  if (input.weather.humidityEstimated) {
+    // ingen linje
+  } else if (input.weather.humidityPct >= 80) {
     lines.push({ level: 'positive', category: 'humidity', text: copy.humidityHigh(hum) });
   } else if (input.weather.humidityPct >= 60) {
     lines.push({ level: 'neutral', category: 'humidity', text: copy.humidityModerate(hum) });

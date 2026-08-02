@@ -94,6 +94,10 @@ export default function GlobalError({
             >
               {copy.retry}
             </button>
+            {/* Bevisst <a> og ikke <Link>: rot-layouten har nettopp kastet, så
+                router-konteksten kan være ødelagt. En full sidelasting er
+                nøyaktig det vi vil ha her. */}
+            {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
             <a
               href="/"
               style={{

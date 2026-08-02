@@ -22,6 +22,7 @@ describe('field context', () => {
           source: 'smhi',
           temperatureC: 14,
           humidityPct: 83,
+          humidityEstimated: false,
           rain3dMm: 9,
           rain7dMm: 20,
           rain14dMm: 30,

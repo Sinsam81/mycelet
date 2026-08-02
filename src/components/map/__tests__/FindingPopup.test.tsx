@@ -109,6 +109,27 @@ describe('artsnavnet følger leserens språk', () => {
   });
 });
 
+describe('artspåstanden er ikke en bestemmelse', () => {
+  // Markørfargen settes av artskatalogens spiselighet (grønn = edible), og
+  // kartintroen lærer brukeren nettopp det. Uten en tekst som sier at arten
+  // bare er OPPGITT, leses en feilbestemt hvit fluesopp lagret som
+  // sjampinjong som en grønn, godkjent matsopp for alle andre.
+  it('merker ubekreftede funn som oppgitt art — på begge språk', () => {
+    expect(render(<FindingPopup finding={finding} />)).toContain(nb.FindingPopup.unverifiedClaim);
+    expect(render(<FindingPopup finding={finding} />, 'sv')).toContain(sv.FindingPopup.unverifiedClaim);
+  });
+
+  it('lar merket falle bort når funnet faktisk er verifisert', () => {
+    const verifisert = { ...(finding as object), verification_status: 'verified' } as never;
+    expect(render(<FindingPopup finding={verifisert} />)).not.toContain(nb.FindingPopup.unverifiedClaim);
+  });
+
+  it('merker også funn uten verification_status i det hele tatt', () => {
+    const utenStatus = { ...(finding as object), verification_status: null } as never;
+    expect(render(<FindingPopup finding={utenStatus} />)).toContain(nb.FindingPopup.unverifiedClaim);
+  });
+});
+
 describe('sonefunn', () => {
   it('merkes som omtrentlig', () => {
     const sone = { ...(finding as object), is_zone_finding: true, zone_precision_km: 5 } as never;

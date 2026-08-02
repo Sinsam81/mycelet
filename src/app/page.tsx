@@ -376,6 +376,10 @@ export default async function HomePage() {
                 </li>
               ))}
             </ul>
+            {/* Spiselighetsmerket over kommer fra artskatalogen, altså «arten
+                som ble OPPGITT er spiselig» — ikke «dette funnet er riktig
+                bestemt». Ingenting kontrollerer artspåstanden i dag. */}
+            <p className="mt-3 text-xs text-gray-500">{t('communityUnverifiedNote')}</p>
           </article>
         ) : null}
 
