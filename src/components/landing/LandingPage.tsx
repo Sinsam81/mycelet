@@ -15,7 +15,7 @@ import {
 } from 'lucide-react';
 import { NonNativeOnly } from '@/components/native/NonNativeOnly';
 import { PageWrapper } from '@/components/layout/PageWrapper';
-import { BILLING_PLANS } from '@/lib/billing/plans';
+import { BILLING_PLANS, FREE_DAILY_AI_LIMIT } from '@/lib/billing/plans';
 
 /**
  * Marketing landing page shown to logged-OUT visitors on `/` (logged-in users
@@ -148,7 +148,7 @@ export async function LandingPage() {
   ];
 
   const faqs = [
-    { q: t('faqFreeQ'), a: t('faqFreeA') },
+    { q: t('faqFreeQ'), a: t('faqFreeA', { limit: FREE_DAILY_AI_LIMIT }) },
     { q: t('faqSwedenQ'), a: t('faqSwedenA') },
     { q: t('faqAiQ'), a: t('faqAiA') },
     { q: t('faqOfflineQ'), a: t('faqOfflineA') },
@@ -253,7 +253,7 @@ export async function LandingPage() {
             <h3 className="font-serif text-lg font-semibold text-forest-900">{t('planFree')}</h3>
             <p className="mt-1 text-2xl font-bold text-forest-900">0 kr</p>
             <ul className="mt-2 flex-1 space-y-1 text-sm text-gray-700">
-              {[t('planFreeF1'), t('planFreeF2'), t('planFreeF3')].map((feature) => (
+              {[t('planFreeF1', { limit: FREE_DAILY_AI_LIMIT }), t('planFreeF2'), t('planFreeF3')].map((feature) => (
                 <li key={feature} className="flex items-start gap-1.5">
                   <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-forest-700" />
                   {feature}

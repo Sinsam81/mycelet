@@ -12,7 +12,7 @@
     "swedish": "Svenska"
   },
   "AdminAuditLog": {
-    "metaTitle": "Audit-log — Mycelet admin",
+    "metaTitle": "Audit-log — admin",
     "metaDescription": "Sporbare admin-handlinger og kontosletteinger.",
     "actionVerifiedForagerUpsert": "Verifisert plukker — opprettet/endret",
     "actionVerifiedForagerDelete": "Verifisert plukker — fjernet",
@@ -67,7 +67,7 @@
     "noUsers": "Ingen brukere funnet."
   },
   "Admin": {
-    "metaTitle": "Statistikk — Mycelet admin",
+    "metaTitle": "Statistikk — admin",
     "metaDescription": "Oversikt over brukere, funn, samfunn, moderering og artskatalog.",
     "mustBeLoggedIn": "Du må være logget inn for å se denne siden.",
     "noAccessTitle": "Ingen tilgang",
@@ -196,7 +196,7 @@
     "haveAccount": "Har du allerede konto?",
     "login": "Logg inn",
     "loading": "Laster...",
-    "acceptPrefix": "Jeg er minst 18 år (eller har samtykke fra en foresatt) og godtar",
+    "acceptPrefix": "Jeg er minst 13 år, og har samtykke fra en foresatt hvis jeg er under 18. Jeg godtar",
     "acceptTerms": "vilkårene",
     "acceptAnd": "og",
     "acceptPrivacy": "personvernerklæringen"
@@ -241,7 +241,7 @@
     "monthDec": "des"
   },
   "Datakilder": {
-    "metaTitle": "Datakilder — Mycelet",
+    "metaTitle": "Datakilder",
     "metaDescription": "Åpne datakilder og lisenser som driver Mycelets soppkart og prediksjoner.",
     "heading": "Datakilder",
     "intro": "Mycelet er bygget på åpne, offentlige data. Soppkartet og prediksjonene hadde ikke vært mulige uten disse kildene — tusen takk til institusjonene og alle som rapporterer funn. Her er hva vi bruker, og under hvilke lisenser.",
@@ -380,7 +380,7 @@
     "safetyDataIncomplete": "Vi klarte ikke å hente sikkerhetsdataene for disse forslagene akkurat nå. At det ikke står noen advarsel her betyr derfor IKKE at arten er trygg — det betyr at vi ikke fikk sjekket. Åpne artssiden og sjekk forvekslingsarter manuelt, eller prøv igjen om litt."
   },
   "MineSteder": {
-    "metaTitle": "Mine steder — Mycelet",
+    "metaTitle": "Mine steder",
     "unknownSpecies": "Ukjent art",
     "nearPlace": "Sted nær {lat}, {lng}",
     "onlyVisibleToYou": "Bare synlig for deg",
@@ -573,7 +573,7 @@
     "contactEmergencyBefore": "For akutte sikkerhetshendelser, ring",
     "contactEmergencyAfter": "(døgnåpent).",
     "backToHome": "Tilbake til forsiden",
-    "metaTitle": "Personvern — Mycelet",
+    "metaTitle": "Personvern",
     "metaDescription": "Hvordan Mycelet samler inn, bruker og beskytter personopplysningene dine. GDPR-rettighetene dine og hvem du kan kontakte.",
     "supervisoryAuthorityName": "Datatilsynet",
     "supervisoryAuthorityUrl": "https://www.datatilsynet.no",
@@ -598,7 +598,7 @@
     "statusIncompleteExpired": "Utløpt",
     "statusInactive": "Inaktiv",
     "freeTagline": "Kom trygt i gang",
-    "freeFeature1": "5 AI-identifikasjoner per døgn",
+    "freeFeature1": "{limit} AI-identifikasjoner per døgn",
     "freeFeature2": "Artsbibliotek med forvekslingsadvarsler",
     "freeFeature3": "Soppkart, soppvarsel, kalender og forum",
     "premiumTagline": "Fleksibelt måned for måned",
@@ -619,7 +619,7 @@
     "faq2Q": "Kan jeg avslutte når som helst?",
     "faq2A": "Ja. Du administrerer abonnementet selv fra denne siden («Administrer abonnement»). Tilgangen varer ut perioden du allerede har betalt for, og du belastes ikke videre.",
     "faq3Q": "Hva får jeg gratis?",
-    "faq3A": "Kjernen i Mycelet er gratis: artsbiblioteket med forvekslingsadvarsler, soppkartet, soppvarselet, kalenderen, forumet — og 5 AI-identifikasjoner per døgn.",
+    "faq3A": "Kjernen i Mycelet er gratis: artsbiblioteket med forvekslingsadvarsler, soppkartet, soppvarselet, kalenderen, forumet — og {limit} AI-identifikasjoner per døgn.",
     "faq4Q": "Fungerer Mycelet i Sverige?",
     "faq4A": "Ja. Kart, værdata, funn og prediksjon dekker både Norge og Sverige.",
     "checkoutSuccess": "Betaling fullført. Oppdaterer abonnement...",
@@ -720,7 +720,7 @@
     "seeAlsoPrefix": "Se også:",
     "privacyLinkText": "Personvernerklæringen",
     "seeAlsoSuffix": "for hvordan vi behandler dataene dine.",
-    "metaTitle": "Sikkerhet og ansvar — Mycelet",
+    "metaTitle": "Sikkerhet og ansvar",
     "metaDescription": "Slik bruker du Mycelet trygt. Kontaktinfo til Soppkontrollen og Giftinformasjonen ved behov."
   },
   "SpeciesDetail": {
@@ -1375,7 +1375,7 @@
     "forestMeadowSpecies": "Parasollsopp og sjampinjonger — se opp for hvit fluesopp!",
     "pricingHeading": "Priser",
     "planFree": "Gratis",
-    "planFreeF1": "5 AI-identifiseringer per døgn",
+    "planFreeF1": "{limit} AI-identifiseringer per døgn",
     "planFreeF2": "Soppkart, varsel og kalender",
     "planFreeF3": "Artsbibliotek med advarsler",
     "planPremium": "Premium",
@@ -1394,7 +1394,7 @@
     "safetyBody": "Spis aldri sopp du ikke er 100 % sikker på. Mycelet er et hjelpemiddel, ikke en fasit — AI-forslag skal alltid dobbeltsjekkes, og appen viser deg alltid farlige forvekslingsarter. Er du i tvil, ta med soppen til soppkontroll hos Norges sopp- og nyttevekstforbund.",
     "faqHeading": "Spørsmål og svar",
     "faqFreeQ": "Er appen gratis?",
-    "faqFreeA": "Ja — du kan bruke soppkart, varsel, kalender, artsbibliotek og 5 AI-identifiseringer per døgn helt gratis, uten kortopplysninger. Premium gir ubegrenset AI, full prediksjon og offline-kart.",
+    "faqFreeA": "Ja — du kan bruke soppkart, varsel, kalender, artsbibliotek og {limit} AI-identifiseringer per døgn helt gratis, uten kortopplysninger. Premium gir ubegrenset AI, full prediksjon og offline-kart.",
     "faqSwedenQ": "Fungerer den i Sverige?",
     "faqSwedenA": "Ja! Værdata fra SMHI, svenske skogdata og svensk språk i appen. Kartet og varselet fungerer i hele Norge og Sverige.",
     "faqAiQ": "Kan jeg stole blindt på AI-identifiseringen?",
@@ -1468,7 +1468,7 @@
     "termsLink": "Vilkår for bruk",
     "purchaseTermsLink": "Kjøpsvilkår",
     "privacyLink": "Personvernerklæring",
-    "metaTitle": "Kontakt — Mycelet",
+    "metaTitle": "Kontakt",
     "metaDescription": "Kontaktopplysninger og foretaksinformasjon for Mycelet."
   }
 }

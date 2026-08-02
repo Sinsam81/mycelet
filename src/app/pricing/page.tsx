@@ -6,7 +6,7 @@ import { useSearchParams } from 'next/navigation';
 import { useLocale, useTranslations } from 'next-intl';
 import { Check, Crown, Leaf, Loader2, ShieldCheck, Undo2 } from 'lucide-react';
 import { PageWrapper } from '@/components/layout/PageWrapper';
-import { BILLING_PLANS } from '@/lib/billing/plans';
+import { BILLING_PLANS, FREE_DAILY_AI_LIMIT } from '@/lib/billing/plans';
 import { canPurchasePlan, getBlockingPaidPlan, getPlanViewState } from '@/lib/billing/plan-state';
 import { useIsNative } from '@/lib/hooks/useIsNative';
 import { trackEvent } from '@/lib/analytics';
@@ -82,7 +82,7 @@ function PricingInner() {
       period: '',
       lead: null,
       features: [
-        t('freeFeature1'),
+        t('freeFeature1', { limit: FREE_DAILY_AI_LIMIT }),
         t('freeFeature2'),
         t('freeFeature3')
       ],
@@ -130,7 +130,7 @@ function PricingInner() {
     },
     {
       q: t('faq3Q'),
-      a: t('faq3A')
+      a: t('faq3A', { limit: FREE_DAILY_AI_LIMIT })
     },
     {
       q: t('faq4Q'),
