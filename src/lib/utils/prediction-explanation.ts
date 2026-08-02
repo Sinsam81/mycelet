@@ -75,14 +75,22 @@ export interface ExplanationWeather {
 }
 
 /**
- * Real forest data at the queried point (NIBIO SR16). When present, it
- * supersedes the species' generic "preferred habitat" line with what's
+ * Real forest data near the queried point (NIBIO SR16 / CORINE). When present,
+ * it supersedes the species' generic "preferred habitat" line with what's
  * actually on the ground — and the server-computed habitat reasons.
  */
 export interface ExplanationForest {
   forestType: string;
   productivity: number | null;
   volumePerHa: number | null;
+  /**
+   * Hvor langt unna skogdataene er målt, i km. Null/undefined betyr «i punktet»
+   * — bare da skriver vi «Skog her». Flisebanen i /api/prediction leverer et
+   * tall (rasteret har ~7 km mellom midtpunktene), og da navngir teksten
+   * avstanden i stedet for å låne presisjonen i «bonitet 20» til et sted vi
+   * ikke har målt.
+   */
+  distanceKm?: number | null;
   /** Habitat-fit multiplier [0.2, 1.3] from computeHabitatScore. */
   habitatScore: number | null;
   /** Habitat reasons (tree-species match, soil richness), already in the reader's language. */
@@ -138,6 +146,10 @@ interface ExplanationCopy {
   humidityLow: (pct: number) => string;
 
   forestHere: (source: string, forest: string, bonitet: string) => string;
+  /** Samme opplysning når dataene er hentet et stykke unna — avstanden med. */
+  forestNearby: (source: string, forest: string, bonitet: string, distance: string) => string;
+  distanceMeters: (meters: number) => string;
+  distanceKilometers: (km: string) => string;
   bonitetSuffix: (productivity: number) => string;
   preferredHabitat: (tags: string) => string;
   mycorrhizalPartners: (partners: string) => string;
@@ -205,6 +217,10 @@ const COPY: Record<Locale, ExplanationCopy> = {
     humidityLow: (pct) => `${pct}% luftfuktighet — tørt`,
 
     forestHere: (source, forest, bonitet) => `Skog her (${source}): ${forest}${bonitet}`,
+    forestNearby: (source, forest, bonitet, distance) =>
+      `Nærmeste skogdata (${source}, ${distance} unna): ${forest}${bonitet}`,
+    distanceMeters: (meters) => `${meters} m`,
+    distanceKilometers: (km) => `${km} km`,
     bonitetSuffix: (productivity) => `, bonitet ${productivity}`,
     preferredHabitat: (tags) => `Foretrukket habitat: ${tags}`,
     mycorrhizalPartners: (partners) => `Følger ${partners}`,
@@ -269,6 +285,10 @@ const COPY: Record<Locale, ExplanationCopy> = {
     humidityLow: (pct) => `${pct}% luftfuktighet — låg`,
 
     forestHere: (source, forest, bonitet) => `Skog här (${source}): ${forest}${bonitet}`,
+    forestNearby: (source, forest, bonitet, distance) =>
+      `Närmaste skogsdata (${source}, ${distance} härifrån): ${forest}${bonitet}`,
+    distanceMeters: (meters) => `${meters} m`,
+    distanceKilometers: (km) => `${km} km`,
     bonitetSuffix: (productivity) => `, bonitet ${productivity}`,
     preferredHabitat: (tags) => `Föredraget habitat: ${tags}`,
     mycorrhizalPartners: (partners) => `Följer ${partners}`,
@@ -308,6 +328,18 @@ function forestLabel(forestType: string, copy: ExplanationCopy): string {
  *  NIBIO otherwise (Norway / unspecified — preserves the original label). */
 function forestSourceLabel(source: string | undefined): string {
   return source === 'corine' ? 'CORINE' : 'NIBIO';
+}
+
+/**
+ * Avstand som en leselig streng. Under ~1 km i hele hundre meter, over i km med
+ * én desimal — komma som desimalskilletegn, som både norsk og svensk bruker.
+ * Gulvet på 100 m er med vilje: en avstand vi runder til «0 m» ville lest som
+ * «her», og det er nettopp påstanden linja ikke skal gjenta.
+ */
+function formatDistance(km: number, copy: ExplanationCopy): string {
+  const safe = Math.max(0, km);
+  if (safe < 0.95) return copy.distanceMeters(Math.max(100, Math.round(safe * 10) * 100));
+  return copy.distanceKilometers((Math.round(safe * 10) / 10).toFixed(1).replace('.', ','));
 }
 
 /** Map the habitat-fit multiplier to a color level for the UI. */
@@ -496,17 +528,26 @@ export function buildExplanation(input: ExplanationInput): Explanation[] {
   }
 
   // ── Habitat ──────────────────────────────────────────────────────────
-  // Prefer the REAL forest at the point (NIBIO) over the species' generic
+  // Prefer the REAL forest near the point (NIBIO) over the species' generic
   // preferred-habitat tags. The server already computed the match reasons;
   // we tag them by the overall habitat fit so the UI can color-code.
+  //
+  // «Her» sies BARE når dataene faktisk er målt i punktet (distanceKm null).
+  // Kommer de fra en flis i nærheten, står avstanden i setningen: «bonitet 20»
+  // er en ekte og presis måling, og presisjonen skal følge stedet den gjelder.
   if (input.forest) {
     const f = input.forest;
     const level = habitatLevel(f.habitatScore);
     const bonitetPart = f.productivity != null ? copy.bonitetSuffix(f.productivity) : '';
+    const sourceLabel = forestSourceLabel(f.source);
+    const forestName = forestLabel(f.forestType, copy);
     lines.push({
       level: 'neutral',
       category: 'habitat',
-      text: copy.forestHere(forestSourceLabel(f.source), forestLabel(f.forestType, copy), bonitetPart)
+      text:
+        f.distanceKm == null
+          ? copy.forestHere(sourceLabel, forestName, bonitetPart)
+          : copy.forestNearby(sourceLabel, forestName, bonitetPart, formatDistance(f.distanceKm, copy))
     });
     for (const reason of f.habitatReasons) {
       lines.push({ level, category: 'habitat', text: reason });

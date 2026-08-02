@@ -63,14 +63,20 @@ export interface PredictionWeatherSnapshot {
 }
 
 /**
- * Real forest properties at the queried point (NIBIO SR16 for Norway).
- * Present on the computed_fallback path when forest data is available.
+ * Real forest properties (NIBIO SR16 for Norway, CORINE for Sweden).
+ *
+ * NB: not necessarily measured AT the queried point. On the tile path the
+ * values come from the nearest pre-generated tile, whose centre can be several
+ * kilometres away — `distanceKm` says how far, and the UI must name it rather
+ * than write «her». Null means the lookup was done for the point itself (the
+ * computed_fallback path calls getForestProperties live).
  */
 export interface PredictionForest {
   forestType: string;
   productivity: number | null;
   volumePerHa: number | null;
   source: 'sr16' | 'fallback';
+  distanceKm?: number | null;
 }
 
 /**

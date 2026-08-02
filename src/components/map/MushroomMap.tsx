@@ -1488,6 +1488,9 @@ export function MushroomMap() {
             forestType: data.forest.forestType,
             productivity: data.forest.productivity,
             volumePerHa: data.forest.volumePerHa,
+            // Hvor langt unna skogdataene er hentet. Uten den skrev panelet
+            // «Skog her» om en flis flere kilometer borte.
+            distanceKm: data.forest.distanceKm ?? null,
             habitatScore: data.habitat?.score ?? null,
             habitatReasons: data.habitat?.reasons ?? [],
             source: data.forest.source

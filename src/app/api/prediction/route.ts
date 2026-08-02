@@ -11,6 +11,7 @@ import type { SpeciesContext } from '@/lib/utils/species-scoring';
 import { getForestProperties, buildSpeciesHabitatPreferences } from '@/lib/forest';
 import { computeCellPrediction } from '@/lib/prediction/cell-score';
 import { bestTilePerCell } from '@/lib/prediction/collapse-tiles';
+import { nearestForestTile } from '@/lib/prediction/nearest-forest-tile';
 import { dayOfYearOf } from '@/lib/prediction/phenology';
 import { weightedOccurrenceDensity, OCCURRENCE_FETCH_LIMIT } from '@/lib/prediction/occurrences';
 import { getElevation } from '@/lib/terrain';
@@ -264,11 +265,15 @@ export async function GET(request: NextRequest) {
       const weightSum = weightedTotals.weightSum || 1;
       const score = Math.round(weightedTotals.scoreSum / weightSum);
       const condition = scoreToCondition(score);
-      // Representative forest/habitat for the explanation: the highest-scoring
-      // tile that actually has forest data (some cells are water/urban → null).
-      const forestTile = cells
-        .filter((t) => t.components?.forest)
-        .reduce<PredictionTileRow | null>((best, t) => (!best || t.score > best.score ? t : best), null);
+      // Skogen/habitatet som vises i forklaringen: flisa med skogdata som
+      // ligger NÆRMEST punktet det ble spurt om — ikke den høyest scorende i
+      // hele boksen, som før. Den gamle regelen plukket den beste skogen
+      // innenfor ±15 km og kalte den «her»: i Oslo sentrum ble det en ekte
+      // NIBIO-måling fra en flis 15,5 km unna. Avstanden følger med ut i
+      // svaret, så teksten kan si hvor langt unna dataene faktisk er hentet.
+      // Se src/lib/prediction/nearest-forest-tile.ts.
+      const nearestForest = nearestForestTile(cells, lat, lon);
+      const forestTile: PredictionTileRow | null = nearestForest?.tile ?? null;
       const seasonal = computeSeasonalScore(new Date().getMonth() + 1);
       const vegetation = Math.round(weightedTotals.vegetationSum / weightSum);
       const moisture = Math.round(weightedTotals.moistureSum / weightSum);
@@ -346,6 +351,10 @@ export async function GET(request: NextRequest) {
         tileCount: tiles.length,
         cellCount: cells.length,
         leadingSpeciesId: leadingSpecies?.id ?? null,
+        // Hvor langt unna skogdataene i svaret er hentet. Grov nok til å ikke
+        // være et posisjonsspor, presis nok til å se om rasteret er for tynt
+        // et sted (da vokser avstanden, og teksten sier det høyt).
+        forestDistanceKm: nearestForest ? Number(nearestForest.distanceKm.toFixed(1)) : null,
         weatherSource: weather?.source ?? 'unavailable'
       });
 
@@ -389,7 +398,13 @@ export async function GET(request: NextRequest) {
           recent30d: 0,
           recent365d: 0
         },
-        forest: forestTile?.components?.forest ?? null,
+        // `distanceKm` er hvor langt unna skogdataene faktisk er målt. Uten
+        // den leste panelet en flis flere kilometer unna som «skog her».
+        // Null betyr «målt i punktet» (fallback-veien slår opp SR16/CORINE
+        // direkte) — der, og bare der, er «her» sant.
+        forest: nearestForest?.tile.components?.forest
+          ? { ...nearestForest.tile.components.forest, distanceKm: Number(nearestForest.distanceKm.toFixed(2)) }
+          : null,
         habitat: forestTile?.components?.habitat ?? undefined,
         hotspots,
         leadingSpecies: leadingSpecies ?? undefined,
@@ -592,7 +607,11 @@ export async function GET(request: NextRequest) {
             forestType: forest.forestType,
             productivity: forest.productivity,
             volumePerHa: forest.volumePerHa,
-            source: forest.source
+            source: forest.source,
+            // Slått opp live for nøyaktig dette punktet (getForestProperties
+            // over), ikke hentet fra en flis i nærheten. Derfor null: ingen
+            // avstand å opplyse om, og «Skog her» er sant.
+            distanceKm: null
           }
         : null,
       habitat: habitatScore ? { score: habitatScore.score, reasons: habitatScore.reasons } : undefined,
