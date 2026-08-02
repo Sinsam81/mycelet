@@ -1,4 +1,4 @@
-import { BillingTier, guessTierFromProductId } from './plans';
+import { BillingStatus, BillingTier, guessTierFromProductId, hasPaidAccess, isPaidTier } from './plans';
 
 /**
  * RevenueCat webhook event mapping — pure logic, no I/O.
@@ -25,6 +25,10 @@ import { BillingTier, guessTierFromProductId } from './plans';
  *              when the row is RevenueCat-owned (or unpaid).
  * - 'revoke' = removes access → same ownership requirement, so an old Apple
  *              event can never kill a subscription the user pays via Stripe.
+ *
+ * Manually granted access (founder pass, App Review demo account, customer
+ * service comp) is a THIRD kind of row that no store owns — see the manual
+ * grant floor at the bottom of this file.
  */
 
 export interface RevenueCatEvent {
@@ -222,5 +226,164 @@ export function mapRevenueCatEvent(event: RevenueCatEvent): RevenueCatDecision {
       currentPeriodEnd: periodEnd,
       cancelAtPeriodEnd: true
     }
+  };
+}
+
+// ───────────────────────── Manuelt tildelt tilgang ─────────────────────────
+//
+// Founder-passet, App Review-demokontoen og eventuelle kundeservice-pass
+// skrives for hånd i SQL-editoren, i den SAMME `billing_subscriptions`-raden
+// som butikkene skriver. Raden merkes `metadata = {"source":"manual_grant"}`
+// og har en eksplisitt `current_period_end`.
+//
+// Det er ikke et kjøp. Ingen butikk fornyer det, og ingen butikkhendelse skal
+// kunne ta det fra brukeren — heller ikke et sandkassekjøp fra Apples egen
+// reviewer, som utløper etter minutter og sender EXPIRATION rett etterpå.
+
+/** Manuelt tildelt tilgang, slik den ligger på raden eller i metadata. */
+export interface ManualGrant {
+  tier: BillingTier;
+  status: BillingStatus;
+  currentPeriodStart: string | null;
+  currentPeriodEnd: string | null;
+  cancelAtPeriodEnd: boolean;
+  note: string | null;
+}
+
+/** Feltene fra `billing_subscriptions` som trengs for å lese passet. */
+export interface ManualGrantRow {
+  tier?: string | null;
+  status?: string | null;
+  current_period_start?: string | null;
+  current_period_end?: string | null;
+  cancel_at_period_end?: boolean | null;
+  metadata?: Record<string, unknown> | null;
+}
+
+/** Markøren en operatør skriver for hånd. Ett sted, så den er søkbar. */
+export const MANUAL_GRANT_SOURCE = 'manual_grant';
+
+function asIsoOrNull(value: unknown): string | null {
+  return typeof value === 'string' && value.length > 0 ? value : null;
+}
+
+/**
+ * Streng lesing: mangler tier eller status, finnes det ikke noe pass.
+ * Feilretningen som gir tilgang er den farlige, så tvil betyr «intet gulv».
+ */
+function coerceManualGrant(raw: Record<string, unknown>): ManualGrant | null {
+  const tier = raw.tier;
+  const status = raw.status;
+  if (typeof tier !== 'string' || !isPaidTier(tier as BillingTier)) return null;
+  if (typeof status !== 'string') return null;
+  return {
+    tier: tier as BillingTier,
+    status: status as BillingStatus,
+    currentPeriodStart: asIsoOrNull(raw.current_period_start),
+    currentPeriodEnd: asIsoOrNull(raw.current_period_end),
+    cancelAtPeriodEnd: raw.cancel_at_period_end === true,
+    note: typeof raw.note === 'string' ? raw.note : null
+  };
+}
+
+/**
+ * Les det manuelle passet som gjelder for raden, hvis det finnes. To former,
+ * i prioritert rekkefølge:
+ *
+ *  1. Raden ER passet — `metadata.source === 'manual_grant'`. Da står passet i
+ *     radens egne kolonner. Dette er formen produksjonsradene har i dag.
+ *  2. Raden er overtatt av et kjøp som varer lenger, og passet ligger igjen som
+ *     `metadata.manual_grant`. Webhooken legger det der nettopp for at passet
+ *     skal kunne gjenopprettes når kjøpet utløper eller refunderes.
+ */
+export function readManualGrant(row: ManualGrantRow | null | undefined): ManualGrant | null {
+  const meta = row?.metadata ?? null;
+
+  if (meta && meta.source === MANUAL_GRANT_SOURCE) {
+    const fromRow = coerceManualGrant({
+      tier: row?.tier,
+      status: row?.status,
+      current_period_start: row?.current_period_start,
+      current_period_end: row?.current_period_end,
+      cancel_at_period_end: row?.cancel_at_period_end,
+      note: meta.note
+    });
+    if (fromRow) return fromRow;
+  }
+
+  const snapshot = meta?.manual_grant;
+  if (snapshot && typeof snapshot === 'object' && !Array.isArray(snapshot)) {
+    return coerceManualGrant(snapshot as Record<string, unknown>);
+  }
+
+  return null;
+}
+
+/**
+ * Et pass gjelder bare så lenge operatøren har sagt at det gjelder. Samme
+ * regel som all annen betalt tilgang: utløpt dato eller status utenfor
+ * active/trialing = ikke noe gulv.
+ */
+export function isManualGrantActive(grant: ManualGrant | null | undefined): boolean {
+  if (!grant) return false;
+  return hasPaidAccess(grant.status, grant.tier, grant.currentPeriodEnd);
+}
+
+/** Serialisert form i metadata — snake_case, som kolonnene den kom fra. */
+export function serializeManualGrant(grant: ManualGrant): Record<string, unknown> {
+  return {
+    tier: grant.tier,
+    status: grant.status,
+    current_period_start: grant.currentPeriodStart,
+    current_period_end: grant.currentPeriodEnd,
+    cancel_at_period_end: grant.cancelAtPeriodEnd,
+    note: grant.note
+  };
+}
+
+/** Varer kjøpet lenger enn passet? Null = ingen sluttdato = varer evig. */
+function outlastsManualGrant(purchaseEnd: string | null, grantEnd: string | null): boolean {
+  if (grantEnd === null) return false;
+  if (purchaseEnd === null) return true;
+  const purchase = new Date(purchaseEnd).getTime();
+  const grant = new Date(grantEnd).getTime();
+  if (!Number.isFinite(purchase) || !Number.isFinite(grant)) return false;
+  return purchase > grant;
+}
+
+/**
+ * Manuelt tildelt tilgang er et GULV, ikke et kjøp.
+ *
+ * RevenueCat-hendelsen får bare skrive raden når den gir betalt tilgang som
+ * varer LENGER enn passet. Alt annet faller tilbake til passet slik operatøren
+ * skrev det: sandkassekjøpet som utløper om fem minutter, EXPIRATION etterpå,
+ * refusjonen, regningsproblemet.
+ *
+ * Gulvet kan aldri gi mer enn det som er tildelt for hånd. Det er avgrenset av
+ * passets egen `current_period_end`, og et utløpt pass er ikke noe gulv i det
+ * hele tatt. En ekte kunde som slutter å betale mister tilgangen nøyaktig som
+ * før — det eneste hen sitter igjen med er det en operatør uttrykkelig har
+ * skrevet inn, med den sluttdatoen operatøren satte.
+ */
+export function applyManualGrantFloor(
+  update: BillingUpdate,
+  grant: ManualGrant | null | undefined
+): { update: BillingUpdate; floorApplied: boolean } {
+  if (!isManualGrantActive(grant) || !grant) return { update, floorApplied: false };
+
+  const purchaseIsPaid = hasPaidAccess(update.status, update.tier, update.currentPeriodEnd);
+  if (purchaseIsPaid && outlastsManualGrant(update.currentPeriodEnd, grant.currentPeriodEnd)) {
+    return { update, floorApplied: false };
+  }
+
+  return {
+    update: {
+      tier: grant.tier,
+      status: grant.status === 'trialing' ? 'trialing' : 'active',
+      currentPeriodStart: grant.currentPeriodStart,
+      currentPeriodEnd: grant.currentPeriodEnd,
+      cancelAtPeriodEnd: grant.cancelAtPeriodEnd
+    },
+    floorApplied: true
   };
 }

@@ -1,52 +1,178 @@
 import { describe, expect, it } from 'vitest';
-import { seasonShiftDays, isInSeasonOn, shiftLabel } from '@/lib/utils/season-region';
+import {
+  baseSeasonMask,
+  isMonthInMask,
+  latitudeBand,
+  monthMask,
+  monthsInMask,
+  nextMonth,
+  peakMask,
+  seasonMask,
+  type LatitudeBand,
+  type SeasonSpecies
+} from '@/lib/utils/season-region';
+import { SEASON_WINDOWS } from '@/lib/utils/season-window-data';
 
-describe('seasonShiftDays', () => {
-  it('is 0 at the baseline (~60°N)', () => {
-    expect(seasonShiftDays(60)).toBe(0);
+/**
+ * Bakgrunn: kalenderen forskjøv hele sesongvinduet «4 dager senere per
+ * breddegrad nord for 60°N», opptil 35 døgn. I august i Nord-Norge ga det to
+ * feil på én gang — den DØDELIGE steinmorkelen ble merket «i sesong nå», mens
+ * kantarell og steinsopp forsvant fra listen. I tillegg var katalogvinduene
+ * systematisk for smale målt mot de daterte funnene i basen.
+ *
+ * Artene under er ekte rader fra mushroom_species (id-ene matcher de empiriske
+ * vinduene i season-window-data.ts), med katalogvinduene slik de står i
+ * migrasjonene.
+ */
+const AUGUST = 8;
+
+const steinmorkel: SeasonSpecies = { id: 57, edibility: 'deadly', season_start: 4, season_end: 6 };
+const kantarell: SeasonSpecies = { id: 1, edibility: 'edible', season_start: 7, season_end: 9 };
+const steinsopp: SeasonSpecies = { id: 2, edibility: 'edible', season_start: 7, season_end: 10 };
+const piggsopp: SeasonSpecies = { id: 7, edibility: 'edible', season_start: 9, season_end: 11 };
+const flatklokkehatt: SeasonSpecies = { id: 56, edibility: 'deadly', season_start: 8, season_end: 11 };
+
+/** Tromsø ≈ 69,6°N — det var her august-feilen ble sett. */
+const NORD = latitudeBand(69.6);
+const BANDS: LatitudeBand[] = ['south', 'central', 'north'];
+
+describe('august i Nord-Norge — den rapporterte feilen', () => {
+  it('den dødelige steinmorkelen er IKKE i sesong i august, heller ikke i nord', () => {
+    expect(isMonthInMask(seasonMask(steinmorkel, NORD), AUGUST)).toBe(false);
+    for (const band of [null, ...BANDS]) {
+      expect(isMonthInMask(seasonMask(steinmorkel, band), AUGUST)).toBe(false);
+    }
   });
-  it('shifts later the further north, capped', () => {
-    expect(seasonShiftDays(65)).toBe(20);
-    expect(seasonShiftDays(69)).toBe(35); // capped
-    expect(seasonShiftDays(75)).toBe(35);
+
+  it('steinmorkelen står i sesong om våren, der den hører hjemme', () => {
+    const mask = seasonMask(steinmorkel, NORD);
+    expect(monthsInMask(mask)).toEqual([4, 5, 6]);
   });
-  it('shifts a little earlier in the far south, floored', () => {
-    expect(seasonShiftDays(58)).toBe(-8);
-    expect(seasonShiftDays(40)).toBe(-14); // floored
-  });
-  it('is neutral when latitude is missing', () => {
-    expect(seasonShiftDays(null)).toBe(0);
-    expect(seasonShiftDays(undefined)).toBe(0);
-    expect(seasonShiftDays(NaN)).toBe(0);
+
+  it('kantarell og steinsopp forsvinner ikke fra august i nord', () => {
+    expect(isMonthInMask(seasonMask(kantarell, NORD), AUGUST)).toBe(true);
+    expect(isMonthInMask(seasonMask(steinsopp, NORD), AUGUST)).toBe(true);
   });
 });
 
-describe('isInSeasonOn', () => {
-  it('matches a normal season at the baseline', () => {
-    expect(isInSeasonOn(new Date(2026, 6, 15), 7, 9, 0)).toBe(true); // mid-July
-    expect(isInSeasonOn(new Date(2026, 5, 15), 7, 9, 0)).toBe(false); // mid-June
+describe('sperre A — en posisjon kan bare utvide vinduet, aldri fjerne en art', () => {
+  it('holder for hver art og hvert bånd i det empiriske datasettet', () => {
+    for (const id of Object.keys(SEASON_WINDOWS)) {
+      const species: SeasonSpecies = { id: Number(id), edibility: 'edible', season_start: 7, season_end: 9 };
+      const base = baseSeasonMask(species);
+      for (const band of BANDS) {
+        const adjusted = seasonMask(species, band);
+        // Alle månedene i base må fortsatt være med.
+        expect((adjusted & base) === base).toBe(true);
+      }
+    }
   });
 
-  it('pushes the season start later in the north', () => {
-    // Jul-Sep, +20 days (~65°N): early July is NOT yet in season up north…
-    expect(isInSeasonOn(new Date(2026, 6, 5), 7, 9, 20)).toBe(false);
-    // …but late July is.
-    expect(isInSeasonOn(new Date(2026, 6, 28), 7, 9, 20)).toBe(true);
-  });
-
-  it('handles a year-end wrap season', () => {
-    expect(isInSeasonOn(new Date(2026, 0, 15), 11, 2, 0)).toBe(true); // January
-    expect(isInSeasonOn(new Date(2026, 5, 15), 11, 2, 0)).toBe(false); // June
+  it('gjelder også arter uten empirisk vindu i det hele tatt', () => {
+    const ukjentArt: SeasonSpecies = { id: 999999, edibility: 'edible', season_start: 7, season_end: 9 };
+    for (const band of BANDS) {
+      expect(seasonMask(ukjentArt, band)).toBe(monthMask(7, 9));
+    }
   });
 });
 
-describe('shiftLabel', () => {
-  it('labels a northward shift in weeks', () => {
-    expect(shiftLabel(20)).toContain('3 uker senere');
-    expect(shiftLabel(7)).toContain('1 uke senere');
+describe('sperre B — en farlig art blir aldri løftet fram av en regionjustering', () => {
+  it('dødelig art får nøyaktig samme vindu i alle bånd', () => {
+    for (const id of Object.keys(SEASON_WINDOWS)) {
+      const species: SeasonSpecies = { id: Number(id), edibility: 'deadly', season_start: 8, season_end: 10 };
+      const base = baseSeasonMask(species);
+      for (const band of BANDS) {
+        expect(seasonMask(species, band)).toBe(base);
+      }
+    }
   });
-  it('is empty when negligible or southward', () => {
-    expect(shiftLabel(0)).toBe('');
-    expect(shiftLabel(-8)).toBe('');
+
+  it('gjelder også giftig og ukjent spiselighet', () => {
+    for (const edibility of ['toxic', 'unknown', null, undefined]) {
+      const species: SeasonSpecies = { id: 57, edibility, season_start: 4, season_end: 6 };
+      for (const band of BANDS) {
+        expect(seasonMask(species, band)).toBe(baseSeasonMask(species));
+      }
+    }
+  });
+
+  it('blokkerer de konkrete tilfellene der båndet ellers ville utvidet', () => {
+    // Funnene i sør gir steinmorkel mars–mai, og funnene i midten gir
+    // flatklokkehatt juli. Begge er dødelige, så ingen av månedene skal inn.
+    expect(SEASON_WINDOWS['57'].south).toBeDefined();
+    expect(isMonthInMask(SEASON_WINDOWS['57'].south!, 3)).toBe(true);
+    expect(isMonthInMask(seasonMask(steinmorkel, 'south'), 3)).toBe(false);
+
+    expect(SEASON_WINDOWS['56'].central).toBeDefined();
+    expect(isMonthInMask(SEASON_WINDOWS['56'].central!, 7)).toBe(true);
+    expect(isMonthInMask(seasonMask(flatklokkehatt, 'central'), 7)).toBe(false);
+  });
+
+  it('en spiselig art med samme id-data ville fått månedene — det er spiselighet, ikke id, som stopper det', () => {
+    const spiselig: SeasonSpecies = { ...flatklokkehatt, edibility: 'edible' };
+    expect(isMonthInMask(seasonMask(spiselig, 'central'), 7)).toBe(true);
+  });
+});
+
+describe('sesongvinduene er kalibrert mot de daterte funnene', () => {
+  it('piggsopp er i sesong i august — katalogen sa sep–nov, men 37,5 % av funnene lå utenfor', () => {
+    expect(isMonthInMask(monthMask(piggsopp.season_start, piggsopp.season_end), AUGUST)).toBe(false);
+    expect(isMonthInMask(baseSeasonMask(piggsopp), AUGUST)).toBe(true);
+  });
+
+  it('kantarell er i sesong allerede i juni', () => {
+    expect(isMonthInMask(baseSeasonMask(kantarell), 6)).toBe(true);
+  });
+
+  it('utvider ikke vinduet for arter med kort, skarp sesong', () => {
+    // Steinmorkelen har 3809 daterte funn og et smalt vindu — kalibreringen
+    // skal ikke gjøre «i sesong» meningsløst ved å blåse opp alle vinduene.
+    expect(monthsInMask(baseSeasonMask(steinmorkel))).toEqual([4, 5, 6]);
+  });
+
+  it('katalogvinduet er alltid med i det kalibrerte vinduet', () => {
+    for (const id of Object.keys(SEASON_WINDOWS)) {
+      const species: SeasonSpecies = { id: Number(id), edibility: 'edible', season_start: 9, season_end: 11 };
+      const katalog = monthMask(9, 11);
+      expect((baseSeasonMask(species) & katalog) === katalog).toBe(true);
+    }
+  });
+});
+
+describe('månedsmasker', () => {
+  it('dekker et vanlig intervall', () => {
+    expect(monthsInMask(monthMask(7, 9))).toEqual([7, 8, 9]);
+  });
+
+  it('wrapper rundt nyttår', () => {
+    expect(monthsInMask(monthMask(11, 2))).toEqual([1, 2, 11, 12]);
+  });
+
+  it('ett enkelt månedsvindu er én måned, ikke hele året', () => {
+    expect(monthsInMask(monthMask(5, 5))).toEqual([5]);
+  });
+
+  it('nextMonth wrapper fra desember til januar', () => {
+    expect(nextMonth(12)).toBe(1);
+    expect(nextMonth(8)).toBe(9);
+  });
+
+  it('toppsesong er tom når arten ikke har noen', () => {
+    expect(peakMask({ peak_season_start: null, peak_season_end: null })).toBe(0);
+    expect(monthsInMask(peakMask({ peak_season_start: 8, peak_season_end: 9 }))).toEqual([8, 9]);
+  });
+});
+
+describe('breddegradsbånd', () => {
+  it('deler Norden i tre', () => {
+    expect(latitudeBand(59.9)).toBe('south'); // Oslo
+    expect(latitudeBand(63.4)).toBe('central'); // Trondheim
+    expect(latitudeBand(69.6)).toBe('north'); // Tromsø
+  });
+
+  it('er null når posisjonen mangler', () => {
+    expect(latitudeBand(null)).toBeNull();
+    expect(latitudeBand(undefined)).toBeNull();
+    expect(latitudeBand(NaN)).toBeNull();
   });
 });

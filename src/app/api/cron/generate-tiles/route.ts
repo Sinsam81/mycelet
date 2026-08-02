@@ -8,6 +8,7 @@ import {
   PREDICTION_TILE_REGIONS,
   predictionTileGridCells
 } from '@/lib/prediction/tile-regions';
+import { PREDICTION_SPECIES_LATIN_NAMES } from '@/lib/prediction/prediction-species';
 import type { SpeciesContext } from '@/lib/utils/species-scoring';
 import { createRequestLogger } from '@/lib/log/request';
 
@@ -25,19 +26,6 @@ import { createRequestLogger } from '@/lib/log/request';
  */
 
 export const maxDuration = 300; // seconds (Vercel Pro); localhost is unbounded
-
-// Prediction species, looked up by latin name (so we don't depend on row ids
-// being stable). Five autumn v1 species + two spring morels — together they
-// give the map a useful species in season from spring through late autumn.
-const V1_LATIN_NAMES = [
-  'Cantharellus cibarius', // kantarell
-  'Boletus edulis', // steinsopp
-  'Craterellus tubaeformis', // traktkantarell
-  'Hydnum repandum', // piggsopp
-  'Craterellus cornucopioides', // svart trompetsopp
-  'Morchella esculenta', // vanlig morkel (vår)
-  'Morchella elata' // spiss morkel (vår)
-];
 
 interface SpeciesRow {
   id: number;
@@ -89,7 +77,7 @@ export async function POST(request: NextRequest) {
     .select(
       'id,latin_name,genus,season_start,season_end,peak_season_start,peak_season_end,habitat,mycorrhizal_partners'
     )
-    .in('latin_name', V1_LATIN_NAMES);
+    .in('latin_name', PREDICTION_SPECIES_LATIN_NAMES);
 
   if (speciesErr || !speciesData || speciesData.length === 0) {
     log.error('generate_tiles.species_load_failed', speciesErr);

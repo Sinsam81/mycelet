@@ -73,3 +73,26 @@ export function canPurchasePlan(view: PlanViewState, planId: BillingTier): boole
   if (!isPaidTier(planId)) return false;
   return view.activeTier !== planId;
 }
+
+/**
+ * Planen som sperrer for et NYTT kjøp — null når ingenting sperrer.
+ *
+ * Dette er samme regel som 409-en i /api/billing/checkout: har kunden en
+ * betalt plan som faktisk gir tilgang, kan vi ikke sette i gang en betaling
+ * til. Ruta oppretter alltid et nytt abonnement, så et «bytte» ville gitt to
+ * aktive abonnement og dobbeltbelastning.
+ *
+ * Web ble beskyttet av ruta. Den native flyten går ikke via ruta i det hele
+ * tatt — RevenueCat-kjøpet skjer på enheten — så uten denne vakten kunne en
+ * kunde med aktivt Stripe-abonnement kjøpe den andre planen hos Apple og
+ * betale to steder samtidig. Apple refunderer ikke det automatisk.
+ *
+ * Vakten er derfor bevisst uavhengig av hvor det eksisterende abonnementet
+ * ble kjøpt: den ser bare på om kunden HAR tilgang nå.
+ *
+ * Merk at et bortfalt abonnement (canceled/past_due/utløpt periode) ikke
+ * sperrer — `activeTier` er da 'free', og kunden skal kunne kjøpe på nytt.
+ */
+export function getBlockingPaidPlan(view: PlanViewState): Exclude<BillingTier, 'free'> | null {
+  return isPaidTier(view.activeTier) ? view.activeTier : null;
+}

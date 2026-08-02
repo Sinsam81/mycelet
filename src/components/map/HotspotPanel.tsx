@@ -89,6 +89,16 @@ export function HotspotPanel({ speciesId, data, explanations, isLoading, error }
         )
       : '';
 
+  // Ingen art å navngi, og ingen valgt. Da må panelet si nettopp det.
+  //
+  // «Alle arter», som sto her før, leses som «tallet dekker alle artene» — og
+  // det gjør det aldri. Det er enten den beste artens tall (flisbanen) eller et
+  // generelt forholdstall for stedet (fallback-banen når den ikke fikk navngitt
+  // noen). To ulike størrelser på samme 0-100-flate, og herfra kan vi ikke se
+  // hvilken. Det ærlige er å si at arten mangler og at tallet derfor ikke kan
+  // stilles opp mot et som bærer et artsnavn.
+  const unnamedSpecies = Boolean(data) && !data?.species && !leadingName && !speciesId;
+
   // Collapsed: a compact pill that still shows the verdict at a glance, so the
   // map stays open. Tap to expand the full "hvorfor" + sources.
   if (!open) {
@@ -102,6 +112,9 @@ export function HotspotPanel({ speciesId, data, explanations, isLoading, error }
           <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${condition.dot}`} aria-hidden="true" />
         ) : null}
         {leadingName ? <span className="truncate font-semibold text-gray-900">{leadingName}</span> : null}
+        {unnamedSpecies ? (
+          <span className="truncate font-semibold text-gray-900">{t('noLeadingSpeciesShort')}</span>
+        ) : null}
         <span className="shrink-0 font-semibold text-gray-900">
           {isLoading && !data ? t('calculatingShort') : data ? `${data.score}/100` : t('mushroomConditions')}
         </span>
@@ -149,6 +162,11 @@ export function HotspotPanel({ speciesId, data, explanations, isLoading, error }
         <>
           <p className="text-xs font-medium text-gray-700">{t('leadingSpecies', { species: leadingName })}</p>
           <p className="text-[11px] text-gray-500">{t('leadingSpeciesNote')}</p>
+        </>
+      ) : unnamedSpecies ? (
+        <>
+          <p className="text-xs font-medium text-gray-700">{t('noLeadingSpecies')}</p>
+          <p className="text-[11px] text-gray-500">{t('noLeadingSpeciesNote')}</p>
         </>
       ) : (
         <p className="text-xs text-gray-600">{speciesId ? t('speciesNumber', { id: speciesId }) : t('allSpecies')}</p>

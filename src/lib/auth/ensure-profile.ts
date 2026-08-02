@@ -11,20 +11,24 @@
  * Callback-ruten (OAuth og e-postbekreftelse) reparerte dette allerede ved å
  * upserte profilen fra user_metadata. Passordinnlogging går aldri gjennom
  * callbacken, så der fantes ingen redning. Denne funksjonen er den delte
- * versjonen, og kalles nå også ved vanlig innlogging: er profilen der, gjør
- * den ingenting; mangler den, opprettes den.
+ * versjonen: er profilen der, gjør den ingenting; mangler den, opprettes den.
+ *
+ * Selve funksjonen er bare reparasjonen. NÅR den kjøres, avgjøres av
+ * src/lib/auth/profile-self-heal.ts (hver økt i nettleseren) og av
+ * /api/findings (siste skanse på serveren) — se kommentaren der for hvorfor
+ * det ikke holder å kalle den ved registrering og innlogging alene.
  *
  * Brukernavn og visningsnavn ligger allerede i user_metadata fra signUp, så vi
  * gjenskaper det brukeren faktisk valgte — ikke en tilfeldig erstatning.
  */
 
-interface MinimalUser {
+export interface MinimalUser {
   id: string;
   email?: string | null;
   user_metadata?: { username?: string; display_name?: string } | null;
 }
 
-interface ProfileUpsertClient {
+export interface ProfileUpsertClient {
   from(table: 'profiles'): {
     upsert(
       values: { id: string; username: string; display_name: string },
@@ -32,6 +36,8 @@ interface ProfileUpsertClient {
     ): PromiseLike<{ error: { code?: string; message: string } | null }>;
   };
 }
+
+import { toPublicUsername } from './username';
 
 /** Postgres: unique_violation. Her betyr det at brukernavnet er opptatt. */
 const UNIQUE_VIOLATION = '23505';
@@ -53,7 +59,11 @@ export async function ensureProfile(
   user: MinimalUser
 ): Promise<EnsureProfileResult> {
   const meta = user.user_metadata ?? {};
-  const desired = meta.username || defaultUsernameFor(user);
+  // toPublicUsername: brukernavn er OFFENTLIG (public_findings velger
+  // p.username), og to brukere skrev hele e-postadressen sin i feltet ved
+  // registrering. Vi avviser ikke — vi tar lokaldelen, som er navnet de mente.
+  // Se src/lib/auth/username.ts.
+  const desired = toPublicUsername(meta.username) || defaultUsernameFor(user);
   const displayName = meta.display_name || desired;
 
   const attempt = (username: string) =>

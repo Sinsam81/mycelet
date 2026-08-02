@@ -1,5 +1,6 @@
 import { isNativePlatform } from './platform';
 import { IapPlan, guessTierFromProductId } from '@/lib/billing/plans';
+import { PlanViewState, getBlockingPaidPlan } from '@/lib/billing/plan-state';
 
 /**
  * RevenueCat IAP wrapper for the native shells (Apple App Store rule 3.1.1
@@ -29,7 +30,7 @@ export interface IapOffer {
   rcPackage: PurchasesPackageLike;
 }
 
-export type IapPurchaseOutcome = 'success' | 'cancelled';
+export type IapPurchaseOutcome = 'success' | 'cancelled' | 'blocked-active-plan';
 
 // The plugin type surface we rely on (subset of @revenuecat/purchases-capacitor).
 export interface PurchasesPackageLike {
@@ -117,8 +118,17 @@ export async function getIapOffers(): Promise<IapOffer[]> {
  * Run the native purchase flow for an offer. Resolves 'cancelled' when the
  * user backs out of Apple's sheet; throws on real errors (caller shows a
  * translated error message).
+ *
+ * `planView` is REQUIRED so no call site can start an Apple purchase without
+ * stating what the customer already pays for. Web is protected by the 409 in
+ * /api/billing/checkout; this flow never touches that route, so the same rule
+ * has to be enforced here — before Apple's sheet opens. Once the sheet is
+ * confirmed the customer is charged, and a double subscription has to be
+ * refunded by Apple, which they must ask for themselves.
  */
-export async function purchaseIapOffer(offer: IapOffer): Promise<IapPurchaseOutcome> {
+export async function purchaseIapOffer(offer: IapOffer, planView: PlanViewState): Promise<IapPurchaseOutcome> {
+  if (getBlockingPaidPlan(planView)) return 'blocked-active-plan';
+
   const purchases = await loadPlugin();
   try {
     await purchases.purchasePackage({ aPackage: offer.rcPackage });

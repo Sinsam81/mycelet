@@ -7,7 +7,8 @@ export interface PredictionHotspot {
    * Arten scoren gjelder. Rasteret lagrer én flis per art per rute, så et sted
    * har ett tall per art — «60/100» er 60 for kantarell, ikke for sopp som
    * sådan. Kartet slår sammen til beste art per rute og navngir den.
-   * Null på fallback-banen, som ikke er artsoppdelt.
+   * Null på fallback-banen: der er punktene funnklynger på tvers av arter, ikke
+   * artsfliser. (Fallback-bane-SCOREN er artsoppdelt — se `leadingSpecies`.)
    */
   speciesId?: number | null;
 }
@@ -63,14 +64,20 @@ export interface PredictionWeatherSnapshot {
 }
 
 /**
- * Real forest properties at the queried point (NIBIO SR16 for Norway).
- * Present on the computed_fallback path when forest data is available.
+ * Real forest properties (NIBIO SR16 for Norway, CORINE for Sweden).
+ *
+ * NB: not necessarily measured AT the queried point. On the tile path the
+ * values come from the nearest pre-generated tile, whose centre can be several
+ * kilometres away — `distanceKm` says how far, and the UI must name it rather
+ * than write «her». Null means the lookup was done for the point itself (the
+ * computed_fallback path calls getForestProperties live).
  */
 export interface PredictionForest {
   forestType: string;
   productivity: number | null;
   volumePerHa: number | null;
   source: 'sr16' | 'fallback';
+  distanceKm?: number | null;
 }
 
 /**
@@ -131,6 +138,12 @@ export interface PredictionResponse {
   /**
    * Arten som drar `score` når kalleren IKKE ba om en bestemt art. Uten den er
    * tallet et svar uten spørsmål — panelet setter navnet ved siden av.
+   *
+   * Settes av BEGGE banene: flisbanen tar den beste arten per rute fra
+   * rasteret, fallback-banen regner samme artsliste live. Er den likevel tom
+   * (oppslaget feilet, eller ingen art overlevde filteret), er tallet et
+   * generelt forholdstall for stedet — en annen størrelse enn artstallet, og
+   * panelet MÅ da si det i stedet for å la tallet stå alene.
    */
   leadingSpecies?: {
     id: number;
