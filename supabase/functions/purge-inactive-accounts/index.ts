@@ -238,16 +238,63 @@ Deno.serve(async (req: Request) => {
       continue;
     }
 
-    const { error: privateError } = await supabase
+    // ⚠️ REGELEN ER `!== 'approximate'`, IKKE `=== 'private'`.
+    //
+    // Erklæringen (Personvern.retentionNegativeDesc) lover at det som overlever
+    // er «kun observasjoner med omtrentlig delingsnivå (±500 m)». Sto det
+    // `.eq('visibility', 'private')` her, ble OFFENTLIGE negative observasjoner
+    // liggende — og for dem er display_* lik det eksakte punktet. Da beholdt vi
+    // en eksakt posisjon vi hadde lovet å grovkorne.
+    //
+    // Dette må si nøyaktig det samme som RETAINED_VISIBILITY-grenen i
+    // src/app/api/me/delete/route.ts. Denne funksjonen kjører på Deno og kan
+    // ikke importere fra src/, så regelen står to steder med vilje;
+    // src/lib/privacy/__tests__/retention-purge-path.test.ts vokter at de er enige.
+    const RETAINED_VISIBILITY = 'approximate';
+
+    const { error: nonRetainedError } = await supabase
       .from('findings')
       .delete()
       .eq('user_id', due.user_id)
       .eq('is_negative_observation', true)
-      .eq('visibility', 'private');
-    if (privateError) {
-      errors.push(`private findings ${due.user_id}: ${privateError.message}`);
+      .neq('visibility', RETAINED_VISIBILITY);
+    if (nonRetainedError) {
+      errors.push(`non-retained findings ${due.user_id}: ${nonRetainedError.message}`);
       continue;
     }
+
+    // Radene som blir igjen må faktisk VÆRE grovkornet. latitude/longitude er
+    // det eksakte GPS-punktet; display_* er den jitrede kopien. Uten dette
+    // steget beholdt vi det eksakte punktet med tidsstempel og art.
+    const { data: retained, error: retainedError } = await supabase
+      .from('findings')
+      .select('id, display_latitude, display_longitude')
+      .eq('user_id', due.user_id)
+      .eq('is_negative_observation', true)
+      .eq('visibility', RETAINED_VISIBILITY);
+    if (retainedError) {
+      errors.push(`retained lookup ${due.user_id}: ${retainedError.message}`);
+      continue;
+    }
+
+    let coarsenFailed = false;
+    for (const row of retained ?? []) {
+      // Mangler display-koordinat (skal ikke kunne skje for 'approximate', men
+      // vi gjetter ikke): slett heller enn å beholde et eksakt punkt.
+      const { error: rowError } =
+        row.display_latitude == null || row.display_longitude == null
+          ? await supabase.from('findings').delete().eq('id', row.id)
+          : await supabase
+              .from('findings')
+              .update({ latitude: row.display_latitude, longitude: row.display_longitude })
+              .eq('id', row.id);
+      if (rowError) {
+        errors.push(`coarsen ${row.id}: ${rowError.message}`);
+        coarsenFailed = true;
+        break;
+      }
+    }
+    if (coarsenFailed) continue;
 
     const { error: deleteError } = await supabase.auth.admin.deleteUser(due.user_id);
     if (deleteError) {

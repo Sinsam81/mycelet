@@ -166,9 +166,18 @@ describe('gratiskvoten på AI-identifikasjon', () => {
     expect(insertCount).toBe(1);
   });
 
-  it('betalende kunde telles ikke opp', async () => {
+  it('betalende kunde telles OGSÅ opp — kvoten gjelder gratis, kostnaden gjelder alle', async () => {
+    // Denne testen sa tidligere det motsatte. Ruta ble endret med vilje, og
+    // begrunnelsen står ved insert-en: hvert kall koster oss det samme hos
+    // Kindwise uansett hvem som gjorde det. Teller vi bare gratisbrukere, kan
+    // ingen svare på hva de betalte kontoene faktisk koster — og en betalt
+    // konto har ingen døgngrense i dag.
+    //
+    // Kvote-SJEKKEN er uendret: spørringen mot forbruket kjører fortsatt bare
+    // for !capabilities.paid, noe testen over («betalende kunde rammes ikke av
+    // kvoten») fastholder. Det er forskjell på å telle og å begrense.
     mockPaid = true;
     await POST(makeRequest());
-    expect(insertCount).toBe(0);
+    expect(insertCount).toBe(1);
   });
 });

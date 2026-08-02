@@ -53,9 +53,15 @@ describe('oppsettet', () => {
   });
 
   it('sender timeZone inn i begge klientprovidere', () => {
-    // Rot-layouten OG den løsrevne popup-roten i MushroomMap — kontekst
-    // krysser ikke rot-grenser, så begge må få den eksplisitt.
-    for (const file of ['../../app/layout.tsx', '../../components/map/MushroomMap.tsx']) {
+    // Rot-layouten OG den løsrevne popup-roten — kontekst krysser ikke
+    // rot-grenser, så begge må få den eksplisitt.
+    //
+    // Popup-provideren bodde tidligere inline i MushroomMap.tsx. Den er flyttet
+    // til findingPopupElement.tsx, som til forskjell fra MushroomMap FAKTISK har
+    // en test som laster den (MushroomMap trekker inn Leaflet og DOM). Peker
+    // denne testen på feil fil, vokter den ingenting — så stien står her,
+    // sammen med grunnen til at den er der.
+    for (const file of ['../../app/layout.tsx', '../../components/map/findingPopupElement.tsx']) {
       expect(source(file), file).toContain('timeZone={timeZoneForLocale(locale)}');
     }
   });

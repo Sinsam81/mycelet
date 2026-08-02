@@ -31,27 +31,66 @@ const DELETE_ROUTE_SOURCE = readFileSync(
   'utf8'
 );
 
+/**
+ * Kildekoden uten kommentarer.
+ *
+ * Testen under sjekker at en gammel, for mild regel IKKE står i koden. Uten
+ * denne strippingen slår den ut på kommentaren som FORKLARER hvorfor regelen
+ * ble strammet inn — altså på dokumentasjonen av fiksen. En vakt som gjør det,
+ * straffer den som skriver ned hvorfor.
+ */
+function withoutComments(source: string): string {
+  return source
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .split('\n')
+    .filter((line) => !line.trim().startsWith('//'))
+    .join('\n');
+}
+
 describe('retensjon: begge slettestiene fjerner det som ikke skal overleve', () => {
-  it('kontosletting fjerner positive funn og private observasjoner', () => {
+  // ⚠️ Regelen er «behold KUN approximate», ikke «slett private».
+  //
+  // Sto det `.eq('visibility', 'private')`, ble OFFENTLIGE negative
+  // observasjoner liggende — og for dem er display_* lik det eksakte punktet.
+  // Erklæringen lover «kun observasjoner med omtrentlig delingsnivå (±500 m)».
+  // Slette-ruta ble strammet inn først; purgen sa fortsatt det gamle, så de to
+  // stiene motsa hverandre OG erklæringen. Denne testen finnes for å fange
+  // nettopp det.
+  const RETAINED = "neq('visibility', RETAINED_VISIBILITY)";
+
+  it('kontosletting beholder kun omtrentlige observasjoner', () => {
     expect(DELETE_ROUTE_SOURCE).toContain("eq('is_negative_observation', false)");
-    expect(DELETE_ROUTE_SOURCE).toContain("eq('visibility', 'private')");
+    expect(DELETE_ROUTE_SOURCE).toContain(RETAINED);
   });
 
-  it('inaktivitets-purgen fjerner de samme radene', () => {
+  it('inaktivitets-purgen bruker NØYAKTIG samme regel', () => {
     expect(PURGE_SOURCE).toContain("eq('is_negative_observation', false)");
-    expect(PURGE_SOURCE).toContain("eq('visibility', 'private')");
+    expect(PURGE_SOURCE).toContain(RETAINED);
+  });
+
+  it('ingen av stiene sletter bare «private» — det var den for milde regelen', () => {
+    for (const [navn, src] of [['delete-ruta', DELETE_ROUTE_SOURCE], ['purgen', PURGE_SOURCE]] as const) {
+      expect(withoutComments(src), navn).not.toContain("eq('visibility', 'private')");
+    }
+  });
+
+  it('begge stiene grovkorner det som blir igjen', () => {
+    // Radene som overlever må ha latitude/longitude erstattet av display_*.
+    expect(DELETE_ROUTE_SOURCE).toContain('coarsenRetainedObservations');
+    expect(PURGE_SOURCE).toContain('display_latitude');
+    expect(PURGE_SOURCE).toContain('latitude: row.display_latitude');
   });
 
   it('purgen sletter funnene FØR auth-raden, ikke etter', () => {
     const positiveDelete = PURGE_SOURCE.indexOf("eq('is_negative_observation', false)");
-    const privateDelete = PURGE_SOURCE.indexOf("eq('visibility', 'private')");
+    const nonRetainedDelete = PURGE_SOURCE.indexOf(RETAINED);
     const authDelete = PURGE_SOURCE.indexOf('auth.admin.deleteUser');
 
     expect(positiveDelete).toBeGreaterThan(-1);
-    expect(privateDelete).toBeGreaterThan(-1);
+    expect(nonRetainedDelete).toBeGreaterThan(-1);
     expect(authDelete).toBeGreaterThan(-1);
     expect(positiveDelete).toBeLessThan(authDelete);
-    expect(privateDelete).toBeLessThan(authDelete);
+    expect(nonRetainedDelete).toBeLessThan(authDelete);
   });
 
   it('påstår ikke lenger at foreldreløse rader er ufarlige fordi de er jitret', () => {
