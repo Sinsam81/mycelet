@@ -1,0 +1,41 @@
+# Gitleaks-oppsett for Mycelet.
+#
+# Arver alle standardreglene — dette er IKKE en demping av verktøyet. Det eneste
+# som legges til er én sti-basert unntaksregel, og den er begrunnet under.
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = """
+src/lib/log/__tests__/pii.test.ts finnes NETTOPP for å bevise at redactPII()
+fjerner hemmeligheter før de når loggen. Testdataene må ha formen til ekte
+nøkler — Stripe-, webhook- og leverandørprefikser — ellers beviser testen
+ingenting. Verdiene er åpenbart oppdiktede plassholdere og har aldri vært
+gyldige noe sted. Åpne fila og se selv før du stoler på dette.
+"""
+
+# ⚠️ HVORFOR STI OG IKKE FINGERAVTRYKK
+#
+# Første forsøk brukte .gitleaksignore med fingeravtrykk. Et gitleaks-
+# fingeravtrykk er «<commit>:<fil>:<regel>:<linje>» — det inneholder altså
+# commit-SHA-en. Repoet squash-merger, så fila får en NY SHA hver gang noe
+# merges, og lista sluttet å treffe med én gang. Den ville feilet på hver
+# eneste framtidige PR som rørte fila.
+#
+# En sti-regel overlever rebase, squash og omdøping av linjer. Den er også
+# ærligere om hva unntaket faktisk er: «denne ene testfila», ikke «disse fire
+# linjene i denne ene commiten».
+paths = ['''^src/lib/log/__tests__/pii\.test\.ts$''']
+
+# ⚠️ HVA DETTE IKKE ER
+#
+# Ikke en generell demping. Alt utenfor den ene fila feiler fortsatt bygget, og
+# det skal det. Gitleaks meldte SUKSESS i ukevis mens et ekte Apple-review-
+# passord lå i klartekst i en markdown-fil i dette repoet — verktøyet har både
+# falske positive og falske negative.
+#
+# Og merk: hadde dette vært en ekte nøkkel, ville et unntak her ikke vært
+# svaret. Gitleaks skanner HELE historikken, så å fjerne en nøkkel fra
+# arbeidstreet hjelper ikke. Eneste riktige svar på en ekte lekkasje er å
+# RULLERE nøkkelen, akkurat som med Apple-passordet i juli.
