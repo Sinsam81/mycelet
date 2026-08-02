@@ -3,6 +3,7 @@ import { createRequestLogger } from '@/lib/log/request';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getRegion } from '@/lib/utils/region';
 import { fetchHistoricalFrostFeatures } from '@/lib/weather/historical-frost';
+import { bearerSecretMatches } from '@/lib/security/secret-compare';
 
 export const maxDuration = 300;
 
@@ -40,8 +41,7 @@ async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promis
 
 export async function POST(request: NextRequest) {
   const log = createRequestLogger(request);
-  const cronSecret = process.env.CRON_SECRET;
-  if (!cronSecret || request.headers.get('authorization') !== `Bearer ${cronSecret}`) {
+  if (!bearerSecretMatches(request.headers.get('authorization'), process.env.CRON_SECRET)) {
     log.warn('occurrence_weather_backfill.unauthorized');
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }

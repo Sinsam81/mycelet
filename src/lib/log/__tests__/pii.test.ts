@@ -91,6 +91,50 @@ describe('redactPII', () => {
     expect(redactPII(true)).toBe(true);
   });
 
+  it('redacts header-style keys with a hyphen (Api-Key, X-Api-Key)', () => {
+    // Kindwise-kallet setter headeren nøyaktig slik: 'Api-Key'. Før normali-
+    // seringen slapp den gjennom fordi «api-key» ikke inneholder «apikey».
+    const out = redactPII({
+      'Api-Key': 'kw_live_abc123def456',
+      'X-Api-Key': 'kw_live_abc123def456',
+      'set-cookie': 'sb-access-token=abc',
+      publicId: 'OK'
+    }) as Record<string, unknown>;
+
+    expect(out['Api-Key']).toBe('<redacted>');
+    expect(out['X-Api-Key']).toBe('<redacted>');
+    expect(out['set-cookie']).toBe('<redacted>');
+    expect(out.publicId).toBe('OK');
+  });
+
+  it('redacts secrets that appear as a VALUE under an unknown key', () => {
+    const out = redactPII({
+      header: 'Bearer sk_live_abc123def456',
+      note: 'used sk_live_51Hxxxxxxxxxxxxxxxxx while debugging',
+      hook: 'whsec_abcdef123456',
+      jwt: 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.c2lnbmF0dXJl'
+    }) as Record<string, unknown>;
+
+    expect(out.header).toBe('Bearer <redacted>');
+    expect(out.note).toBe('used <redacted> while debugging');
+    expect(out.hook).toBe('<redacted>');
+    expect(out.jwt).toBe('<redacted>');
+  });
+
+  it('leaves ordinary prose and identifiers alone', () => {
+    const out = redactPII({
+      msg: 'Kantarell funnet i Bærumsmarka, 3 stk',
+      reqId: 'req_01HZY3',
+      route: '/api/identify',
+      species: 'Cantharellus cibarius'
+    }) as Record<string, unknown>;
+
+    expect(out.msg).toBe('Kantarell funnet i Bærumsmarka, 3 stk');
+    expect(out.reqId).toBe('req_01HZY3');
+    expect(out.route).toBe('/api/identify');
+    expect(out.species).toBe('Cantharellus cibarius');
+  });
+
   it('preserves UUIDs and numeric IDs (internal-only, not PII)', () => {
     const out = redactPII({
       userId: '8e23c7b6-6d4c-4357-a118-3f3554c41caf',

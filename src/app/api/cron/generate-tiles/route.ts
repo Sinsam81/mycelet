@@ -9,8 +9,10 @@ import {
   predictionTileGridCells
 } from '@/lib/prediction/tile-regions';
 import { PREDICTION_SPECIES_LATIN_NAMES } from '@/lib/prediction/prediction-species';
+import { computeTileDataCoverage } from '@/lib/prediction/tile-data-coverage';
 import type { SpeciesContext } from '@/lib/utils/species-scoring';
 import { createRequestLogger } from '@/lib/log/request';
+import { bearerSecretMatches } from '@/lib/security/secret-compare';
 
 /**
  * Daily prediction-tile generator.
@@ -56,8 +58,7 @@ async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promis
 export async function POST(request: NextRequest) {
   const log = createRequestLogger(request);
 
-  const cronSecret = process.env.CRON_SECRET;
-  if (!cronSecret || request.headers.get('authorization') !== `Bearer ${cronSecret}`) {
+  if (!bearerSecretMatches(request.headers.get('authorization'), process.env.CRON_SECRET)) {
     log.warn('generate_tiles.unauthorized');
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
@@ -118,6 +119,16 @@ export async function POST(request: NextRequest) {
       // route (grid/route.ts). Neutral fallback values are appropriate for an
       // on-demand summary, but not enough evidence to publish a hotspot tile.
       if (!forest) return [];
+      // Datadekning er per CELLE — den avhenger av skogkilden og værserien, ikke
+      // av hvilken art raden gjelder. Regnes én gang og gjenbrukes for alle
+      // artsradene på cellen. Se src/lib/prediction/tile-data-coverage.ts.
+      const dataCoverage = computeTileDataCoverage({
+        forestSource: forest.source,
+        productivity: forest.productivity,
+        volumePerHa: forest.volumePerHa,
+        soilMoistureIndex: weather.soilMoistureIndex,
+        precipDailyMm: weather.precipDailyMm
+      });
       return species.map((sp) => {
         const speciesCtx: SpeciesContext = {
           speciesId: sp.id,
@@ -149,7 +160,11 @@ export async function POST(request: NextRequest) {
           center_lng: cell.lng,
           radius_meters: 500,
           score: prediction.score,
-          confidence: 70, // forest is guaranteed non-null here (no-forest cells skipped above)
+          // Kolonnen heter fortsatt `confidence` i basen, men innholdet er
+          // DATADEKNING: hvor mange av kildene vi ønsker oss som svarte for
+          // cellen. Den sier ingenting om treffsikkerhet — den ærlige romlige
+          // AUC-en er ~0,52. Før dette sto det literalen 70 i hver eneste rad.
+          confidence: dataCoverage,
           components: {
             vegetation: prediction.factors.vegetation,
             moisture: prediction.factors.moisture,

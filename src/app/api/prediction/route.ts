@@ -11,6 +11,7 @@ import type { SpeciesContext } from '@/lib/utils/species-scoring';
 import { getForestProperties, buildSpeciesHabitatPreferences } from '@/lib/forest';
 import { computeCellPrediction, type CellPrediction } from '@/lib/prediction/cell-score';
 import { bestTilePerCell } from '@/lib/prediction/collapse-tiles';
+import { averageTiles } from '@/lib/prediction/tile-average';
 import { nearestForestTile } from '@/lib/prediction/nearest-forest-tile';
 import { PREDICTION_SPECIES_LATIN_NAMES } from '@/lib/prediction/prediction-species';
 import { isRecommendableSpecies } from '@/lib/prediction/recommendable';
@@ -260,28 +261,12 @@ export async function GET(request: NextRequest) {
       // så snittet igjen er et snitt over steder. Med ?speciesId satt filtrerer
       // RPC-en allerede, og dette er en no-op. Se collapse-tiles.ts.
       const cells = bestTilePerCell(tiles);
-      const weightedTotals = cells.reduce(
-        (acc, tile) => {
-          const confidenceWeight = Math.max(0.2, (tile.confidence ?? 50) / 100);
-          acc.weightSum += confidenceWeight;
-          acc.scoreSum += tile.score * confidenceWeight;
-
-          const vegetation = Number(tile.components?.vegetation ?? 0);
-          const moisture = Number(tile.components?.moisture ?? 0);
-          const terrain = Number(tile.components?.terrain ?? 0);
-          const history = Number(tile.components?.history ?? 0);
-
-          acc.vegetationSum += vegetation * confidenceWeight;
-          acc.moistureSum += moisture * confidenceWeight;
-          acc.terrainSum += terrain * confidenceWeight;
-          acc.historySum += history * confidenceWeight;
-          return acc;
-        },
-        { scoreSum: 0, vegetationSum: 0, moistureSum: 0, terrainSum: 0, historySum: 0, weightSum: 0 }
-      );
-
-      const weightSum = weightedTotals.weightSum || 1;
-      const score = Math.round(weightedTotals.scoreSum / weightSum);
+      // Snittet var «konfidensvektet» i navnet, men vekten kom fra en kolonne
+      // som var hardkodet 70 i hver rad — altså et vanlig snitt. Nå som
+      // kolonnen har ekte innhold (datadekning) er vektingen fjernet med vilje:
+      // datadekning er et driftstall, ikke en modellvekt. Se tile-average.ts.
+      const averaged = averageTiles(cells);
+      const score = averaged.score;
       const condition = scoreToCondition(score);
       // Skogen/habitatet som vises i forklaringen: flisa med skogdata som
       // ligger NÆRMEST punktet det ble spurt om — ikke den høyest scorende i
@@ -293,9 +278,9 @@ export async function GET(request: NextRequest) {
       const nearestForest = nearestForestTile(cells, lat, lon);
       const forestTile: PredictionTileRow | null = nearestForest?.tile ?? null;
       const seasonal = computeSeasonalScore(new Date().getMonth() + 1);
-      const vegetation = Math.round(weightedTotals.vegetationSum / weightSum);
-      const moisture = Math.round(weightedTotals.moistureSum / weightSum);
-      const terrain = Math.round(weightedTotals.terrainSum / weightSum);
+      const vegetation = averaged.vegetation;
+      const moisture = averaged.moisture;
+      const terrain = averaged.terrain;
       const soil = clamp(terrain * 0.65 + vegetation * 0.35, 0, 100);
       const weatherTrend = moisture;
       const environment = clamp(
@@ -303,7 +288,7 @@ export async function GET(request: NextRequest) {
         0,
         100
       );
-      const historical = Math.round(weightedTotals.historySum / weightSum);
+      const historical = averaged.history;
 
       const modelFactors = premiumPrediction
         ? { vegetation, moisture, terrain, soil, weatherTrend }

@@ -1,0 +1,49 @@
+-- 041: Drop the unused profiles.default_finding_visibility /
+--      profiles.notification_preferences columns.
+--
+-- Lanseringsrevisjon, infra/data-funn 3. Samme mønster og samme begrunnelse som
+-- migrasjon 025 (som droppet profiles.latitude/longitude): SELECT-policyen på
+-- profiles er «Profiler er synlige for alle» USING (true) (001:321), og RLS kan
+-- ikke begrense KOLONNER. Alt som ligger i tabellen er derfor lesbart for
+-- hvem som helst med den offentlige anon-nøkkelen.
+--
+-- Verifisert mot produksjon: et anon-kall til
+--   /rest/v1/profiles?select=id,username,default_finding_visibility,notification_preferences
+-- svarer 206 med alle radene.
+--
+-- HVORFOR NETTOPP DISSE TO
+-- Ingen kodesti leser eller skriver dem. Repo-vidt søk etter både
+-- `default_finding_visibility`/`notification_preferences` og camelCase-variantene
+-- gir bare denne migrasjonen, 001 og dokumentasjon. Kolonnene har altså aldri
+-- vært annet enn standardverdiene sine — men default_finding_visibility er
+-- nettopp den innstillingen som ville avslørt hvilke brukere som deler eksakte
+-- koordinater, og det er en peker til hvem det lønner seg å følge. Ved 6
+-- brukere er det uinteressant; ved 6000 er det en driftsrisiko som ligger og
+-- venter på at noen tar innstillingene i bruk.
+--
+-- HVA DETTE IKKE FIKSER
+-- Selve brukerlisten (id, username, display_name, avatar_url, bio, location)
+-- er fortsatt lesbar for anon. Det er delvis med vilje: forumet er åpent for
+-- utloggede, og PostgREST-embedene i src/lib/hooks/useForum.ts henter
+-- forfatterens navn og avatar derfra. Skal enumereringen stanses, er veien den
+-- 025 allerede peker på — et public_profiles-view med bare de offentlige
+-- kolonnene, REVOKE SELECT på tabellen, og alle embeds pekt om på viewet. Det
+-- er en større endring som treffer fem spørresteder og ikke kan prøvekjøres
+-- uten et testmiljø; den er bevisst ikke gjort her.
+--
+-- Trengs varslingsinnstillinger eller en delingsstandard senere: IKKE legg dem
+-- tilbake under den åpne policyen. Legg dem i en egen tabell med
+-- USING (auth.uid() = user_id), eller bak viewet over.
+--
+-- Idempotent: DROP COLUMN IF EXISTS. Andre kjøring gjør intet.
+--
+-- Kontrollspørring — kjør FØR og ETTER. Skal gi 0 rader etterpå:
+--
+--   SELECT column_name
+--     FROM information_schema.columns
+--    WHERE table_schema = 'public'
+--      AND table_name = 'profiles'
+--      AND column_name IN ('default_finding_visibility', 'notification_preferences');
+
+ALTER TABLE profiles DROP COLUMN IF EXISTS default_finding_visibility;
+ALTER TABLE profiles DROP COLUMN IF EXISTS notification_preferences;

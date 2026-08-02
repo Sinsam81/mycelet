@@ -23,6 +23,11 @@
  * value should be redacted. Match-by-substring is intentionally permissive
  * so a developer adding `userPassword` or `apiPasswordReset` doesn't have
  * to remember to update the list.
+ *
+ * Skilletegn spiller ingen rolle: både nøkkelen og mønsteret strippes for alt
+ * som ikke er bokstav/tall før sammenligningen (se normalizeKey). Uten det
+ * slapp HTTP-headeren `Api-Key` gjennom — den skrivemåten koden selv bruker mot
+ * Kindwise — fordi «api-key» ikke inneholder «apikey».
  */
 const REDACT_KEY_PATTERNS = [
   'password',
@@ -43,9 +48,43 @@ const REDACT_KEY_PATTERNS = [
 
 const REDACTION_PLACEHOLDER = '<redacted>';
 
+/** Bokstaver og tall bare — «Api-Key», «api_key» og «apiKey» blir alle «apikey». */
+function normalizeKey(key: string): string {
+  return key.toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+const NORMALIZED_REDACT_KEY_PATTERNS = REDACT_KEY_PATTERNS.map(normalizeKey);
+
 function shouldRedactKey(key: string): boolean {
-  const lower = key.toLowerCase();
-  return REDACT_KEY_PATTERNS.some((pattern) => lower.includes(pattern));
+  const normalized = normalizeKey(key);
+  return NORMALIZED_REDACT_KEY_PATTERNS.some((pattern) => normalized.includes(pattern));
+}
+
+/**
+ * Hemmeligheter som opptrer som VERDI, under en nøkkel vi ikke gjenkjenner.
+ *
+ * Nøkkellisten over hjelper ikke mot `log.debug('kindwise.request', { headers })`
+ * eller `{ note: 'brukte sk_live_…' }`. Formen på selve verdien er det eneste
+ * signalet vi har igjen da, og disse fire formene er entydige nok til at en
+ * treffer aldri er tilfeldig tekst:
+ *
+ *   • `Bearer <noe>`            — Authorization-verdien, uansett hvor den står
+ *   • `sk_live_…`, `kw_test_…`  — leverandørnøkler (Stripe, Kindwise, m.fl.)
+ *   • `whsec_…`                 — Stripes webhook-hemmelighet
+ *   • `eyJ….….…`                — JWT (base64 av `{"`), f.eks. et Supabase-token
+ */
+const SECRET_VALUE_RULES: Array<{ pattern: RegExp; replacement: string }> = [
+  { pattern: /\bBearer\s+[A-Za-z0-9._~+/=-]{8,}/gi, replacement: `Bearer ${REDACTION_PLACEHOLDER}` },
+  { pattern: /\beyJ[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]{4,}/g, replacement: REDACTION_PLACEHOLDER },
+  { pattern: /\bwhsec_[A-Za-z0-9_-]{6,}/g, replacement: REDACTION_PLACEHOLDER },
+  { pattern: /\b[A-Za-z][A-Za-z0-9]{0,7}_(?:live|test)_[A-Za-z0-9]{6,}/g, replacement: REDACTION_PLACEHOLDER }
+];
+
+function redactSecretValues(value: string): string {
+  return SECRET_VALUE_RULES.reduce(
+    (acc, rule) => acc.replace(rule.pattern, rule.replacement),
+    value
+  );
 }
 
 /**
@@ -76,9 +115,9 @@ const EMAIL_REGEX = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
 export function redactPII(value: unknown, seen: WeakSet<object> = new WeakSet()): unknown {
   if (value === null || value === undefined) return value;
 
-  // Strings: scan for embedded emails and mask them.
+  // Strings: mask embedded secrets first, then embedded emails.
   if (typeof value === 'string') {
-    return value.replace(EMAIL_REGEX, (match) => maskEmail(match));
+    return redactSecretValues(value).replace(EMAIL_REGEX, (match) => maskEmail(match));
   }
 
   // Primitives pass through.
