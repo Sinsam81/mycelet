@@ -263,13 +263,19 @@ export function MushroomMap() {
         // Uten kant og med lav dekkevne smelter nabocellene sammen til et mykt
         // varmekart — som er nettopp det et lag med 3–8 km oppløsning bør se ut
         // som. Oppløsningen står i klartekst i popupen i stedet.
+        //
+        // 0,13 er valgt ved å SE på det, ikke ved å gjette. Første forsøk uten
+        // kant satte 0,07, og da forsvant laget helt — fra «rutenett» til
+        // «ingenting» i ett hopp. 0,13 gir synlig fargeforskjell mellom
+        // nabocellene uten at det oppstår streker. Prøvekartet som avgjorde det
+        // tegner de ekte rutene over ekte Kartverket-fliser, uten innlogging.
         const shape = cellDeg
           ? leaflet.rectangle(
               [
                 [spot.lat - cellDeg / 2, spot.lng - cellDeg / 2],
                 [spot.lat + cellDeg / 2, spot.lng + cellDeg / 2]
               ],
-              { color, fillColor: color, fillOpacity: 0.07, weight: 0, stroke: false }
+              { color, fillColor: color, fillOpacity: 0.13, weight: 0, stroke: false }
             )
           : leaflet.circle([spot.lat, spot.lng], {
               radius: Math.max(120, Math.min(450, 90 + spot.score * 3)),
