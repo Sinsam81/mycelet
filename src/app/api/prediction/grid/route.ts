@@ -6,7 +6,8 @@ import { fetchWeatherSamplesForBounds, nearestWeatherSample, weatherSourceSummar
 import { getForestProperties, buildSpeciesHabitatPreferences } from '@/lib/forest';
 import { computeCellPrediction } from '@/lib/prediction/cell-score';
 import { dayOfYearOf } from '@/lib/prediction/phenology';
-import { weightedOccurrenceDensity, OCCURRENCE_FETCH_LIMIT } from '@/lib/prediction/occurrences';
+import { weightedOccurrenceDensity, countWithinKm, OCCURRENCE_FETCH_LIMIT } from '@/lib/prediction/occurrences';
+import { buildAreaReport, summariseNeighbourhood } from '@/lib/prediction/area-report';
 import { getElevation } from '@/lib/terrain';
 import { computeHabitatScore } from '@/lib/forest';
 import { buildSpotSummary } from '@/lib/utils/prediction-explanation';
@@ -74,6 +75,10 @@ const MAX_N = 7;
 const DEFAULT_N = 5;
 const FOREST_CONCURRENCY = 16;
 const FOREST_TIMEOUT_MS = 2500;
+/** Én breddegrad i km. Brukes bare til å si hvor stor rute en nål står for. */
+const KM_PER_DEGREE_LAT = 111.32;
+/** Radius områderapporten teller registrerte funn innenfor. */
+const FINDINGS_RADIUS_KM = 0.5;
 
 function num(value: string | null): number {
   const n = Number(value);
@@ -370,11 +375,61 @@ export async function GET(request: NextRequest) {
         }
       : undefined;
 
+    // Rutestørrelsen i km — områderapporten sier den høyt, fordi nåla står for
+    // en RUTE, ikke for et tre. På et 5×5-nett over Nesodden er ruta rundt 3 km bred.
+    const cellHeightKm = latSpan * KM_PER_DEGREE_LAT;
+    const cellWidthKm = latSpan > 0 ? lngSpan * KM_PER_DEGREE_LAT * Math.cos((centerLat * Math.PI) / 180) : 0;
+
+    /**
+     * Radiusen vi kan telle registrerte funn innenfor UTEN å underrapportere:
+     * observasjonene er hentet for boksen, så en radius større enn halve ruta
+     * ville strekke seg utenfor det vi har hentet for cellene ytterst. Da
+     * droppes linja heller enn å oppgi et for lavt tall. Samme hvis
+     * observasjonsspørringen ble kuttet av radtaket.
+     */
+    const findingsRadiusKm =
+      !occRes.truncated && Math.min(cellWidthKm, cellHeightKm) / 2 >= FINDINGS_RADIUS_KM
+        ? FINDINGS_RADIUS_KM
+        : null;
+
+    // Sesongstatusen for arten brukeren filtrerte på, regnet ut av de samme
+    // sesongkolonnene rutenettet allerede scorer med.
+    const reportSeasonSelected =
+      speciesRes?.data && speciesRes.data.season_start != null && speciesRes.data.season_end != null
+        ? {
+            name:
+              getSpeciesDisplayName(
+                speciesRes.data as { norwegian_name: string | null; swedish_name: string | null },
+                locale
+              ) || copy.speciesFallback,
+            inSeason: inSeason(month, speciesRes.data.season_start as number, speciesRes.data.season_end as number),
+            inPeak:
+              speciesRes.data.peak_season_start != null &&
+              speciesRes.data.peak_season_end != null &&
+              inSeason(
+                month,
+                speciesRes.data.peak_season_start as number,
+                speciesRes.data.peak_season_end as number
+              )
+          }
+        : null;
+
     // `top` mode returns the most promising N cells with a persuasive "why" per spot
     // (for "5 lovende steder nær meg"); the default returns lean cells for the heatmap.
     let cells: Record<string, unknown>[];
     if (effectiveTop) {
       const topCells = [...allCells].sort((a, b) => b.score - a.score).slice(0, effectiveTop);
+      // Nabolaget rapporten sammenligner med: alle rutene i det samme søket som
+      // faktisk fikk skogdata. Det er det eneste «rundt her» vi har målt — og
+      // når ruta ikke skiller seg fra det, skal rapporten si nettopp det.
+      const neighbourhood = summariseNeighbourhood(
+        allCells.map((cell) => ({
+          score: cell.score,
+          forestType: cell.forestType,
+          productivity: cell.productivity
+        })),
+        { cellSizeKm: { widthKm: cellWidthKm, heightKm: cellHeightKm } }
+      );
       cells = topCells.map((c) => {
         // Free tier: coordinates and score only — the persuasive "why" and the
         // per-spot species list are the premium half of the feature.
@@ -423,6 +478,42 @@ export async function GET(request: NextRequest) {
             .slice(0, 3)
             .map((s) => s.name);
         }
+        // Områderapporten: en kort, lesbar tekst om OMRÅDET i stedet for en
+        // trang boks med score og et par stikkord. Bygges her fordi feltene
+        // den trenger (volum, kilde, nedbør, markfukt, funn i nærheten,
+        // nabolaget) bare finnes på serveren — og fordi teksten er prosa, og
+        // dermed må ha leserens språk tredd inn eksplisitt.
+        const report = buildAreaReport({
+          score: c.score,
+          forest: {
+            forestType: c.forest.forestType,
+            productivity: c.forest.productivity,
+            volumePerHa: c.forest.volumePerHa,
+            source: c.forest.source,
+            // Rutenettet slår opp skogen i selve punktet nåla står i (SR16 og
+            // CORINE er punktoppslag), så avstanden er null. Feltet sendes
+            // likevel med: uten det kunne ikke rapporten si HVOR målingen er
+            // gjort, og «granskog» ville igjen vært en påstand uten sted.
+            distanceKm: 0
+          },
+          weather: {
+            temperatureC: c.weather.temperatureC,
+            humidityPct: c.weather.humidityPct,
+            humidityEstimated: c.weather.humidityEstimated,
+            rain3dMm: c.weather.rain3dMm,
+            rain7dMm: c.weather.rain7dMm,
+            rain14dMm: c.weather.rain14dMm,
+            soilMoistureIndex: c.weather.soilMoistureIndex
+          },
+          season: reportSeasonSelected ? { selected: reportSeasonSelected } : { topSpecies },
+          nearbyFindings:
+            findingsRadiusKm != null
+              ? { count: countWithinKm(occurrences, c.lat, c.lng, findingsRadiusKm), radiusKm: findingsRadiusKm }
+              : null,
+          habitatReasons: habitat ? habitat.reasons : [],
+          neighbourhood,
+          locale
+        });
         return {
           lat: c.lat,
           lng: c.lng,
@@ -431,7 +522,8 @@ export async function GET(request: NextRequest) {
           productivity: c.productivity,
           verdict: summary.verdict,
           reasons: summary.reasons,
-          topSpecies
+          topSpecies,
+          report
         };
       });
     } else {

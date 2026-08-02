@@ -33,6 +33,7 @@ import {
   saveOfflineAreas
 } from '@/lib/utils/offlineMap';
 import { buildExplanation } from '@/lib/utils/prediction-explanation';
+import type { AreaReport } from '@/lib/prediction/area-report';
 import { intlLocale } from '@/lib/utils/intl-locale';
 import { colorForScore } from '@/lib/utils/condition-colors';
 import { scoreToCondition } from '@/lib/utils/prediction';
@@ -64,6 +65,55 @@ const FOREST_LABEL: Record<string, string> = {
   blandet: 'blandingsskog',
   apent: 'åpent landskap'
 };
+
+/**
+ * Ett av de anbefalte stedene fra /api/prediction/grid?top=N.
+ *
+ * `report` er områderapporten: serveren setter den sammen av feltene den har
+ * (skogtype, bonitet, volum, avstand til målingen, vær, sesong, nabolaget) og
+ * sender den ferdig formulert på leserens språk. Den er premium-halvdelen av
+ * funksjonen, så gratisbrukere får en nål uten rapport.
+ */
+type TopSpot = {
+  lat: number;
+  lng: number;
+  score: number;
+  forestType: string;
+  productivity: number | null;
+  verdict?: string;
+  reasons?: string[];
+  topSpecies?: string[];
+  report?: AreaReport;
+};
+
+/**
+ * Popupene for toppsteder bygges som HTML-strenger (Leaflet-API-et tar en
+ * streng), og rapportlinjene inneholder navn fra databasen. Alt som ikke er
+ * vår egen markup escapes derfor før det limes inn.
+ */
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+/** Områderapporten som lesbare avsnitt: overskrift + korte linjer. */
+function areaReportHtml(report: AreaReport | undefined): string {
+  if (!report || report.sections.length === 0) return '';
+  return report.sections
+    .map((section) => {
+      const lines = section.lines
+        .map((line) => `<div style="margin-top:3px">${escapeHtml(line)}</div>`)
+        .join('');
+      return `<div style="margin-top:9px">
+        <div style="font-size:11px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;color:#4b5563">${escapeHtml(section.heading)}</div>
+        <div style="font-size:12px;color:#1f2937;line-height:1.45">${lines}</div>
+      </div>`;
+    })
+    .join('');
+}
 
 function bearingLabel(aLat: number, aLng: number, bLat: number, bLng: number): string {
   const dLng = ((bLng - aLng) * Math.PI) / 180;
@@ -176,7 +226,7 @@ export function MushroomMap() {
   const [offlineOpen, setOfflineOpen] = useState(false);
   const [storageMb, setStorageMb] = useState<number | null>(null);
   const [toolsOpen, setToolsOpen] = useState(false);
-  const [topSpots, setTopSpots] = useState<{ lat: number; lng: number; score: number; forestType: string; productivity: number | null; verdict?: string; reasons?: string[]; topSpecies?: string[] }[] | null>(null);
+  const [topSpots, setTopSpots] = useState<TopSpot[] | null>(null);
   const [topLoading, setTopLoading] = useState(false);
   const [topMsg, setTopMsg] = useState<string | null>(null);
   const [topAccess, setTopAccess] = useState<'premium_full' | 'free_limited' | null>(null);
@@ -359,7 +409,7 @@ export function MushroomMap() {
   // "Lovende steder nær meg": numbered pins on promising forest cells within ~5 km.
   const renderTopSpots = useCallback(
     async (
-      spots: { lat: number; lng: number; score: number; forestType: string; productivity: number | null; verdict?: string; reasons?: string[]; topSpecies?: string[] }[],
+      spots: TopSpot[],
       origin: { lat: number; lng: number },
       opts?: { limited?: boolean; speciesId?: number | null }
     ) => {
@@ -379,10 +429,23 @@ export function MushroomMap() {
         const km = haversineKm(origin.lat, origin.lng, spot.lat, spot.lng);
         const dirKey = bearingLabel(origin.lat, origin.lng, spot.lat, spot.lng);
         const dir = t(`dir_${dirKey}`);
-        const reasonsHtml = (spot.reasons ?? []).map((r) => `<div style="margin-top:3px">${r}</div>`).join('');
-        const topSpeciesHtml = (spot.topSpecies ?? []).length
-          ? `<div style="margin-top:6px;font-size:12px;font-weight:600;color:#14532d">${t('mostLikelyHere', { species: (spot.topSpecies ?? []).join(', ') })}</div>`
-          : '';
+        // Områderapporten erstatter stikkordslista når serveren har sendt den:
+        // de samme opplysningene, men som en lesbar tekst om OMRÅDET. Har vi
+        // ingen rapport (gratisnivå, eller et eldre svar), står stikkordene
+        // igjen som før.
+        const report = areaReportHtml(spot.report);
+        const reasonsHtml =
+          report || (spot.reasons ?? []).length === 0
+            ? ''
+            : `<div style="font-size:12px;margin-top:6px;color:#1f2937">${(spot.reasons ?? [])
+                .map((r) => `<div style="margin-top:3px">${escapeHtml(r)}</div>`)
+                .join('')}</div>`;
+        // Artene står i rapportens «Forholdene nå»-del når den er med, så
+        // toppartslinja gjentas ikke.
+        const topSpeciesHtml =
+          !report && (spot.topSpecies ?? []).length
+            ? `<div style="margin-top:6px;font-size:12px;font-weight:600;color:#14532d">${t('mostLikelyHere', { species: (spot.topSpecies ?? []).join(', ') })}</div>`
+            : '';
         const limitedHtml = opts?.limited
           ? `<div style="margin-top:6px;font-size:12px;color:#92400e;background:#fef3c7;border-radius:8px;padding:5px 8px">${t('premiumWhyHigh')}</div>`
           : '';
@@ -395,11 +458,14 @@ export function MushroomMap() {
             <button type="button" data-fb="no" style="flex:1;background:#f3f4f6;color:#374151;border:none;border-radius:8px;padding:5px 0;font-size:12px;font-weight:600;cursor:pointer">${t('feedbackNo')}</button>
           </div>
         </div>`;
-        const popup = `<div style="min-width:210px;max-width:265px">
+        // Rapporten er lengre enn stikkordene var, så teksten får rulle inne i
+        // popupen i stedet for å vokse ut av kartet på en liten skjerm.
+        const popup = `<div style="min-width:230px;max-width:290px;max-height:60vh;overflow-y:auto">
           <div style="font-weight:700;color:#14532d">${spot.verdict ?? t('topRank', { rank })}</div>
           <div style="color:#555;font-size:12px;margin-top:2px">~${km.toFixed(1)} km ${dir} · ${spot.score}/100</div>
           ${topSpeciesHtml}
-          <div style="font-size:12px;margin-top:6px;color:#1f2937">${reasonsHtml}</div>
+          ${report}
+          ${reasonsHtml}
           ${limitedHtml}
           <a href="https://www.google.com/maps/search/?api=1&query=${spot.lat},${spot.lng}" target="_blank" rel="noreferrer" style="display:block;margin-top:7px;color:#15803d;font-weight:600;font-size:12px;text-decoration:underline">${t('openInMapNavigate')}</a>
           ${feedbackHtml}
@@ -433,7 +499,7 @@ export function MushroomMap() {
       const originLat = place?.lat ?? latitude ?? center.lat;
       const originLng = place?.lng ?? longitude ?? center.lng;
 
-      type Spot = { lat: number; lng: number; score: number; forestType: string; productivity: number | null; verdict?: string; reasons?: string[]; topSpecies?: string[] };
+      type Spot = TopSpot;
 
       // Start local (5 km) and widen only when the near area has no promising
       // forest, so users in fields/towns still get pointed at the nearest good
