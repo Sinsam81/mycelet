@@ -266,3 +266,101 @@ Ingen rollback av kode eller database var nødvendig.
 - **Verify post-deploy mot mycelet.com:** score 55 «good», `leadingSpecies` Kantarell, 19 steder, **3 hotspots på 3 unike posisjoner** (ingen stabling). Health 200.
 - **Sveip etter søsken:** `/api/prediction/grid` og `species-spots` navngir allerede arten per sted — de live-beregnede banene gjorde dette riktig, og den eldre forhåndsberegnede rasterbanen ble aldri oppdatert til å følge etter. Det er grunnen til at feilen overlevde. `/api/health/predictions` sjekker bare ferskhet. `/admin/prediction` midler et topp-150-utvalg, men er en diagnosetabell som skriver `species_id` på hver rad; bevisst latt være.
 - **Rollback:** none needed.
+
+## 2026-08-02 — Lanseringsrevisjonen: PR #114–#117 + migrasjon 035–038
+
+Én sammenhengende økt: ny revisjonsprotokoll → revisjon → fiks → deploy. Ført samlet fordi
+funnene henger sammen.
+
+### PR #114 — revisjonsprompten skrevet om rundt bevis
+
+- **Hvorfor:** den forrige prompten hadde kjørt én gang og gitt `technical-audit.md` m.fl. Jeg
+  karaktersatte alle 39 konkrete funn: 13 fortsatt sanne, 11 allerede fikset, 6 uverifiserbare,
+  2 utdaterte og **7 som aldri var sanne**. Tre av de sju siterte **filer som aldri har eksistert
+  i noen branch** (`029_findings_context.sql`, to billing-webhook-stier), og `package.json:50`
+  som «bevis» for en sårbar avhengighet er `"react"`. To andre påsto at noe manglet som fantes i
+  selve commiten som ble revidert.
+- **Diagnosen:** prompten manglet ikke temaer — den listet alt. Den sa aldri **hvordan man skal
+  vite**. Ny versjon bytter lengde mot beviskrav.
+- **Rangeringen er målt, ikke ment:** av 40 reelle feil rettet 1. august ville kodelesing funnet 7.
+- **Én regel snudd:** den gamle forbød kommandoer som krever produksjonsnøkler. Den regelen er
+  grunnen til at de to verste feilene forble usynlige. Lesende produksjonsverifisering er nå
+  påkrevd, med harde grenser.
+
+### PR #115 — revisjonen kjørt
+
+188 rå funn → 55 til motbevis → 50 overlevde → 23 nedgradert av eget motbevis. **Null oppdiktede
+henvisninger** — hver fil:linje i kritisk/høy ble åpnet. Teknikkfordeling blant de 50: UI-mot-
+database 17, kjørte ruta 15, verktøy 8, konsumenter side om side 5, rendret komponent 2,
+**leste koden 2**, muterte testen 1.
+
+### PR #116 — de fire kritiske + åtte høy
+
+- **45 ferdigskrevne sikkerhetsadvarsler var usynlige.** Artssiden rendret `edibility_notes` kun
+  for `conditionally_edible`. "OBS: hold den klart adskilt fra grønn fluesopp" (grønnkremle),
+  "VIKTIG: forveksles med dødelig flatklokkehatt" (vintersopp) — alt skrevet, kvalitetssikret og
+  deployet til produksjonsbasen, og aldri vist. Én betingelse i en JSX-blokk.
+- **Tonen bestemmes av struktur, ikke av å lete i teksten.** Rødgul piggsopps notat er «Kan IKKE
+  lett forveksles med giftige arter» — det inneholder begge ordene og betyr det motsatte. Derfor:
+  spiselighetsklasse + registrert kritisk tvilling + forfatterens egen `OBS:`/`VIKTIG:`-markør.
+  Resten blir nøytralt notat, fordi «Stek på lav varme» i en advarselsboks lærer folk å overse
+  advarselsbokser.
+- **Grønnkremle sviktet dobbelt:** skjult tekst *og* null forvekslingsrader. Migrasjon 035.
+  Sveipen viste at det var det eneste tilfellet — men **26 av 52** spiselige arter mangler
+  forvekslingsdata helt, og det krever soppsakkyndig.
+- **Identifiseringen skiller nå tre tilstander** — `present` / `none_recorded` / `unavailable`,
+  per forslag. De 24 artene uten data rendret før som et rent resultat, umulig å skille fra en art
+  vi har sjekket, mens landingssiden lover advarsler «alltid».
+- **Offline-kartet lastet ned Nordishavet.** `latLngToTile` delte på `π` der Web Mercator krever
+  `2π`. Målt: kodens flis for Oslo z12 er **854 bytes tomt hav**, riktig flis er **111 250 bytes**.
+  Betalt funksjon. Gammel test sjekket `tile.y >= 0` — sant for enhver breddegrad, også gal.
+- **Sverige har aldri hatt svensk vær.** SMHI leverer døgnparametre som `{from, to, ref}` — ingen
+  `date`-nøkkel. Adapteren leste `date`, fikk NaN, returnerte null. Testfixturen bygde en form SMHI
+  aldri returnerer, så suiten var grønn på en død kodesti. Göteborg/Stockholm/Kiruna gir nå `smhi`.
+  Scorene faller litt — ekte stasjonsdata er tørrere enn modellen. Open-Meteo (CC BY 4.0) ble brukt
+  uten kreditering; nå rettet.
+- **Prognosen ga samme score motsatt farge.** Fuktvetoet var strukturelt inert for dag 1–6.
+
+### PR #117 — sju høy-funn til
+
+- **Syv innloggede brukere kunne ikke lagre noe.** 17 kontoer, 7 profiler. Rotårsaken var ikke at
+  `ensureProfile` manglet — den ble bare kalt ved tre **overganger**, alle engangshendelser. En som
+  allerede er innlogget går aldri gjennom dem igjen. Reparasjonen er flyttet til selve øktene.
+- **Apple-reviewerens sandbox-kjøp revokerte demokontoen** midt i vurderingen. Manuelt tildelt
+  abonnement er nå et gulv ingen butikkhendelse kan senke.
+- **Dødelig steinmorkel sto «i sesong nå» i august.** Regionjusteringen løftet fram en vårsopp og
+  fjernet kantarell. Verifisert etter fiksen: morklene ute, fluesopp/flatklokkehatt står igjen —
+  riktig, de går faktisk nå — med «Dødelig giftig»-merke.
+- **«Skog her»** beskrev skog opptil 15,5 km unna; svaret bærer nå `distanceKm` (målt 1,11 km).
+- Fallback navngir art, `/offline` finnes, dobbeltkjøp native/Stripe blokkert.
+
+### Migrasjoner kjørt i produksjon
+
+| Nr | Hva | Resultat |
+|---|---|---|
+| 035 | Grønnkremle → grønn fluesopp | ✅ forvekslingskortet vises |
+| 033 | Revoke fra `anon` | ⚠️ **kjørte, men lukket ingenting** |
+| 036 | Revoke fra `public` + grant tilbake | ✅ anon → 401 |
+| 037 | Bakfyll manglende profiler | ✅ 17/17, 0 mangler |
+| 038 | Rett e-post-som-brukernavn | ✅ 0 igjen |
+
+- **033 er verdt å merke seg.** Den svarte `Success`, og rettighetstabellen ville sett riktig ut.
+  Postgres gir `EXECUTE` til rollen `PUBLIC` på enhver ny funksjon, og alle roller arver derfra —
+  så `revoke ... from anon` fjernet ingenting. Mitt eget tiltak i revisjonsrapporten var
+  ufullstendig; rapporten er rettet. Bare det å kalle funksjonen som anon avslørte det.
+- **038 rettet noe 037 forårsaket.** To brukere hadde skrevet hele e-postadressen sin i
+  brukernavn-feltet ved registrering, og bakfyllingen gjorde adressene til offentlige navn.
+  Ingen rakk å bli eksponert — uten profil kunne de ikke poste — men første funn ville avslørt dem.
+  `toPublicUsername()` hindrer nå at det oppstår på nytt.
+
+### Verify post-deploy
+
+Grønnkremle viser gul advarsel + forvekslingskort. Vintersopp og snøballsjampinjong viser sine.
+Göteborg/Stockholm på `smhi`. `/offline` 200. Fallback navngir Kantarell. Skogdata bærer 1,11 km.
+Morkler ute av august. Helse 200. **962 tester** (fra 730 ved øktstart).
+
+- **To falske alarmer jeg selv utløste, begge korrigert:** (1) grep etter giftnummeret over hele
+  HTML-en traff en bevisst tospråklig nødblokk og Next sin serialiserte payload — de rendrede
+  `tel:`-lenkene er én per språk og riktige; (2) jeg meldte tre fikser som «ikke live» fordi jeg
+  leste **preview**-deployen i stedet for produksjonsdeployen, 40 sekunder før den var ute.
+- **Rollback:** none needed.
