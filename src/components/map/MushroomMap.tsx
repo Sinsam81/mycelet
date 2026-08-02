@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { NextIntlClientProvider, useLocale, useMessages, useTranslations } from 'next-intl';
+import { useLocale, useMessages, useTranslations } from 'next-intl';
 import { NonNativeOnly } from '@/components/native/NonNativeOnly';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Download, MoreHorizontal, Navigation, Trash2, X } from 'lucide-react';
@@ -14,18 +14,22 @@ import { usePrediction } from '@/lib/hooks/usePrediction';
 import { useBillingStatus } from '@/lib/hooks/useBilling';
 import { PredictionHotspot, PredictionResponse, PredictionTile } from '@/types/prediction';
 import { AddFindingSheet } from './AddFindingSheet';
-import { FindingPopup } from './FindingPopup';
+import { findingPopupElement } from './findingPopupElement';
 import { HotspotPanel } from './HotspotPanel';
 import { MapFilters, MapFilterState } from './MapFilters';
 import { MapFinding } from '@/types/finding';
+import { OwnFindingRow, ownFindingToMapFinding } from '@/lib/utils/map-findings';
 import {
   OfflineArea,
   OSM_TILE_TEMPLATE,
   SATELLITE_TILE_TEMPLATE,
   TERRAIN_TILE_TEMPLATE,
   cacheMapTilesForArea,
+  clearMapTileCache,
+  estimateStorageMb,
   readOfflineAreas,
   removeOfflineAreaById,
+  removeOfflineAreaTiles,
   saveOfflineAreas
 } from '@/lib/utils/offlineMap';
 import { buildExplanation } from '@/lib/utils/prediction-explanation';
@@ -35,6 +39,8 @@ import { scoreToCondition } from '@/lib/utils/prediction';
 import { bestTilePerCell } from '@/lib/prediction/collapse-tiles';
 import { getSpeciesDisplayName } from '@/lib/utils/species-name';
 import { PlaceResult, searchPlaces } from '@/lib/utils/place-search';
+import { filterWithinRadiusKm, haversineKm } from '@/lib/utils/geo-distance';
+import { readLocal, readLocalJson, removeLocal, writeLocal } from '@/lib/utils/safe-storage';
 import { PlaceForecastStrip } from './PlaceForecastStrip';
 import { FLAGS } from '@/lib/flags';
 import toast from 'react-hot-toast';
@@ -58,16 +64,6 @@ const FOREST_LABEL: Record<string, string> = {
   blandet: 'blandingsskog',
   apent: 'åpent landskap'
 };
-
-function haversineKm(aLat: number, aLng: number, bLat: number, bLng: number): number {
-  const R = 6371;
-  const dLat = ((bLat - aLat) * Math.PI) / 180;
-  const dLng = ((bLng - aLng) * Math.PI) / 180;
-  const s =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos((aLat * Math.PI) / 180) * Math.cos((bLat * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
-  return R * 2 * Math.atan2(Math.sqrt(s), Math.sqrt(1 - s));
-}
 
 function bearingLabel(aLat: number, aLng: number, bLat: number, bLng: number): string {
   const dLng = ((bLng - aLng) * Math.PI) / 180;
@@ -141,6 +137,9 @@ export function MushroomMap() {
   const [filters, setFilters] = useState<MapFilterState>(initialFilters);
   const [showAddSheet, setShowAddSheet] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  // Brukernavnet vises i popupen. For «Kun mine funn» leser vi funnene rett fra
+  // tabellen, som ikke har den join-en public_findings-viewet gjør.
+  const [currentUsername, setCurrentUsername] = useState<string | null>(null);
   const [showOccurrences, setShowOccurrences] = useState(false);
   const [occCount, setOccCount] = useState(0);
   const [occTruncated, setOccTruncated] = useState(false);
@@ -167,11 +166,15 @@ export function MushroomMap() {
     lon: null
   });
   const [tileHotspots, setTileHotspots] = useState<PredictionHotspot[]>([]);
+  // Snitt over ALLE kollapsede ruter i utsnittet, ikke bare de 80 vi tegner.
+  // Tegnelista er kuttet på score, så et snitt av den er systematisk for høyt.
+  const [tileCellAverage, setTileCellAverage] = useState<number | null>(null);
   const [offlineAreas, setOfflineAreas] = useState<OfflineArea[]>([]);
   const [offlineName, setOfflineName] = useState('');
   const [offlineStatus, setOfflineStatus] = useState<string | null>(null);
   const [offlineBusy, setOfflineBusy] = useState(false);
   const [offlineOpen, setOfflineOpen] = useState(false);
+  const [storageMb, setStorageMb] = useState<number | null>(null);
   const [toolsOpen, setToolsOpen] = useState(false);
   const [topSpots, setTopSpots] = useState<{ lat: number; lng: number; score: number; forestType: string; productivity: number | null; verdict?: string; reasons?: string[]; topSpecies?: string[] }[] | null>(null);
   const [topLoading, setTopLoading] = useState(false);
@@ -207,14 +210,36 @@ export function MushroomMap() {
       heatLayer.clearLayers();
 
       for (const spot of data?.hotspots ?? []) {
-        const radiusMeters = Math.max(120, Math.min(450, 90 + spot.score * 3));
-        const circle = leaflet.circle([spot.lat, spot.lng], {
-          radius: radiusMeters,
-          color: colorForScore(spot.score).hex,
-          fillColor: colorForScore(spot.score).hex,
-          fillOpacity: 0.2,
-          weight: 1
-        });
+        // TEGNINGEN SKAL IKKE VÆRE MER PRESIS ENN DATAENE.
+        //
+        // Her sto en sirkel med radius 90 + score·3 meter — 270 m ved score 60.
+        // Rasteret bak tallet har 0,06–0,07° mellom målepunktene (3,4–4,0 km i
+        // øst–vest, 6,7–7,8 km i nord–sør), og fallback-banen klumper funn på
+        // hele hundredels grader. En liten lys sirkel leses som «soppen står
+        // inni denne ringen», og den romlige delen av modellen har en ærlig AUC
+        // rundt 0,52 — den kan ikke bære en slik påstand.
+        //
+        // Rutene tegnes derfor i sin FAKTISKE størrelse når vi kjenner den
+        // (grid_size_deg følger med flisa / settes av API-et). Uten den faller vi
+        // tilbake til den gamle sirkelen, som er det eneste ærlige vi kan si om
+        // et punkt uten kjent oppløsning.
+        const color = colorForScore(spot.score).hex;
+        const cellDeg = spot.gridSizeDeg && spot.gridSizeDeg > 0 ? spot.gridSizeDeg : null;
+        const shape = cellDeg
+          ? leaflet.rectangle(
+              [
+                [spot.lat - cellDeg / 2, spot.lng - cellDeg / 2],
+                [spot.lat + cellDeg / 2, spot.lng + cellDeg / 2]
+              ],
+              { color, fillColor: color, fillOpacity: 0.18, weight: 1 }
+            )
+          : leaflet.circle([spot.lat, spot.lng], {
+              radius: Math.max(120, Math.min(450, 90 + spot.score * 3)),
+              color,
+              fillColor: color,
+              fillOpacity: 0.2,
+              weight: 1
+            });
 
         // Si hvilken art tallet gjelder. «60/100» på et sted er meningsløst
         // alene: det er 60 for kantarell og 2 for vanlig morkel på nøyaktig
@@ -228,8 +253,8 @@ export function MushroomMap() {
             ? t('hotspotTooltipSpecies', { species: speciesName, score: spot.score })
             : t('hotspotTooltipBest', { species: speciesName, score: spot.score });
 
-        circle.bindTooltip(label, { direction: 'top' });
-        heatLayer.addLayer(circle);
+        shape.bindTooltip(cellDeg ? `${label} — ${t('hotspotTooltipArea')}` : label, { direction: 'top' });
+        heatLayer.addLayer(shape);
       }
     },
     [filters.speciesId, speciesNamesVersion, t]
@@ -258,6 +283,7 @@ export function MushroomMap() {
 
     if (error) {
       setTileHotspots([]);
+      setTileCellAverage(null);
       return;
     }
 
@@ -273,8 +299,18 @@ export function MushroomMap() {
       lng: tile.center_lng,
       count: 1,
       score: tile.score,
-      speciesId: tile.species_id
+      speciesId: tile.species_id,
+      // Rutas faktiske størrelse, slik generatoren la den ut (tile-regions.ts).
+      // Kartet tegner den i denne størrelsen — se updateHeatLayer.
+      gridSizeDeg: Number(tile.metadata?.grid_size_deg) || null
     }));
+    // Snittet i panelet skal IKKE regnes av de 80 høyest scorende — det er
+    // trunkert på score og drar tallet oppover. `cells` er allerede kollapset
+    // til beste art per rute, så dette er et ærlig snitt over stedene i
+    // utsnittet.
+    setTileCellAverage(
+      cells.length > 0 ? Math.round(cells.reduce((sum, c) => sum + c.score, 0) / cells.length) : null
+    );
     setTileHotspots(mapped);
   }, [filters.speciesId, supabase]);
 
@@ -439,7 +475,15 @@ export function MushroomMap() {
           return;
         }
 
-        const found = (data.cells ?? []) as Spot[];
+        // Rutenettet legges ut over hele BOKSEN, så hjørnerutene ligger opptil
+        // √2 × radius unna. Uten dette sa banneret «6 lovende steder innen 5 km»
+        // over en nål som selv skrev «~6,1 km» — to tall som motsier hverandre i
+        // samme kartvisning. Vi kutter det som ligger utenfor radiusen vi lover.
+        const found = filterWithinRadiusKm(
+          { lat: originLat, lng: originLng },
+          (data.cells ?? []) as Spot[],
+          radiusKm
+        );
         if (found.length > 0) {
           spots = found;
           usedRadius = radiusKm;
@@ -744,10 +788,20 @@ export function MushroomMap() {
         iconSize: [12, 12],
         iconAnchor: [6, 6]
       });
-      const ediHtml = ediLabel ? `<br/><span style="color:${color};font-weight:600;font-size:12px">${ediLabel}</span>` : '';
+      // SPISELIGHET UTEN KONTEKST ER EN TRYGGHETSERKLÆRING.
+      //
+      // Her sto ordet «Spiselig» alene i grønt, rett under artsnavnet, i en boks
+      // som ellers bare handler om et historisk observasjonspunkt. Sammen med
+      // filterknappen «🟢 Spiselige» leses kartet da som en plukkeliste over hvor
+      // det står spiselig sopp. Etiketten er artens, ikke soppen brukeren
+      // eventuelt står med — og et GBIF-punkt fra 2019 sier ingenting om hva som
+      // vokser der nå. Begge deler står nå eksplisitt.
+      const ediHtml = ediLabel
+        ? `<br/><span style="color:${color};font-weight:600;font-size:12px">${t('speciesEdibility', { label: ediLabel })}</span><br/><span style="color:#6b7280;font-size:11px">${t('speciesEdibilityNote')}</span>`
+        : '';
       const found = formatFound(o.observed_at);
       const foundHtml = found ? ` · ${found}` : '';
-      const popup = `<div><b>${name}</b>${ediHtml}<br/><span style="color:#555;font-size:12px">${t('registeredFinding')}${foundHtml}</span><br/><a href="https://www.google.com/maps/search/?api=1&query=${o.latitude},${o.longitude}" target="_blank" rel="noreferrer" style="color:#15803d;font-weight:600;font-size:12px;text-decoration:underline">${t('openInMap')}</a><br/><span style="color:#9ca3af;font-size:10px">Artsdatabanken/GBIF</span></div>`;
+      const popup = `<div><b>${name}</b>${ediHtml}<br/><span style="color:#555;font-size:12px">${t('registeredFinding')}${foundHtml}</span><br/><span style="color:#6b7280;font-size:11px">${t('historicalFindingNote')}</span><br/><a href="https://www.google.com/maps/search/?api=1&query=${o.latitude},${o.longitude}" target="_blank" rel="noreferrer" style="color:#15803d;font-weight:600;font-size:12px;text-decoration:underline">${t('openInMap')}</a><br/><span style="color:#9ca3af;font-size:10px">Artsdatabanken/GBIF</span></div>`;
       leaflet.marker([o.latitude, o.longitude], { icon }).bindPopup(popup).addTo(cluster);
     }
     setOccCount(points.length);
@@ -791,15 +845,18 @@ export function MushroomMap() {
     void loadOccurrences();
   }, [loadOccurrences]);
 
+  // All localStorage-bruk under går via safe-storage. `window.localStorage`
+  // KASTER (ikke returnerer null) når nettleseren blokkerer lagring — Chrome
+  // med «Blokker alle informasjonskapsler», iOS Safari med lagring av. Begge
+  // lesningene her kjører på hver mount av /map, så en ubeskyttet getItem tok
+  // ned hele kartsiden for de brukerne. Kartet er produktet.
   const dismissIntro = useCallback(() => {
     setShowIntro(false);
-    if (typeof window !== 'undefined') {
-      window.localStorage.setItem('mycelet:map-intro-v1', '1');
-    }
+    writeLocal('mycelet:map-intro-v1', '1');
   }, []);
 
   useEffect(() => {
-    if (typeof window !== 'undefined' && !window.localStorage.getItem('mycelet:map-intro-v1')) {
+    if (!readLocal('mycelet:map-intro-v1')) {
       setShowIntro(true);
     }
   }, []);
@@ -812,18 +869,14 @@ export function MushroomMap() {
     tripFindsRef.current = [];
     setTripActive(true);
     setTripFinds([]);
-    if (typeof window !== 'undefined') {
-      window.localStorage.setItem('mycelet:trip-v1', JSON.stringify({ finds: [] }));
-    }
+    writeLocal('mycelet:trip-v1', JSON.stringify({ finds: [] }));
   }, []);
 
   const addTripFind = useCallback((name?: string) => {
     const next = [...tripFindsRef.current, name && name.trim() ? name.trim() : t('mushroomFallback')];
     tripFindsRef.current = next;
     setTripFinds(next);
-    if (typeof window !== 'undefined') {
-      window.localStorage.setItem('mycelet:trip-v1', JSON.stringify({ finds: next }));
-    }
+    writeLocal('mycelet:trip-v1', JSON.stringify({ finds: next }));
   }, [t]);
 
   const endTrip = useCallback(() => {
@@ -834,14 +887,12 @@ export function MushroomMap() {
     tripFindsRef.current = [];
     setTripActive(false);
     setTripFinds([]);
-    if (typeof window !== 'undefined') {
-      window.localStorage.removeItem('mycelet:trip-v1');
-      if (count > 0) {
-        window.localStorage.setItem(
-          'mycelet:last-trip',
-          JSON.stringify({ count, species: unique, at: new Date().toISOString() })
-        );
-      }
+    removeLocal('mycelet:trip-v1');
+    if (count > 0) {
+      writeLocal(
+        'mycelet:last-trip',
+        JSON.stringify({ count, species: unique, at: new Date().toISOString() })
+      );
     }
     if (count > 0) {
       toast.success(
@@ -855,19 +906,15 @@ export function MushroomMap() {
   }, [t]);
 
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const raw = window.localStorage.getItem('mycelet:trip-v1');
-    if (!raw) return;
-    try {
-      const parsed = JSON.parse(raw) as { finds?: string[] };
-      const finds = Array.isArray(parsed.finds) ? parsed.finds : [];
-      tripActiveRef.current = true;
-      tripFindsRef.current = finds;
-      setTripActive(true);
-      setTripFinds(finds);
-    } catch {
-      window.localStorage.removeItem('mycelet:trip-v1');
-    }
+    // readLocalJson rydder selv opp i en skadet verdi. Den gamle catch-grenen
+    // kalte removeItem direkte — som kaster like hardt som getItem gjorde.
+    const parsed = readLocalJson<{ finds?: string[] }>('mycelet:trip-v1');
+    if (!parsed) return;
+    const finds = Array.isArray(parsed.finds) ? parsed.finds : [];
+    tripActiveRef.current = true;
+    tripFindsRef.current = finds;
+    setTripActive(true);
+    setTripFinds(finds);
   }, []);
 
   // "Finn meg": recenter on a fresh GPS fix (falling back to the last known
@@ -962,10 +1009,30 @@ export function MushroomMap() {
     map.setView([area.centerLat, area.centerLng], area.zoom);
   }, []);
 
-  const deleteSavedArea = useCallback((areaId: string) => {
-    const next = removeOfflineAreaById(areaId);
-    setOfflineAreas(next);
+  /** Omtrentlig lagringsbruk, så flisecachen ikke er usynlig for brukeren. */
+  const refreshStorageUsage = useCallback(async () => {
+    setStorageMb(await estimateStorageMb());
   }, []);
+
+  const deleteSavedArea = useCallback(
+    async (areaId: string) => {
+      // Slett FLISENE først, mens vi ennå vet hvilke området eier. Før dette
+      // fjernet «Slett» bare linja i lista — flisene ble liggende i
+      // CacheStorage for alltid, og lagringen brukeren trodde han frigjorde var
+      // fortsatt opptatt.
+      const area = offlineAreas.find((item) => item.id === areaId);
+      if (area) await removeOfflineAreaTiles(area);
+      setOfflineAreas(removeOfflineAreaById(areaId));
+      void refreshStorageUsage();
+    },
+    [offlineAreas, refreshStorageUsage]
+  );
+
+  const clearTileCache = useCallback(async () => {
+    await clearMapTileCache();
+    setOfflineStatus(t('offlineCacheCleared'));
+    void refreshStorageUsage();
+  }, [refreshStorageUsage, t]);
 
   const saveCurrentAreaOffline = useCallback(async () => {
     setOfflineStatus(null);
@@ -1033,13 +1100,21 @@ export function MushroomMap() {
       const areaWithTiles: OfflineArea = {
         ...area,
         cachedTiles: cacheResult.cached,
-        failedTiles: cacheResult.failed
+        failedTiles: cacheResult.failed,
+        // Nødvendig for å kunne slette akkurat disse flisene senere.
+        tileTemplate,
+        zoomLevels
       };
 
-      const next = [areaWithTiles, ...offlineAreas.filter((item) => item.id !== areaWithTiles.id)].slice(0, 8);
+      const kept = [areaWithTiles, ...offlineAreas.filter((item) => item.id !== areaWithTiles.id)];
+      const next = kept.slice(0, 8);
+      // Område nr. 9 forsvant stille fra lista mens flisene ble igjen i cachen.
+      // Faller det ut av visningen, skal lagringen følge med ut.
+      for (const evicted of kept.slice(8)) void removeOfflineAreaTiles(evicted);
       saveOfflineAreas(next);
       setOfflineAreas(next);
       setOfflineName('');
+      void refreshStorageUsage();
 
       if (cacheResult.cached === 0 && cacheResult.failed > 0) {
         setOfflineStatus(t('offlineCacheFailed'));
@@ -1091,24 +1166,65 @@ export function MushroomMap() {
     const bounds = map.getBounds();
     const monthFilter = filters.period === 'month' ? new Date().getMonth() + 1 : null;
 
-    const { data, error } = await supabase.rpc('get_findings_in_bounds', {
-      min_lat: bounds.getSouth(),
-      min_lng: bounds.getWest(),
-      max_lat: bounds.getNorth(),
-      max_lng: bounds.getEast(),
-      species_filter: filters.speciesId,
-      month_filter: monthFilter
-    });
+    // «Kun mine funn» må lese en annen kilde enn resten av kartet.
+    //
+    // get_findings_in_bounds returnerer SETOF public_findings, og det viewet har
+    // `WHERE visibility IN ('public','approximate')`. Å filtrere det på user_id
+    // fjernet derfor nøyaktig de funnene brukeren har merket PRIVATE — de han
+    // helst vil ha på sitt eget kart. Samme bruker talte ulikt antall egne funn
+    // her og på /mine-steder, uten at noe forklarte forskjellen.
+    //
+    // findings-tabellen har eier-RLS (migrasjon 015: «Brukere kan lese egne
+    // funn»), så et direkte oppslag gir eieren alle tre synlighetene OG de
+    // eksakte koordinatene til sine egne funn — samme kilde /mine-steder bruker.
+    //
+    // Vet vi ikke hvem brukeren er ennå (auth-oppslaget er asynkront), skal
+    // «Kun mine funn» vise INGENTING. Å falle tilbake til det offentlige laget
+    // ville vist alle andres funn under en avkrysningsboks som sier «mine».
+    if (filters.onlyMine && !currentUserId) {
+      cleanupPopupRoots();
+      clusters.clearLayers();
+      return;
+    }
+
+    const { data, error } = filters.onlyMine && currentUserId
+      ? await (async () => {
+          let query = supabase
+            .from('findings')
+            .select(
+              'id,user_id,species_id,latitude,longitude,found_at,quantity,notes,thumbnail_url,verification_status,is_zone_finding,zone_label,zone_precision_km,mushroom_species(norwegian_name,latin_name,edibility)'
+            )
+            .eq('user_id', currentUserId)
+            .eq('is_negative_observation', false)
+            .gte('latitude', bounds.getSouth())
+            .lte('latitude', bounds.getNorth())
+            .gte('longitude', bounds.getWest())
+            .lte('longitude', bounds.getEast())
+            .order('found_at', { ascending: false })
+            .limit(1000);
+          if (filters.speciesId != null) query = query.eq('species_id', filters.speciesId);
+          const res = await query;
+          const rows = (res.data ?? []) as unknown as OwnFindingRow[];
+          return {
+            data: rows.map((row) => ownFindingToMapFinding(row, currentUsername ?? '')) as MapFinding[],
+            error: res.error
+          };
+        })()
+      : await supabase.rpc('get_findings_in_bounds', {
+          min_lat: bounds.getSouth(),
+          min_lng: bounds.getWest(),
+          max_lat: bounds.getNorth(),
+          max_lng: bounds.getEast(),
+          species_filter: filters.speciesId,
+          month_filter: monthFilter
+        });
 
     if (error) {
       return;
     }
 
     const findings = (data ?? []) as MapFinding[];
-    const filtered = findings.filter((finding) => {
-      if (filters.onlyMine && finding.user_id !== currentUserId) return false;
-      return passPeriodFilter(finding.found_at, filters.period);
-    });
+    const filtered = findings.filter((finding) => passPeriodFilter(finding.found_at, filters.period));
 
     cleanupPopupRoots();
     clusters.clearLayers();
@@ -1125,26 +1241,20 @@ export function MushroomMap() {
       const popupContainer = document.createElement('div');
       const popupRoot = createRoot(popupContainer);
 
-      // Provideren MÅ være med her.
-      //
-      // Dette er en løsrevet React-rot — Leaflet eier elementet, ikke React-
-      // treet vårt — og React-kontekst krysser ikke rot-grenser. Uten den
-      // kaster FindingPopup på sin aller første linje (`useTranslations`), og
-      // React lar roten stå tom. Brukeren klikker en soppmarkør og får en tom
-      // hvit boks: intet artsnavn, intet bilde, ingen dato, ingen lenke.
-      //
-      // Feilen kom inn med den svenske lokaliseringen (fae2940, 26. juni) og
-      // rammet ALLE brukere, ikke bare svenske. Se testen ved siden av
-      // FindingPopup, som fastholder at komponenten kaster uten provider.
+      // Provideren MÅ være med her — den bor i findingPopupElement, som HAR en
+      // test ved siden av seg. Dette er en løsrevet React-rot (Leaflet eier
+      // elementet), og React-kontekst krysser ikke rot-grenser: uten provider
+      // kaster FindingPopup på første linje og roten står tom. Fra 26. juni til
+      // 1. august ga hvert klikk på en soppmarkør en tom hvit boks for ALLE
+      // brukere. Ingen test laster denne fila, så wrappingen skal ikke ligge her.
       popupRoot.render(
-        <NextIntlClientProvider locale={locale} messages={messages}>
-          <FindingPopup
-            finding={finding}
-            displayName={
-              finding.species_id != null ? speciesNamesRef.current.get(finding.species_id) : undefined
-            }
-          />
-        </NextIntlClientProvider>
+        findingPopupElement({
+          finding,
+          displayName:
+            finding.species_id != null ? speciesNamesRef.current.get(finding.species_id) : undefined,
+          locale,
+          messages: messages as Record<string, unknown>
+        })
       );
       popupRootsRef.current.push(popupRoot);
 
@@ -1156,7 +1266,7 @@ export function MushroomMap() {
 
       clusters.addLayer(marker);
     }
-  }, [currentUserId, filters, supabase, locale, messages]);
+  }, [currentUserId, currentUsername, filters, supabase, locale, messages]);
 
   useEffect(() => {
     loadFindingsRef.current = loadFindings;
@@ -1339,9 +1449,19 @@ export function MushroomMap() {
   }, []);
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
-      setCurrentUserId(data.user?.id ?? null);
-    });
+    let cancelled = false;
+    void (async () => {
+      const { data } = await supabase.auth.getUser();
+      const id = data.user?.id ?? null;
+      if (cancelled) return;
+      setCurrentUserId(id);
+      if (!id) return;
+      const { data: profile } = await supabase.from('profiles').select('username').eq('id', id).maybeSingle();
+      if (!cancelled) setCurrentUsername((profile?.username as string | null) ?? null);
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [supabase]);
 
   useEffect(() => {
@@ -1367,6 +1487,10 @@ export function MushroomMap() {
   useEffect(() => {
     setOfflineAreas(readOfflineAreas());
   }, []);
+
+  useEffect(() => {
+    if (offlineOpen) void refreshStorageUsage();
+  }, [offlineOpen, refreshStorageUsage]);
 
   // Don't let a queued typeahead fire after the map unmounts.
   useEffect(
@@ -1411,7 +1535,14 @@ export function MushroomMap() {
       // tileHotspots er allerede kollapset til beste art per rute, så dette er
       // et snitt over STEDER — ikke, som før, et snitt på tvers av arter der
       // morkler utenfor sesong dro tallet ned hele høsten.
-      const avgScore = Math.round(tileHotspots.reduce((sum, item) => sum + item.score, 0) / tileHotspots.length);
+      //
+      // Snittet regnes over ALLE rutene i utsnittet (tileCellAverage), ikke over
+      // tegnelista: den er kuttet til de 80 høyest scorende, så et snitt av den
+      // er systematisk høyere enn stedet fortjener. Reserven under gjelder bare
+      // hvis snittet mangler.
+      const avgScore =
+        tileCellAverage ??
+        Math.round(tileHotspots.reduce((sum, item) => sum + item.score, 0) / tileHotspots.length);
       // Arten som drar snittet. Kartet har navnene ferdig oversatt allerede,
       // så det slipper å vente på API-svaret for å kunne merke tallet.
       const lead = tileHotspots.reduce((best, s) => (s.score > best.score ? s : best), tileHotspots[0]);
@@ -1424,11 +1555,9 @@ export function MushroomMap() {
             : undefined,
         // Same ladder as the server uses, so one number never gets two labels.
         condition: scoreToCondition(avgScore),
-        components: {
-          environment: 0,
-          historical: 0,
-          seasonal: 0
-        },
+        // Ingen `components` her med vilje: rasteret lagrer bare totalen per
+        // rute, og tre nuller ville sagt at miljø, historikk og sesong ER null.
+        // Panelet skjuler de tekniske tallene når oppdelingen mangler.
         weather: {
           temperature: 0,
           humidity: 0,
@@ -1455,7 +1584,7 @@ export function MushroomMap() {
     };
     // speciesNamesVersion: navnene lastes asynkront, og uten den ville panelet
     // stått uten artsnavn til noe annet tilfeldigvis utløste en ny beregning.
-  }, [prediction.data, tileHotspots, speciesNamesVersion]);
+  }, [prediction.data, tileHotspots, tileCellAverage, speciesNamesVersion]);
 
   useEffect(() => {
     const overlayData = panelData ?? prediction.data;
@@ -1848,7 +1977,7 @@ export function MushroomMap() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => deleteSavedArea(area.id)}
+                  onClick={() => void deleteSavedArea(area.id)}
                   className="inline-flex items-center gap-1 rounded border border-red-200 px-2 py-1 text-[11px] text-red-700 hover:bg-red-50"
                 >
                   <Trash2 className="h-3 w-3" />
@@ -1858,6 +1987,23 @@ export function MushroomMap() {
             </div>
           ))}
           {offlineAreas.length === 0 ? <p className="text-[11px] text-gray-600">{t('noSavedAreas')}</p> : null}
+        </div>
+
+        {/* Flisecachen var usynlig: ingen tak, ingen utløp, og ingen steder å se
+            eller rydde den. Tjenestearbeideren legger dessuten inn hver flis du
+            panorerer forbi, ikke bare de lagrede områdene. */}
+        <div className="mt-2 border-t border-gray-100 pt-2">
+          <p className="text-[11px] text-gray-600">
+            {storageMb != null ? t('storageUsage', { mb: storageMb }) : t('storageUsageUnknown')}
+          </p>
+          <button
+            type="button"
+            onClick={() => void clearTileCache()}
+            className="mt-1 inline-flex items-center gap-1 rounded border border-gray-300 px-2 py-1 text-[11px] font-medium text-gray-800 hover:bg-gray-50"
+          >
+            <Trash2 className="h-3 w-3" />
+            {t('clearTileCache')}
+          </button>
         </div>
 
         {/* /offline er den ene siden som kan åpnes uten dekning (precachet av

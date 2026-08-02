@@ -6,7 +6,7 @@ import { getBillingCapabilities, getUserBillingSubscription } from '@/lib/billin
 import { fetchWeatherSummary } from '@/lib/weather';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { getClientKey, rateLimitResponse } from '@/lib/rate-limit/route';
-import { computeSeasonalScore, scoreToCondition } from '@/lib/utils/prediction';
+import { COMPONENT_MAX, computeSeasonalScore, scoreToCondition } from '@/lib/utils/prediction';
 import type { SpeciesContext } from '@/lib/utils/species-scoring';
 import { getForestProperties, buildSpeciesHabitatPreferences } from '@/lib/forest';
 import { computeCellPrediction, type CellPrediction } from '@/lib/prediction/cell-score';
@@ -139,6 +139,8 @@ interface PredictionTileRow {
      */
     habitat?: { score: number; reasons: string[]; reasonsSv?: string[] } | null;
   } | null;
+  /** Generatoren legger rutestørrelsen (grader) her — se tile-regions.ts. */
+  metadata?: { region?: string; grid_size_deg?: number } | null;
 }
 
 /**
@@ -409,10 +411,15 @@ export async function GET(request: NextRequest) {
       const terrain = Math.round(weightedTotals.terrainSum / weightSum);
       const soil = clamp(terrain * 0.65 + vegetation * 0.35, 0, 100);
       const weatherTrend = moisture;
+      // SAMME NEVNER SOM FALLBACK-BANEN. Denne linja klampet til 0–100 mens
+      // computeCellPrediction (cell-score.ts) klamper miljøleddet til 0–50, så
+      // «Miljø 64» i Bergen og «Miljø 46» i Tromsø kom fra to ulike skalaer bak
+      // samme etikett — 46 er nesten maks på den ene, 64 er midt på treet på den
+      // andre. Ett tall, én nevner.
       const environment = clamp(
-        vegetation * 0.33 + moisture * 0.3 + terrain * 0.17 + soil * 0.1 + weatherTrend * 0.1,
+        (vegetation * 0.33 + moisture * 0.3 + terrain * 0.17 + soil * 0.1 + weatherTrend * 0.1) / 2,
         0,
-        100
+        COMPONENT_MAX.environment
       );
       const historical = Math.round(weightedTotals.historySum / weightSum);
 
@@ -434,7 +441,11 @@ export async function GET(request: NextRequest) {
           score: tile.score,
           // Hvilken art tallet gjelder. Uten dette er «60/100» på et sted uten
           // mening — det er 60 for kantarell, ikke for sopp som sådan.
-          speciesId: tile.species_id ?? null
+          speciesId: tile.species_id ?? null,
+          // Rutestørrelsen tallet faktisk er regnet for. Kartet tegner ruta i
+          // denne størrelsen i stedet for en liten sirkel, så tegningen ikke
+          // påstår mer om HVOR enn modellen kan bære.
+          gridSizeDeg: Number(tile.metadata?.grid_size_deg) || null
         }))
         .sort((a, b) => b.score - a.score)
         .slice(0, 20);
@@ -747,7 +758,11 @@ export async function GET(request: NextRequest) {
     const hotspotsFull = Array.from(hotspotsMap.values())
       .map((spot) => ({
         ...spot,
-        score: Math.min(100, Math.round(score * 0.6 + spot.count * 8))
+        score: Math.min(100, Math.round(score * 0.6 + spot.count * 8)),
+        // Punktene er funn klumpet på hele hundredels grader (nøkkelen over),
+        // så det er oppløsningen kartet skal tegne — ikke en sirkel på et par
+        // hundre meter rundt et koordinat som aldri var så presist.
+        gridSizeDeg: 0.01
       }))
       .sort((a, b) => b.score - a.score)
       .slice(0, 8);

@@ -11,6 +11,13 @@ export interface PredictionHotspot {
    * artsfliser. (Fallback-bane-SCOREN er artsoppdelt — se `leadingSpecies`.)
    */
   speciesId?: number | null;
+  /**
+   * Rutestørrelsen tallet gjelder for, i grader. Kartet tegner ruta i denne
+   * størrelsen i stedet for en liten sirkel, så tegningen ikke påstår mer om
+   * HVOR enn modellen kan bære (romlig AUC ~0,52). Null/undefined betyr ukjent
+   * oppløsning — da faller kartet tilbake til en nøytral sirkel.
+   */
+  gridSizeDeg?: number | null;
 }
 
 export interface PredictionTile {
@@ -124,7 +131,17 @@ export interface PredictionResponse {
   baseScore?: number;
   speciesFit?: number | null;
   condition: 'poor' | 'moderate' | 'good' | 'excellent';
-  components: {
+  /**
+   * Modellens tre råledd. SKALAENE ER FASTE OG ULIKE — se
+   * src/lib/utils/prediction.ts: miljø 0–50, historikk 0–35, sesong 0–15.
+   * De MÅ vises med nevner; «Sesong: 15» leses ellers som 15 av 100 når 15 er
+   * maksverdien. Begge kodeveier skal bruke de samme nevnerne.
+   *
+   * Utelates når svaret ikke har en ekte oppdeling å vise (kartets flisbane har
+   * bare den lagrede totalen per rute). Null-verdier ville påstått at leddene
+   * ER null, som er en annen og verre feil enn å la være å vise dem.
+   */
+  components?: {
     environment: number;
     historical: number;
     seasonal: number;

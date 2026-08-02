@@ -99,6 +99,14 @@ interface KartverketName {
   representasjonspunkt?: { nord?: number; 'øst'?: number };
 }
 
+/**
+ * Navneobjekttyper Kartverket returnerer som er NOEN SIN BOLIG eller gård, ikke
+ * et sted man drar på tur til. «Helsinki» ga «Helsing, Enebolig/mindre
+ * boligbygg · Asker» — en navngitt privatadresse foreslått som kartdestinasjon.
+ * De hører ikke hjemme i et søkeforslag uansett hvor godt de matcher.
+ */
+const PRIVATE_KARTVERKET_TYPES = new Set(['enebolig/mindre boligbygg', 'fritidsbolig', 'bruk']);
+
 async function searchKartverket(query: string, signal: AbortSignal): Promise<PlaceResult[]> {
   const params = new URLSearchParams({
     sok: query,
@@ -111,6 +119,7 @@ async function searchKartverket(query: string, signal: AbortSignal): Promise<Pla
   if (!res.ok) throw new Error(`kartverket ${res.status}`);
   const data = (await res.json()) as { navn?: KartverketName[] };
   return (data.navn ?? [])
+    .filter((n) => !PRIVATE_KARTVERKET_TYPES.has((n.navneobjekttype ?? '').trim().toLowerCase()))
     .map((n) => ({
       name: n['skrivemåte'] ?? '',
       context: [n.navneobjekttype, n.kommuner?.[0]?.kommunenavn, 'Norge'].filter(Boolean).join(' · '),
@@ -135,9 +144,15 @@ export async function searchPlacesServer(query: string, signal?: AbortSignal): P
   // exists for (Photon unreachable).
   const attempt = (ms: number) => (signal ? AbortSignal.any([signal, AbortSignal.timeout(ms)]) : AbortSignal.timeout(ms));
 
+  // «Photon svarte, men ingen av treffene lå i NO/SE» og «Photon svarte ikke»
+  // er to helt forskjellige tilstander, og bare den siste er en grunn til å
+  // spørre Kartverket. Da de var slått sammen (`if (results.length > 0) return`)
+  // endte hvert søk utenfor dekningsområdet i Kartverkets fuzzy-søk, som ALDRI
+  // svarer tomt: «Reykjavik» ble «Regavik, Vik i sjø · Bokn», «Paris» ble
+  // «Paris, Jorde · Osen», og kartet fløy dit. Et selvsikkert feil svar er
+  // verre enn ingen svar — det er nettopp det filhodet over lover å unngå.
   try {
-    const results = await searchPhoton(trimmed, attempt(4000));
-    if (results.length > 0) return results;
+    return await searchPhoton(trimmed, attempt(4000));
   } catch {
     // fall through to Kartverket (Norway only, but better than nothing)
   }

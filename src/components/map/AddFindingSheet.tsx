@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
 import { Camera } from 'lucide-react';
 import { buildUserUploadPath } from '@/lib/storage/upload-path';
@@ -8,6 +8,7 @@ import { createClient } from '@/lib/supabase/client';
 import { getSpeciesDisplayName } from '@/lib/utils/species-name';
 import { Button } from '@/components/ui/Button';
 import { reencodeImageForUpload } from '@/lib/utils/image';
+import { applyPositionOffset } from '@/lib/utils/position-offset';
 import { isNativePlatform } from '@/lib/native/platform';
 import { captureNativePhoto } from '@/lib/native/camera';
 
@@ -51,6 +52,12 @@ export function AddFindingSheet({ latitude, longitude, onClose, onSaved }: AddFi
   const [zoneLabel, setZoneLabel] = useState('');
   const [zonePrecisionKm, setZonePrecisionKm] = useState(5);
   const [positionOffsetMeters, setPositionOffsetMeters] = useState(0);
+  // Kursen forskyvningen går i. Den trekkes ÉN gang per slider-verdi, ikke per
+  // kall: forhåndsvisningen under skal vise nøyaktig det punktet som lagres.
+  // (Retningen må være tilfeldig — se applyPositionOffset. Den var låst til 45°,
+  // så alle justerte funn fra samme bruker lå skjøvet samme vei.)
+  const [offsetSeed, setOffsetSeed] = useState(() => Math.random());
+  const offsetBearing = useCallback(() => offsetSeed, [offsetSeed]);
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -83,14 +90,6 @@ export function AddFindingSheet({ latitude, longitude, onClose, onSaved }: AddFi
     } catch (err) {
       setError(err instanceof Error ? err.message : t('errorFetchImage'));
     }
-  };
-
-  const applyOffset = (lat: number, lng: number, meters: number) => {
-    if (meters <= 0) return { lat, lng };
-    const angle = (45 * Math.PI) / 180;
-    const deltaLat = (meters / 111320) * Math.cos(angle);
-    const deltaLng = (meters / (111320 * Math.cos((lat * Math.PI) / 180))) * Math.sin(angle);
-    return { lat: lat + deltaLat, lng: lng + deltaLng };
   };
 
   const uploadImage = async (file: File) => {
@@ -161,7 +160,7 @@ export function AddFindingSheet({ latitude, longitude, onClose, onSaved }: AddFi
         throw new Error(t('errorNotLoggedIn'));
       }
 
-      const adjusted = applyOffset(latitude, longitude, positionOffsetMeters);
+      const adjusted = applyPositionOffset(latitude, longitude, positionOffsetMeters, offsetBearing);
       const isNegative = findingType === 'negative';
       // No image for negative observations — there's nothing to photograph.
       const imageUrl = !isNegative && imageFile ? await uploadImage(imageFile) : null;
@@ -319,7 +318,10 @@ export function AddFindingSheet({ latitude, longitude, onClose, onSaved }: AddFi
             max={500}
             step={10}
             value={positionOffsetMeters}
-            onChange={(event) => setPositionOffsetMeters(Number(event.target.value))}
+            onChange={(event) => {
+              setPositionOffsetMeters(Number(event.target.value));
+              setOffsetSeed(Math.random());
+            }}
             className="mt-2 w-full"
           />
           <span className="text-xs text-gray-600">{t('offset', { meters: positionOffsetMeters })}</span>
@@ -328,8 +330,8 @@ export function AddFindingSheet({ latitude, longitude, onClose, onSaved }: AddFi
         {latitude && longitude ? (
           <p className="text-xs text-gray-600">
             {t('coordinatePreview', {
-              lat: applyOffset(latitude, longitude, positionOffsetMeters).lat.toFixed(5),
-              lng: applyOffset(latitude, longitude, positionOffsetMeters).lng.toFixed(5)
+              lat: applyPositionOffset(latitude, longitude, positionOffsetMeters, offsetBearing).lat.toFixed(5),
+              lng: applyPositionOffset(latitude, longitude, positionOffsetMeters, offsetBearing).lng.toFixed(5)
             })}
           </p>
         ) : null}
