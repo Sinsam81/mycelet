@@ -42,14 +42,14 @@ const COPY: Record<
     // («Gratis viser forenklet heatmap. Oppgrader for full detalj.») lovet
     // dermed noe leseren allerede hadde. Denne beskriver det premium faktisk
     // gir på kartet.
-    upsell: 'Premium gir lovende steder med begrunnelse, soppbilder på kartet og offline-kart.',
+    upsell: 'Premium gir lovende områder med begrunnelse, soppbilder på kartet og offline-kart.',
     noWeather: 'Værdata ikke tilgjengelig for disse koordinatene (mangler API-nøkkel eller stasjonsdata)',
     badCoordinates: 'Mangler eller ugyldige koordinater (lat/lon)',
     badSpeciesId: 'Ugyldig artsnummer',
     failed: 'Kunne ikke beregne soppforhold'
   },
   sv: {
-    upsell: 'Premium ger lovande platser med motivering, svampbilder på kartan och offlinekarta.',
+    upsell: 'Premium ger lovande områden med motivering, svampbilder på kartan och offlinekarta.',
     noWeather: 'Väderdata är inte tillgängliga för dessa koordinater (saknar API-nyckel eller stationsdata)',
     badCoordinates: 'Saknade eller ogiltiga koordinater (lat/lon)',
     badSpeciesId: 'Ogiltigt artnummer',

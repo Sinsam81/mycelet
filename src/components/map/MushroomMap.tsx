@@ -33,6 +33,7 @@ import {
   saveOfflineAreas
 } from '@/lib/utils/offlineMap';
 import { buildExplanation } from '@/lib/utils/prediction-explanation';
+import type { AreaReport } from '@/lib/prediction/area-report';
 import { intlLocale } from '@/lib/utils/intl-locale';
 import { colorForScore } from '@/lib/utils/condition-colors';
 import { scoreToCondition } from '@/lib/utils/prediction';
@@ -40,6 +41,9 @@ import { bestTilePerCell } from '@/lib/prediction/collapse-tiles';
 import { getSpeciesDisplayName } from '@/lib/utils/species-name';
 import { PlaceResult, searchPlaces } from '@/lib/utils/place-search';
 import { filterWithinRadiusKm, haversineKm } from '@/lib/utils/geo-distance';
+import { MIN_SEARCH_AREA_RADIUS_M, searchAreaRadiusForResponse } from '@/lib/utils/spot-area';
+import { createTopSpotArea } from './topSpotArea';
+import { buildTopSpotPopupHtml } from './topSpotPopup';
 import { readLocal, readLocalJson, removeLocal, writeLocal } from '@/lib/utils/safe-storage';
 import { PlaceForecastStrip } from './PlaceForecastStrip';
 import { FLAGS } from '@/lib/flags';
@@ -64,6 +68,28 @@ const FOREST_LABEL: Record<string, string> = {
   blandet: 'blandingsskog',
   apent: 'åpent landskap'
 };
+
+/**
+ * Ett av de anbefalte stedene fra /api/prediction/grid?top=N.
+ *
+ * `report` er områderapporten: serveren setter den sammen av feltene den har
+ * (skogtype, bonitet, volum, avstand til målingen, vær, sesong, nabolaget) og
+ * sender den ferdig formulert på leserens språk. Den er premium-halvdelen av
+ * funksjonen, så gratisbrukere får en nål uten rapport.
+ */
+type TopSpot = {
+  lat: number;
+  lng: number;
+  score: number;
+  forestType: string;
+  productivity: number | null;
+  verdict?: string;
+  reasons?: string[];
+  topSpecies?: string[];
+  report?: AreaReport;
+};
+
+
 
 function bearingLabel(aLat: number, aLng: number, bLat: number, bLng: number): string {
   const dLng = ((bLng - aLng) * Math.PI) / 180;
@@ -176,7 +202,7 @@ export function MushroomMap() {
   const [offlineOpen, setOfflineOpen] = useState(false);
   const [storageMb, setStorageMb] = useState<number | null>(null);
   const [toolsOpen, setToolsOpen] = useState(false);
-  const [topSpots, setTopSpots] = useState<{ lat: number; lng: number; score: number; forestType: string; productivity: number | null; verdict?: string; reasons?: string[]; topSpecies?: string[] }[] | null>(null);
+  const [topSpots, setTopSpots] = useState<TopSpot[] | null>(null);
   const [topLoading, setTopLoading] = useState(false);
   const [topMsg, setTopMsg] = useState<string | null>(null);
   const [topAccess, setTopAccess] = useState<'premium_full' | 'free_limited' | null>(null);
@@ -356,57 +382,42 @@ export function MushroomMap() {
     });
   }, [t]);
 
-  // "Lovende steder nær meg": numbered pins on promising forest cells within ~5 km.
+  // "Lovende områder nær meg": ett mykt søkeOMRÅDE per lovende rute i rutenettet.
+  //
+  // Her sto det nummererte nåler. En nål er kartets mest presise form, og tallet
+  // i den er en rangering — to påstander vi ikke har dekning for: koordinaten er
+  // senteret i en 1,4–10 km bred rute (se spot-area.ts), og valideringen skiller
+  // ikke område 1 fra område 4 innenfor skog. Se topSpotArea.ts for formvalgene.
   const renderTopSpots = useCallback(
     async (
-      spots: { lat: number; lng: number; score: number; forestType: string; productivity: number | null; verdict?: string; reasons?: string[]; topSpecies?: string[] }[],
+      spots: TopSpot[],
       origin: { lat: number; lng: number },
-      opts?: { limited?: boolean; speciesId?: number | null }
+      opts?: { limited?: boolean; speciesId?: number | null; radiusM?: number }
     ) => {
       const layer = topLayerRef.current;
       if (!mapRef.current || !layer) return;
       const leaflet = (await import('leaflet')).default;
       layer.clearLayers();
-      spots.forEach((spot, index) => {
-        const rank = index + 1;
+      const radiusM = opts?.radiusM && opts.radiusM > 0 ? opts.radiusM : MIN_SEARCH_AREA_RADIUS_M;
+      spots.forEach((spot) => {
         const color = colorForScore(spot.score).hex;
-        const icon = leaflet.divIcon({
-          className: 'top-spot-marker',
-          html: `<div style="background:${color};color:${colorForScore(spot.score).ink};border-radius:9999px;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,0.45)">${rank}</div>`,
-          iconSize: [28, 28],
-          iconAnchor: [14, 14]
+        const popup = buildTopSpotPopupHtml({
+          spot,
+          distanceKm: haversineKm(origin.lat, origin.lng, spot.lat, spot.lng),
+          directionLabel: t(`dir_${bearingLabel(origin.lat, origin.lng, spot.lat, spot.lng)}`),
+          radiusM,
+          limited: opts?.limited,
+          speciesId: opts?.speciesId ?? null,
+          locale,
+          t: t as (key: string, values?: Record<string, string | number>) => string
         });
-        const km = haversineKm(origin.lat, origin.lng, spot.lat, spot.lng);
-        const dirKey = bearingLabel(origin.lat, origin.lng, spot.lat, spot.lng);
-        const dir = t(`dir_${dirKey}`);
-        const reasonsHtml = (spot.reasons ?? []).map((r) => `<div style="margin-top:3px">${r}</div>`).join('');
-        const topSpeciesHtml = (spot.topSpecies ?? []).length
-          ? `<div style="margin-top:6px;font-size:12px;font-weight:600;color:#14532d">${t('mostLikelyHere', { species: (spot.topSpecies ?? []).join(', ') })}</div>`
-          : '';
-        const limitedHtml = opts?.limited
-          ? `<div style="margin-top:6px;font-size:12px;color:#92400e;background:#fef3c7;border-radius:8px;padding:5px 8px">${t('premiumWhyHigh')}</div>`
-          : '';
-        const feedbackHtml = `<div data-spot-feedback data-lat="${spot.lat}" data-lng="${spot.lng}" data-score="${spot.score}"${
-          opts?.speciesId ? ` data-species="${opts.speciesId}"` : ''
-        } data-model="v4_species_spots_habitat" data-source="computed_top_spots" style="margin-top:8px;border-top:1px solid #e5e7eb;padding-top:7px">
-          <div style="font-size:12px;font-weight:600;color:#1f2937">${t('wereYouHere')}</div>
-          <div style="display:flex;gap:6px;margin-top:5px">
-            <button type="button" data-fb="yes" style="flex:1;background:#15803d;color:#fff;border:none;border-radius:8px;padding:5px 0;font-size:12px;font-weight:600;cursor:pointer">${t('feedbackYes')}</button>
-            <button type="button" data-fb="no" style="flex:1;background:#f3f4f6;color:#374151;border:none;border-radius:8px;padding:5px 0;font-size:12px;font-weight:600;cursor:pointer">${t('feedbackNo')}</button>
-          </div>
-        </div>`;
-        const popup = `<div style="min-width:210px;max-width:265px">
-          <div style="font-weight:700;color:#14532d">${spot.verdict ?? t('topRank', { rank })}</div>
-          <div style="color:#555;font-size:12px;margin-top:2px">~${km.toFixed(1)} km ${dir} · ${spot.score}/100</div>
-          ${topSpeciesHtml}
-          <div style="font-size:12px;margin-top:6px;color:#1f2937">${reasonsHtml}</div>
-          ${limitedHtml}
-          <a href="https://www.google.com/maps/search/?api=1&query=${spot.lat},${spot.lng}" target="_blank" rel="noreferrer" style="display:block;margin-top:7px;color:#15803d;font-weight:600;font-size:12px;text-decoration:underline">${t('openInMapNavigate')}</a>
-          ${feedbackHtml}
-          <div style="color:#9ca3af;font-size:10px;margin-top:6px">${t('sourcesCredit')}</div>
-        </div>`;
-        const marker = leaflet.marker([spot.lat, spot.lng], { icon }).bindPopup(popup).addTo(layer);
-        marker.on('popupopen', (event) => bindSpotFeedback(event.popup));
+        const { area, center } = createTopSpotArea(leaflet, spot, radiusM, color);
+        // Popupen henger på begge: flata åpner den der du trykker (Leaflet gir
+        // Path-lag klikkpunktet), prikken er ankeret når området er lite.
+        area.bindPopup(popup).addTo(layer);
+        area.on('popupopen', (event) => bindSpotFeedback(event.popup));
+        center.bindPopup(popup).addTo(layer);
+        center.on('popupopen', (event) => bindSpotFeedback(event.popup));
       });
     },
     [bindSpotFeedback, t]
@@ -433,27 +444,39 @@ export function MushroomMap() {
       const originLat = place?.lat ?? latitude ?? center.lat;
       const originLng = place?.lng ?? longitude ?? center.lng;
 
-      type Spot = { lat: number; lng: number; score: number; forestType: string; productivity: number | null; verdict?: string; reasons?: string[]; topSpecies?: string[] };
+      type Spot = TopSpot;
 
       // Start local (5 km) and widen only when the near area has no promising
       // forest, so users in fields/towns still get pointed at the nearest good
       // ground instead of a dead-end message. 35 km stays inside the grid
       // route's bounds cap (2·35/111≈0.63° lat, ≤1.76° lng even at 69°N).
       const RADII_KM = [5, 10, 20, 35];
+      // Rutenettet vi ber om. Serveren kan sette den ned (gratisbrukere får 5),
+      // og sier i så fall fra i svaret — derfor leses cellestørrelsen derfra.
+      const GRID_N = 7;
       let spots: Spot[] = [];
       let usedRadius = RADII_KM[0];
       let limited = false;
+      // Radiusen sirklene tegnes med: halve cellebredden i rutenettet som
+      // faktisk ble brukt. Se src/lib/utils/spot-area.ts.
+      let areaRadiusM = MIN_SEARCH_AREA_RADIUS_M;
 
       for (let i = 0; i < RADII_KM.length; i++) {
         const radiusKm = RADII_KM[i];
         const latDelta = radiusKm / 111;
         const lngDelta = radiusKm / (111 * Math.cos((originLat * Math.PI) / 180));
+        const box = {
+          minLat: originLat - latDelta,
+          maxLat: originLat + latDelta,
+          minLng: originLng - lngDelta,
+          maxLng: originLng + lngDelta
+        };
         const params = new URLSearchParams({
-          minLat: String(originLat - latDelta),
-          maxLat: String(originLat + latDelta),
-          minLng: String(originLng - lngDelta),
-          maxLng: String(originLng + lngDelta),
-          n: '7',
+          minLat: String(box.minLat),
+          maxLat: String(box.maxLat),
+          minLng: String(box.minLng),
+          maxLng: String(box.maxLng),
+          n: String(GRID_N),
           top: '12'
         });
         if (sid) params.set('speciesId', String(sid));
@@ -488,6 +511,14 @@ export function MushroomMap() {
           spots = found;
           usedRadius = radiusKm;
           limited = data.access === 'free_limited';
+          areaRadiusM = searchAreaRadiusForResponse({
+            bounds: box,
+            requestedN: GRID_N,
+            lat: originLat,
+            cellLatSpan: data.cellLatSpan,
+            cellLngSpan: data.cellLngSpan,
+            n: data.n
+          });
           break;
         }
 
@@ -505,10 +536,22 @@ export function MushroomMap() {
 
       setTopAccess(limited ? 'free_limited' : 'premium_full');
       setTopSpots(spots);
-      await renderTopSpots(spots, { lat: originLat, lng: originLng }, { limited, speciesId: sid ?? null });
+      await renderTopSpots(
+        spots,
+        { lat: originLat, lng: originLng },
+        { limited, speciesId: sid ?? null, radiusM: areaRadiusM }
+      );
       const leaflet = (await import('leaflet')).default;
       const bounds = leaflet.latLngBounds(spots.map((s) => [s.lat, s.lng] as [number, number]));
       bounds.extend([originLat, originLng]);
+      // Kartobjektet er nå flata, ikke senterpunktet. Uten dette kunne et
+      // område på 10 km bli klippet halvveis av skjermkanten etter fitBounds.
+      const padLat = areaRadiusM / 111_320;
+      const padLng = padLat / Math.max(0.2, Math.cos((originLat * Math.PI) / 180));
+      spots.forEach((s) => {
+        bounds.extend([s.lat + padLat, s.lng + padLng]);
+        bounds.extend([s.lat - padLat, s.lng - padLng]);
+      });
       map.fitBounds(bounds.pad(0.2));
       const sName = sid != null ? speciesNamesRef.current.get(sid) ?? null : null;
       setTopMsg(
@@ -626,7 +669,7 @@ export function MushroomMap() {
         const popup = `<div style="min-width:210px;max-width:265px">
           <div style="font-weight:700;color:#14532d">${spot.displayName || spot.norwegianName}</div>
           <div style="font-style:italic;color:#6b7280;font-size:11px">${spot.latinName}</div>
-          <div style="color:#555;font-size:12px;margin-top:3px">${spot.verdict ?? t('promisingSpotHere')} · ${spot.score}/100</div>
+          <div style="color:#555;font-size:12px;margin-top:3px">${spot.verdict ?? t('promisingConditionsInArea')} · ${spot.score}/100</div>
           <div style="font-size:12px;margin-top:6px;color:#1f2937">${reasonsHtml}</div>
           <a href="https://www.google.com/maps/search/?api=1&query=${spot.lat},${spot.lng}" target="_blank" rel="noreferrer" style="display:block;margin-top:7px;color:#15803d;font-weight:600;font-size:12px;text-decoration:underline">${t('openInMapNavigate')}</a>
           <div style="color:#9ca3af;font-size:10px;margin-top:6px">${t('sourcesCredit')}</div>

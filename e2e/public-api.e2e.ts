@@ -32,7 +32,7 @@ test.describe('Helse', () => {
   });
 });
 
-test.describe('Prediksjon / Lovende steder', () => {
+test.describe('Prediksjon / Lovende områder', () => {
   test('NO-punkt (Oslo) svarer (Frost-ruting)', async ({ request }) => {
     const res = await request.get(`/api/prediction?lat=${OSLO.lat}&lon=${OSLO.lon}`);
     // 502 = ingen værkilde nåbar = infrastruktur, ikke kodefeil. Alt annet enn
