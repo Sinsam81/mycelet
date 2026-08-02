@@ -41,7 +41,7 @@ import { bestTilePerCell } from '@/lib/prediction/collapse-tiles';
 import { getSpeciesDisplayName } from '@/lib/utils/species-name';
 import { PlaceResult, searchPlaces } from '@/lib/utils/place-search';
 import { filterWithinRadiusKm, haversineKm } from '@/lib/utils/geo-distance';
-import { MIN_SEARCH_AREA_RADIUS_M, searchAreaRadiusForResponse } from '@/lib/utils/spot-area';
+import { SEARCH_AREA_RADIUS_M } from '@/lib/utils/spot-area';
 import { createTopSpotArea } from './topSpotArea';
 import { buildTopSpotPopupHtml } from './topSpotPopup';
 import { readLocal, readLocalJson, removeLocal, writeLocal } from '@/lib/utils/safe-storage';
@@ -269,7 +269,7 @@ export function MushroomMap() {
                 [spot.lat - cellDeg / 2, spot.lng - cellDeg / 2],
                 [spot.lat + cellDeg / 2, spot.lng + cellDeg / 2]
               ],
-              { color, fillColor: color, fillOpacity: 0.14, weight: 0, stroke: false }
+              { color, fillColor: color, fillOpacity: 0.07, weight: 0, stroke: false }
             )
           : leaflet.circle([spot.lat, spot.lng], {
               radius: Math.max(120, Math.min(450, 90 + spot.score * 3)),
@@ -411,7 +411,7 @@ export function MushroomMap() {
       if (!mapRef.current || !layer) return;
       const leaflet = (await import('leaflet')).default;
       layer.clearLayers();
-      const radiusM = opts?.radiusM && opts.radiusM > 0 ? opts.radiusM : MIN_SEARCH_AREA_RADIUS_M;
+      const radiusM = opts?.radiusM && opts.radiusM > 0 ? opts.radiusM : SEARCH_AREA_RADIUS_M;
       spots.forEach((spot) => {
         const color = colorForScore(spot.score).hex;
         const popup = buildTopSpotPopupHtml({
@@ -472,7 +472,7 @@ export function MushroomMap() {
       let limited = false;
       // Radiusen sirklene tegnes med: halve cellebredden i rutenettet som
       // faktisk ble brukt. Se src/lib/utils/spot-area.ts.
-      let areaRadiusM = MIN_SEARCH_AREA_RADIUS_M;
+      let areaRadiusM = SEARCH_AREA_RADIUS_M;
 
       for (let i = 0; i < RADII_KM.length; i++) {
         const radiusKm = RADII_KM[i];
@@ -524,14 +524,10 @@ export function MushroomMap() {
           spots = found;
           usedRadius = radiusKm;
           limited = data.access === 'free_limited';
-          areaRadiusM = searchAreaRadiusForResponse({
-            bounds: box,
-            requestedN: GRID_N,
-            lat: originLat,
-            cellLatSpan: data.cellLatSpan,
-            cellLngSpan: data.cellLngSpan,
-            n: data.n
-          });
+          // Fast én kvadratkilometer, ikke hele samplingscellen. Cellen kunne
+          // bli 10 km bred, og da dekket områdene hele landskapet — et kart som
+          // markerer alt markerer ingenting. Se SEARCH_AREA_RADIUS_M.
+          areaRadiusM = SEARCH_AREA_RADIUS_M;
           break;
         }
 
