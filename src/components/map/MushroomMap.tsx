@@ -1859,6 +1859,18 @@ export function MushroomMap() {
           ))}
           {offlineAreas.length === 0 ? <p className="text-[11px] text-gray-600">{t('noSavedAreas')}</p> : null}
         </div>
+
+        {/* /offline er den ene siden som kan åpnes uten dekning (precachet av
+            public/sw.js). Lenken ligger her for at brukeren skal få sett hva
+            som faktisk blir med ut i skogen — MENS det ennå er dekning. */}
+        <a
+          href="/offline"
+          className="mt-2 inline-flex items-center gap-1 rounded border border-gray-300 px-2 py-1 text-[11px] font-medium text-gray-800 hover:bg-gray-50"
+        >
+          <Navigation className="h-3 w-3" />
+          {t('openOfflineMap')}
+        </a>
+        <p className="mt-1 text-[11px] text-gray-600">{t('offlineShellHint')}</p>
       </div>
       ) : null}
 

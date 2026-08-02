@@ -139,7 +139,11 @@ const nextConfig = {
     return [
       // Clean URLs for the static «Sanketips» articles built by
       // scripts/build-articles.mjs into public/landing/sanketips/.
-      { source: '/sanketips/:slug', destination: '/landing/sanketips/:slug.html' }
+      { source: '/sanketips/:slug', destination: '/landing/sanketips/:slug.html' },
+      // Offline-skallet. public/sw.js precacher nøyaktig '/offline' og svarer
+      // med det når en navigasjon feiler uten dekning, så stien må finnes som
+      // en ekte URL — ikke bare som filen /offline/index.html.
+      { source: '/offline', destination: '/offline/index.html' }
     ];
   }
 };
