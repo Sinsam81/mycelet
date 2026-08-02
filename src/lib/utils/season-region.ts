@@ -98,6 +98,49 @@ export function nextMonth(month: number): number {
   return m === 12 ? 1 : m + 1;
 }
 
+/** Måneden før `month` (1–12), med wrap over nyttår. */
+export function previousMonth(month: number): number {
+  const m = clampMonth(month);
+  return m === 1 ? 12 : m - 1;
+}
+
+/**
+ * Maskens sammenhengende månedsintervaller, som `[fra, til]`-par.
+ *
+ * Brukes til å skrive masken ut som «jul – nov» i stedet for en liste med tolv
+ * månedsnavn. Intervaller som møtes over nyttår slås sammen, slik at
+ * vintersoppens okt–mars blir ett intervall og ikke to (jan–mar + okt–des).
+ * Hele året gir `[[1, 12]]`.
+ */
+export function seasonMonthRanges(mask: number): Array<[number, number]> {
+  const months = monthsInMask(mask);
+  if (months.length === 0) return [];
+  if (months.length === 12) return [[1, 12]];
+
+  const ranges: Array<[number, number]> = [];
+  let start = months[0];
+  let previous = months[0];
+  for (const month of months.slice(1)) {
+    if (month === previous + 1) {
+      previous = month;
+      continue;
+    }
+    ranges.push([start, previous]);
+    start = month;
+    previous = month;
+  }
+  ranges.push([start, previous]);
+
+  // Slå sammen over nyttår: siste intervall slutter i desember og det første
+  // starter i januar, altså er de i virkeligheten ett vindu.
+  if (ranges.length > 1 && ranges[0][0] === 1 && ranges[ranges.length - 1][1] === 12) {
+    const last = ranges.pop()!;
+    const first = ranges.shift()!;
+    ranges.unshift([last[0], first[1]]);
+  }
+  return ranges;
+}
+
 /**
  * Vinduet uten regionjustering: katalogvinduet utvidet med det empiriske
  * hele-Norden-vinduet. Dette er vinduet vi viser når vi ikke vet hvor brukeren

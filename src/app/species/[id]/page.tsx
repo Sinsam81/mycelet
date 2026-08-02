@@ -9,21 +9,31 @@ import { createClient } from '@/lib/supabase/server';
 import { getSpeciesDisplayName } from '@/lib/utils/species-name';
 import { edibilityNoteTone } from '@/lib/species/edibility-note';
 import { stripPoisonHotline } from '@/lib/utils/poison-hotline';
+import { baseSeasonMask, seasonMonthRanges } from '@/lib/utils/season-region';
 
 interface SpeciesDetailPageProps {
   params: Promise<{ id: string }>;
 }
 
-function formatSeason(
-  start: number,
-  end: number,
-  monthNames: string[],
-  emptyLabel: string
-): string {
-  const s = monthNames[start - 1];
-  const e = monthNames[end - 1];
-  if (!s || !e) return emptyLabel;
-  return start === end ? s : `${s} – ${e}`;
+/**
+ * Skriver ut sesongvinduet som «jul – nov».
+ *
+ * Vinduet er `baseSeasonMask`, altså det SAMME vinduet kalenderen,
+ * artsbiblioteket og «i sesong nå» bruker. Før leste denne siden
+ * season_start/season_end rått, og for arter der de håndsatte månedstallene er
+ * for smale sa siden «Sesong sep – nov» om en art kalenderen samtidig førte
+ * opp som i sesong i august. Samme art, samme dag, to svar.
+ */
+function formatSeasonMask(mask: number, monthNames: string[], emptyLabel: string): string {
+  const parts = seasonMonthRanges(mask)
+    .map(([start, end]) => {
+      const s = monthNames[start - 1];
+      const e = monthNames[end - 1];
+      if (!s || !e) return null;
+      return start === end ? s : `${s} – ${e}`;
+    })
+    .filter((part): part is string => part != null);
+  return parts.length > 0 ? parts.join(', ') : emptyLabel;
 }
 
 const DANGER_STYLES: Record<string, string> = {
@@ -231,7 +241,18 @@ export default async function SpeciesDetailPage({ params }: SpeciesDetailPagePro
               <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-forest-700">{t('detailsHeading')}</p>
               <div className="flex justify-between border-b border-gray-100 py-2">
                 <dt className="text-gray-600">{t('seasonLabel')}</dt>
-                <dd className="font-medium text-gray-900">{formatSeason(species.season_start, species.season_end, monthNames, t('emptyValue'))}</dd>
+                <dd className="font-medium text-gray-900">
+                  {formatSeasonMask(
+                    baseSeasonMask({
+                      id: species.id,
+                      edibility: species.edibility,
+                      season_start: species.season_start,
+                      season_end: species.season_end
+                    }),
+                    monthNames,
+                    t('emptyValue')
+                  )}
+                </dd>
               </div>
               <div className="flex justify-between border-b border-gray-100 py-2">
                 <dt className="text-gray-600">{t('habitatLabel')}</dt>
@@ -246,6 +267,11 @@ export default async function SpeciesDetailPage({ params }: SpeciesDetailPagePro
                 </div>
               ) : null}
             </dl>
+
+            {/* Sesongvinduet og kartets «forhold i dag» er to ulike spørsmål.
+                Uten denne linja leser «Sesong aug – nov» som «nå er det tid»,
+                og brukeren møter «Svake forhold» på kartet uten forklaring. */}
+            <p className="text-xs text-gray-600">{t('seasonNote')}</p>
           </div>
         </div>
 
@@ -260,6 +286,22 @@ export default async function SpeciesDetailPage({ params }: SpeciesDetailPagePro
             className="rounded-2xl border-2 border-amber-500 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900"
           >
             ⚠️ {t('lookAlikesUnavailable')}
+          </p>
+        ) : null}
+
+        {/*
+          Ingen registrerte forvekslingsarter ga tidligere en helt tom side:
+          seksjonen uteble, og stillheten var ikke til å skille fra «vi har
+          sjekket, og denne arten har ingen farlige tvillinger». 26 av 52
+          spiselige arter i katalogen har fortsatt null rader, så det er den
+          vanligste tilstanden — ikke et unntak. Identifiseringsflaten sier
+          allerede fra om det samme (lookAlikeNoneRecorded); artssiden gjorde
+          det ikke. Fravær av advarsel skal aldri kunne leses som en
+          trygghetserklæring.
+        */}
+        {!lookAlikesError && (lookAlikes?.length ?? 0) === 0 ? (
+          <p className="rounded-2xl border border-gray-300 bg-gray-50 px-4 py-3 text-sm text-gray-800">
+            {t('lookAlikesNoneRecorded')}
           </p>
         ) : null}
 

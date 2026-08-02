@@ -21,6 +21,12 @@
 
 BEGIN;
 
+-- Samme kolonne-reparasjon som øverst i 012: `primary_image_url` finnes i
+-- produksjon fordi den ble lagt til for hånd, men ingen migrasjon oppretter
+-- den. Uten denne linja stopper en base bygget fra bunnen her. IF NOT EXISTS
+-- gjør den til et null-operativt trinn mot en base som allerede har kolonnen.
+ALTER TABLE mushroom_species ADD COLUMN IF NOT EXISTS primary_image_url TEXT;
+
 -- ---------------------------------------------------------------
 -- A. TOXIC / DEADLY / INEDIBLE (safety priority — review these first)
 -- ---------------------------------------------------------------

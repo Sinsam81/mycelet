@@ -8,6 +8,7 @@ import {
   nextMonth,
   peakMask,
   seasonMask,
+  seasonMonthRanges,
   type LatitudeBand,
   type SeasonSpecies
 } from '@/lib/utils/season-region';
@@ -160,6 +161,54 @@ describe('månedsmasker', () => {
   it('toppsesong er tom når arten ikke har noen', () => {
     expect(peakMask({ peak_season_start: null, peak_season_end: null })).toBe(0);
     expect(monthsInMask(peakMask({ peak_season_start: 8, peak_season_end: 9 }))).toEqual([8, 9]);
+  });
+});
+
+describe('seasonMonthRanges — vinduet som tekst på artssiden', () => {
+  it('et sammenhengende vindu blir ett intervall', () => {
+    expect(seasonMonthRanges(monthMask(7, 10))).toEqual([[7, 10]]);
+  });
+
+  it('vinduet over nyttår blir ETT intervall, ikke to', () => {
+    // Vintersopp: okt–mars. Uten sammenslåingen ville siden skrevet
+    // «jan – mar, okt – des», som ser ut som to adskilte sesonger.
+    expect(seasonMonthRanges(monthMask(10, 3))).toEqual([[10, 3]]);
+  });
+
+  it('én måned blir et intervall med samme start og slutt', () => {
+    expect(seasonMonthRanges(monthMask(9, 9))).toEqual([[9, 9]]);
+  });
+
+  it('hele året blir jan – des', () => {
+    expect(seasonMonthRanges(monthMask(1, 12))).toEqual([[1, 12]]);
+  });
+
+  it('en tom maske gir ingen intervaller', () => {
+    expect(seasonMonthRanges(0)).toEqual([]);
+  });
+
+  it('to adskilte perioder holdes fra hverandre', () => {
+    const mask = monthMask(3, 3) | monthMask(7, 8);
+    expect(seasonMonthRanges(mask)).toEqual([
+      [3, 3],
+      [7, 8]
+    ]);
+  });
+
+  it('dekker nøyaktig de samme månedene som masken, for alle ekte vinduer', () => {
+    for (const id of Object.keys(SEASON_WINDOWS)) {
+      const mask = SEASON_WINDOWS[id].all;
+      const fromRanges = new Set<number>();
+      for (const [start, end] of seasonMonthRanges(mask)) {
+        let month = start;
+        for (let i = 0; i < 12; i++) {
+          fromRanges.add(month);
+          if (month === end) break;
+          month = month === 12 ? 1 : month + 1;
+        }
+      }
+      expect([...fromRanges].sort((a, b) => a - b)).toEqual(monthsInMask(mask));
+    }
   });
 });
 
