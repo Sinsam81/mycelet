@@ -7,7 +7,7 @@ import { useLocale, useTranslations } from 'next-intl';
 import { Check, Crown, Leaf, Loader2, ShieldCheck, Undo2 } from 'lucide-react';
 import { PageWrapper } from '@/components/layout/PageWrapper';
 import { BILLING_PLANS } from '@/lib/billing/plans';
-import { canPurchasePlan, getPlanViewState } from '@/lib/billing/plan-state';
+import { canPurchasePlan, getBlockingPaidPlan, getPlanViewState } from '@/lib/billing/plan-state';
 import { useIsNative } from '@/lib/hooks/useIsNative';
 import { trackEvent } from '@/lib/analytics';
 import { createClient } from '@/lib/supabase/client';
@@ -213,7 +213,24 @@ function PricingInner() {
     try {
       setIapBusy('purchase');
       setIapNotice(null);
-      const outcome = await purchaseIapOffer(offer);
+      // Vakten må lese en abonnementsstatus vi FAKTISK har fått svar på. Har
+      // ikke siden det ennå, hentes den her — et kjøp som starter på
+      // antakelsen «gratisbruker» er nettopp det som koster kunden dobbelt.
+      const current = status ?? (await loadStatus());
+      if (!current) {
+        setStatusError(t('errorLoadStatus'));
+        return;
+      }
+      // Samme fasit som 409-en i /api/billing/checkout: har kunden allerede
+      // en betalt plan, stoppes kjøpet før Apple-arket rekker å åpne seg.
+      const view = getPlanViewState(current.capabilities);
+      const outcome = await purchaseIapOffer(offer, view);
+      if (outcome === 'blocked-active-plan') {
+        // Navnet på planen som sperrer, fra samme visningstilstand vakten leste.
+        const blocking = getBlockingPaidPlan(view) ?? view.activeTier;
+        setStatusError(t('iapPlanChangeBlocked', { plan: TIER_LABELS[blocking] }));
+        return;
+      }
       if (outcome === 'success') {
         setIapNotice(t('iapPurchaseSuccess'));
         void refreshStatusUntilPaid();
