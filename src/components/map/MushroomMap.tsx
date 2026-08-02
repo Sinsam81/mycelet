@@ -36,7 +36,7 @@ import { buildExplanation, scoreVerdict } from '@/lib/utils/prediction-explanati
 import type { Locale } from '@/i18n/config';
 import type { AreaReport } from '@/lib/prediction/area-report';
 import { intlLocale } from '@/lib/utils/intl-locale';
-import { colorForScore } from '@/lib/utils/condition-colors';
+import { colorForScore, fillOpacityForScore } from '@/lib/utils/condition-colors';
 import { scoreToCondition } from '@/lib/utils/prediction';
 import { bestTilePerCell } from '@/lib/prediction/collapse-tiles';
 import { getSpeciesDisplayName } from '@/lib/utils/species-name';
@@ -265,24 +265,34 @@ export function MushroomMap() {
         // varmekart — som er nettopp det et lag med 3–8 km oppløsning bør se ut
         // som. Oppløsningen står i klartekst i popupen i stedet.
         //
-        // 0,13 er valgt ved å SE på det, ikke ved å gjette. Første forsøk uten
-        // kant satte 0,07, og da forsvant laget helt — fra «rutenett» til
-        // «ingenting» i ett hopp. 0,13 gir synlig fargeforskjell mellom
-        // nabocellene uten at det oppstår streker. Prøvekartet som avgjorde det
-        // tegner de ekte rutene over ekte Kartverket-fliser, uten innlogging.
+        // DEKKEVNEN ER GRADERT, IKKE FLAT. Se CONDITION_FILL_OPACITY.
+        //
+        // Her sto flate 0,13 for alle fire bøttene. Den verdien ble valgt ved å
+        // se på laget den gang tersklene var ukalibrerte og 71 % av rutene havnet
+        // i samme bøtte — det fantes altså knapt fire farger å skille mellom, og
+        // én dekkevne holdt. Etter kalibreringen er fordelingen reell, og da er
+        // fire farger på 0,13 fortsatt fire nesten usynlige farger: målt på
+        // prøvekartet var «før» og «etter» ikke til å skille med øyet selv om
+        // klassifiseringen gikk fra 0/88/10/2 % til 47/42/7/4 %.
+        //
+        // Fortsatt ingen kant: cellene ligger kant i kant, og en synlig strek gjør
+        // hele kartet til et rutenett — og påstår en grense der ingen går.
+        // Ærligheten ligger i STØRRELSEN på ruta, ikke i streken.
+        const fillOpacity = fillOpacityForScore(spot.score);
         const shape = cellDeg
           ? leaflet.rectangle(
               [
                 [spot.lat - cellDeg / 2, spot.lng - cellDeg / 2],
                 [spot.lat + cellDeg / 2, spot.lng + cellDeg / 2]
               ],
-              { color, fillColor: color, fillOpacity: 0.13, weight: 0, stroke: false }
+              { color, fillColor: color, fillOpacity, weight: 0, stroke: false }
             )
           : leaflet.circle([spot.lat, spot.lng], {
               radius: Math.max(120, Math.min(450, 90 + spot.score * 3)),
               color,
               fillColor: color,
-              fillOpacity: 0.2,
+              // Sirkelen er mye mindre enn ruta, så den tåler litt mer.
+              fillOpacity: Math.min(0.6, fillOpacity + 0.07),
               weight: 0,
               stroke: false
             });

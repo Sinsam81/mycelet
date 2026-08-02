@@ -139,10 +139,44 @@ export function computeTotalScore(components: PredictionComponents): number {
   return clamp(components.environment + components.historical + components.seasonal, 0, 100);
 }
 
+/**
+ * ÉN STIGE FOR HELE APPEN — farger, dommer og `condition` i API-svaret.
+ *
+ * Tersklene er kalibrert mot den FAKTISKE fordelingen, ikke mot en tenkt
+ * 0–100-skala. Målt over hele prediction_tiles i produksjon 2026-08-02
+ * (n = 1000):
+ *
+ *     spenn 43–85 · p25 = 50 · median = 55 · p75 = 59 · p95 = 80
+ *
+ * De gamle tersklene var 75/55/35. Laveste score som FINNES er 43, så «poor»
+ * krevde en verdi under minimum — bøtta var uoppnåelig, og 0 % av rasteret havnet
+ * der. 71 % havnet i «moderate». Kartet ble derfor én sammenhengende gulfarge, og
+ * appen kunne aldri si at det var lite sopp. Det var ikke ærlighet, det var en
+ * feilkalibrert skala.
+ *
+ * Årsaken til at scoren ikke sprer seg av seg selv: vegetation/terrain/soil er
+ * konstanten 50 når skogdata mangler (se computeAdvancedFactors), og de veier
+ * 52 % av miljøleddet — gulv 26, tak 74. Det er ikke rettet; tersklene tar høyde
+ * for det. Se docs/kalibrering-av-dommene.md.
+ *
+ * DE MÅ STÅ ETT STED. Da fargekartet og dommene hadde hver sin stige, malte kartet
+ * det beste terrenget i fargen brukeren leser som «ingenting her» — se
+ * kommentaren i condition-colors.ts. Verdiktteksten i prediction-explanation.ts
+ * importerer disse, så en grønn ring og en grønn rute alltid betyr det samme.
+ *
+ * Etterprøv i uke 38, når rasteret dekker høysesong: fordelingen flytter seg
+ * oppover, og «excellent» skal ikke fyre på halve kartet.
+ */
+export const CONDITION_THRESHOLDS = {
+  excellent: 72, // topp ~10 % av det som faktisk forekommer
+  good: 60, // topp ~25 %
+  moderate: 50 // rundt medianen
+} as const;
+
 export function scoreToCondition(score: number): 'poor' | 'moderate' | 'good' | 'excellent' {
-  if (score >= 75) return 'excellent';
-  if (score >= 55) return 'good';
-  if (score >= 35) return 'moderate';
+  if (score >= CONDITION_THRESHOLDS.excellent) return 'excellent';
+  if (score >= CONDITION_THRESHOLDS.good) return 'good';
+  if (score >= CONDITION_THRESHOLDS.moderate) return 'moderate';
   return 'poor';
 }
 
