@@ -9,9 +9,11 @@ import { getClientKey, rateLimitResponse } from '@/lib/rate-limit/route';
 import { computeSeasonalScore, scoreToCondition } from '@/lib/utils/prediction';
 import type { SpeciesContext } from '@/lib/utils/species-scoring';
 import { getForestProperties, buildSpeciesHabitatPreferences } from '@/lib/forest';
-import { computeCellPrediction } from '@/lib/prediction/cell-score';
+import { computeCellPrediction, type CellPrediction } from '@/lib/prediction/cell-score';
 import { bestTilePerCell } from '@/lib/prediction/collapse-tiles';
 import { nearestForestTile } from '@/lib/prediction/nearest-forest-tile';
+import { PREDICTION_SPECIES_LATIN_NAMES } from '@/lib/prediction/prediction-species';
+import { isRecommendableSpecies } from '@/lib/prediction/recommendable';
 import { dayOfYearOf } from '@/lib/prediction/phenology';
 import { weightedOccurrenceDensity, OCCURRENCE_FETCH_LIMIT } from '@/lib/prediction/occurrences';
 import { getElevation } from '@/lib/terrain';
@@ -60,6 +62,22 @@ interface FindingRow {
   display_lat: number | null;
   display_lng: number | null;
   found_at: string;
+}
+
+/** En kandidat til «hvilken art gjelder tallet» på fallback-banen. */
+interface CandidateSpeciesRow {
+  id: number;
+  norwegian_name: string | null;
+  swedish_name: string | null;
+  latin_name: string | null;
+  genus: string | null;
+  season_start: number | null;
+  season_end: number | null;
+  peak_season_start: number | null;
+  peak_season_end: number | null;
+  habitat: string[] | null;
+  mycorrhizal_partners: string[] | null;
+  edibility: string | null;
 }
 
 interface PredictionTileRow {
@@ -423,7 +441,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const [findingsRes, forest, occRes, elevationData] = await Promise.all([
+    const [findingsRes, forest, occRes, elevationData, candidateRes] = await Promise.all([
       supabase.rpc('get_findings_in_bounds', {
         min_lat: minLat,
         min_lng: minLng,
@@ -454,7 +472,17 @@ export async function GET(request: NextRequest) {
         { limit: OCCURRENCE_FETCH_LIMIT }
       ),
       // Real terrain elevation (Kartverket) → replaces the pseudo-noise proxy.
-      getElevation({ lat, lon })
+      getElevation({ lat, lon }),
+      // Artene tallet kan gjelde når kalleren ikke har bedt om én. Samme liste
+      // som rasteret bygges av, så de to banene svarer på samme spørsmål.
+      speciesId == null
+        ? supabase
+            .from('mushroom_species')
+            .select(
+              'id,norwegian_name,swedish_name,latin_name,genus,season_start,season_end,peak_season_start,peak_season_end,habitat,mycorrhizal_partners,edibility'
+            )
+            .in('latin_name', PREDICTION_SPECIES_LATIN_NAMES)
+        : Promise.resolve(null)
     ]);
     if (occRes.truncated) {
       log.warn('prediction.occurrences_truncated', {
@@ -484,27 +512,104 @@ export async function GET(request: NextRequest) {
     const recent30d = findings.filter((f) => now - new Date(f.found_at).getTime() <= 30 * dayMs).length;
     const recent365d = findings.filter((f) => now - new Date(f.found_at).getTime() <= 365 * dayMs).length;
 
-    // Shared scoring — the exact same pipeline the tile generator uses.
-    const cell = computeCellPrediction({
+    // Alt som IKKE varierer med art. Hentes én gang og gjenbrukes over
+    // kandidatene — samme mønster som /api/prediction/species-spots.
+    const sharedCellInput = {
       lat,
       lon,
       month,
       dayOfYear: dayOfYearOf(new Date()),
       weather: { temperature: currentTemp, humidity: currentHumidity, rain3dMm, soilMoistureIndex: weather.soilMoistureIndex },
       forest,
+      recent30d,
+      recent365d,
+      nearbyOccurrences,
+      elevation: elevationData?.elevationM ?? null,
+      locale
+    };
+
+    // Shared scoring — the exact same pipeline the tile generator uses.
+    let cell = computeCellPrediction({
+      ...sharedCellInput,
       species: speciesContext,
       speciesHabitat: speciesSummary
         ? buildSpeciesHabitatPreferences({
             mycorrhizalPartners: speciesSummary.mycorrhizalPartners,
             habitat: speciesSummary.habitat
           })
-        : null,
-      recent30d,
-      recent365d,
-      nearbyOccurrences,
-      elevation: elevationData?.elevationM ?? null,
-      locale
+        : null
     });
+
+    // Uten artsfilter svarte denne banen før med ett artsløst tall, mens
+    // flisbanen svarer med den beste arten på stedet (PR #113). Samme panel,
+    // samme 0-100-flate, to ulike størrelser — og ingenting i svaret sa hvilken
+    // av dem brukeren så på.
+    //
+    // Her stilles derfor samme spørsmål som rasteret stiller: hvilken av
+    // prediksjonsartene ligger best an her nå, og hvor godt. Samme artsliste og
+    // samme computeCellPrediction som generatoren, så banene ikke kan drifte fra
+    // hverandre. Kandidatene koster ingenting ekstra: vær, skog, høyde og funn
+    // er allerede hentet, og bare den rene multiplikatoren skiller artene.
+    //
+    // Merk at dette ikke påstår noe mer om HVOR soppen står — den romlige delen
+    // har ærlig AUC rundt 0,52. Det navngivningen gjør er å flytte tallet over
+    // på tidsdelen, som er den validerte (AUC 0,89).
+    //
+    // Klarer vi det ikke — spørringen feiler, eller ingen kandidat overlever
+    // filteret — beholdes det generelle tallet og `leadingSpecies` står tom.
+    // Panelet sier da uttrykkelig at ingen art er navngitt, i stedet for å la
+    // tallet stå der og se ut som flisbanens artstall.
+    let leadingSpecies: { id: number; norwegianName: string; swedishName: string | null } | null = null;
+    if (speciesId == null) {
+      if (candidateRes?.error) {
+        log.warn('prediction.leading_species_candidates_failed', { message: candidateRes.error.message });
+      }
+      const candidates = ((candidateRes?.data ?? []) as CandidateSpeciesRow[]).filter(
+        (sp) =>
+          sp.season_start != null &&
+          sp.season_end != null &&
+          // Navnet står ved siden av «gode forhold» på et sted i kartet. Det er
+          // en invitasjon, ikke et oppslagsverk — aldri en giftig art der.
+          // isRecommendableSpecies feiler lukket på ukjent/manglende verdi.
+          isRecommendableSpecies(sp.edibility)
+      );
+
+      let best: { row: CandidateSpeciesRow; prediction: CellPrediction } | null = null;
+      for (const sp of candidates) {
+        const prediction = computeCellPrediction({
+          ...sharedCellInput,
+          species: {
+            speciesId: sp.id,
+            latinName: sp.latin_name,
+            genus: sp.genus,
+            seasonStart: sp.season_start as number,
+            seasonEnd: sp.season_end as number,
+            peakSeasonStart: sp.peak_season_start,
+            peakSeasonEnd: sp.peak_season_end
+          },
+          speciesHabitat: buildSpeciesHabitatPreferences({
+            mycorrhizalPartners: sp.mycorrhizal_partners,
+            habitat: sp.habitat
+          })
+        });
+        // Uavgjort brytes på lavest id, som i bestTilePerCell. Ellers kunne to
+        // like gode arter bytte på å bli navngitt mellom hver panorering.
+        const better =
+          !best ||
+          prediction.score > best.prediction.score ||
+          (prediction.score === best.prediction.score && sp.id < best.row.id);
+        if (better) best = { row: sp, prediction };
+      }
+
+      if (best) {
+        cell = best.prediction;
+        leadingSpecies = {
+          id: best.row.id,
+          norwegianName: best.row.norwegian_name ?? '',
+          swedishName: best.row.swedish_name
+        };
+      }
+    }
 
     const { score, baseScore, speciesFit, habitatFit, habitat: habitatScore, factors: advancedFactors } = cell;
     const { environment, historical, seasonal } = cell.components;
@@ -559,6 +664,7 @@ export async function GET(request: NextRequest) {
       forestSource: forest?.source ?? 'none',
       forestType: forest?.forestType ?? null,
       condition,
+      leadingSpeciesId: leadingSpecies?.id ?? null,
       weatherSource: weather.source,
       findingsInArea: findings.length
     });
@@ -616,6 +722,7 @@ export async function GET(request: NextRequest) {
         : null,
       habitat: habitatScore ? { score: habitatScore.score, reasons: habitatScore.reasons } : undefined,
       hotspots,
+      leadingSpecies: leadingSpecies ?? undefined,
       species: speciesSummary ?? undefined
     });
   } catch (error) {
