@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { Session, User } from '@supabase/supabase-js';
 import { createClient } from '@/lib/supabase/client';
 import { TERMS_VERSION } from '@/lib/legal';
-import { ensureProfile } from '@/lib/auth/ensure-profile';
+import { ensureProfileOnce } from '@/lib/auth/profile-self-heal';
 
 interface SignUpPayload {
   email: string;
@@ -49,13 +49,15 @@ export function useAuth() {
     if (error) throw error;
 
     // Selvhelbredelse for kontoer som mistet profilen sin under registrering
-    // (se ensure-profile.ts). Callback-ruten gjorde allerede dette for OAuth og
-    // e-postbekreftelse; passordinnlogging hadde ingen slik redning, så en
-    // bruker som ble rammet var permanent låst ute av appen sin.
+    // (se ensure-profile.ts). ProfileSelfHeal gjør det samme for enhver økt,
+    // men her venter vi på svaret FØR innloggingen regnes som ferdig, slik at
+    // brukeren ikke lander på /map og lagrer et funn i det halvsekundet
+    // reparasjonen fortsatt er underveis.
     //
-    // Har profilen allerede (det normale), er dette en no-op.
+    // ensureProfileOnce deler forsøket med ProfileSelfHeal, så SIGNED_IN-
+    // hendelsen og dette kallet blir ett nettverkskall, ikke to.
     if (data.user) {
-      const { error: profileError } = await ensureProfile(supabase, data.user);
+      const { error: profileError } = await ensureProfileOnce(supabase, data.user);
       if (profileError) {
         // Innloggingen lyktes — vi skal ikke ta den fra dem fordi en
         // reparasjon ikke gikk. Men det må være synlig.
