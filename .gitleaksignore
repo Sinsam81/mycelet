@@ -8,7 +8,14 @@
 #
 # (Første versjon av denne kommentaren SITERTE de oppdiktede nøklene for å vise
 # hvor harmløse de er. Da flagget gitleaks denne fila i stedet. Forklaringen
-# gjengir dem derfor ikke.)
+# gjengir dem derfor ikke — men den gamle commiten ligger fortsatt i
+# historikken, og gitleaks skanner HISTORIKK, ikke arbeidstreet. Derfor står
+# fingeravtrykket for den nederst.
+#
+# Det er en påminnelse verdt å ta med seg: hadde dette vært en ekte nøkkel,
+# ville det å fjerne den fra arbeidstreet ikke hjulpet i det hele tatt. Eneste
+# riktige svar på en ekte lekkasje er å RULLERE nøkkelen — akkurat som med
+# Apple-review-passordet i juli.)
 #
 # ⚠️ Merk hva denne fila IKKE er: en generell demping av gitleaks. Hver linje er
 # ett fingeravtrykk for ett funn i én fil. Et nytt funn andre steder feiler
@@ -20,3 +27,6 @@
 27af890ca6bb224f7f01b844018b56065db28579:src/lib/log/__tests__/pii.test.ts:generic-api-key:99
 27af890ca6bb224f7f01b844018b56065db28579:src/lib/log/__tests__/pii.test.ts:stripe-access-token:112
 27af890ca6bb224f7f01b844018b56065db28579:src/lib/log/__tests__/pii.test.ts:stripe-access-token:113
+
+# Historisk: den gamle versjonen av denne fila, som siterte testnøklene.
+255b852f5efb76a31994e95843225eeab26ec3e0:.gitleaksignore:stripe-access-token:6
