@@ -33,6 +33,7 @@ import {
   saveOfflineAreas
 } from '@/lib/utils/offlineMap';
 import { buildExplanation } from '@/lib/utils/prediction-explanation';
+import type { AreaReport } from '@/lib/prediction/area-report';
 import { intlLocale } from '@/lib/utils/intl-locale';
 import { colorForScore } from '@/lib/utils/condition-colors';
 import { scoreToCondition } from '@/lib/utils/prediction';
@@ -67,6 +68,55 @@ const FOREST_LABEL: Record<string, string> = {
   blandet: 'blandingsskog',
   apent: 'åpent landskap'
 };
+
+/**
+ * Ett av de anbefalte stedene fra /api/prediction/grid?top=N.
+ *
+ * `report` er områderapporten: serveren setter den sammen av feltene den har
+ * (skogtype, bonitet, volum, avstand til målingen, vær, sesong, nabolaget) og
+ * sender den ferdig formulert på leserens språk. Den er premium-halvdelen av
+ * funksjonen, så gratisbrukere får en nål uten rapport.
+ */
+type TopSpot = {
+  lat: number;
+  lng: number;
+  score: number;
+  forestType: string;
+  productivity: number | null;
+  verdict?: string;
+  reasons?: string[];
+  topSpecies?: string[];
+  report?: AreaReport;
+};
+
+/**
+ * Popupene for toppsteder bygges som HTML-strenger (Leaflet-API-et tar en
+ * streng), og rapportlinjene inneholder navn fra databasen. Alt som ikke er
+ * vår egen markup escapes derfor før det limes inn.
+ */
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+/** Områderapporten som lesbare avsnitt: overskrift + korte linjer. */
+function areaReportHtml(report: AreaReport | undefined): string {
+  if (!report || report.sections.length === 0) return '';
+  return report.sections
+    .map((section) => {
+      const lines = section.lines
+        .map((line) => `<div style="margin-top:3px">${escapeHtml(line)}</div>`)
+        .join('');
+      return `<div style="margin-top:9px">
+        <div style="font-size:11px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;color:#4b5563">${escapeHtml(section.heading)}</div>
+        <div style="font-size:12px;color:#1f2937;line-height:1.45">${lines}</div>
+      </div>`;
+    })
+    .join('');
+}
 
 function bearingLabel(aLat: number, aLng: number, bLat: number, bLng: number): string {
   const dLng = ((bLng - aLng) * Math.PI) / 180;
@@ -179,7 +229,7 @@ export function MushroomMap() {
   const [offlineOpen, setOfflineOpen] = useState(false);
   const [storageMb, setStorageMb] = useState<number | null>(null);
   const [toolsOpen, setToolsOpen] = useState(false);
-  const [topSpots, setTopSpots] = useState<{ lat: number; lng: number; score: number; forestType: string; productivity: number | null; verdict?: string; reasons?: string[]; topSpecies?: string[] }[] | null>(null);
+  const [topSpots, setTopSpots] = useState<TopSpot[] | null>(null);
   const [topLoading, setTopLoading] = useState(false);
   const [topMsg, setTopMsg] = useState<string | null>(null);
   const [topAccess, setTopAccess] = useState<'premium_full' | 'free_limited' | null>(null);
@@ -367,7 +417,7 @@ export function MushroomMap() {
   // ikke område 1 fra område 4 innenfor skog. Se topSpotArea.ts for formvalgene.
   const renderTopSpots = useCallback(
     async (
-      spots: { lat: number; lng: number; score: number; forestType: string; productivity: number | null; verdict?: string; reasons?: string[]; topSpecies?: string[] }[],
+      spots: TopSpot[],
       origin: { lat: number; lng: number },
       opts?: { limited?: boolean; speciesId?: number | null; radiusM?: number }
     ) => {
@@ -420,7 +470,7 @@ export function MushroomMap() {
       const originLat = place?.lat ?? latitude ?? center.lat;
       const originLng = place?.lng ?? longitude ?? center.lng;
 
-      type Spot = { lat: number; lng: number; score: number; forestType: string; productivity: number | null; verdict?: string; reasons?: string[]; topSpecies?: string[] };
+      type Spot = TopSpot;
 
       // Start local (5 km) and widen only when the near area has no promising
       // forest, so users in fields/towns still get pointed at the nearest good

@@ -424,6 +424,17 @@ function formatDistance(km: number, copy: ExplanationCopy): string {
   return copy.distanceKilometers((Math.round(safe * 10) / 10).toFixed(1).replace('.', ','));
 }
 
+/**
+ * Skogtypen på leserens språk ('gran' → «granskog» / «granskog», 'furu' →
+ * «furuskog» / «tallskog»). Eksportert så områderapporten
+ * (src/lib/prediction/area-report.ts) navngir skogen med de samme ordene som
+ * forklaringslinjene — ellers ville de to tekstene i samme popup kunne kalle
+ * den samme skogen to ting.
+ */
+export function forestTypeLabel(forestType: string, locale: Locale | undefined): string {
+  return forestLabel(forestType, copyFor(locale));
+}
+
 /** Map the habitat-fit multiplier to a color level for the UI. */
 function habitatLevel(score: number | null): ExplanationLevel {
   if (score == null) return 'neutral';
