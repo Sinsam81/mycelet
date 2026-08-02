@@ -5,12 +5,25 @@ import { getStripeServerClient } from '@/lib/stripe/server';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { getClientKey, rateLimitResponse } from '@/lib/rate-limit/route';
 import { createRequestLogger } from '@/lib/log/request';
+import { billingCopy } from '@/lib/billing/copy';
+import { getUserLocale } from '@/i18n/locale';
+import { DEFAULT_LOCALE, type Locale } from '@/i18n/config';
 
 export const runtime = 'nodejs';
 
 export async function POST(request: NextRequest) {
   const log = createRequestLogger(request);
   log.info('billing.portal.start');
+
+  // Samme grunn som i checkout-ruta: svarene under er tekst kunden leser, og
+  // next-intl dekker ikke det som genereres på serveren.
+  let locale: Locale = DEFAULT_LOCALE;
+  try {
+    locale = await getUserLocale();
+  } catch {
+    // beholder norsk
+  }
+
   try {
     const supabase = createClient();
     const {
@@ -19,7 +32,7 @@ export async function POST(request: NextRequest) {
 
     if (!user) {
       log.info('billing.portal.unauthenticated');
-      return NextResponse.json({ error: 'Ikke autentisert' }, { status: 401 });
+      return NextResponse.json({ error: billingCopy('unauthenticated', locale) }, { status: 401 });
     }
 
     const userLog = log.child({ userId: user.id });
@@ -35,7 +48,7 @@ export async function POST(request: NextRequest) {
     const subscription = await getUserBillingSubscription(supabase, user.id);
     if (!subscription?.stripe_customer_id) {
       userLog.warn('billing.portal.no_customer');
-      return NextResponse.json({ error: 'Fant ingen aktiv Stripe-kunde' }, { status: 400 });
+      return NextResponse.json({ error: billingCopy('portalNoCustomer', locale) }, { status: 400 });
     }
 
     const stripe = getStripeServerClient();
@@ -50,14 +63,10 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ url: session.url });
   } catch (error) {
+    // Rå Stripe-feiltekst hører hjemme i loggen (linja over), ikke i den røde
+    // boksen på prissiden.
     log.error('billing.portal.unexpected_failure', error);
-    return NextResponse.json(
-      {
-        error: 'Kunne ikke åpne kundeside',
-        details: error instanceof Error ? error.message : 'unknown'
-      },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: billingCopy('portalFailed', locale) }, { status: 500 });
   }
 }
 

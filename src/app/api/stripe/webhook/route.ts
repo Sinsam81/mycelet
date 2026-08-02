@@ -1,10 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Stripe from 'stripe';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { BillingStatus, BillingTier, hasPaidAccess, resolveTierByPriceId } from '@/lib/billing/plans';
+import { BillingTier, resolveTierByPriceId } from '@/lib/billing/plans';
 import { getStripeServerClient } from '@/lib/stripe/server';
 import { createRequestLogger } from '@/lib/log/request';
 import { resolveSubscriptionPeriod, type SubscriptionPeriod } from '@/lib/billing/subscription-period';
+import { seasonPassEndDateIso } from '@/lib/billing/season-pass';
+import {
+  decideStripeWrite,
+  type StripeBillingRow,
+  type StripeEventFacts
+} from '@/lib/billing/stripe-webhook-decision';
 
 export const runtime = 'nodejs';
 
@@ -17,16 +23,6 @@ function mapStripeStatus(status: Stripe.Subscription.Status) {
   if (status === 'incomplete') return 'incomplete';
   if (status === 'incomplete_expired') return 'incomplete_expired';
   return 'inactive';
-}
-
-function computeSeasonPassEndDateIso() {
-  const now = new Date();
-  const currentYear = now.getUTCFullYear();
-  const endThisSeason = new Date(Date.UTC(currentYear, 10, 30, 23, 59, 59)); // 30. nov
-  if (now.getTime() <= endThisSeason.getTime()) {
-    return endThisSeason.toISOString();
-  }
-  return new Date(Date.UTC(currentYear + 1, 10, 30, 23, 59, 59)).toISOString();
 }
 
 async function upsertBillingByUserId(payload: {
@@ -101,32 +97,83 @@ async function resolveUserIdFromCustomer(customerId: string) {
 }
 
 /**
- * Cross-provider guard (mirror of the RevenueCat webhook's rule): the row is
- * dual-provider, and metadata.provider records who wrote it last. A Stripe
- * REVOKE (canceled/deleted/unpaid on an old web subscription) must not clobber
- * a row RevenueCat owns while the user actively pays via Apple/Google. Grants
- * always apply — new money takes ownership.
+ * Raden slik den står nå. Alle vaktene i decideStripeWrite leser den:
+ * rekkefølge (metadata.stripe_event_created), hvilket abonnement raden peker
+ * på, om RevenueCat eier den, og om det ligger et manuelt tildelt pass der.
+ *
+ * Feiler lesingen KASTER vi. Da får Stripe en ikke-2xx og prøver på nytt —
+ * mye bedre enn å skrive i blinde og risikere at en betalende kunde mister
+ * tilgangen fordi vakten ikke fikk lest raden sin.
  */
-async function isRowOwnedByActiveIap(userId: string): Promise<boolean> {
+async function readBillingRow(userId: string): Promise<StripeBillingRow | null> {
   const admin = createAdminClient();
   const { data, error } = await admin
     .from('billing_subscriptions')
-    .select('tier,status,current_period_end,metadata')
+    .select('tier,status,current_period_start,current_period_end,cancel_at_period_end,stripe_subscription_id,metadata')
     .eq('user_id', userId)
-    .maybeSingle<{ tier: string; status: string; current_period_end: string | null; metadata: Record<string, unknown> | null }>();
+    .maybeSingle<StripeBillingRow>();
 
-  // On read failure, err on the side of NOT writing (throw → 400/500 →
-  // Stripe retries the event) rather than risking a wrongful downgrade.
-  if (error) throw new Error(error.message);
-  if (!data) return false;
-  return (
-    data.metadata?.provider === 'revenuecat' &&
-    hasPaidAccess(data.status as BillingStatus, data.tier as BillingTier, data.current_period_end)
-  );
+  if (error) throw new Error(`readBillingRow failed: ${error.message}`);
+  return data ?? null;
 }
 
-function isPaidStatus(status: string) {
-  return status === 'active' || status === 'trialing';
+/**
+ * Les raden, avgjør hva som skal skrives, og skriv det.
+ *
+ * All logikken ligger i decideStripeWrite (ren, testet). Her er bare I/O-en og
+ * loggingen — inkludert de tre tilfellene der vi bevisst IKKE skriver, som må
+ * være synlige i loggen for å kunne feilsøkes.
+ */
+async function applyDecision(
+  facts: StripeEventFacts,
+  target: { userId: string; customerId: string | null; subscriptionId: string | null; priceId: string | null },
+  log: ReturnType<typeof createRequestLogger>
+) {
+  const existing = await readBillingRow(target.userId);
+  const decision = decideStripeWrite(facts, existing);
+
+  if (decision.action === 'skip') {
+    log.warn('stripe.webhook.write_skipped', {
+      eventType: facts.eventType,
+      userId: target.userId,
+      reason: decision.reason,
+      subscriptionId: facts.subscriptionId
+    });
+    return;
+  }
+
+  if (decision.tierKept) {
+    // Pris-ID-en i hendelsen finnes ikke i STRIPE_PRICE_*. Uten vakten hadde
+    // kunden blitt satt til tier 'free' midt i et løpende abonnement.
+    log.warn('stripe.webhook.unknown_price_kept_tier', {
+      eventType: facts.eventType,
+      userId: target.userId,
+      priceId: target.priceId,
+      tier: decision.write.tier
+    });
+  }
+  if (decision.manualGrantFloor) {
+    log.warn('stripe.webhook.manual_grant_floor', {
+      eventType: facts.eventType,
+      userId: target.userId,
+      tier: decision.write.tier,
+      currentPeriodEnd: decision.write.currentPeriodEnd
+    });
+  }
+
+  await upsertBillingByUserId({
+    userId: target.userId,
+    tier: decision.write.tier,
+    status: decision.write.status,
+    stripeCustomerId: target.customerId,
+    stripeSubscriptionId: target.subscriptionId,
+    stripePriceId: target.priceId,
+    currentPeriodStart: decision.write.currentPeriodStart,
+    currentPeriodEnd: decision.write.currentPeriodEnd,
+    periodUnknown: decision.write.periodUnknown,
+    cancelAtPeriodEnd: decision.write.cancelAtPeriodEnd,
+    metadata: decision.write.metadata
+  });
 }
 
 /**
@@ -256,37 +303,53 @@ export async function POST(request: NextRequest) {
             subscriptionId: subscription.id
           });
 
-          await upsertBillingByUserId({
-            userId,
-            tier,
-            status: mapStripeStatus(subscription.status),
-            stripeCustomerId: customerId,
-            stripeSubscriptionId: subscription.id,
-            stripePriceId: priceId,
-            currentPeriodStart: period.start,
-            currentPeriodEnd: period.end,
-            periodUnknown: period.source === 'missing',
-            cancelAtPeriodEnd: subscription.cancel_at_period_end,
-            metadata: { provider: 'stripe', source: 'checkout.session.completed' }
-          });
+          await applyDecision(
+            {
+              eventType: 'checkout.session.completed',
+              eventCreated: event.created,
+              subscriptionId: subscription.id,
+              status: mapStripeStatus(subscription.status),
+              tier,
+              currentPeriodStart: period.start,
+              currentPeriodEnd: period.end,
+              periodUnknown: period.source === 'missing',
+              cancelAtPeriodEnd: subscription.cancel_at_period_end,
+              // Abonnementet er nettopp hentet fra Stripe, så innholdet er
+              // sant nå — også hvis selve hendelsen er en gammel retry.
+              freshFromApi: true
+            },
+            { userId, customerId, subscriptionId: subscription.id, priceId },
+            log
+          );
         }
       }
 
       if (session.mode === 'payment') {
+        // Død gren i dag: checkout-ruta setter alltid mode 'subscription', og
+        // begge live-prisene er recurring. Beholdt for det tilfellet at et
+        // engangsprodukt legges inn — men med riktig varighet. Den regnet
+        // tidligere ut «30. november», altså to måneder for en kunde som
+        // kjøpte 1. oktober, mens vi lover ett år.
         const customerId = typeof session.customer === 'string' ? session.customer : null;
         const userId = metadataUserId ?? (customerId ? await resolveUserIdFromCustomer(customerId) : null);
         if (userId) {
-          await upsertBillingByUserId({
-            userId,
-            tier: 'season_pass',
-            status: 'active',
-            stripeCustomerId: customerId,
-            stripePriceId: metadataPrice,
-            currentPeriodStart: new Date().toISOString(),
-            currentPeriodEnd: computeSeasonPassEndDateIso(),
-            cancelAtPeriodEnd: true,
-            metadata: { provider: 'stripe', source: 'checkout.session.completed_payment' }
-          });
+          const purchasedAt = new Date();
+          await applyDecision(
+            {
+              eventType: 'checkout.session.completed_payment',
+              eventCreated: event.created,
+              subscriptionId: null,
+              status: 'active',
+              tier: 'season_pass',
+              currentPeriodStart: purchasedAt.toISOString(),
+              currentPeriodEnd: seasonPassEndDateIso(purchasedAt),
+              periodUnknown: false,
+              cancelAtPeriodEnd: true,
+              freshFromApi: true
+            },
+            { userId, customerId, subscriptionId: null, priceId: metadataPrice },
+            log
+          );
         }
       }
     }
@@ -304,33 +367,28 @@ export async function POST(request: NextRequest) {
 
       const userId = subscription.metadata?.user_id ?? (customerId ? await resolveUserIdFromCustomer(customerId) : null);
       if (userId) {
-        const mappedStatus = mapStripeStatus(subscription.status);
-        // Revoking updates from an old Stripe sub must not clobber an active
-        // IAP subscription (user moved from web to App Store billing).
-        if (!isPaidStatus(mappedStatus) && (await isRowOwnedByActiveIap(userId))) {
-          log.info('stripe.webhook.skipped_iap_active', { eventType: event.type, userId });
-        } else {
-          // Her kommer objektet rått fra Stripe, rendret i kontoens
-          // API-versjon — ikke i SDK-ens. Det er denne grenen som skrev null.
-          const period = readSubscriptionPeriod(subscription, log, {
-            eventType: event.type,
-            subscriptionId: subscription.id
-          });
+        // Her kommer objektet rått fra Stripe, rendret i kontoens
+        // API-versjon — ikke i SDK-ens. Det er denne grenen som skrev null.
+        const period = readSubscriptionPeriod(subscription, log, {
+          eventType: event.type,
+          subscriptionId: subscription.id
+        });
 
-          await upsertBillingByUserId({
-            userId,
+        await applyDecision(
+          {
+            eventType: event.type,
+            eventCreated: event.created,
+            subscriptionId: subscription.id,
+            status: mapStripeStatus(subscription.status),
             tier,
-            status: mappedStatus,
-            stripeCustomerId: customerId,
-            stripeSubscriptionId: subscription.id,
-            stripePriceId: priceId,
             currentPeriodStart: period.start,
             currentPeriodEnd: period.end,
             periodUnknown: period.source === 'missing',
-            cancelAtPeriodEnd: subscription.cancel_at_period_end,
-            metadata: { provider: 'stripe', source: event.type }
-          });
-        }
+            cancelAtPeriodEnd: subscription.cancel_at_period_end
+          },
+          { userId, customerId, subscriptionId: subscription.id, priceId },
+          log
+        );
       }
     }
 

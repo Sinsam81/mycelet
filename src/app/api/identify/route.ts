@@ -234,7 +234,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Record this successful (cost-incurring) call against the free daily cap.
-    // Best-effort + free-only: a logging hiccup must not fail the identification —
+    // Best-effort: a logging hiccup must not fail the identification —
     // vi har allerede betalt for kallet, og å feile nå ville tatt fra brukeren
     // det de nettopp ventet på.
     //
@@ -243,19 +243,27 @@ export async function POST(request: NextRequest) {
     // feilende insert var helt usynlig — mens konsekvensen er at gratisbrukere
     // får ubegrenset AI-bruk på vår regning. Nå logges det som warn, slik at
     // det dukker opp før det blir dyrt.
-    if (!capabilities.paid) {
-      try {
-        const admin = createAdminClient();
-        const { error: quotaError } = await admin.from('ai_identifications').insert({ user_id: user.id });
-        if (quotaError) {
-          userLog.warn('identify.quota_counter_failed', { message: quotaError.message });
-        }
-      } catch (quotaThrow) {
-        // Naar admin-klienten ikke kan konstrueres (manglende service role key).
-        userLog.warn('identify.quota_counter_unavailable', {
-          message: quotaThrow instanceof Error ? quotaThrow.message : 'unknown'
-        });
+    //
+    // Raden skrives for ALLE brukere, ikke bare gratisbrukere. Kvoten gjelder
+    // fortsatt bare gratis (spørringen over kjører kun der), men hvert kall
+    // koster oss det samme hos Kindwise uansett hvem som gjorde det. Skrev vi
+    // bare gratisbrukernes kall, kunne ingen svare på hva de betalte kontoene
+    // faktisk koster — og en betalt konto har ingen døgngrense i dag.
+    //
+    // Bivirkning, med vilje: mister noen den betalte planen midt på dagen,
+    // teller kallene de allerede har gjort de siste 24 timene mot gratiskvoten.
+    // Det er riktig lest — kvoten er «5 per døgn», ikke «5 etter nedgradering».
+    try {
+      const admin = createAdminClient();
+      const { error: quotaError } = await admin.from('ai_identifications').insert({ user_id: user.id });
+      if (quotaError) {
+        userLog.warn('identify.quota_counter_failed', { message: quotaError.message, tier: capabilities.tier });
       }
+    } catch (quotaThrow) {
+      // Naar admin-klienten ikke kan konstrueres (manglende service role key).
+      userLog.warn('identify.quota_counter_unavailable', {
+        message: quotaThrow instanceof Error ? quotaThrow.message : 'unknown'
+      });
     }
 
     const plantIdData = await plantIdResponse.json();

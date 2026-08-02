@@ -16,6 +16,11 @@ describe('billing plans', () => {
     expect(hasPaidAccess('active', 'season_pass', past)).toBe(false);
   });
 
+  // Oppslaget er bare et oppslag: kjenner vi ikke pris-ID-en, kjenner vi ikke
+  // planen. Det betyr IKKE at kunden skal settes til gratis — den avgjørelsen
+  // ligger i decideStripeWrite, som beholder plannavnet raden allerede har når
+  // et løpende abonnement kommer med en ukjent pris (se
+  // stripe-webhook-decision.test.ts, «ukjent pris-ID»).
   it('resolves free when price id is unknown', () => {
     expect(resolveTierByPriceId('price_unknown')).toBe('free');
   });
