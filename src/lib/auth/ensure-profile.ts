@@ -37,6 +37,8 @@ export interface ProfileUpsertClient {
   };
 }
 
+import { toPublicUsername } from './username';
+
 /** Postgres: unique_violation. Her betyr det at brukernavnet er opptatt. */
 const UNIQUE_VIOLATION = '23505';
 
@@ -57,7 +59,11 @@ export async function ensureProfile(
   user: MinimalUser
 ): Promise<EnsureProfileResult> {
   const meta = user.user_metadata ?? {};
-  const desired = meta.username || defaultUsernameFor(user);
+  // toPublicUsername: brukernavn er OFFENTLIG (public_findings velger
+  // p.username), og to brukere skrev hele e-postadressen sin i feltet ved
+  // registrering. Vi avviser ikke — vi tar lokaldelen, som er navnet de mente.
+  // Se src/lib/auth/username.ts.
+  const desired = toPublicUsername(meta.username) || defaultUsernameFor(user);
   const displayName = meta.display_name || desired;
 
   const attempt = (username: string) =>
