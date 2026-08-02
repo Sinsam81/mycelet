@@ -5,7 +5,14 @@ import Link from 'next/link';
 import { useLocale, useTranslations } from 'next-intl';
 import { MapPin } from 'lucide-react';
 import { EdibilityBadge } from '@/components/ui/EdibilityBadge';
-import { seasonShiftDays, isInSeasonOn, shiftLabel } from '@/lib/utils/season-region';
+import {
+  isMonthInMask,
+  latitudeBand,
+  nextMonth,
+  peakMask,
+  seasonMask,
+  type LatitudeBand
+} from '@/lib/utils/season-region';
 import type { Edibility } from '@/types/species';
 import { getSpeciesDisplayName } from '@/lib/utils/species-name';
 
@@ -55,21 +62,28 @@ function SpeciesRowLink({ s, peak }: { s: CalendarSpecies; peak?: boolean }) {
   );
 }
 
+const BAND_KEYS: Record<LatitudeBand, 'regionSouth' | 'regionCentral' | 'regionNorth'> = {
+  south: 'regionSouth',
+  central: 'regionCentral',
+  north: 'regionNorth'
+};
+
 export function SeasonNow({ species }: { species: CalendarSpecies[] }) {
   const t = useTranslations('SeasonNow');
-  const [shift, setShift] = useState(0);
+  const [band, setBand] = useState<LatitudeBand | null>(null);
   const [personalized, setPersonalized] = useState(false);
   const [canRequest, setCanRequest] = useState(false);
 
   const applyPosition = (lat: number) => {
-    setShift(seasonShiftDays(lat));
+    setBand(latitudeBand(lat));
     setPersonalized(true);
   };
 
-  // Never prompt for location just to browse the calendar. Personalize silently
-  // ONLY if the user has already granted geolocation; otherwise show an opt-in
-  // button (mirrors the home page's MushroomDayCard). navigator.geolocation is
-  // absent in the iOS WKWebView, so native simply stays on the Sør-Norge baseline.
+  // Vi spør aldri om posisjon bare for å bla i kalenderen. Vi tilpasser stille
+  // KUN hvis brukeren allerede har gitt tilgang; ellers står det en frivillig
+  // knapp (samme mønster som MushroomDayCard på forsiden). navigator.geolocation
+  // finnes ikke i iOS-WKWebView, så native blir stående på hele-Norden-vinduet —
+  // som er det videste vinduet, ikke et snevrere «Sør-Norge»-vindu.
   useEffect(() => {
     if (typeof navigator === 'undefined' || !navigator.geolocation) return;
     setCanRequest(true);
@@ -101,15 +115,16 @@ export function SeasonNow({ species }: { species: CalendarSpecies[] }) {
   };
 
   const now = new Date();
-  const soon = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
-  const label = shiftLabel(shift);
+  const month = now.getMonth() + 1;
+  const soon = nextMonth(month);
+  const label = band ? t(BAND_KEYS[band]) : '';
 
-  const inSeason = species.filter((s) => isInSeasonOn(now, s.season_start, s.season_end, shift));
-  const comingSoon = species.filter(
-    (s) =>
-      !isInSeasonOn(now, s.season_start, s.season_end, shift) &&
-      isInSeasonOn(soon, s.season_start, s.season_end, shift)
-  );
+  // Vinduene er månedsgrove fordi datagrunnlaget er månedsgrovt — vi later ikke
+  // som vi vet at sesongen starter en bestemt dag.
+  const masks = new Map(species.map((s) => [s.id, seasonMask(s, band)]));
+  const maskOf = (s: CalendarSpecies) => masks.get(s.id) ?? 0;
+  const inSeason = species.filter((s) => isMonthInMask(maskOf(s), month));
+  const comingSoon = species.filter((s) => !isMonthInMask(maskOf(s), month) && isMonthInMask(maskOf(s), soon));
 
   return (
     <>
@@ -138,14 +153,7 @@ export function SeasonNow({ species }: { species: CalendarSpecies[] }) {
           <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             {inSeason.map((s) => (
               <li key={s.id}>
-                <SpeciesRowLink
-                  s={s}
-                  peak={
-                    s.peak_season_start !== null &&
-                    s.peak_season_end !== null &&
-                    isInSeasonOn(now, s.peak_season_start, s.peak_season_end, shift)
-                  }
-                />
+                <SpeciesRowLink s={s} peak={isMonthInMask(peakMask(s), month)} />
               </li>
             ))}
           </ul>

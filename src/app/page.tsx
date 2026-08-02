@@ -13,6 +13,7 @@ import { BILLING_PLANS } from '@/lib/billing/plans';
 import { FLAGS } from '@/lib/flags';
 import type { Edibility } from '@/types/species';
 import { getSpeciesDisplayName } from '@/lib/utils/species-name';
+import { baseSeasonMask, isMonthInMask, peakMask } from '@/lib/utils/season-region';
 import { intlLocale } from '@/lib/utils/intl-locale';
 
 type HomeTranslator = Awaited<ReturnType<typeof getTranslations<'Home'>>>;
@@ -62,11 +63,6 @@ function getMonthName(month: number, t: HomeTranslator) {
     'monthJuly', 'monthAugust', 'monthSeptember', 'monthOctober', 'monthNovember', 'monthDecember'
   ] as const;
   return t(keys[month - 1]);
-}
-
-function isInMonth(month: number, start: number, end: number) {
-  if (start <= end) return month >= start && month <= end;
-  return month >= start || month <= end;
 }
 
 function getSeasonHeadline(month: number, edibleCount: number, t: HomeTranslator) {
@@ -120,13 +116,15 @@ export default async function HomePage() {
     very_rare: 4
   };
   const commonalityRank = (value: string | null) => COMMONALITY_ORDER[value ?? ''] ?? 9;
-  const atPeak = (s: SpeciesRow) =>
-    s.peak_season_start != null && s.peak_season_end != null && isInMonth(month, s.peak_season_start, s.peak_season_end);
+  // Samme kalibrerte sesongvindu som kalenderen bruker — katalogvinduet utvidet
+  // med månedene der 90 % av de daterte funnene faktisk ligger. Uten posisjon,
+  // så ingen regionjustering her.
+  const atPeak = (s: SpeciesRow) => isMonthInMask(peakMask(s), month);
   const inSeasonEdible = species
     .filter(
       (s) =>
         (s.edibility === 'edible' || s.edibility === 'conditionally_edible') &&
-        isInMonth(month, s.season_start, s.season_end)
+        isMonthInMask(baseSeasonMask(s), month)
     )
     // Peak season first — the strongest thing we can say — then by how often
     // the species is actually encountered. Ranking alphabetically inside the
@@ -140,7 +138,9 @@ export default async function HomePage() {
         getSpeciesDisplayName(a, locale).localeCompare(getSpeciesDisplayName(b, locale), intlLocale(locale))
     )
     .slice(0, 6);
-  const dangerousInSeason = species.filter((s) => (s.edibility === 'toxic' || s.edibility === 'deadly') && isInMonth(month, s.season_start, s.season_end));
+  const dangerousInSeason = species.filter(
+    (s) => (s.edibility === 'toxic' || s.edibility === 'deadly') && isMonthInMask(baseSeasonMask(s), month)
+  );
   const speciesNames = new globalThis.Map(species.map((item) => [item.id, getSpeciesDisplayName(item, locale)]));
 
   let userStats: { total: number; species: number } | null = null;
