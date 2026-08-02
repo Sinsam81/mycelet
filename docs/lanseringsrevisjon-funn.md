@@ -176,9 +176,30 @@ Alle andre migrasjoner **er** kjørt (verifisert: 034-kolonnene, omdøpingene, a
 returnerer **kun `display_*`** — ingen rå koordinater, ingen private funn — så personvernmodellen
 holder. Sistnevnte er GBIF-data, som er åpne per definisjon.
 
-**Tiltak.** Kjør `033_lock_prediction_tiles_rpc.sql` i SQL-editoren. Og innfør en sjekk som fanger
-migrasjoner uten skjemaspor — en `applied_migrations`-tabell, eller en helsesjekk som prøver
-kallet som anon og feiler hvis det lykkes.
+**Tiltak.** ~~Kjør `033`~~ — **se rettelsen under.** Og innfør en sjekk som fanger migrasjoner uten
+skjemaspor: en `applied_migrations`-tabell, eller en helsesjekk som prøver kallet som anon og
+feiler hvis det lykkes.
+
+> ### ⚠️ Rettelse 2. august: mitt eget tiltak var utilstrekkelig
+>
+> Migrasjon 033 ble kjørt i produksjon og svarte `Success. No rows returned.` **Hullet var
+> fortsatt åpent** — anon hentet fortsatt 763 fliser rett etterpå.
+>
+> Årsaken er en Postgres-standard: enhver ny funksjon får automatisk `EXECUTE` til rollen
+> `PUBLIC`, og alle roller arver derfra. `revoke ... from anon` fjerner derfor ingenting så lenge
+> `PUBLIC` beholder rettigheten. Revoken var ikke gal, den var ufullstendig.
+>
+> Migrasjon **036** gjør det riktig: `revoke ... from public`, og — bindende — `grant ... to
+> authenticated, service_role` i samme transaksjon, siden revoken fra PUBLIC ellers også ville
+> tatt rettigheten fra kartet og fra `/api/prediction`.
+>
+> **Verifisert etter 036:** anon → 401. service_role → 763 fliser. `/api/prediction` utlogget →
+> 48/100 Kantarell fra flisbanen. `get_findings_in_bounds` som anon → uendret. Helse 200.
+>
+> **Lærdommen er den samme som resten av revisjonen.** Rettighetstabellen ville sett riktig ut
+> etter 033, fordi arv via `PUBLIC` ikke vises der man leter. Bare det å faktisk kalle
+> funksjonen som anon avslørte at den ikke virket. Et grønt svar er ikke et bevis — heller ikke
+> når det er mitt eget tiltak som svarer grønt.
 
 ### H1. SMHI-adapteren leverer ALDRI data — hele Sverige kjører i skjul på Open-Meteo, og «Kilder»-linja mister værkilden
 
