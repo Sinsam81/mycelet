@@ -351,7 +351,10 @@
     "analyzing": "Analyserer bilde...",
     "identifyFailed": "Identifikasjon feilet",
     "couldNotGetImage": "Kunne ikke hente bilde.",
-    "networkError": "Fikk ikke kontakt med serveren. Sjekk dekningen og prøv igjen."
+    "networkError": "Fikk ikke kontakt med serveren. Sjekk dekningen og prøv igjen.",
+    "quotaHeading": "Du har brukt opp dagens gratis AI-identifikasjoner",
+    "quotaComeBackTomorrow": "Vente til i morgen — kvoten nullstilles etter 24 timer",
+    "quotaSeePlans": "Se abonnement"
   },
   "IdentifyResult": {
     "errorNotLoggedIn": "Du må være logget inn for å lagre funn.",
@@ -377,7 +380,12 @@
     "acknowledgeLabel": "Jeg forstår at dette ikke er en spiselighetsgaranti, og jeg spiser aldri sopp uten å få den bekreftet av en ekspert.",
     "matchLabel": "bildelikhet",
     "notFoodAssessed": "Ikke matvurdert",
-    "safetyDataIncomplete": "Vi klarte ikke å hente sikkerhetsdataene for disse forslagene akkurat nå. At det ikke står noen advarsel her betyr derfor IKKE at arten er trygg — det betyr at vi ikke fikk sjekket. Åpne artssiden og sjekk forvekslingsarter manuelt, eller prøv igjen om litt."
+    "safetyDataIncomplete": "Vi klarte ikke å hente sikkerhetsdataene for disse forslagene akkurat nå. At det ikke står noen advarsel her betyr derfor IKKE at arten er trygg — det betyr at vi ikke fikk sjekket. Åpne artssiden og sjekk forvekslingsarter manuelt, eller prøv igjen om litt.",
+    "sharingLevel": "Delingsnivå",
+    "sharingPublic": "Eksakt punkt (offentlig)",
+    "sharingApproximate": "Omtrentlig (±500m)",
+    "sharingPrivate": "Privat",
+    "sharingHelp": "Slik havner funnet på kartet. «Omtrentlig» vises for alle, men flyttet inntil 500 m fra det ekte stedet. «Privat» vises bare for deg."
   },
   "MineSteder": {
     "metaTitle": "Mine steder — Mycelet",
@@ -761,7 +769,9 @@
     "noImage": "Ingen bilde",
     "dangerPrefix": "Fare:",
     "howToTellApart": "Hvordan skille:",
-    "lookAlikesUnavailable": "Vi klarte ikke å hente forvekslingsartene for denne arten akkurat nå. At det ikke står noen farlige forvekslinger her betyr derfor IKKE at det ikke finnes noen. Last siden på nytt, eller få soppen vurdert av soppkontroll før du spiser den."
+    "lookAlikesUnavailable": "Vi klarte ikke å hente forvekslingsartene for denne arten akkurat nå. At det ikke står noen farlige forvekslinger her betyr derfor IKKE at det ikke finnes noen. Last siden på nytt, eller få soppen vurdert av soppkontroll før du spiser den.",
+    "seasonNote": "Sesongvinduet viser når arten normalt er å finne i Norden — det sier ingenting om forholdene akkurat nå. Kartet vurderer dagens forhold der du er.",
+    "lookAlikesNoneRecorded": "Vi har ikke ført inn forvekslingsarter for denne arten ennå. At det ikke står noen advarsel her, betyr IKKE at arten er trygg å plukke — det betyr at vi ikke har dekning å love. Få alltid soppen vurdert av soppkontroll eller en ekspert før du spiser."
   },
   "Species": {
     "edibilityAll": "Alle",
@@ -777,7 +787,9 @@
     "inSeasonOnly": "Kun i sesong nå",
     "loading": "Laster arter...",
     "loadError": "Kunne ikke hente arter.",
-    "noMatches": "Ingen arter matcher filtrene dine."
+    "noMatches": "Ingen arter matcher filtrene dine.",
+    "edibilityConditional": "Betinget spiselig",
+    "edibilityInedible": "Uspiselig"
   },
   "SeasonNow": {
     "peakSeason": "Topp-sesong",

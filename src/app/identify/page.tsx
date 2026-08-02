@@ -1,7 +1,8 @@
 'use client';
 
-import { Camera, Info, Search } from 'lucide-react';
+import { Camera, Info, Search, Sparkles } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { PageWrapper } from '@/components/layout/PageWrapper';
@@ -22,6 +23,11 @@ export default function IdentifyPage() {
 
   const [error, setError] = useState<string | null>(null);
   const [aiDisabled, setAiDisabled] = useState(false);
+  // Kvoteveggen får sin egen tilstand fordi den er det motsatte av en feil:
+  // brukeren har gjort alt riktig og skal videre et sted. Som rød tekstlinje
+  // uten noe å trykke på endte appens sterkeste konverteringsøyeblikk i en
+  // blindvei — teksten ba om oppgradering, men pekte ingen vei dit.
+  const [quotaMessage, setQuotaMessage] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -39,6 +45,7 @@ export default function IdentifyPage() {
   const handleFile = async (file: File) => {
     setError(null);
     setAiDisabled(false);
+    setQuotaMessage(null);
 
     try {
       // One EXIF-free re-encode serves both the AI call and the saved find
@@ -69,6 +76,10 @@ export default function IdentifyPage() {
       // det feilmeldingene ble oversatt.
       if (err instanceof IdentifyError && err.code === 'ai_disabled') {
         setAiDisabled(true);
+      } else if (err instanceof IdentifyError && err.code === 'daily_quota') {
+        // Teksten er serverens — den er allerede på leserens språk og
+        // inneholder det faktiske tallet fra FREE_DAILY_AI_LIMIT.
+        setQuotaMessage(message);
       } else {
         setError(message);
       }
@@ -81,6 +92,7 @@ export default function IdentifyPage() {
       return;
     }
     setError(null);
+    setQuotaMessage(null);
     try {
       const file = await captureNativePhoto();
       if (file) await handleFile(file);
@@ -120,6 +132,34 @@ export default function IdentifyPage() {
                   </Button>
                   <Button variant="outline" onClick={() => router.push('/calendar')}>
                     {t('seasonCalendar')}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        {quotaMessage ? (
+          <div className="rounded-xl border border-forest-300 bg-forest-50 p-4">
+            <div className="flex items-start gap-3">
+              <Sparkles className="h-5 w-5 shrink-0 text-forest-700" />
+              <div className="space-y-2">
+                <p className="font-semibold text-forest-900">{t('quotaHeading')}</p>
+                <p className="text-sm text-forest-900">{quotaMessage}</p>
+                <ul className="list-disc pl-5 text-sm text-forest-900">
+                  <li>{t('disabledSearchDb')}</li>
+                  <li>{t('disabledBrowseSeason')}</li>
+                  <li>{t('quotaComeBackTomorrow')}</li>
+                </ul>
+                <div className="flex flex-wrap gap-2 pt-2">
+                  <Link
+                    href="/pricing"
+                    className="inline-flex items-center justify-center rounded-lg bg-forest-700 px-4 py-2 text-sm font-semibold text-white hover:bg-forest-800"
+                  >
+                    {t('quotaSeePlans')}
+                  </Link>
+                  <Button variant="outline" onClick={() => router.push('/species')}>
+                    {t('searchDb')}
                   </Button>
                 </div>
               </div>

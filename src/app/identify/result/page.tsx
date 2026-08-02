@@ -24,6 +24,14 @@ export default function IdentifyResultPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedIndex, setSelectedIndex] = useState(0);
+  // Synligheten var hardkodet til 'approximate' uten at brukeren ble spurt
+  // eller fikk vite det. Et AI-funn tatt på det hemmelige stedet havnet altså
+  // som en markør innenfor ±500 m, knyttet til brukernavnet og lesbar for
+  // enhver besøkende — og funn kan ikke slettes i appen, så valget var
+  // endelig. Standardverdien er den samme som før, men nå er den synlig og
+  // mulig å endre. Sone-funn krever navn + presisjon og bor derfor fortsatt
+  // bare i AddFindingSheet.
+  const [visibility, setVisibility] = useState<'public' | 'approximate' | 'private'>('approximate');
   // The user must actively acknowledge that the AI result is not an edibility
   // guarantee before logging a find — strengthens the duty-of-care posture and
   // stops the result from reading as an authoritative "this is safe to eat".
@@ -103,7 +111,7 @@ export default function IdentifyResultPage() {
           aiTopSuggestion: topSuggestion.name,
           aiConfidence: topSuggestion.probability / 100,
           aiRawResponse: { suggestions: payload.suggestions, confirmedIndex: selectedIndex },
-          visibility: 'approximate',
+          visibility,
           userConfirmedSpecies: true,
           imageUrl,
           thumbnailUrl: imageUrl,
@@ -181,6 +189,24 @@ export default function IdentifyResultPage() {
           />
           <span>{t('acknowledgeLabel')}</span>
         </label>
+
+        <div className="rounded-lg border border-gray-200 bg-white p-3">
+          <label className="block text-sm font-medium text-gray-800">
+            {t('sharingLevel')}
+            <select
+              value={visibility}
+              onChange={(event) =>
+                setVisibility(event.target.value as 'public' | 'approximate' | 'private')
+              }
+              className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2"
+            >
+              <option value="public">{t('sharingPublic')}</option>
+              <option value="approximate">{t('sharingApproximate')}</option>
+              <option value="private">{t('sharingPrivate')}</option>
+            </select>
+          </label>
+          <p className="mt-2 text-xs text-gray-600">{t('sharingHelp')}</p>
+        </div>
 
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
           <Button onClick={handleSave} loading={saving} disabled={!acknowledged}>

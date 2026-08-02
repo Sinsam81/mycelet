@@ -6,7 +6,7 @@ import { getBillingCapabilities, getUserBillingSubscription } from '@/lib/billin
 import { checkRateLimit } from '@/lib/rate-limit';
 import { getClientKey, rateLimitResponse } from '@/lib/rate-limit/route';
 import { createRequestLogger } from '@/lib/log/request';
-import { seasonFit, rankOrder } from '@/lib/utils/identify-ranking';
+import { seasonFitForSpecies, rankOrder } from '@/lib/utils/identify-ranking';
 import { coarsenLocation } from '@/lib/privacy/coarsen-location';
 import { getSpeciesDisplayName } from '@/lib/utils/species-name';
 import { getUserLocale } from '@/i18n/locale';
@@ -364,13 +364,9 @@ export async function POST(request: NextRequest) {
           mapped.norwegianName = getSpeciesDisplayName(species, locale);
           mapped.edibility = species.edibility;
           mapped.imageUrl = (species.primary_image_url as string | null) ?? null;
-          const fit = seasonFit(
-            month,
-            species.season_start,
-            species.season_end,
-            species.peak_season_start,
-            species.peak_season_end
-          );
+          // Samme sesongvindu som kalenderen og artsbiblioteket. Se
+          // seasonFitForSpecies for hvorfor det rå katalogvinduet ikke duger.
+          const fit = seasonFitForSpecies(month, species);
           mapped.inSeason = fit.inSeason;
           mapped.peakSeason = fit.peakSeason;
           mapped.seasonFactor = fit.factor;

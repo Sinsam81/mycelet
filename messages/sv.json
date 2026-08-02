@@ -351,7 +351,10 @@
     "analyzing": "Analyserar bild...",
     "identifyFailed": "Identifieringen misslyckades",
     "couldNotGetImage": "Kunde inte hämta bild.",
-    "networkError": "Kunde inte nå servern. Kontrollera täckningen och försök igen."
+    "networkError": "Kunde inte nå servern. Kontrollera täckningen och försök igen.",
+    "quotaHeading": "Du har använt upp dagens gratis AI-identifieringar",
+    "quotaComeBackTomorrow": "Vänta till i morgon — kvoten nollställs efter 24 timmar",
+    "quotaSeePlans": "Se abonnemang"
   },
   "IdentifyResult": {
     "errorNotLoggedIn": "Du måste vara inloggad för att spara fynd.",
@@ -377,7 +380,12 @@
     "acknowledgeLabel": "Jag förstår att detta inte är en ätlighetsgaranti, och jag äter aldrig svamp utan att få den bekräftad av en expert.",
     "matchLabel": "bildlikhet",
     "notFoodAssessed": "Inte matbedömd",
-    "safetyDataIncomplete": "Vi kunde inte hämta säkerhetsdatan för de här förslagen just nu. Att det inte står någon varning här betyder därför INTE att arten är säker — det betyder att vi inte fick kontrollerat. Öppna artsidan och kontrollera förväxlingsarter manuellt, eller försök igen om en stund."
+    "safetyDataIncomplete": "Vi kunde inte hämta säkerhetsdatan för de här förslagen just nu. Att det inte står någon varning här betyder därför INTE att arten är säker — det betyder att vi inte fick kontrollerat. Öppna artsidan och kontrollera förväxlingsarter manuellt, eller försök igen om en stund.",
+    "sharingLevel": "Delningsnivå",
+    "sharingPublic": "Exakt punkt (offentlig)",
+    "sharingApproximate": "Ungefärlig (±500m)",
+    "sharingPrivate": "Privat",
+    "sharingHelp": "Så hamnar fyndet på kartan. ”Ungefärlig” visas för alla, men flyttat upp till 500 m från den riktiga platsen. ”Privat” visas bara för dig."
   },
   "MineSteder": {
     "metaTitle": "Mina platser — Mycelet",
@@ -761,7 +769,9 @@
     "noImage": "Ingen bild",
     "dangerPrefix": "Fara:",
     "howToTellApart": "Hur man skiljer:",
-    "lookAlikesUnavailable": "Vi kunde inte hämta förväxlingsarterna för den här arten just nu. Att det inte står några farliga förväxlingar här betyder därför INTE att det inte finns några. Ladda om sidan, eller låt svampen bedömas av svampkontroll innan du äter den."
+    "lookAlikesUnavailable": "Vi kunde inte hämta förväxlingsarterna för den här arten just nu. Att det inte står några farliga förväxlingar här betyder därför INTE att det inte finns några. Ladda om sidan, eller låt svampen bedömas av svampkontroll innan du äter den.",
+    "seasonNote": "Säsongsfönstret visar när arten normalt går att hitta i Norden — det säger ingenting om förhållandena just nu. Kartan bedömer dagens förhållanden där du är.",
+    "lookAlikesNoneRecorded": "Vi har ännu inte fört in några förväxlingsarter för den här arten. Att det inte står någon varning här betyder INTE att arten är säker att plocka — det betyder att vi inte har någon täckning att lova. Låt alltid svampen bedömas av svampkontroll eller en expert innan du äter."
   },
   "Species": {
     "edibilityAll": "Alla",
@@ -777,7 +787,9 @@
     "inSeasonOnly": "Endast i säsong nu",
     "loading": "Laddar arter...",
     "loadError": "Kunde inte hämta arter.",
-    "noMatches": "Inga arter matchar dina filter."
+    "noMatches": "Inga arter matchar dina filter.",
+    "edibilityConditional": "Villkorligt ätlig",
+    "edibilityInedible": "Oätlig"
   },
   "SeasonNow": {
     "peakSeason": "Toppsäsong",
