@@ -78,7 +78,7 @@ export function AddFindingSheet({ latitude, longitude, onClose, onSaved }: AddFi
       return;
     }
     try {
-      const file = await captureNativePhoto();
+      const file = await captureNativePhoto(locale);
       if (file) setImageFromFile(file);
     } catch (err) {
       setError(err instanceof Error ? err.message : t('errorFetchImage'));

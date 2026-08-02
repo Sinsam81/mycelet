@@ -131,7 +131,8 @@
     "edibilityToxic": "Giftig",
     "edibilityDeadly": "Dödlig",
     "accessValidationErrorTitle": "Kunde inte verifiera din behörighet",
-    "accessValidationErrorBody": "Uppslaget mot moderator_roles misslyckades — det betyder inte att du saknar behörighet. Försök ladda om sidan. Teknisk detalj: {message}"
+    "accessValidationErrorBody": "Uppslaget mot moderator_roles misslyckades — det betyder inte att du saknar behörighet. Försök ladda om sidan. Teknisk detalj: {message}",
+    "usersWithProfile": "Med profil"
   },
   "AdminPrediction": {
     "title": "Prediction Tiles (Admin)",

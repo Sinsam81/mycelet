@@ -1,0 +1,63 @@
+name: ci
+
+# Porten inn til main.
+#
+# Fram til nå var gitleaks den ENESTE workflowen i repoet: verken tsc, vitest,
+# eslint eller next build gjennomførte en merge. `docs/reports/deploys.md`
+# innleder likevel med at «alle kodeendringer ble verifisert med typecheck, full
+# Vitest-suite og produksjonsbygg før merge» — det var en manuell vane, ikke en
+# maskin. Vercel publiserer det som lander i main uansett, så én PR som glemte å
+# kjøre testene lokalt gikk rett til betalende kunder.
+#
+# Hele denne porten koster under to minutter.
+#
+# 👤 GJENSTÅR FOR SINDRE (kan ikke gjøres herfra):
+#   1. Slå på «Require status checks to pass before merging» på main i GitHub →
+#      Settings → Branches, og huk av «verify». Uten det er dette bare et
+#      rådgivende kryss.
+#   2. `next build` er BEVISST ikke med: det trenger NEXT_PUBLIC_SUPABASE_URL og
+#      NEXT_PUBLIC_SUPABASE_ANON_KEY ved prerender (se «Prerender + Supabase env
+#      vars» i CLAUDE.md). Legg dem inn som repo-secrets, så kan build-steget
+#      under kommenteres inn.
+#
+# `npm run qa` / `qa:prod` hører IKKE hjemme her — de treffer produksjon.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  verify:
+    name: Typecheck, lint and tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      # `npm run test` starter vitest i watch-modus; --run gjør den til
+      # engangskjøring, ellers henger jobben til timeout.
+      - name: Tests
+        run: npm run test -- --run
+
+      # - name: Production build
+      #   run: npm run build
+      #   env:
+      #     NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+      #     NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}

@@ -94,7 +94,7 @@ function NewForumPostInner() {
       return;
     }
     try {
-      const file = await captureNativePhoto();
+      const file = await captureNativePhoto(locale);
       if (file) addFiles([file]);
     } catch (err) {
       setError(err instanceof Error ? err.message : t('couldNotGetImage'));

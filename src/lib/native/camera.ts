@@ -6,8 +6,38 @@
  * web implementation is never evaluated during SSR.
  */
 import { base64ToBlob } from '@/lib/utils/image';
+import { DEFAULT_LOCALE, type Locale } from '@/i18n/config';
 
-export async function captureNativePhoto(): Promise<File | null> {
+/**
+ * Etikettene i den NATIVE bildevelgeren.
+ *
+ * Disse dukker opp i iOS' egen action sheet, altså utenfor React-treet —
+ * next-intl rekker dem ikke, og de var derfor hardkodet norske i en app som
+ * markedsføres og har grensesnitt på svensk. Samme mønster som COPY-tabellene
+ * i prediksjonsbibliotekene: teksten bor ved siden av logikken, med nb som
+ * standard slik at kallsteder uten locale oppfører seg som før.
+ *
+ * (Info.plist-tekstene — NSCameraUsageDescription og de tre andre — ligger
+ * utenfor dette repoets TypeScript og må lokaliseres i Xcode med
+ * ios/App/App/sv.lproj/InfoPlist.strings.)
+ */
+const PROMPT_COPY: Record<Locale, { header: string; photo: string; picture: string; cancel: string }> = {
+  nb: {
+    header: 'Legg til bilde',
+    photo: 'Velg fra bilder',
+    picture: 'Ta bilde',
+    cancel: 'Avbryt'
+  },
+  sv: {
+    header: 'Lägg till bild',
+    photo: 'Välj från bilder',
+    picture: 'Ta bild',
+    cancel: 'Avbryt'
+  }
+};
+
+export async function captureNativePhoto(locale: Locale | string = DEFAULT_LOCALE): Promise<File | null> {
+  const copy = PROMPT_COPY[locale as Locale] ?? PROMPT_COPY[DEFAULT_LOCALE];
   const { Camera, CameraResultType, CameraSource } = await import('@capacitor/camera');
 
   let photo;
@@ -22,10 +52,10 @@ export async function captureNativePhoto(): Promise<File | null> {
       resultType: CameraResultType.Base64,
       source: CameraSource.Prompt,
       correctOrientation: true,
-      promptLabelHeader: 'Legg til bilde',
-      promptLabelPhoto: 'Velg fra bilder',
-      promptLabelPicture: 'Ta bilde',
-      promptLabelCancel: 'Avbryt'
+      promptLabelHeader: copy.header,
+      promptLabelPhoto: copy.photo,
+      promptLabelPicture: copy.picture,
+      promptLabelCancel: copy.cancel
     });
   } catch (err) {
     // The plugin throws (rather than returning empty) when the user cancels.
