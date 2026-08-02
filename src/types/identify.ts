@@ -27,6 +27,11 @@ export interface IdentifySuggestion {
   peakSeason?: boolean;
   nearbyFindings?: number;
   dangerousLookAlikes?: IdentifyLookAlike[];
+  /**
+   * Hva vi VET om forvekslingsarter for dette forslaget. Uten dette feltet
+   * rendrer «ingen registrert» og «sjekket, ingen farlige» helt likt.
+   */
+  lookAlikeData?: 'present' | 'none_recorded' | 'unavailable';
 }
 
 export interface IdentifyResultPayload {

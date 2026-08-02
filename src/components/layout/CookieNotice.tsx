@@ -58,14 +58,20 @@ export function CookieNotice() {
 
   if (!visible) return null;
 
+  // Notisen må ligge OVER bunnmenyen (samme offset som InstallPrompt), og bare
+  // selve kortet skal ta imot trykk. Med `bottom-0` og samme z-index som
+  // bunnmenyen vant notisen — den rendres sist i layouten — slik at et trykk på
+  // «Kart» i realiteten traff «Tillat analyse», og resten av bunnmenyen var død
+  // til notisen var besvart. Et samtykke gitt ved et navigasjonstrykk er ikke
+  // et samtykke.
   return (
     <div
       role="dialog"
       aria-live="polite"
       aria-labelledby="cookie-notice-title"
-      className="fixed inset-x-0 bottom-0 z-50 px-4 pb-4 sm:px-6 sm:pb-6"
+      className="pointer-events-none fixed inset-x-0 bottom-[calc(4.75rem+env(safe-area-inset-bottom))] z-50 px-4 sm:px-6"
     >
-      <div className="mx-auto flex max-w-3xl items-start gap-3 rounded-xl border border-forest-200 bg-white p-4 shadow-lg">
+      <div className="pointer-events-auto mx-auto flex max-w-3xl items-start gap-3 rounded-xl border border-forest-200 bg-white p-4 shadow-lg">
         <Cookie aria-hidden="true" className="mt-0.5 h-5 w-5 shrink-0 text-forest-700" />
 
         <div className="flex-1 space-y-2 text-sm text-gray-800">

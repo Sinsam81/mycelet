@@ -1,12 +1,14 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
-import { AlertTriangle, ChevronLeft } from 'lucide-react';
+import { AlertTriangle, ChevronLeft, Info } from 'lucide-react';
 import { EdibilityBadge } from '@/components/ui/EdibilityBadge';
 import { PageWrapper } from '@/components/layout/PageWrapper';
 import { SpeciesPhotoCarousel } from '@/components/species/SpeciesPhotoCarousel';
 import { createClient } from '@/lib/supabase/server';
 import { getSpeciesDisplayName } from '@/lib/utils/species-name';
+import { edibilityNoteTone } from '@/lib/species/edibility-note';
+import { stripPoisonHotline } from '@/lib/utils/poison-hotline';
 
 interface SpeciesDetailPageProps {
   params: Promise<{ id: string }>;
@@ -83,6 +85,29 @@ export default async function SpeciesDetailPage({ params }: SpeciesDetailPagePro
 
   const isToxic = species.edibility === 'toxic' || species.edibility === 'deadly';
   const displayName = getSpeciesDisplayName(species, locale);
+  // Har arten en registrert dødelig tvilling? Da skal notatet se ut som en
+  // advarsel selv om ordlyden er nøytral.
+  // `any` her av samme grunn som i visnings-blokka lenger nede: PostgREST-typen
+  // for et join med alias er en union som inkluderer GenericStringError.
+  const hasCriticalLookAlike = (lookAlikes ?? []).some(
+    (item: any) => item?.danger_level === 'critical' // eslint-disable-line @typescript-eslint/no-explicit-any
+  );
+  const noteTone = edibilityNoteTone({
+    edibility: species.edibility,
+    notes: species.edibility_notes,
+    hasCriticalLookAlike
+  });
+
+  // Symptom- og toksinteksten kommer fra basen og er skrevet på norsk — flere
+  // rader har «ring Giftinformasjonen 22 59 13 00» bakt inn i setningen. Den
+  // teksten står øverst i den røde boksen, over den lokaliserte linja lenger
+  // nede, så en svensk leser fikk det norske nummeret først og
+  // Giftinformationscentralen etterpå. Nummeret skal komme ett sted fra:
+  // Safety-namespacet, som er oversatt. Begge feltene under vises kun inne i
+  // blokken som også viser den lokaliserte linja, så strippingen kan aldri
+  // etterlate siden helt uten nummer.
+  const toxinInfo = stripPoisonHotline(species.toxin_info);
+  const symptoms = stripPoisonHotline(species.symptoms);
 
   return (
     <PageWrapper wide>
@@ -132,14 +157,14 @@ export default async function SpeciesDetailPage({ params }: SpeciesDetailPagePro
                     <p className="text-base font-bold uppercase tracking-wide">
                       {species.edibility === 'deadly' ? t('deadlyDoNotEat') : t('toxicDoNotEat')}
                     </p>
-                    {species.toxin_info ? (
+                    {toxinInfo ? (
                       <p className="text-sm">
-                        <span className="font-semibold">{t('toxinLabel')}</span> {species.toxin_info}
+                        <span className="font-semibold">{t('toxinLabel')}</span> {toxinInfo}
                       </p>
                     ) : null}
-                    {species.symptoms ? (
+                    {symptoms ? (
                       <p className="text-sm">
-                        <span className="font-semibold">{t('symptomsLabel')}</span> {species.symptoms}
+                        <span className="font-semibold">{t('symptomsLabel')}</span> {symptoms}
                       </p>
                     ) : null}
                     <p className="pt-1 text-sm font-medium">
@@ -165,16 +190,37 @@ export default async function SpeciesDetailPage({ params }: SpeciesDetailPagePro
               </div>
             ) : null}
 
-            {species.edibility === 'conditionally_edible' && species.edibility_notes ? (
-              <div className="rounded-2xl border border-amber-300 bg-amber-50 p-4">
-                <div className="flex items-start gap-3">
-                  <AlertTriangle className="h-5 w-5 shrink-0 text-amber-700" />
-                  <div>
-                    <p className="font-semibold text-amber-900">{t('conditionallyEdibleTitle')}</p>
-                    <p className="mt-1 text-sm text-amber-900">{species.edibility_notes}</p>
+            {/* edibility_notes ble tidligere bare rendret for `conditionally_edible`.
+                45 arter merket `edible` har skrevet og deployet notat i basen —
+                blant dem «OBS: hold den klart adskilt fra grønn fluesopp» på
+                grønnkremle. Ingen av dem har noen gang vært synlig. Notatet vises
+                nå alltid; tonen avgjør bare hvor kraftig det ser ut. */}
+            {noteTone ? (
+              noteTone === 'warning' ? (
+                <div className="rounded-2xl border border-amber-300 bg-amber-50 p-4">
+                  <div className="flex items-start gap-3">
+                    <AlertTriangle className="h-5 w-5 shrink-0 text-amber-700" />
+                    <div>
+                      <p className="font-semibold text-amber-900">
+                        {species.edibility === 'conditionally_edible'
+                          ? t('conditionallyEdibleTitle')
+                          : t('safetyNoteTitle')}
+                      </p>
+                      <p className="mt-1 text-sm text-amber-900">{species.edibility_notes}</p>
+                    </div>
                   </div>
                 </div>
-              </div>
+              ) : (
+                <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
+                  <div className="flex items-start gap-3">
+                    <Info className="h-5 w-5 shrink-0 text-gray-500" />
+                    <div>
+                      <p className="font-semibold text-gray-800">{t('edibilityNoteTitle')}</p>
+                      <p className="mt-1 text-sm text-gray-700">{species.edibility_notes}</p>
+                    </div>
+                  </div>
+                </div>
+              )
             ) : null}
 
             {species.description ? (

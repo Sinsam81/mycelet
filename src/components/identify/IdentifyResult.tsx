@@ -100,9 +100,22 @@ export function IdentifyResult({ suggestions, selectedIndex, onSelect }: Identif
               ) : null}
             </div>
 
+            {/* Tre tilstander, ikke to. Et forslag uten registrerte
+                forvekslingsarter rendret før nøyaktig likt som et vi har
+                sjekket — og 24 av 45 spiselige arter i katalogen har ingen
+                rader. Fravær av advarsel må aldri kunne leses som en
+                trygghetserklæring. */}
             {suggestion.dangerousLookAlikes && suggestion.dangerousLookAlikes.length > 0 ? (
               <p className="mt-2 rounded-lg border border-red-300 bg-red-50 px-2 py-1.5 text-xs font-medium text-red-900">
                 ⚠️ {t('lookAlikeWarning', { names: suggestion.dangerousLookAlikes.map((d) => d.name).join(', ') })}
+              </p>
+            ) : suggestion.lookAlikeData === 'none_recorded' ? (
+              <p className="mt-2 rounded-lg border border-amber-300 bg-amber-50 px-2 py-1.5 text-xs text-amber-900">
+                {t('lookAlikeNoneRecorded')}
+              </p>
+            ) : suggestion.lookAlikeData === 'unavailable' ? (
+              <p className="mt-2 rounded-lg border border-amber-300 bg-amber-50 px-2 py-1.5 text-xs text-amber-900">
+                {t('lookAlikeUnknown')}
               </p>
             ) : null}
 

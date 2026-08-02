@@ -10,6 +10,16 @@ export interface OccurrencePoint {
   species_id: number | null;
 }
 
+/**
+ * Hvor mange observasjonspunkter prediksjonsrutene henter for et utsnitt.
+ *
+ * Dette er IKKE det samme som funksjonens `p_limit` alene: PostgREST kutter
+ * hvert svar ved 1000 rader, så tallet må hentes over flere sider via
+ * `fetchRpcPaged` (se src/lib/supabase/paged-rpc.ts). Sendes bare `p_limit`,
+ * kommer det 1000 rader tilbake uten at noe sier fra.
+ */
+export const OCCURRENCE_FETCH_LIMIT = 4000;
+
 export function occurrenceHaversineKm(aLat: number, aLng: number, bLat: number, bLng: number): number {
   const R = 6371;
   const dLat = ((bLat - aLat) * Math.PI) / 180;

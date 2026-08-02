@@ -312,10 +312,59 @@ interface SmhiStation {
   longitude?: number;
 }
 
+// SMHI leverer TO ulike punktformer, og det er verdt å lese nøye:
+//
+//   Timesparametre  (1 lufttemperatur, 6 luftfuktighet):  {date, value, quality}
+//   Døgnparametre   (5 nedbør, 19 min-temp, 20 maks-temp): {from, to, ref, value, quality}
+//
+// Døgnpunktene har INGEN 'date'-nøkkel i det hele tatt, og 'ref' er en
+// datostreng ("2026-08-01"), ikke et tall. Se smhiPointTime under.
 interface SmhiDataPoint {
+  /** Kun timesparametrene: epoke-ms for målingen. */
   date?: number;
+  /** Kun døgnparametrene: epoke-ms for start/slutt på akkumuleringsdøgnet. */
+  from?: number;
+  to?: number;
+  /** Kun døgnparametrene: datomerkelappen for døgnet, f.eks. "2026-08-01". */
+  ref?: string | number;
   value?: string | number | null;
   quality?: string;
+}
+
+/** Tolker både epoke-ms-tall og datostrenger; alt annet blir NaN. */
+function toEpochMs(value: unknown): number {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : NaN;
+  if (typeof value === 'string' && value.length > 0) return Date.parse(value);
+  return NaN;
+}
+
+/**
+ * Tidsstempelet til et SMHI-målepunkt, i epoke-ms.
+ *
+ * Dette er selve feilen som gjorde at Sverige aldri fikk svensk stasjonsvær:
+ * koden gjorde `Number(p.date)` på ALLE punkter. Døgnparametrene (5, 19, 20)
+ * har ikke 'date', så hvert eneste døgnpunkt ble NaN og ble filtrert bort.
+ * precipDaily ble tom, fetchSmhi returnerte null, og hele Sverige falt
+ * stilltiende ned på Open-Meteo-reserven.
+ *
+ * Rekkefølgen er bevisst:
+ *   date → timesparametrene, entydig.
+ *   to   → slutten på akkumuleringsdøgnet. Et nedbørsdøgn målt 06:00→06:00
+ *          hører hjemme i «siste 3 døgn» når perioden ble AVSLUTTET innenfor
+ *          vinduet. Brukte vi 'from' eller 'ref' (midnatt) i stedet, ville det
+ *          ferskeste døgnet falle systematisk ut av 3-døgnsummen — altså for
+ *          lite målt regn, som trekker soppscoren ned.
+ *   from → numerisk reserve hvis 'to' skulle mangle.
+ *   ref  → siste reserve. Ligger sist fordi den er en streng: skulle SMHI
+ *          sende noe annet enn en ISO-dato, gjetter Date.parse fritt.
+ */
+function smhiPointTime(p: SmhiDataPoint | undefined): number {
+  if (!p) return NaN;
+  for (const candidate of [p.date, p.to, p.from, p.ref]) {
+    const time = toEpochMs(candidate);
+    if (Number.isFinite(time)) return time;
+  }
+  return NaN;
 }
 
 const SMHI_STATION_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
@@ -431,9 +480,9 @@ function sumWithinDays(points: SmhiDataPoint[] | null, days: number, now: number
   if (!points) return 0;
   const cutoff = now - days * 24 * 60 * 60 * 1000;
   return points.reduce((sum, p) => {
-    const date = Number(p?.date);
+    const time = smhiPointTime(p);
     const value = Number(p?.value);
-    if (!Number.isFinite(date) || date < cutoff) return sum;
+    if (!Number.isFinite(time) || time < cutoff) return sum;
     if (!Number.isFinite(value)) return sum;
     return sum + value;
   }, 0);
@@ -449,9 +498,9 @@ function extremeWithinDays(
   const cutoff = now - days * 24 * 60 * 60 * 1000;
   let result: number | null = null;
   for (const p of points) {
-    const date = Number(p?.date);
+    const time = smhiPointTime(p);
     const value = Number(p?.value);
-    if (!Number.isFinite(date) || date < cutoff) continue;
+    if (!Number.isFinite(time) || time < cutoff) continue;
     if (!Number.isFinite(value)) continue;
     if (result === null) result = value;
     else if (pick === 'min' && value < result) result = value;
@@ -491,12 +540,18 @@ async function fetchSmhi({ lat, lon }: WeatherFetchOptions): Promise<WeatherSumm
 
   const now = Date.now();
 
-  // Last ~30 daily precip values oldest→newest → soil-water bucket.
+  // Døgnnedbør eldst→nyest for de siste 30 døgnene → jordvann-bøtta.
+  //
+  // Vinduet er i TID, ikke antall punkter. 'latest-months' gir ~4 måneder, så
+  // «de siste 30 punktene» fra en stasjon som sluttet å rapportere i juni ville
+  // matet bøtta med juni-regn og gitt soilMoistureIndex «fuktig» samtidig som
+  // rain7dMm korrekt sa 0. Med tidsvindu blir serien tom i stedet, og guarden
+  // rett under sier ærlig «vi vet ikke» og lar Open-Meteo overta.
+  const precipCutoff = now - 30 * 24 * 60 * 60 * 1000;
   const precipDaily = (rainData ?? [])
-    .map((p) => ({ date: Number(p?.date), value: Number(p?.value) }))
-    .filter((p) => Number.isFinite(p.date) && Number.isFinite(p.value))
-    .sort((a, b) => a.date - b.date)
-    .slice(-30)
+    .map((p) => ({ time: smhiPointTime(p), value: Number(p?.value) }))
+    .filter((p) => Number.isFinite(p.time) && Number.isFinite(p.value) && p.time >= precipCutoff)
+    .sort((a, b) => a.time - b.time)
     .map((p) => p.value);
 
   // Samme regel som i Frost-adapteren over: nedbør er obligatorisk. Fant vi en

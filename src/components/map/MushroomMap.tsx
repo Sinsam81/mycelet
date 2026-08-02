@@ -7,6 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Download, MoreHorizontal, Navigation, Trash2, X } from 'lucide-react';
 import { createRoot, Root } from 'react-dom/client';
 import { createClient } from '@/lib/supabase/client';
+import { fetchRpcPaged } from '@/lib/supabase/paged-rpc';
 import { useGeolocation, watchPositionUntilAccurate } from '@/lib/hooks/useGeolocation';
 import { getRegion } from '@/lib/utils/region';
 import { usePrediction } from '@/lib/hooks/usePrediction';
@@ -39,6 +40,15 @@ import { FLAGS } from '@/lib/flags';
 import toast from 'react-hot-toast';
 
 type LeafletType = typeof import('leaflet');
+
+/**
+ * Hvor mange registrerte funn kartet henter for utsnittet. Verdien er et
+ * tegne-budsjett (klyngelaget takler noen tusen punkter), ikke en databasegrense
+ * — den hentes nå over flere sider fordi PostgREST kutter hvert enkelt svar ved
+ * 1000 rader. Treffer vi taket, sier kartet fra i stedet for å late som det
+ * viser alt. Se src/lib/supabase/paged-rpc.ts.
+ */
+const OCCURRENCE_FETCH_LIMIT = 3000;
 
 const FOREST_LABEL: Record<string, string> = {
   gran: 'granskog',
@@ -133,6 +143,7 @@ export function MushroomMap() {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [showOccurrences, setShowOccurrences] = useState(false);
   const [occCount, setOccCount] = useState(0);
+  const [occTruncated, setOccTruncated] = useState(false);
   const [occEdibility, setOccEdibility] = useState<'all' | 'edible' | 'toxic'>('all');
   const [occSeason, setOccSeason] = useState(false);
   const [showIntro, setShowIntro] = useState(false);
@@ -639,14 +650,27 @@ export function MushroomMap() {
       return;
     }
     const b = map.getBounds();
-    const { data } = await supabase.rpc('get_occurrences_in_bounds', {
-      min_lat: b.getSouth(),
-      min_lng: b.getWest(),
-      max_lat: b.getNorth(),
-      max_lng: b.getEast(),
-      p_species_id: filters.speciesId,
-      p_limit: 3000
-    });
+    // PostgREST kutter hvert svar ved 1000 rader uansett hva p_limit sier, så
+    // dette må pagineres — ellers viser kartet 1000 punkter som (fordi RPC-en
+    // ikke sorterer) i praksis er én til to arter, og ser komplett ut.
+    const { rows: data, truncated } = await fetchRpcPaged<{
+      latitude: number;
+      longitude: number;
+      species_id: number | null;
+      observed_at?: string | null;
+    }>(
+      supabase,
+      'get_occurrences_in_bounds',
+      {
+        min_lat: b.getSouth(),
+        min_lng: b.getWest(),
+        max_lat: b.getNorth(),
+        max_lng: b.getEast(),
+        p_species_id: filters.speciesId,
+        p_limit: OCCURRENCE_FETCH_LIMIT
+      },
+      { limit: OCCURRENCE_FETCH_LIMIT }
+    );
     const leaflet = (await import('leaflet')).default;
     cluster.clearLayers();
     const names = speciesNamesRef.current;
@@ -701,7 +725,7 @@ export function MushroomMap() {
       const diff = Math.min((month - nowMonth + 12) % 12, (nowMonth - month + 12) % 12);
       return diff <= 1; // within ±1 month of now (wraps the year boundary)
     };
-    const all = (data ?? []) as { latitude: number; longitude: number; species_id: number | null; observed_at?: string | null }[];
+    const all = data;
     const points = all.filter((o) => {
       if (seasonOnly && !inSeasonMonth(o.observed_at)) return false;
       if (filter === 'all') return true;
@@ -727,6 +751,11 @@ export function MushroomMap() {
       leaflet.marker([o.latitude, o.longitude], { icon }).bindPopup(popup).addTo(cluster);
     }
     setOccCount(points.length);
+    // Avkuttingen skal ikke være stille: når vi traff taket viser kartet et
+    // utvalg, og spiselighets-/sesongfiltrene over har filtrert INNI det
+    // utvalget. Et tomt «giftige»-kart kan da skyldes avkuttingen, ikke at det
+    // mangler giftige funn — og må aldri leses som en trygghetserklæring.
+    setOccTruncated(truncated);
   }, [filters.speciesId, supabase, t]);
 
   useEffect(() => {
@@ -742,6 +771,7 @@ export function MushroomMap() {
     } else {
       occClusterRef.current?.clearLayers();
       setOccCount(0);
+      setOccTruncated(false);
     }
   }, [loadOccurrences]);
 
@@ -1579,7 +1609,16 @@ export function MushroomMap() {
               showOccurrences ? 'bg-forest-800 text-white hover:bg-forest-700' : 'bg-white/95 text-gray-800 hover:bg-white'
             }`}
           >
-            {showOccurrences ? (occCount ? t('hideFindingsCount', { count: occCount }) : t('hideFindings')) : t('findingsButton')}
+            {/* «Skjul funn (3000)» ville påstått at det er nøyaktig 3000 funn i
+                utsnittet. Traff vi hentetaket vet vi bare at det er minst så
+                mange, og da skal tallet vise det. */}
+            {showOccurrences
+              ? occCount
+                ? occTruncated
+                  ? t('hideFindingsAtLeast', { count: occCount })
+                  : t('hideFindingsCount', { count: occCount })
+                : t('hideFindings')
+              : t('findingsButton')}
           </button>
           <button
             type="button"
@@ -1723,6 +1762,13 @@ export function MushroomMap() {
             >
               {occSeason ? t('onlyInSeasonNow') : t('showAllTimes')}
             </button>
+            {occTruncated ? (
+              <p className="w-full text-center text-[11px] font-medium text-amber-900">
+                <span className="rounded-full bg-amber-50/95 px-2 py-1 shadow-lg backdrop-blur">
+                  {t('findingsTruncated', { count: OCCURRENCE_FETCH_LIMIT })}
+                </span>
+              </p>
+            ) : null}
           </div>
         ) : null}
       </div>

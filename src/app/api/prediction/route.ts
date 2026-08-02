@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { fetchRpcPaged } from '@/lib/supabase/paged-rpc';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getBillingCapabilities, getUserBillingSubscription } from '@/lib/billing/subscription';
 import { fetchWeatherSummary } from '@/lib/weather';
@@ -11,7 +12,7 @@ import { getForestProperties, buildSpeciesHabitatPreferences } from '@/lib/fores
 import { computeCellPrediction } from '@/lib/prediction/cell-score';
 import { bestTilePerCell } from '@/lib/prediction/collapse-tiles';
 import { dayOfYearOf } from '@/lib/prediction/phenology';
-import { weightedOccurrenceDensity } from '@/lib/prediction/occurrences';
+import { weightedOccurrenceDensity, OCCURRENCE_FETCH_LIMIT } from '@/lib/prediction/occurrences';
 import { getElevation } from '@/lib/terrain';
 import { createRequestLogger } from '@/lib/log/request';
 import { getUserLocale } from '@/i18n/locale';
@@ -422,22 +423,34 @@ export async function GET(request: NextRequest) {
       // (null → v4_computed_neutral_fallback), so a 3s cap degrades gracefully.
       withTimeout(getForestProperties({ lat, lon }), 3000),
       // Real prior finds (GBIF) near the point → "observasjoner nær her" boost.
-      supabase.rpc('get_occurrences_in_bounds', {
-        min_lat: minLat,
-        min_lng: minLng,
-        max_lat: maxLat,
-        max_lng: maxLng,
-        p_species_id: speciesId,
-        p_limit: 4000
-      }),
+      // Pagineres forbi PostgREST-taket på 1000 rader; uten det er punktene vi
+      // regner tetthet fra et vilkårlig utvalg. Se src/lib/supabase/paged-rpc.ts.
+      fetchRpcPaged<{ latitude: number; longitude: number }>(
+        supabase,
+        'get_occurrences_in_bounds',
+        {
+          min_lat: minLat,
+          min_lng: minLng,
+          max_lat: maxLat,
+          max_lng: maxLng,
+          p_species_id: speciesId,
+          p_limit: OCCURRENCE_FETCH_LIMIT
+        },
+        { limit: OCCURRENCE_FETCH_LIMIT }
+      ),
       // Real terrain elevation (Kartverket) → replaces the pseudo-noise proxy.
       getElevation({ lat, lon })
     ]);
-    const nearbyOccurrences = weightedOccurrenceDensity(
-      (occRes?.data ?? []) as { latitude: number; longitude: number }[],
-      lat,
-      lon
-    );
+    if (occRes.truncated) {
+      log.warn('prediction.occurrences_truncated', {
+        limit: OCCURRENCE_FETCH_LIMIT,
+        minLat,
+        minLng,
+        maxLat,
+        maxLng
+      });
+    }
+    const nearbyOccurrences = weightedOccurrenceDensity(occRes.rows, lat, lon);
 
     const currentTemp = weather.temperatureC;
     const currentHumidity = weather.humidityPct;

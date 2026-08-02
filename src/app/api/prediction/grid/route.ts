@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { fetchRpcPaged } from '@/lib/supabase/paged-rpc';
 import { getBillingCapabilities, getUserBillingSubscription } from '@/lib/billing/subscription';
 import { fetchWeatherSamplesForBounds, nearestWeatherSample, weatherSourceSummary } from '@/lib/weather/samples';
 import { getForestProperties, buildSpeciesHabitatPreferences } from '@/lib/forest';
 import { computeCellPrediction } from '@/lib/prediction/cell-score';
 import { dayOfYearOf } from '@/lib/prediction/phenology';
-import { weightedOccurrenceDensity } from '@/lib/prediction/occurrences';
+import { weightedOccurrenceDensity, OCCURRENCE_FETCH_LIMIT } from '@/lib/prediction/occurrences';
 import { getElevation } from '@/lib/terrain';
 import { computeHabitatScore } from '@/lib/forest';
 import { buildSpotSummary } from '@/lib/utils/prediction-explanation';
@@ -164,16 +165,33 @@ export async function GET(request: NextRequest) {
             .eq('id', speciesId)
             .maybeSingle()
         : Promise.resolve(null),
-      supabase.rpc('get_occurrences_in_bounds', {
-        min_lat: minLat,
-        min_lng: minLng,
-        max_lat: maxLat,
-        max_lng: maxLng,
-        p_species_id: speciesId,
-        p_limit: 4000
-      })
+      // Pagineres forbi PostgREST-taket på 1000 rader — ellers får cellene i
+      // rutenettet nærhets-boost fra et vilkårlig (og artsskjevt) utvalg av
+      // observasjonene, uten at noe sier fra. Se src/lib/supabase/paged-rpc.ts.
+      fetchRpcPaged<{ latitude: number; longitude: number; species_id: number | null }>(
+        supabase,
+        'get_occurrences_in_bounds',
+        {
+          min_lat: minLat,
+          min_lng: minLng,
+          max_lat: maxLat,
+          max_lng: maxLng,
+          p_species_id: speciesId,
+          p_limit: OCCURRENCE_FETCH_LIMIT
+        },
+        { limit: OCCURRENCE_FETCH_LIMIT }
+      )
     ]);
-    const occurrences = (occRes?.data ?? []) as { latitude: number; longitude: number; species_id: number | null }[];
+    const occurrences = occRes.rows;
+    if (occRes.truncated) {
+      log.warn('prediction_grid.occurrences_truncated', {
+        limit: OCCURRENCE_FETCH_LIMIT,
+        minLat,
+        minLng,
+        maxLat,
+        maxLng
+      });
+    }
     const centerWeather = nearestWeatherSample(weatherSamples, centerLat, centerLng)?.weather ?? null;
     const weatherSource = weatherSourceSummary(weatherSamples);
 

@@ -39,3 +39,31 @@ export function computeSoilMoistureIndex(
   }
   return Math.round((soil / capacityMm) * 1000) / 1000;
 }
+
+/**
+ * Ett døgn videre med den samme bøtta: dagens indeks, pluss nedbøren som faller
+ * det døgnet, minus fordampningen ved det døgnets temperatur.
+ *
+ * Dette er nøyaktig samme regnestykke som løkka over — bare fortsatt fra en
+ * indeks vi allerede har, i stedet for kjørt om igjen på hele historikken. Det
+ * er det som gjør at en prognosedag kan bedømmes på SAMME fuktmålestokk som
+ * dag 0: dag 1 er per definisjon dag 0 flyttet ett steg. Å regne historikken om
+ * igjen ville brukt én temperatur for hele serien, og dermed kunne gitt et
+ * sprang mellom dag 0 og dag 1 uten at været beveget seg.
+ *
+ * Returnerer null når vi ikke har noen indeks å gå videre fra (leverandøren har
+ * ingen døgnnedbør) — da skal fuktsignalet være like fraværende fremover som i
+ * dag, ikke gjettet.
+ */
+export function advanceSoilMoistureIndex(
+  index: number | null,
+  precipMm: number,
+  meanTempC: number,
+  capacityMm: number = SOIL_CAPACITY_MM
+): number | null {
+  if (index == null || !Number.isFinite(index)) return null;
+  const et = evapotranspirationMmPerDay(Number.isFinite(meanTempC) ? meanTempC : 0);
+  const rain = Number.isFinite(precipMm) && precipMm > 0 ? precipMm : 0;
+  const soil = Math.max(0, Math.min(capacityMm, index * capacityMm + rain - et));
+  return Math.round((soil / capacityMm) * 1000) / 1000;
+}

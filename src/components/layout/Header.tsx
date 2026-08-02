@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { User } from 'lucide-react';
 import { useTranslations } from 'next-intl';
+import { getPlanViewState } from '@/lib/billing/plan-state';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { useBillingStatus } from '@/lib/hooks/useBilling';
 import { useIsNative } from '@/lib/hooks/useIsNative';
@@ -29,7 +30,11 @@ export function Header() {
   const t = useTranslations('Header');
   const { user, loading } = useAuth();
   const billingQuery = useBillingStatus(Boolean(user));
-  const tier = billingQuery.data?.capabilities.tier ?? 'free';
+  // Gullmerket skal si hva kunden faktisk har tilgang til nå. Leste vi `tier`
+  // rett fra raden, fikk et avsluttet eller ubetalt abonnement fortsatt
+  // «Premium» i gull — merket ville da vært en tilgangserklæring appen ikke
+  // holder.
+  const tier = getPlanViewState(billingQuery.data?.capabilities).activeTier;
   const native = useIsNative();
 
   return (

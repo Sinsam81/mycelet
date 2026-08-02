@@ -8,6 +8,7 @@ import { getClientKey, rateLimitResponse } from '@/lib/rate-limit/route';
 import { createRequestLogger } from '@/lib/log/request';
 import { getUserLocale } from '@/i18n/locale';
 import { observedRainWindows, rainWindowsFromSeries, sumLastN } from '@/lib/weather/windows';
+import { advanceSoilMoistureIndex } from '@/lib/weather/soil-moisture';
 import { DEFAULT_LOCALE, type Locale } from '@/i18n/config';
 
 /**
@@ -132,6 +133,25 @@ export async function GET(request: NextRequest) {
     const observedRain7d = observed.rain7dMm ?? observed.rain3dMm * 2;
     let forecastAccum = 0;
     const recent3: number[] = [];
+
+    // Fukta må gli fremover sammen med regnvinduene, ellers dømmes de sju dagene
+    // på hver sin målestokk.
+    //
+    // Dag 0 fikk soilMoistureIndex; dag 1-6 fikk den ikke i det hele tatt. I
+    // assessMushroomDay er fuktvetoet («tørr bakke avlyser feiringen») inert når
+    // tallet mangler, så det var STRUKTURELT dødt for hele prognosen: hver
+    // prognosedag med score >= 65 ble grønn uansett hvor tørr bakken var. På
+    // Nesodden ga det 83/100 tegnet gult ved siden av 75/100 tegnet grønt — med
+    // tallene skrevet rett over søylene. Brukeren planlegger turen til den
+    // DÅRLIGERE dagen fordi den er den eneste grønne.
+    //
+    // Vi flytter bøtta ett døgn av gangen fremover fra observert fukt, med
+    // prognosens egen nedbør og temperatur. Dag 1 er da per definisjon dag 0
+    // flyttet ett steg — samme modell, samme terskel — og dag 0-tallet vårt
+    // holder seg identisk med det /api/mushroom-day og flush-banneret under
+    // melder for samme dag.
+    let soilMoistureIndex = observed.soilMoistureIndex;
+
     future.forEach((d, idx) => {
       const i = idx + 1; // 1..6 days ahead
       forecastAccum += d.precipMm;
@@ -150,13 +170,17 @@ export async function GET(request: NextRequest) {
             rain14dMm: null
           };
       const dayDate = new Date(`${d.date}T12:00:00Z`);
+      soilMoistureIndex = advanceSoilMoistureIndex(soilMoistureIndex, d.precipMm, d.tempC);
       const a = assessMushroomDay(
         {
           temperatureC: d.tempC,
           humidityPct: d.humidityPct,
           ...windows,
           minTemp7dC: null,
-          maxTemp7dC: null
+          maxTemp7dC: null,
+          // Null her (leverandør uten døgnnedbør) lar vetoet være inert — men da
+          // er det inert for dag 0 også, så stripen er fortsatt konsistent.
+          soilMoistureIndex
         },
         dayDate.getUTCMonth() + 1,
         locale

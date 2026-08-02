@@ -48,6 +48,16 @@ const SOURCES: SourceEntry[] = [
     license: 'CC BY 4.0',
     url: 'https://www.smhi.se'
   },
+  // Open-Meteo er reserveleverandøren som brukes når Frost eller SMHI ikke
+  // svarer. Den manglet helt her mens SMHI ble kreditert for data vi ikke fikk
+  // — altså kreditering til feil leverandør. Open-Meteo er CC BY 4.0, så
+  // navngivingen er en lisensforpliktelse.
+  {
+    name: 'Open-Meteo',
+    whatKey: 'sourceOpenMeteo',
+    license: 'CC BY 4.0',
+    url: 'https://open-meteo.com'
+  },
   {
     name: 'Copernicus / EEA — CORINE Land Cover',
     whatKey: 'sourceCorine',
