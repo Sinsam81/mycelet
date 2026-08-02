@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { renderToString } from 'react-dom/server';
 import { NextIntlClientProvider } from 'next-intl';
+import { timeZoneForLocale } from '@/i18n/config';
 import { FindingPopup } from '../FindingPopup';
 import nb from '../../../../messages/nb.json';
 import sv from '../../../../messages/sv.json';
@@ -44,7 +45,14 @@ const finding = {
 
 const render = (node: React.ReactElement, locale: 'nb' | 'sv' = 'nb') =>
   renderToString(
-    <NextIntlClientProvider locale={locale} messages={locale === 'sv' ? sv : nb}>
+    // timeZone speiler MushroomMap: uten den logger next-intl
+    // ENVIRONMENT_FALLBACK ved hver rendring, og støyen i testkjøringen ser
+    // ut som om appen mangler oppsettet.
+    <NextIntlClientProvider
+      locale={locale}
+      timeZone={timeZoneForLocale(locale)}
+      messages={locale === 'sv' ? sv : nb}
+    >
       {node}
     </NextIntlClientProvider>
   );

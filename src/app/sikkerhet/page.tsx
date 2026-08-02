@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { AlertTriangle, BookOpen, Phone, Shield } from 'lucide-react';
 import { getTranslations } from 'next-intl/server';
 import { PageWrapper } from '@/components/layout/PageWrapper';
+import { PoisonHotlineLinks } from '@/components/safety/PoisonHotlineLinks';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations('Sikkerhet');
@@ -28,9 +29,7 @@ export default async function SikkerhetPage() {
               <p className="text-base font-bold text-red-900">{t('emergencyHeading')}</p>
               <p className="text-sm text-red-900">
                 {t('callPrefix')}{' '}
-                <a href={`tel:${s('poisonTel')}`} className="font-bold underline">
-                  {s('poisonDisplay')}
-                </a>{' '}
+                <PoisonHotlineLinks withName className="font-bold underline" />{' '}
                 {t('poisonSuffix')}
               </p>
               <p className="text-sm text-red-900">

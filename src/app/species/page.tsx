@@ -1,16 +1,18 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import { PageWrapper } from '@/components/layout/PageWrapper';
 import { SpeciesCard } from '@/components/species/SpeciesCard';
 import { SpeciesSearch } from '@/components/species/SpeciesSearch';
 import { useDebouncedValue } from '@/lib/hooks/useDebouncedValue';
 import { useSpecies } from '@/lib/hooks/useSpecies';
+import { habitatSuggestions } from '@/lib/species/habitat-filter';
 import type { Edibility } from '@/types/species';
 
 export default function SpeciesPage() {
   const t = useTranslations('Species');
+  const locale = useLocale();
   // Basen har seks spiselighetsverdier, filteret dekket fire. De 7 betinget
   // spiselige artene (morkler, riskere, rødnende fluesopp …) er nettopp de som
   // gjør folk syke ved feil tilberedning — og de kunne ikke isoleres i det hele
@@ -38,6 +40,8 @@ export default function SpeciesPage() {
     }),
     [debouncedQuery, edibility, inSeasonNow, habitat]
   );
+
+  const habitatOptions = useMemo(() => habitatSuggestions(locale), [locale]);
 
   const { data, isLoading, error } = useSpecies(filters);
 
@@ -77,9 +81,18 @@ export default function SpeciesPage() {
             <input
               className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2"
               placeholder={t('habitatPlaceholder')}
+              list="habitat-suggestions"
               value={habitat}
               onChange={(event) => setHabitat(event.target.value)}
             />
+            {/* Forslagene gjør at brukeren ser hvilke habitat som faktisk
+                finnes, i stedet for å gjette staving. Fritekst virker
+                fortsatt — lista er forslag, ikke en lukket meny. */}
+            <datalist id="habitat-suggestions">
+              {habitatOptions.map((option) => (
+                <option key={option} value={option} />
+              ))}
+            </datalist>
           </label>
 
           <label className="inline-flex items-center gap-2 text-sm font-medium text-gray-800">

@@ -8,6 +8,7 @@ import { Analytics } from '@/components/analytics/Analytics';
 import { NonNativeOnly } from '@/components/native/NonNativeOnly';
 import { Providers } from '@/components/layout/Providers';
 import { getUserLocale } from '@/i18n/locale';
+import { timeZoneForLocale } from '@/i18n/config';
 
 // Self-hosted via next/font (no external requests, zero CLS). --font-display
 // drives Tailwind's `font-serif` (headings/brand), --font-sans the body.
@@ -70,7 +71,14 @@ export default async function RootLayout({
   return (
     <html lang={locale} className={`${fraunces.variable} ${inter.variable}`}>
       <body>
-        <NextIntlClientProvider locale={locale} messages={messages}>
+        {/* timeZone må sendes eksplisitt: klientprovideren arver den ikke fra
+            getRequestConfig, og uten den formaterer serveren i UTC mens
+            nettleseren formaterer i brukerens sone. */}
+        <NextIntlClientProvider
+          locale={locale}
+          timeZone={timeZoneForLocale(locale)}
+          messages={messages}
+        >
           {/* Analytics + consent are WEB-ONLY on purpose: the App Store
               build's App Privacy label declares no usage analytics, and the
               native shell must match it. */}

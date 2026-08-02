@@ -1,5 +1,6 @@
 import type { ReactElement } from 'react';
 import { NextIntlClientProvider } from 'next-intl';
+import { timeZoneForLocale } from '@/i18n/config';
 import { FindingPopup } from './FindingPopup';
 import { MapFinding } from '@/types/finding';
 
@@ -33,7 +34,9 @@ export function findingPopupElement({
   messages
 }: FindingPopupElementArgs): ReactElement {
   return (
-    <NextIntlClientProvider locale={locale} messages={messages}>
+    // timeZone må settes eksplisitt: uten den bruker next-intl serverens
+    // sone, og datoer i popupen kan bli en dag feil for leseren.
+    <NextIntlClientProvider locale={locale} timeZone={timeZoneForLocale(locale)} messages={messages}>
       <FindingPopup finding={finding} displayName={displayName} />
     </NextIntlClientProvider>
   );

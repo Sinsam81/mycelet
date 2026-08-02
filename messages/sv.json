@@ -12,7 +12,7 @@
     "swedish": "Svenska"
   },
   "AdminAuditLog": {
-    "metaTitle": "Audit-logg — Mycelet admin",
+    "metaTitle": "Audit-logg — admin",
     "metaDescription": "Spårbara admin-åtgärder och kontoraderingar.",
     "actionVerifiedForagerUpsert": "Verifierad plockare — skapad/ändrad",
     "actionVerifiedForagerDelete": "Verifierad plockare — borttagen",
@@ -67,7 +67,7 @@
     "noUsers": "Inga användare hittades."
   },
   "Admin": {
-    "metaTitle": "Statistik — Mycelet admin",
+    "metaTitle": "Statistik — admin",
     "metaDescription": "Översikt över användare, fynd, community, moderering och artkatalog.",
     "mustBeLoggedIn": "Du måste vara inloggad för att se den här sidan.",
     "noAccessTitle": "Ingen åtkomst",
@@ -196,7 +196,7 @@
     "haveAccount": "Har du redan ett konto?",
     "login": "Logga in",
     "loading": "Laddar...",
-    "acceptPrefix": "Jag är minst 18 år (eller har samtycke från en vårdnadshavare) och godkänner",
+    "acceptPrefix": "Jag är minst 13 år, och har samtycke från en vårdnadshavare om jag är under 18. Jag godkänner",
     "acceptTerms": "användarvillkoren",
     "acceptAnd": "och",
     "acceptPrivacy": "integritetspolicyn"
@@ -241,7 +241,7 @@
     "monthDec": "dec"
   },
   "Datakilder": {
-    "metaTitle": "Datakällor — Mycelet",
+    "metaTitle": "Datakällor",
     "metaDescription": "Öppna datakällor och licenser som driver Mycelets svampkarta och prediktioner.",
     "heading": "Datakällor",
     "intro": "Mycelet är byggt på öppna, offentliga data. Svampkartan och prediktionerna hade inte varit möjliga utan dessa källor — stort tack till institutionerna och alla som rapporterar fynd. Här är vad vi använder, och under vilka licenser.",
@@ -388,7 +388,7 @@
     "sharingHelp": "Så hamnar fyndet på kartan. ”Ungefärlig” visas för alla, men flyttat upp till 500 m från den riktiga platsen. ”Privat” visas bara för dig."
   },
   "MineSteder": {
-    "metaTitle": "Mina platser — Mycelet",
+    "metaTitle": "Mina platser",
     "unknownSpecies": "Okänd art",
     "nearPlace": "Plats nära {lat}, {lng}",
     "onlyVisibleToYou": "Bara synlig för dig",
@@ -561,12 +561,15 @@
     "cookiesIntro": "Mycelet använder dessa strikt nödvändiga kakor:",
     "cookiesSessionLabel": "Inloggningssession (Supabase):",
     "cookiesSessionDesc": "kommer ihåg att du är inloggad så att du inte behöver logga in på varje sida.",
+    "cookiesLocaleLabel": "Språkval (MYCELET_LOCALE):",
+    "cookiesLocaleDesc": "kommer ihåg om du vill ha Mycelet på svenska eller norska. Sätts när du väljer språk och gäller i 12 månader.",
     "cookiesStripeLabel": "Stripe (endast vid betalning):",
-    "cookiesStripeDesc": "säkrar betalningsflödet och förhindrar bedrägeri.",
+    "cookiesStripeDesc": "vi sätter ingen Stripe-kaka på mycelet.com. Ska du betala skickas du till Stripes egen betalsida (checkout.stripe.com) — det är där Stripe sätter sina kakor, för att säkra betalningen och förhindra bedrägeri.",
     "cookiesOptionalIntro": "Om du väljer «Tillåt analys» använder vi dessutom:",
     "cookiesAnalyticsLabel": "Google Analytics (_ga):",
     "cookiesAnalyticsDesc": "hjälper oss att förstå sidvisningar och centrala produktflöden. Kakan löper ut senast efter 13 månader. Google Analytics laddas inte och inga analysdata skickas innan du samtycker.",
     "cookiesMarketing": "Vi använder inte marknadsföringskakor, annonspersonalisering eller Google Signals.",
+    "cookiesLocalStorage": "Dessutom sparar appen några praktiska val lokalt i din webbläsare (lokal lagring, inte kakor — de skickas aldrig till oss): ditt analysval, om du har sett introduktionen och karttipset, listan över fynd på turen du är på just nu, och vilka kartområden du har laddat ner för offlinebruk. Du tar bort dem genom att rensa webbläsardata för mycelet.com.",
     "cookiesManage": "Ändra analysval",
     "securityHeading": "9. Säkerhet",
     "securityHttps": "All trafik är krypterad med HTTPS.",
@@ -583,7 +586,7 @@
     "contactEmergencyBefore": "Vid akuta säkerhetshändelser, ring",
     "contactEmergencyAfter": "(dygnet runt).",
     "backToHome": "Tillbaka till startsidan",
-    "metaTitle": "Integritet — Mycelet",
+    "metaTitle": "Integritet",
     "metaDescription": "Hur Mycelet samlar in, använder och skyddar dina personuppgifter. Dina GDPR-rättigheter och vem du kan kontakta.",
     "supervisoryAuthorityName": "IMY (Integritetsskyddsmyndigheten)",
     "supervisoryAuthorityUrl": "https://www.imy.se",
@@ -608,7 +611,7 @@
     "statusIncompleteExpired": "Utgången",
     "statusInactive": "Inaktiv",
     "freeTagline": "Kom igång tryggt",
-    "freeFeature1": "5 AI-identifieringar per dygn",
+    "freeFeature1": "{limit} AI-identifieringar per dygn",
     "freeFeature2": "Artbibliotek med förväxlingsvarningar",
     "freeFeature3": "Svampkarta, svampvarning, kalender och forum",
     "premiumTagline": "Flexibelt månad för månad",
@@ -631,7 +634,7 @@
     "faq2Q": "Kan jag avsluta när som helst?",
     "faq2A": "Ja. Du hanterar prenumerationen själv från den här sidan (”Hantera prenumeration”). Åtkomsten gäller ut perioden du redan har betalat för, och du debiteras inte mer.",
     "faq3Q": "Vad får jag gratis?",
-    "faq3A": "Kärnan i Mycelet är gratis: artbiblioteket med förväxlingsvarningar, svampkartan, svampvarningen, kalendern, forumet — och 5 AI-identifieringar per dygn.",
+    "faq3A": "Kärnan i Mycelet är gratis: artbiblioteket med förväxlingsvarningar, svampkartan, svampvarningen, kalendern, forumet — och {limit} AI-identifieringar per dygn.",
     "faq4Q": "Fungerar Mycelet i Sverige?",
     "faq4A": "Ja. Karta, väderdata, fynd och prediktion täcker både Norge och Sverige.",
     "checkoutSuccess": "Betalning slutförd. Uppdaterar prenumeration...",
@@ -733,7 +736,7 @@
     "seeAlsoPrefix": "Se även:",
     "privacyLinkText": "Integritetspolicyn",
     "seeAlsoSuffix": "för hur vi behandlar dina uppgifter.",
-    "metaTitle": "Säkerhet och ansvar — Mycelet",
+    "metaTitle": "Säkerhet och ansvar",
     "metaDescription": "Så använder du Mycelet säkert. Kontaktinfo till Giftinformationscentralen och svampkontroll vid behov."
   },
   "SpeciesDetail": {
@@ -1030,7 +1033,7 @@
     "activeCount": "{count} aktiva",
     "closeFilters": "Stäng filter",
     "searchPlace": "Sök efter plats",
-    "searchPlacePlaceholder": "Nordmarka, Trondheim …",
+    "searchPlacePlaceholder": "Tiveden, Göteborg …",
     "noPlaceResults": "Hittade inga platser. Mycelet täcker Norge och Sverige.",
     "speciesSearch": "Art (sök)",
     "speciesSearchPlaceholder": "Kantarell",
@@ -1293,6 +1296,11 @@
   },
   "Safety": {
     "poisonTel": "112",
+    "poisonAcuteLabel": "112 (akut)",
+    "poisonTelDirect": "+46104566700",
+    "poisonDirectLabel": "010-456 67 00",
+    "poisonOr": "eller",
+    "poisonName": "Giftinformationscentralen",
     "poisonNumber": "112 (akut) eller 010-456 67 00",
     "poisonDisplay": "Giftinformationscentralen: 112 (akut) eller 010-456 67 00",
     "emergencyTel": "112",
@@ -1405,7 +1413,7 @@
     "forestMeadowSpecies": "Parasollskivling och champinjoner — se upp för vit flugsvamp!",
     "pricingHeading": "Priser",
     "planFree": "Gratis",
-    "planFreeF1": "5 AI-identifieringar per dygn",
+    "planFreeF1": "{limit} AI-identifieringar per dygn",
     "planFreeF2": "Svampkarta, prognos och kalender",
     "planFreeF3": "Artbibliotek med varningar",
     "planPremium": "Premium",
@@ -1424,7 +1432,7 @@
     "safetyBody": "Ät aldrig svamp du inte är 100 % säker på. Mycelet är ett hjälpmedel, inte ett facit — AI-förslag ska alltid dubbelkollas, och appen visar alltid farliga förväxlingsarter. Är du osäker, ta med svampen till en svampkonsulent.",
     "faqHeading": "Frågor och svar",
     "faqFreeQ": "Är appen gratis?",
-    "faqFreeA": "Ja — du kan använda svampkarta, prognos, kalender, artbibliotek och 5 AI-identifieringar per dygn helt gratis, utan kortuppgifter. Premium ger obegränsad AI, full prediktion och offlinekartor.",
+    "faqFreeA": "Ja — du kan använda svampkarta, prognos, kalender, artbibliotek och {limit} AI-identifieringar per dygn helt gratis, utan kortuppgifter. Premium ger obegränsad AI, full prediktion och offlinekartor.",
     "faqSwedenQ": "Fungerar den i Sverige?",
     "faqSwedenA": "Ja! Väderdata från SMHI, svenska skogsdata och svenskt språk i appen. Kartan och prognosen fungerar i hela Sverige och Norge.",
     "faqAiQ": "Kan jag lita blint på AI-identifieringen?",
@@ -1498,7 +1506,7 @@
     "termsLink": "Användarvillkor",
     "purchaseTermsLink": "Köpvillkor",
     "privacyLink": "Integritetspolicy",
-    "metaTitle": "Kontakt — Mycelet",
+    "metaTitle": "Kontakt",
     "metaDescription": "Kontaktuppgifter och företagsinformation för Mycelet."
   }
 }
