@@ -47,7 +47,10 @@ describe('buildTopSpotPopupHtml', () => {
     // 714 m radius ⇒ ~1,4 km bredt område.
     const html = popup('nb');
     expect(html).toContain('søkeområdet');
-    expect(html).toContain('1.4 km');
+    // Komma, ikke punktum: resten av rapporten skriver «1,1 km» og «0,71»
+    // gjennom Intl, og blandet tegnsetting i én tekst ser maskinskrevet ut.
+    expect(html).toContain('1,4 km');
+    expect(html, 'norsk tekst skal ikke ha engelsk desimaltegn').not.toContain('1.4 km');
     expect(html).toContain('flekkvis');
     expect(popup('sv')).toContain('sökområdet');
     expect(popup('sv')).toContain('fläckvis');

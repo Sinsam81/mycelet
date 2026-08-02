@@ -89,34 +89,7 @@ type TopSpot = {
   report?: AreaReport;
 };
 
-/**
- * Popupene for toppsteder bygges som HTML-strenger (Leaflet-API-et tar en
- * streng), og rapportlinjene inneholder navn fra databasen. Alt som ikke er
- * vår egen markup escapes derfor før det limes inn.
- */
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
 
-/** Områderapporten som lesbare avsnitt: overskrift + korte linjer. */
-function areaReportHtml(report: AreaReport | undefined): string {
-  if (!report || report.sections.length === 0) return '';
-  return report.sections
-    .map((section) => {
-      const lines = section.lines
-        .map((line) => `<div style="margin-top:3px">${escapeHtml(line)}</div>`)
-        .join('');
-      return `<div style="margin-top:9px">
-        <div style="font-size:11px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;color:#4b5563">${escapeHtml(section.heading)}</div>
-        <div style="font-size:12px;color:#1f2937;line-height:1.45">${lines}</div>
-      </div>`;
-    })
-    .join('');
-}
 
 function bearingLabel(aLat: number, aLng: number, bLat: number, bLng: number): string {
   const dLng = ((bLng - aLng) * Math.PI) / 180;
@@ -435,6 +408,7 @@ export function MushroomMap() {
           radiusM,
           limited: opts?.limited,
           speciesId: opts?.speciesId ?? null,
+          locale,
           t: t as (key: string, values?: Record<string, string | number>) => string
         });
         const { area, center } = createTopSpotArea(leaflet, spot, radiusM, color);
