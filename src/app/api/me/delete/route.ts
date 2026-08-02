@@ -6,6 +6,11 @@ import { checkRateLimit } from '@/lib/rate-limit';
 import { getClientKey, rateLimitResponse } from '@/lib/rate-limit/route';
 import { createRequestLogger } from '@/lib/log/request';
 import { deleteUserStorageObjects, type StorageApi } from '@/lib/storage/delete-user-objects';
+import {
+  RETAINED_VISIBILITY,
+  coarsenRetainedObservations,
+  type RetainedObservationsApi
+} from '@/lib/privacy/retained-observations';
 
 /**
  * GDPR Article 17 — right to erasure ("right to be forgotten").
@@ -18,13 +23,17 @@ import { deleteUserStorageObjects, type StorageApi } from '@/lib/storage/delete-
  * Two-step deletion to honor the policy distinction:
  *
  *   STEP 1 (this handler, BEFORE auth deletion): explicitly delete the
- *     rows that should NOT be anonymized:
+ *     rows that should NOT be anonymized, and coarsen what is kept:
  *       - all positive findings (any visibility)
- *       - private negative findings (visibility='private')
+ *       - every negative finding whose visibility is NOT 'approximate'
+ *         (both 'private' and 'public' — the declaration promises that
+ *         only approximate-level observations survive)
+ *       - the survivors get latitude/longitude overwritten with the
+ *         jittered display_* pair, so the exact GPS point is gone
  *
  *   STEP 2 (Supabase auth.admin.deleteUser): cascade to profiles, which
  *     SET NULLs the user_id on:
- *       - public/approximate negative findings  → kept as training data
+ *       - approximate negative findings          → kept as training data
  *       - all forum_posts                       → "[slettet bruker]" in UI
  *       - all comments                          → same
  *     Other tables (post_likes, comment_likes, saved_posts, reports)
@@ -99,7 +108,7 @@ export async function POST(request: NextRequest) {
   // Done via session client so RLS scopes them correctly.
   const [
     positiveFindingsCount,
-    privateNegativeFindingsCount,
+    deletedNegativeFindingsCount,
     anonymizedNegativeFindingsCount,
     postsCount,
     commentsCount,
@@ -112,18 +121,20 @@ export async function POST(request: NextRequest) {
       .select('id', { count: 'exact', head: true })
       .eq('user_id', user.id)
       .eq('is_negative_observation', false),
+    // Kvitteringen må telle de samme radene som faktisk slettes. Alt negativt
+    // som ikke er delt på omtrentlig nivå går med, ikke bare de private.
     supabase
       .from('findings')
       .select('id', { count: 'exact', head: true })
       .eq('user_id', user.id)
       .eq('is_negative_observation', true)
-      .eq('visibility', 'private'),
+      .neq('visibility', RETAINED_VISIBILITY),
     supabase
       .from('findings')
       .select('id', { count: 'exact', head: true })
       .eq('user_id', user.id)
       .eq('is_negative_observation', true)
-      .neq('visibility', 'private'),
+      .eq('visibility', RETAINED_VISIBILITY),
     supabase.from('forum_posts').select('id', { count: 'exact', head: true }).eq('user_id', user.id),
     supabase.from('comments').select('id', { count: 'exact', head: true }).eq('user_id', user.id),
     supabase.from('post_likes').select('post_id', { count: 'exact', head: true }).eq('user_id', user.id),
@@ -167,17 +178,50 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  // STEP 1b — negative observasjoner som IKKE skal overleve.
+  //
+  // Personvernerklæringen (Personvern.retentionNegativeDesc) sier at det som
+  // beholdes er «kun observasjoner med omtrentlig delingsnivå (±500 m)».
+  // Koden slettet bare de private, så både 'public' og 'approximate'
+  // overlevde — og de offentlige med det eksakte GPS-punktet, siden
+  // display_* er lik latitude/longitude for public. Filteret er derfor snudd:
+  // alt som ikke er 'approximate' går med.
   const { error: privateDeleteError } = await admin
     .from('findings')
     .delete()
     .eq('user_id', user.id)
     .eq('is_negative_observation', true)
-    .eq('visibility', 'private');
+    .neq('visibility', RETAINED_VISIBILITY);
   if (privateDeleteError) {
     userLog.error('account.self_delete.private_findings_delete_failed', privateDeleteError);
     return NextResponse.json(
       {
         error: 'Kunne ikke fjerne private observasjoner før kontosletting',
+        details: RETRY_IS_SAFE
+      },
+      { status: 500 }
+    );
+  }
+
+  // STEP 1b2 — grovkorn posisjonen på det som faktisk blir liggende igjen.
+  //
+  // display_latitude/longitude er den jitrede kopien (±500 m); latitude/
+  // longitude er det eksakte punktet brukeren sto på. Uten dette steget
+  // beholdt vi det eksakte punktet, med tidsstempel og art — noe annet enn
+  // det brukeren fikk vite før hen bekreftet slettingen.
+  //
+  // Trigger'n set_display_location stempler display_* på nytt ut fra den nye
+  // (allerede grovkornede) verdien. Det gir mer støy, aldri mindre — så det
+  // er trygt i denne retningen.
+  const coarsenError = await coarsenRetainedObservations(
+    admin as unknown as RetainedObservationsApi,
+    user.id
+  );
+  if (coarsenError) {
+    userLog.error('account.self_delete.coarsen_failed', undefined, { detail: coarsenError });
+    return NextResponse.json(
+      {
+        error: 'Kunne ikke anonymisere posisjonen på observasjonene dine',
         details: RETRY_IS_SAFE
       },
       { status: 500 }
@@ -232,7 +276,9 @@ export async function POST(request: NextRequest) {
   // facing deletion is unaffected.
   const counts = {
     positiveFindings: positiveFindingsCount.count ?? 0,
-    privateNegativeFindings: privateNegativeFindingsCount.count ?? 0,
+    // Het tidligere privateNegativeFindings. Navnet stemte ikke lenger: nå
+    // slettes ALLE negative observasjoner som ikke er delt på omtrentlig nivå.
+    deletedNegativeFindings: deletedNegativeFindingsCount.count ?? 0,
     anonymizedNegativeFindings: anonymizedNegativeFindingsCount.count ?? 0,
     forumPosts: postsCount.count ?? 0,
     comments: commentsCount.count ?? 0,
