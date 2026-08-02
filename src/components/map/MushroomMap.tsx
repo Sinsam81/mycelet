@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { NextIntlClientProvider, useLocale, useMessages, useTranslations } from 'next-intl';
+import { timeZoneForLocale } from '@/i18n/config';
 import { NonNativeOnly } from '@/components/native/NonNativeOnly';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Download, MoreHorizontal, Navigation, Trash2, X } from 'lucide-react';
@@ -1137,7 +1138,11 @@ export function MushroomMap() {
       // rammet ALLE brukere, ikke bare svenske. Se testen ved siden av
       // FindingPopup, som fastholder at komponenten kaster uten provider.
       popupRoot.render(
-        <NextIntlClientProvider locale={locale} messages={messages}>
+        <NextIntlClientProvider
+          locale={locale}
+          timeZone={timeZoneForLocale(locale)}
+          messages={messages}
+        >
           <FindingPopup
             finding={finding}
             displayName={
