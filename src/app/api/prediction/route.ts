@@ -511,6 +511,10 @@ export async function GET(request: NextRequest) {
           ? {
               temperature: Math.round(weather.temperatureC),
               humidity: Math.round(weather.humidityPct),
+              // Klienten må vite om fuktprosenten er målt eller bare den
+              // nøytrale fallbacken — ellers skriver forklaringen «75 %
+              // luftfuktighet» som om en stasjon hadde målt det.
+              humidityEstimated: weather.humidityEstimated,
               rain3dMm: Math.round(weather.rain3dMm * 10) / 10,
               rain7dMm: weather.rain7dMm != null ? Math.round(weather.rain7dMm * 10) / 10 : null,
               rain14dMm: weather.rain14dMm != null ? Math.round(weather.rain14dMm * 10) / 10 : null,
@@ -811,6 +815,7 @@ export async function GET(request: NextRequest) {
       weather: {
         temperature: Math.round(currentTemp),
         humidity: Math.round(currentHumidity),
+        humidityEstimated: weather.humidityEstimated,
         rain3dMm: Math.round(rain3dMm * 10) / 10,
         rain7dMm: weather.rain7dMm != null ? Math.round(weather.rain7dMm * 10) / 10 : null,
         rain14dMm: weather.rain14dMm != null ? Math.round(weather.rain14dMm * 10) / 10 : null,

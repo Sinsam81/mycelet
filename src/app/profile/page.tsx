@@ -14,6 +14,7 @@ import type { Edibility } from '@/types/species';
 import { intlLocale } from '@/lib/utils/intl-locale';
 import { formatMemberSince } from '@/lib/utils/member-since';
 import { statusLabel, tierLabel } from '@/lib/billing/labels';
+import { logger } from '@/lib/log';
 
 interface UserStats {
   total_findings: number;
@@ -68,7 +69,7 @@ export default async function ProfilePage() {
     );
   }
 
-  const [{ data: profile }, statsRes, findingsRes, postsRes, subscription, { data: roleRow }] = await Promise.all([
+  const [{ data: profile }, statsRes, findingsRes, postsRes, subscription, roleRes] = await Promise.all([
     supabase.from('profiles').select('username,display_name,bio,location,created_at,avatar_url').eq('id', user.id).maybeSingle(),
     supabase.rpc('get_user_stats', { p_user_id: user.id }),
     supabase
@@ -94,10 +95,21 @@ export default async function ProfilePage() {
     total_posts: 0,
     total_likes_received: 0
   };
+  // Feilene her er alle «fail closed» — lista blir tom, admin-lenken forsvinner
+  // — så de er ikke farlige, men de er STILLE. Uten disse linjene ser en
+  // spørrefeil ut nøyaktig som «brukeren har ingen funn» / «er ikke admin»,
+  // og det er ikke mulig å finne igjen i loggen etterpå.
+  if (findingsRes.error) {
+    logger.error('profile.findings_failed', { userId: user.id, message: findingsRes.error.message });
+  }
+  if (roleRes.error) {
+    logger.warn('profile.role_lookup_failed', { userId: user.id, message: roleRes.error.message });
+  }
+
   const findings = (findingsRes.data ?? []) as unknown as FindingRow[];
   const posts = (postsRes.data ?? []) as PostRow[];
   const billing = getBillingCapabilities(subscription);
-  const isAdmin = roleRow?.role === 'admin' || roleRow?.role === 'moderator';
+  const isAdmin = roleRes.data?.role === 'admin' || roleRes.data?.role === 'moderator';
 
   // Kontoens dato, ikke profilradens — se src/lib/utils/member-since.ts.
   const memberSince = formatMemberSince(user, profile ?? null, locale);

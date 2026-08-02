@@ -29,6 +29,13 @@ import { bearerSecretMatches } from '@/lib/security/secret-compare';
 
 export const maxDuration = 300; // seconds (Vercel Pro); localhost is unbounded
 
+/**
+ * Hvor lenge genererte fliser beholdes. Ingenting leser eldre datoer; vinduet
+ * finnes bare for feilsøking. Verdien er den som skal stå i
+ * docs/retention-policy.md — hold dem i takt.
+ */
+const TILE_RETENTION_DAYS = 30;
+
 interface SpeciesRow {
   id: number;
   latin_name: string;
@@ -235,7 +242,38 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  return NextResponse.json({ ok: true, tileDate, species: species.length, generated });
+  // ── Opprydding ───────────────────────────────────────────────────────
+  // docs/retention-policy.md sier at prediction_tiles «ruller daglig —
+  // overskrives». Det gjorde den ikke: cron-ruta over sletter bare DAGENS
+  // rader for regionen den regenererer, så tabellen vokste med ~763 rader per
+  // døgn og hadde historikk helt tilbake til april. Ingen leser gamle datoer —
+  // både kartet og /api/prediction filtrerer på tile_date.
+  //
+  // Vinduet er bevisst romslig (ikke 1 dag): et par ukers historikk er verdt
+  // mye ved feilsøking av «hvorfor var scoren lav forrige helg», og ingen av
+  // radene er persondata. Sletting skjer sist, etter at nye fliser er skrevet,
+  // så en feilet kjøring aldri etterlater tabellen tom.
+  const cutoff = new Date(Date.now() - TILE_RETENTION_DAYS * 86_400_000).toISOString().slice(0, 10);
+  const { error: pruneErr, count: pruned } = await supabase
+    .from('prediction_tiles')
+    .delete({ count: 'exact' })
+    .lt('tile_date', cutoff);
+  if (pruneErr) {
+    // Opprydding er ikke kritisk — dagens fliser er allerede skrevet. Logg og
+    // svar OK, slik at et RLS-/rettighetsproblem her ikke ser ut som at
+    // flisgenereringen feilet.
+    log.warn('generate_tiles.prune_failed', { cutoff, message: pruneErr.message });
+  } else {
+    log.info('generate_tiles.pruned', { cutoff, deleted: pruned ?? 0 });
+  }
+
+  return NextResponse.json({
+    ok: true,
+    tileDate,
+    species: species.length,
+    generated,
+    pruned: pruneErr ? null : pruned ?? 0
+  });
 }
 
 // Vercel Cron sends GET (with CRON_SECRET as a bearer when the env var is set).

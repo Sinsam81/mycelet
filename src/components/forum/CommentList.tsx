@@ -6,7 +6,8 @@ import { Button } from '@/components/ui/Button';
 import { ForumComment, ReportReason } from '@/types/forum';
 import { ReportButton } from '@/components/forum/ReportButton';
 import { BlockUserButton } from '@/components/forum/BlockUserButton';
-import { forumBadgeClass, getForumBadge } from '@/lib/utils/forumBadge';
+import { forumBadgeClass } from '@/lib/utils/forumBadge';
+import { useForumBadge } from '@/lib/hooks/useForumBadge';
 import { intlLocale } from '@/lib/utils/intl-locale';
 
 interface CommentListProps {
@@ -38,7 +39,7 @@ function CommentCard({
   const t = useTranslations('CommentList');
   const locale = useLocale();
   const author = comment.profiles?.display_name || comment.profiles?.username || t('unknownUser');
-  const badge = getForumBadge(comment.profiles);
+  const badge = useForumBadge()(comment.profiles);
   const isOwner = currentUserId === comment.user_id;
 
   const [showReply, setShowReply] = useState(false);

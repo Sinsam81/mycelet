@@ -517,3 +517,41 @@ describe('buildExplanation — the rain line must mean the same in every window'
     expect(lines.some((l) => l.text.includes('fruktsetting'))).toBe(false);
   });
 });
+
+describe('fuktighet som ikke er målt', () => {
+  // Nesodden (59.79/10.65) er standardposisjonen i eksemplene, og nærmeste
+  // Frost-stasjon der har ingen fuktsensor. Svaret ble likevel skrevet ut som
+  // «75 % luftfuktighet — moderat»: et målt tall som aldri ble målt.
+  const nesodden: ExplanationWeather = {
+    temperatureC: 15,
+    humidityPct: 75,
+    humidityEstimated: true,
+    rain3dMm: 6,
+    rain7dMm: 14,
+    rain14dMm: 28,
+    minTemp7dC: 9,
+    maxTemp7dC: 20
+  };
+
+  it('skriver ingen fuktlinje når verdien bare er fallbacken', () => {
+    const lines = buildExplanation({ month: 9, weather: nesodden });
+    expect(lines.some((l) => l.category === 'humidity')).toBe(false);
+  });
+
+  it('nevner ikke prosenttallet noe annet sted heller', () => {
+    const lines = buildExplanation({ month: 9, weather: nesodden });
+    expect(lines.some((l) => l.text.includes('75'))).toBe(false);
+  });
+
+  it('skriver fortsatt fuktlinja når stasjonen faktisk målte', () => {
+    const lines = buildExplanation({ month: 9, weather: { ...nesodden, humidityEstimated: false } });
+    const line = lines.find((l) => l.category === 'humidity');
+    expect(line?.text).toContain('75');
+  });
+
+  it('behandler manglende flagg som en måling (bakoverkompatibelt)', () => {
+    const { humidityEstimated: _drop, ...utenFlagg } = nesodden;
+    const lines = buildExplanation({ month: 9, weather: utenFlagg });
+    expect(lines.some((l) => l.category === 'humidity')).toBe(true);
+  });
+});

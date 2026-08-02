@@ -35,6 +35,44 @@ describe('phenologyFactor', () => {
     const v = phenologyFactor(KNOWN_ID, 60, 15) ?? 0;
     expect(v).toBeLessThan(0.2);
   });
+
+  // Generatoren kaster alle observasjoner utenfor april–november, så kurvene
+  // har en hardkodet null i des–mars. Det er FRAVÆR AV DATA, ikke en måling.
+  // Vi må returnere null der, ellers leser kallstedet nullen som «arten finnes
+  // ikke nå» og vintersopp/judasøre kollapser i sin egen topp-sesong.
+  it('returns null outside the window the curves were built on (Dec-Mar)', () => {
+    for (const month of [12, 1, 2, 3]) {
+      expect(phenologyFactor(KNOWN_ID, 60, dayOfYearFromMonth(month))).toBeNull();
+    }
+    expect(phenologyFactor(KNOWN_ID, 60, 335)).toBeNull(); // 1. desember
+    expect(phenologyFactor(KNOWN_ID, 60, 90)).toBeNull(); // 31. mars
+  });
+
+  it('still returns a curve value at both edges of that window', () => {
+    expect(phenologyFactor(KNOWN_ID, 60, 91)).not.toBeNull(); // 1. april
+    expect(phenologyFactor(KNOWN_ID, 60, 334)).not.toBeNull(); // 30. november
+    for (const month of [4, 5, 6, 7, 8, 9, 10, 11]) {
+      expect(phenologyFactor(KNOWN_ID, 60, dayOfYearFromMonth(month))).not.toBeNull();
+    }
+  });
+
+  // Selve skaden: en vinterart med håndsatt vindu okt-des skal IKKE dyttes til
+  // «finnes ikke» av en kurve som ikke har desemberdata.
+  it('lets a winter species keep its catalogue season in December', () => {
+    const winterSpecies: SpeciesContext = {
+      speciesId: KNOWN_ID,
+      latinName: 'Flammulina velutipes',
+      genus: 'Flammulina',
+      seasonStart: 10,
+      seasonEnd: 12,
+      peakSeasonStart: 11,
+      peakSeasonEnd: 12
+    };
+    const decemberWeather = { temperature: 5, humidity: 85, rain3dMm: 8 };
+    const seasonality = phenologyFactor(winterSpecies.speciesId, 60, dayOfYearFromMonth(12));
+    const multiplier = computeSpeciesAdjustment(winterSpecies, decemberWeather, 12, seasonality);
+    expect(multiplier).toBeGreaterThan(0.5);
+  });
 });
 
 describe('day-of-year helpers', () => {

@@ -5,6 +5,7 @@ import { useLocale, useTranslations } from 'next-intl';
 import { PageWrapper } from '@/components/layout/PageWrapper';
 import { SpeciesCard } from '@/components/species/SpeciesCard';
 import { SpeciesSearch } from '@/components/species/SpeciesSearch';
+import { SafetyNote } from '@/components/safety/SafetyNote';
 import { useDebouncedValue } from '@/lib/hooks/useDebouncedValue';
 import { useSpecies } from '@/lib/hooks/useSpecies';
 import { habitatSuggestions } from '@/lib/species/habitat-filter';
@@ -100,6 +101,11 @@ export default function SpeciesPage() {
             {t('inSeasonOnly')}
           </label>
         </div>
+
+        {/* Kortene under bærer hvert sitt spiselighetsmerke. Uten denne noten
+            var biblioteket en av to flater i appen som viste «Spiselig» for
+            dusinvis av arter uten noe forbehold og uten vei til /sikkerhet. */}
+        <SafetyNote />
 
         {isLoading ? <p className="text-sm text-gray-700">{t('loading')}</p> : null}
         {error ? <p className="text-sm text-red-600">{t('loadError')}</p> : null}

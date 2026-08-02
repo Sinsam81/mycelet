@@ -68,7 +68,7 @@ Gjenstår av dette: 7-dagers værtrend-graf (MET Locationforecast 2.0 — gratis
 
 - [ ] **Sett `SUPABASE_SERVICE_ROLE_KEY`** i Vercel produksjonsmiljø ✅ *allerede satt i lokal `.env.local`*
 - [ ] **Sett opp `privacy@mycelet.no`** mailboks (Google Workspace eller lignende). Adressen er referert i `/personvern` og `/api/me/export`-respons.
-- [ ] **Send `/personvern` til norsk personvern-advokat** for gjennomgang. Fyll inn alle `[FYLL INN]`-felter først (juridisk navn, org-nummer, retensjonsperioder, Supabase-region).
+- [ ] **Send `/personvern` til norsk personvern-advokat** for gjennomgang. Erklæringen er komplett på både nb og sv — juridisk navn, org-nr, behandlingsgrunnlag, databehandlere og lagringstider står inne, og det finnes ingen `[FYLL INN]`-felter igjen. Advokatgjennomgangen er eneste gjenstående punkt.
 - [ ] **Signer DPA-er** i leverandør-dashboards:
   - [ ] Supabase
   - [ ] Stripe

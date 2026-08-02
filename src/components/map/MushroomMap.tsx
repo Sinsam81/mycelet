@@ -1605,6 +1605,7 @@ export function MushroomMap() {
       weather: {
         temperatureC: data.weather.temperature,
         humidityPct: data.weather.humidity,
+        humidityEstimated: data.weather.humidityEstimated ?? false,
         rain3dMm: data.weather.rain3dMm,
         rain7dMm: data.weather.rain7dMm ?? null,
         rain14dMm: data.weather.rain14dMm ?? null,

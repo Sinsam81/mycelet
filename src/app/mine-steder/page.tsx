@@ -103,7 +103,7 @@ export default async function MineStederPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect('/auth/login?redirect=/mine-steder');
 
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('findings')
     .select(
       'id, location_name, latitude, longitude, found_at, image_url, visibility, species_name_override, mushroom_species(norwegian_name,swedish_name)'
@@ -130,7 +130,17 @@ export default async function MineStederPage() {
           </p>
         </header>
 
-        {spots.length === 0 ? (
+        {/* Tom er ikke det samme som feilet. Ved en forbigående spørrefeil
+            (RLS-endring, pool-metning, timeout) rendret siden tidligere
+            tom-tilstanden med «du har ikke lagret noen steder ennå» — for en
+            betalende bruker hvis eneste grunn til å betale ER de lagrede
+            stedene, ser det ut som at dataene er slettet. */}
+        {error ? (
+          <article className="rounded-2xl border-2 border-amber-300 bg-amber-50 p-4">
+            <h2 className="font-serif text-lg font-semibold text-amber-900">{t('loadErrorHeading')}</h2>
+            <p className="mt-1 text-sm text-amber-900">{t('loadErrorBody')}</p>
+          </article>
+        ) : spots.length === 0 ? (
           <article className="rounded-2xl bg-white p-6 text-center shadow-card">
             <p className="text-4xl">🍄</p>
             <h2 className="mt-2 font-serif text-xl font-semibold text-forest-900">{t('emptyHeading')}</h2>

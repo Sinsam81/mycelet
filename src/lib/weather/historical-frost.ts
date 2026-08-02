@@ -48,6 +48,12 @@ function authHeader(clientId: string): string {
 async function frostGet(path: string, params: Record<string, string>, auth: string) {
   const response = await fetch(`${FROST_BASE}${path}?${new URLSearchParams(params).toString()}`, {
     headers: { Authorization: auth, Accept: 'application/json' },
+    // Eneste utgående kall i src/lib uten frist. Eneste konsument er den
+    // nattlige backfill-jobben, som har maxDuration = 300: ÉN hengende
+    // MET-forespørsel kunne spise hele vinduet, funksjonen dø på plattformens
+    // timeout midt i arbeidet, og natta bli borte uten en eneste feilmelding.
+    // Samme mønster som weather/index.ts allerede bruker mot samme API.
+    signal: AbortSignal.timeout(10_000),
     next: { revalidate: 31_536_000 }
   });
   if (!response.ok) throw new Error(`frost_${path.includes('sources') ? 'sources' : 'observations'}_${response.status}`);

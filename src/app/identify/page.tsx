@@ -4,7 +4,7 @@ import { Camera, Info, Search, Sparkles } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import { PageWrapper } from '@/components/layout/PageWrapper';
 import { Button } from '@/components/ui/Button';
 import { useGeolocation } from '@/lib/hooks/useGeolocation';
@@ -16,6 +16,7 @@ import { captureNativePhoto } from '@/lib/native/camera';
 export default function IdentifyPage() {
   const t = useTranslations('Identify');
   const s = useTranslations('Safety');
+  const locale = useLocale();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const router = useRouter();
   const { latitude, longitude } = useGeolocation();
@@ -94,7 +95,7 @@ export default function IdentifyPage() {
     setError(null);
     setQuotaMessage(null);
     try {
-      const file = await captureNativePhoto();
+      const file = await captureNativePhoto(locale);
       if (file) await handleFile(file);
     } catch (err) {
       setError(err instanceof Error ? err.message : t('couldNotGetImage'));

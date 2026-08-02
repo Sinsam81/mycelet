@@ -5,6 +5,7 @@ const WEATHER = {
   source: 'met_frost' as const,
   temperatureC: 12,
   humidityPct: 80,
+  humidityEstimated: false,
   rain3dMm: 10,
   rain7dMm: 20,
   rain14dMm: 30,

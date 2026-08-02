@@ -32,6 +32,14 @@ export function FindingPopup({ finding, displayName }: FindingPopupProps) {
       <div>
         <h3 className="font-semibold text-gray-900">{name}</h3>
         <p className="text-xs italic text-gray-600">{finding.latin_name ?? t('notProvided')}</p>
+        {/* Arten er OPPGITT av den som la inn funnet — den er ikke kontrollert
+            av noen. Uten denne linja leses artsnavnet (og markørfargen, som er
+            satt av artskatalogens spiselighet) som en bestemmelse Mycelet står
+            inne for. `verification_status` finnes på raden, men settes ikke av
+            noe i dag, så vi merker alt som ikke er uttrykkelig verifisert. */}
+        {finding.verification_status !== 'verified' ? (
+          <p className="mt-0.5 text-xs font-medium text-amber-800">{t('unverifiedClaim')}</p>
+        ) : null}
         <p className="mt-1 text-xs text-gray-600">
           {finding.username} • {new Date(finding.found_at).toLocaleDateString(intlLocale(locale))}
         </p>

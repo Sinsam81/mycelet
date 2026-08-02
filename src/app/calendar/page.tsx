@@ -3,6 +3,8 @@ import { PageWrapper } from '@/components/layout/PageWrapper';
 import { createClient } from '@/lib/supabase/server';
 import { SeasonNow, type CalendarSpecies } from '@/components/calendar/SeasonNow';
 import { YearTable } from '@/components/calendar/YearTable';
+import { SafetyNote } from '@/components/safety/SafetyNote';
+import { compareSpeciesByDisplayName } from '@/lib/utils/species-name';
 
 export default async function CalendarPage() {
   const t = await getTranslations('Calendar');
@@ -11,10 +13,17 @@ export default async function CalendarPage() {
   const currentMonth = new Date().getMonth() + 1;
   const { data, error } = await supabase
     .from('mushroom_species')
-    .select('id,norwegian_name,swedish_name,latin_name,edibility,season_start,season_end,peak_season_start,peak_season_end,primary_image_url')
-    .order('norwegian_name', { ascending: true });
+    .select('id,norwegian_name,swedish_name,latin_name,edibility,season_start,season_end,peak_season_start,peak_season_end,primary_image_url');
 
-  const species = (data ?? []) as CalendarSpecies[];
+  // Sorter på navnet brukeren FAKTISK ser. Spørringa sorterte på
+  // norwegian_name mens tabellen rendrer getSpeciesDisplayName, så den svenske
+  // sesongtabellen sto i norsk alfabetisk rekkefølge — Karljohan lå der
+  // Steinsopp havner. Tabellen er 70+ rader og horisontalt scrollbar, altså i
+  // praksis ikke oppslagbar uten riktig rekkefølge. Samme komparator som
+  // useSpecies.ts allerede bruker på /species.
+  const species = [...((data ?? []) as CalendarSpecies[])].sort((a, b) =>
+    compareSpeciesByDisplayName(a, b, locale)
+  );
 
   return (
     <PageWrapper>
@@ -26,6 +35,10 @@ export default async function CalendarPage() {
         </header>
 
         {error ? <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{t('loadError')}</p> : null}
+
+        {/* Kalenderen er den flaten som mest direkte sier «plukk denne nå».
+            Forbeholdet står derfor ØVERST, før den første spiselig-merkelappen. */}
+        <SafetyNote />
 
         {/* Location-aware "in season now" + "coming soon" (client — opt-in position). */}
         <SeasonNow species={species} />

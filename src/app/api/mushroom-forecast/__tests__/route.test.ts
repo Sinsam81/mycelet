@@ -76,6 +76,7 @@ function observert(precipDaily: number[], tempC: number, humidityPct: number): W
     source: 'met_frost',
     temperatureC: tempC,
     humidityPct,
+    humidityEstimated: false,
     rain3dMm: sum(precipDaily.slice(-3)),
     rain7dMm: sum(precipDaily.slice(-7)),
     rain14dMm: sum(precipDaily.slice(-14)),

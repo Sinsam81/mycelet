@@ -266,6 +266,7 @@ export async function GET(request: NextRequest) {
     const whyWeather = (weather: NonNullable<typeof centerWeather>) => ({
       temperatureC: weather.temperatureC,
       humidityPct: weather.humidityPct,
+      humidityEstimated: weather.humidityEstimated,
       rain3dMm: weather.rain3dMm,
       rain7dMm: weather.rain7dMm,
       rain14dMm: weather.rain14dMm,

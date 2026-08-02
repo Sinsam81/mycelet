@@ -63,6 +63,12 @@ export interface PredictionSpeciesSummary {
 export interface PredictionWeatherSnapshot {
   temperature: number;
   humidity: number;
+  /**
+   * True når `humidity` ikke er målt, men den nøytrale fallbacken (stasjonen
+   * mangler fuktsensor). Klienten skal da ikke skrive tallet som en måling.
+   * Valgfri fordi eldre, mellomlagrede svar ikke har feltet.
+   */
+  humidityEstimated?: boolean | null;
   rain3dMm: number;
   rain7dMm?: number | null;
   rain14dMm?: number | null;

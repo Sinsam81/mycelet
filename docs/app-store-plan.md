@@ -76,7 +76,7 @@ Ingenting native kan bygges/sendes inn før #1–#3 er på plass.
 
 ### Høy prioritet (før åpen launch)
 1. **Sikkerhet:** migrer `next-pwa` → Serwist (fjerner 8 høye npm-varsler). ~90 min, breaking — testes nøye.
-2. **Personvern:** fyll inn `[FYLL INN]` i `/personvern` + **advokat-gjennomgang** (juridisk navn, org-nr, retensjon, Supabase-region). 👤
+2. **Personvern:** `/personvern` er ferdig utfylt på nb og sv (ingen `[FYLL INN]` igjen) — gjenstår kun **advokat-gjennomgang**. 👤
 3. **`privacy@mycelet.no`** mailboks (Cloudflare Email Routing er gratis). 👤
 4. **Tile-cron i prod:** cron-job.org → `POST /api/cron/generate-tiles?region=…` daglig (per region) med `CRON_SECRET`. Holder kartet oppdatert.
 5. **Koble `mycelet.no`-domenet** til Vercel (du eier det) → oppdater `server.url` + `NEXT_PUBLIC_APP_URL`.

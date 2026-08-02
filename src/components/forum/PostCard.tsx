@@ -3,7 +3,8 @@ import { MessageCircle, Heart } from 'lucide-react';
 import { useLocale, useTranslations } from 'next-intl';
 import { getJoinedSpeciesName } from '@/lib/utils/species-name';
 import { ForumPost } from '@/types/forum';
-import { forumBadgeClass, getForumBadge } from '@/lib/utils/forumBadge';
+import { forumBadgeClass } from '@/lib/utils/forumBadge';
+import { useForumBadge } from '@/lib/hooks/useForumBadge';
 
 const categoryLabelKey: Record<ForumPost['category'], string> = {
   find: 'categoryFind',
@@ -27,7 +28,7 @@ export function PostCard({ post }: PostCardProps) {
   const t = useTranslations('PostCard');
   const locale = useLocale();
   const author = post.profiles?.display_name || post.profiles?.username || t('unknownUser');
-  const badge = getForumBadge(post.profiles);
+  const badge = useForumBadge()(post.profiles);
   const image = post.images?.[0]?.url;
   const findingSpecies =
     getJoinedSpeciesName(post.finding?.mushroom_species, locale) ||
