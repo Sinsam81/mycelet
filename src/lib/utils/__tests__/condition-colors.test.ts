@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CONDITION_COLORS, colorForScore, fillOpacityForScore } from '../condition-colors';
+import { CONDITION_COLORS, colorForScore, fillOpacitiesForScores } from '../condition-colors';
 import { scoreToCondition } from '../prediction';
 
 describe('one colour scale, keyed to one condition ladder', () => {
@@ -30,43 +30,64 @@ describe('one colour scale, keyed to one condition ladder', () => {
 });
 
 /**
- * Dekkevnen var flat 0,13 for alle fire bøttene. Det var forsvarlig så lenge
- * tersklene var ukalibrerte og 71 % av rasteret havnet i samme bøtte — da fantes
- * det knapt fire farger å skille mellom. Etter kalibreringen 2026-08-02 er
- * fordelingen reell (47/42/7/4 % i Oslofjord-utsnittet), og da er fire farger på
- * samme svake dekkevne fortsatt fire nesten usynlige farger: målt på prøvekartet
- * var «før» og «etter» ikke til å skille med øyet.
+ * Dekkevnen har bommet to ganger, begge fordi den brukte en ABSOLUTT skala:
+ *
+ *  1. Flate 0,13 for alt — ingen kontrast i det hele tatt.
+ *  2. Fast verdi per bøtte (0,05/0,15/0,38/0,52) — verre, fordi oppslaget gikk
+ *     gjennom scoreToCondition, altså samme fire bøtter som fargen. Er fargen
+ *     konstant er dekkevnen konstant. Og med 78 % av de tegnede rutene i «poor»
+ *     @ 0,05 forsvant hele laget i 64 % av utsnittene.
+ *
+ * Målt mot ekte fliser 2026-08-02, med kollapsen kartet faktisk tegner: spennet
+ * inne i ett utsnitt har median 7 poeng, mot 10 i den smaleste bøtta. En
+ * absolutt skala KAN derfor ikke skille noe på én skjerm.
+ *
+ * Testene under vokter egenskapen som faktisk betyr noe: at det finnes kontrast
+ * uansett hvor smalt spennet er, og at ingenting forsvinner.
  */
-describe('gradert dekkevne', () => {
-  it('stiger monotont med hvor bra det er', () => {
-    const stige = [
-      fillOpacityForScore(45),
-      fillOpacityForScore(55),
-      fillOpacityForScore(65),
-      fillOpacityForScore(80)
-    ];
-    for (let i = 1; i < stige.length; i++) {
-      expect(stige[i], `trinn ${i} må være sterkere enn trinnet under`).toBeGreaterThan(stige[i - 1]);
+describe('fillOpacitiesForScores — relativ til utsnittet', () => {
+  it('gir kontrast selv når hele utsnittet ligger i samme bøtte', () => {
+    // Innlandet 2026-08-02: 30 av 30 ruter mellom 40 og 49 — alle «poor», så
+    // enhver absolutt skala ga alle samme verdi.
+    const innlandet = [40, 42, 43, 45, 46, 47, 49];
+    const o = fillOpacitiesForScores(innlandet);
+    expect(new Set(o).size, 'hver score må få sin egen dekkevne').toBe(innlandet.length);
+    expect(Math.max(...o) - Math.min(...o)).toBeGreaterThan(0.3);
+  });
+
+  it('lar ingen rute bli usynlig', () => {
+    // 0,05 var i praksis ingenting over et detaljert topokart.
+    for (const sett of [[40, 90], [50, 50, 50], [43], [60, 61, 62]]) {
+      for (const o of fillOpacitiesForScores(sett)) {
+        expect(o, `sett ${sett.join(',')}`).toBeGreaterThanOrEqual(0.12);
+      }
     }
   });
 
-  it('lar de gode skille seg klart ut fra de svake', () => {
-    // Poenget med laget: vise hvor det er verdt å lete. Er forskjellen for liten
-    // ser kartet flatt ut uansett hvor riktig klassifiseringen er.
-    expect(fillOpacityForScore(80) / fillOpacityForScore(45)).toBeGreaterThanOrEqual(5);
+  it('holder seg under full dekning, så bakgrunnskartet fortsatt leses', () => {
+    for (const o of fillOpacitiesForScores([10, 50, 90])) expect(o).toBeLessThanOrEqual(0.55);
   });
 
-  it('tegner fortsatt de svake, så de kan trykkes på', () => {
-    // Å utelate dem ville gjort dem uleselige for brukeren som lurer på
-    // «hva med her?» — de mister tooltip og popup sammen med fargen.
-    expect(fillOpacityForScore(45)).toBeGreaterThan(0);
+  it('stiger med scoren', () => {
+    const o = fillOpacitiesForScores([45, 52, 61, 78]);
+    for (let i = 1; i < o.length; i++) expect(o[i]).toBeGreaterThan(o[i - 1]);
   });
 
-  it('dekker hele det målte spennet uten hull', () => {
-    const maltSpenn = Array.from({ length: 85 - 43 + 1 }, (_, i) => 43 + i);
-    for (const score of maltSpenn) {
-      expect(Number.isFinite(fillOpacityForScore(score)), `score ${score}`).toBe(true);
-    }
-    expect(new Set(maltSpenn.map(fillOpacityForScore)).size).toBe(4);
+  it('gir alle samme verdi når det ikke finnes noe å gradere', () => {
+    const o = fillOpacitiesForScores([55, 55, 55]);
+    expect(new Set(o).size).toBe(1);
+    expect(o[0]).toBeGreaterThan(0.12);
+  });
+
+  it('takler tomt utsnitt', () => {
+    expect(fillOpacitiesForScores([])).toEqual([]);
+  });
+
+  it('gir den beste ruta i utsnittet full styrke, uansett absolutt nivå', () => {
+    // Poenget: et helgrått utsnitt skal fortsatt PEKE. Fargen sier at det er
+    // svakt; dekkevnen sier hvilken av dem som er minst svak.
+    const svakt = fillOpacitiesForScores([40, 44, 49]);
+    const sterkt = fillOpacitiesForScores([70, 78, 85]);
+    expect(Math.max(...svakt)).toBeCloseTo(Math.max(...sterkt), 5);
   });
 });

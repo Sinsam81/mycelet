@@ -36,7 +36,7 @@ import { buildExplanation, scoreVerdict } from '@/lib/utils/prediction-explanati
 import type { Locale } from '@/i18n/config';
 import type { AreaReport } from '@/lib/prediction/area-report';
 import { intlLocale } from '@/lib/utils/intl-locale';
-import { colorForScore, fillOpacityForScore } from '@/lib/utils/condition-colors';
+import { colorForScore, fillOpacitiesForScores } from '@/lib/utils/condition-colors';
 import { scoreToCondition } from '@/lib/utils/prediction';
 import { bestTilePerCell } from '@/lib/prediction/collapse-tiles';
 import { getSpeciesDisplayName } from '@/lib/utils/species-name';
@@ -236,7 +236,15 @@ export function MushroomMap() {
       const leaflet = (await import('leaflet')).default;
       heatLayer.clearLayers();
 
-      for (const spot of data?.hotspots ?? []) {
+      // Dekkevnen regnes over HELE settet før noe tegnes, ikke rute for rute.
+      // Se fillOpacitiesForScores: bøttene er bredere enn variasjonen på én
+      // skjerm (median 7 poeng mot 10 i smaleste bøtte), så en absolutt skala
+      // gir samme verdi til alt som er synlig. Normalisert mot det som faktisk
+      // er på skjermen finnes det alltid kontrast.
+      const synligeRuter = data?.hotspots ?? [];
+      const dekkevner = fillOpacitiesForScores(synligeRuter.map((s) => s.score));
+
+      for (const [indeks, spot] of synligeRuter.entries()) {
         // TEGNINGEN SKAL IKKE VÆRE MER PRESIS ENN DATAENE.
         //
         // Her sto en sirkel med radius 90 + score·3 meter — 270 m ved score 60.
@@ -265,20 +273,10 @@ export function MushroomMap() {
         // varmekart — som er nettopp det et lag med 3–8 km oppløsning bør se ut
         // som. Oppløsningen står i klartekst i popupen i stedet.
         //
-        // DEKKEVNEN ER GRADERT, IKKE FLAT. Se CONDITION_FILL_OPACITY.
-        //
-        // Her sto flate 0,13 for alle fire bøttene. Den verdien ble valgt ved å
-        // se på laget den gang tersklene var ukalibrerte og 71 % av rutene havnet
-        // i samme bøtte — det fantes altså knapt fire farger å skille mellom, og
-        // én dekkevne holdt. Etter kalibreringen er fordelingen reell, og da er
-        // fire farger på 0,13 fortsatt fire nesten usynlige farger: målt på
-        // prøvekartet var «før» og «etter» ikke til å skille med øyet selv om
-        // klassifiseringen gikk fra 0/88/10/2 % til 47/42/7/4 %.
-        //
         // Fortsatt ingen kant: cellene ligger kant i kant, og en synlig strek gjør
         // hele kartet til et rutenett — og påstår en grense der ingen går.
         // Ærligheten ligger i STØRRELSEN på ruta, ikke i streken.
-        const fillOpacity = fillOpacityForScore(spot.score);
+        const fillOpacity = dekkevner[indeks];
         const shape = cellDeg
           ? leaflet.rectangle(
               [
