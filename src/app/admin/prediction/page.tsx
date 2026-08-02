@@ -126,6 +126,10 @@ export default async function PredictionAdminPage({
   const count = tiles.length;
   const avgScore = count > 0 ? Math.round(tiles.reduce((sum, tile) => sum + tile.score, 0) / count) : 0;
   const highScoreCount = tiles.filter((tile) => tile.score >= 70).length;
+  // `confidence`-kolonnen inneholder DATADEKNING (hvor mange av kildene som
+  // svarte for cellen), ikke treffsikkerhet. Den var før hardkodet til 70 i
+  // hver eneste rad og kunne dermed aldri avsløre en region med tynt
+  // datagrunnlag. Se src/lib/prediction/tile-data-coverage.ts.
   const avgConfidence =
     count > 0 ? Math.round(tiles.reduce((sum, tile) => sum + Number(tile.confidence ?? 0), 0) / count) : 0;
 

@@ -3,8 +3,28 @@
 // the header (PR #85, OSM/Esri in connect-src) never reached already-installed
 // workers — an unchanged script skips reinstall. Any byte change here re-runs
 // install; skipWaiting/clients.claim swap the new worker in immediately.
+// MERK om nummereringen: kommentarene under (v2, v3, v4 …) er en endringslogg
+// for FILA. Tallet i cache-navnet er noe annet — det er identiteten til selve
+// lagringen, og skal bare økes når vi VIL kaste alt som ligger der (activate
+// sletter enhver cache som ikke heter noe av det to under). De to teller derfor
+// ikke i takt, og det er meningen.
 const STATIC_CACHE = 'mycelet-static-v3';
 const TILE_CACHE = 'mycelet-map-tiles-v1'; // unchanged: users' saved offline tiles live here
+
+// v5 (2026-08-02): STATIC_CACHE beskjæres.
+//
+// Navnet 'mycelet-static-v3' står stille mellom utrullinger, mens filnavnene
+// under /_next/static/ er innholdshashet og altså NYE ved hver bygging. Cachen
+// vokste derfor monotont: ~2 MB død JS/CSS per deploy som ingenting ryddet bort.
+// Etter noen titalls utrullinger snakker vi 50-100 MB i samme lagringskvote som
+// kartflisene — og på iOS kaster WKWebView hele originens lagring når det blir
+// trangt. Da ryker offline-flisene brukeren har BETALT for.
+//
+// Vi beskjærer til de nyeste oppføringene i stedet for å bumpe navnet, fordi
+// beskjæringen også rydder opp i cacher som allerede har vokst seg store hos
+// eksisterende brukere. Precachede ressurser (offline-skallet, ikonene) er
+// unntatt: de ligger først i cachen og ville vært de første til å ryke.
+const STATIC_CACHE_MAX_ENTRIES = 80;
 
 // v3 (2026-08-01): '/', '/map' og '/pricing' er fjernet herfra.
 //
@@ -38,10 +58,13 @@ const TILE_CACHE = 'mycelet-map-tiles-v1'; // unchanged: users' saved offline ti
 //   • Navigasjoner går fortsatt til NETTET FØRST. Skallet brukes kun når
 //     fetch() faktisk feiler, så en påkoblet bruker får aldri en gammel side.
 const OFFLINE_SHELL = '/offline';
+// '/icons/icon-maskable.svg' er fjernet herfra: den er ikke referert noe sted i
+// appen (manifestene bruker icon-512.png som maskable), så den var en
+// installasjonsnedlasting ingen kunne be om — og med beskjæringen under ville
+// den i tillegg okkupert en av de vernede plassene for alltid.
 const STATIC_ASSETS = [
   '/manifest.json',
   '/icons/icon.svg',
-  '/icons/icon-maskable.svg',
   OFFLINE_SHELL,
   '/offline/offline-map.js'
 ];
@@ -91,6 +114,29 @@ function isMapTileRequest(url) {
     return true;
   }
   return false;
+}
+
+/** Ressursene install() la inn. Disse skal aldri beskjæres bort. */
+function isPrecachedAsset(url) {
+  return STATIC_ASSETS.some((asset) => new URL(asset, self.location.origin).href === url);
+}
+
+/**
+ * Hold STATIC_CACHE under taket. cache.keys() kommer i innsettingsrekkefølge,
+ * altså eldst først — vi kaster fra toppen, men hopper over precachede
+ * ressurser (de ble lagt inn ALLER først og ville ellers gått først).
+ */
+async function trimStaticCache(cache) {
+  const keys = await cache.keys();
+  let excess = keys.length - STATIC_CACHE_MAX_ENTRIES;
+  if (excess <= 0) return;
+
+  for (const request of keys) {
+    if (excess <= 0) break;
+    if (isPrecachedAsset(request.url)) continue;
+    await cache.delete(request);
+    excess--;
+  }
 }
 
 function isCacheableStaticRequest(url) {
@@ -160,9 +206,10 @@ self.addEventListener('fetch', (event) => {
         const cached = await cache.match(event.request);
 
         const networkFetch = fetch(event.request)
-          .then((response) => {
+          .then(async (response) => {
             if (response && response.ok) {
-              cache.put(event.request, response.clone());
+              await cache.put(event.request, response.clone());
+              await trimStaticCache(cache);
             }
             return response;
           })

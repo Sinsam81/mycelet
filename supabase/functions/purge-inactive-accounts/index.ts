@@ -32,21 +32,31 @@ import {
  *      the run self-heals once the key is in place.
  *
  *   3. Find users with a SENT warning whose scheduled_deletion_at has
- *      passed. Hard-delete the auth.users row. FK cascades trigger:
+ *      passed. Delete the rows that must NOT survive anonymization,
+ *      THEN hard-delete the auth.users row. FK cascades trigger:
  *        - profiles deleted
  *        - findings/forum_posts/comments user_id → NULL (anonymized)
  *        - post_likes/saved_posts/reports cascade-deleted
  *
- *      NB: positive findings and private negative findings are NOT
- *      deleted by this path — they survive as orphan rows with
- *      user_id = NULL. This is a deliberate gap because Edge Functions
- *      can't replicate the explicit-delete-before-cascade logic in
- *      /api/me/delete easily; the inactive-account flow has different
- *      privacy semantics (the user never showed up to consent to
- *      anonymization vs deletion). Sindre to decide if we want a
- *      separate cron-side cleanup. For now: anonymized survival is
- *      strictly more privacy-preserving than the user's data being
- *      deleted, since the rows already have display-jittered coords.
+ *      RETENSJONSREGELEN (docs/retention-policy.md, migrasjon 011):
+ *      bare NEGATIVE, ikke-private observasjoner får overleve som
+ *      anonymiserte treningsdata. Positive funn og alt merket privat
+ *      slettes eksplisitt først — nøyaktig slik /api/me/delete gjør
+ *      (src/app/api/me/delete/route.ts, STEP 1).
+ *
+ *      Kommentaren som sto her før kalte dette et bevisst hull og
+ *      begrunnet det med at radene «allerede har display-jittrede
+ *      koordinater». Det stemmer ikke for private funn: triggeren
+ *      set_display_location setter display_* til NULL for dem og lar
+ *      den EKSAKTE latitude/longitude ligge i tabellen. En privat rad
+ *      som overlever er altså et eksakt voksested uten eier og uten
+ *      sletteregel — mens appen har fortalt brukeren at det ble
+ *      slettet. Etter GDPR art. 5(1)(e) og 17 er selve lagringen
+ *      avviket, uavhengig av om noe API eksponerer den i dag.
+ *
+ *      NB: bildene i Storage ryddes IKKE av denne funksjonen ennå
+ *      (/api/me/delete gjør det via deleteUserStorageObjects). Se
+ *      docs/retention-policy.md.
  *
  * Returns a JSON receipt with per-step counts. Logs are emitted via
  * console.log which Supabase forwards to its function-logs page.
@@ -211,6 +221,34 @@ Deno.serve(async (req: Request) => {
   // ble slettet 90 dager etter at raden ble laget selv om e-posten aldri gikk
   // ut. Erklæringen lover et varsel først.
   for (const due of selectDueForDeletion(liveWarnings, now)) {
+    // Slett først det som ikke skal overleve som anonymiserte data. Etter
+    // migrasjon 011 er FK-en ON DELETE SET NULL, så alt vi ikke fjerner her
+    // blir liggende for alltid uten eier. Rekkefølgen er derfor ikke kosmetisk.
+    // Samme to spørringer som /api/me/delete STEP 1 — hold dem i takt.
+    const { error: positiveError } = await supabase
+      .from('findings')
+      .delete()
+      .eq('user_id', due.user_id)
+      .eq('is_negative_observation', false);
+    if (positiveError) {
+      // Vi går IKKE videre til auth-slettingen. Sletter vi brukeren nå, mister
+      // vi koblingen til radene og kan aldri finne dem igjen. Warning-raden
+      // står, så neste kjøring prøver på nytt.
+      errors.push(`positive findings ${due.user_id}: ${positiveError.message}`);
+      continue;
+    }
+
+    const { error: privateError } = await supabase
+      .from('findings')
+      .delete()
+      .eq('user_id', due.user_id)
+      .eq('is_negative_observation', true)
+      .eq('visibility', 'private');
+    if (privateError) {
+      errors.push(`private findings ${due.user_id}: ${privateError.message}`);
+      continue;
+    }
+
     const { error: deleteError } = await supabase.auth.admin.deleteUser(due.user_id);
     if (deleteError) {
       errors.push(`delete ${due.user_id}: ${deleteError.message}`);
