@@ -1185,10 +1185,7 @@
     "searchPlaceOnly": "Sök plats — t.ex. «Sälen»",
     "forecastToday": "I dag",
     "forecastConditionsThisWeek": "svampförhållanden denna vecka",
-    "hotspotTooltip": "Svampförhållanden {score}/100",
-    "hotspotTooltipBest": "Bäst nu: {species} {score}/100",
-    "hotspotTooltipSpecies": "{species} {score}/100",
-    "hotspotTooltipArea": "Gäller hela rutan — inte en bestämd punkt i den."
+    "hotspotTooltipVerdict": "{verdict} ({score}/100)"
   },
   "OnboardingIntro": {
     "step1Title": "Välkommen till Mycelet",

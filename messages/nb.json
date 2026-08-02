@@ -1185,10 +1185,7 @@
     "searchPlaceOnly": "Søk sted — f.eks. «Hamar»",
     "forecastToday": "I dag",
     "forecastConditionsThisWeek": "soppforhold denne uka",
-    "hotspotTooltip": "Soppforhold {score}/100",
-    "hotspotTooltipBest": "Best nå: {species} {score}/100",
-    "hotspotTooltipSpecies": "{species} {score}/100",
-    "hotspotTooltipArea": "Gjelder hele ruta — ikke et bestemt punkt i den."
+    "hotspotTooltipVerdict": "{verdict} ({score}/100)"
   },
   "OnboardingIntro": {
     "step1Title": "Velkommen til Mycelet",

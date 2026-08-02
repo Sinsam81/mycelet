@@ -170,11 +170,14 @@ interface ExplanationCopy {
   preferredHabitat: (tags: string) => string;
   mycorrhizalPartners: (partners: string) => string;
 
-  verdictExcellent: (who: string) => string;
-  verdictGood: (who: string) => string;
-  verdictOk: (who: string) => string;
-  verdictWeak: (who: string) => string;
-  verdictFor: (name: string) => string;
+  /**
+   * De fire dommene. De skal være STRUKTURELT ulike, ikke samme setning med et
+   * byttet adjektiv — se kommentaren over verdictText().
+   */
+  verdictPeak: (name?: string) => string;
+  verdictGood: (name?: string) => string;
+  verdictStarting: (name?: string) => string;
+  verdictQuiet: (name?: string) => string;
 }
 
 const COPY: Record<Locale, ExplanationCopy> = {
@@ -244,11 +247,10 @@ const COPY: Record<Locale, ExplanationCopy> = {
     preferredHabitat: (tags) => `Foretrukket habitat: ${tags}`,
     mycorrhizalPartners: (partners) => `Følger ${partners}`,
 
-    verdictExcellent: (who) => `Svært gode forhold${who} nå`,
-    verdictGood: (who) => `Gode forhold${who} nå`,
-    verdictOk: (who) => `Brukbare forhold${who} nå`,
-    verdictWeak: (who) => `Svake forhold${who} nå`,
-    verdictFor: (name) => ` for ${name.toLowerCase()}`
+    verdictPeak: (name) => (name ? `Nå er det ${name.toLowerCase()} 🍄` : 'Nå er det sopp i skogen 🍄'),
+    verdictGood: (name) => (name ? `Gode dager for ${name.toLowerCase()} nå` : 'Gode soppforhold nå'),
+    verdictStarting: (name) => (name ? `${name} er så vidt i gang` : 'Soppen er så vidt i gang'),
+    verdictQuiet: (name) => (name ? `Lite ${name.toLowerCase()} i skogen nå` : 'Lite sopp i skogen nå')
   },
   sv: {
     months: [
@@ -366,11 +368,10 @@ const COPY: Record<Locale, ExplanationCopy> = {
     preferredHabitat: (tags) => `Föredraget habitat: ${tags}`,
     mycorrhizalPartners: (partners) => `Följer ${partners}`,
 
-    verdictExcellent: (who) => `Mycket goda förhållanden${who} nu`,
-    verdictGood: (who) => `Goda förhållanden${who} nu`,
-    verdictOk: (who) => `Godtagbara förhållanden${who} nu`,
-    verdictWeak: (who) => `Svaga förhållanden${who} nu`,
-    verdictFor: (name) => ` för ${name.toLowerCase()}`
+    verdictPeak: (name) => (name ? `Nu är det ${name.toLowerCase()} 🍄` : 'Nu är det svamp i skogen 🍄'),
+    verdictGood: (name) => (name ? `Bra dagar för ${name.toLowerCase()} nu` : 'Bra svampförhållanden nu'),
+    verdictStarting: (name) => (name ? `${name} är precis i gång` : 'Svampen är precis i gång'),
+    verdictQuiet: (name) => (name ? `Lite ${name.toLowerCase()} i skogen nu` : 'Lite svamp i skogen nu')
   }
 };
 
@@ -677,14 +678,46 @@ const LEVEL_MARK: Record<ExplanationLevel, string> = { positive: '✓', neutral:
 // Verdicts describe CONDITIONS (season + weather + forest type), NOT the odds
 // of a find at this exact pixel. The temporal signal is validated (~0.89 AUC);
 // spot-level spatial ranking is near-chance (~0.52, accessibility bias), so the
-// old "lovende sted … her" wording overclaimed. "Gode forhold nå" is what we can
+// old "lovende sted … her" wording overclaimed. Saying WHEN is what we can
 // honestly stand behind. See docs/reports/prediction-model.md.
+//
+// TERSKLENE ER KALIBRERT MOT DEN FAKTISKE FORDELINGEN, ikke mot en tenkt
+// 0–100-skala. Målt i produksjon 2026-08-02 over hele rasteret:
+//
+//     spenn 43–85 · p25 = 50 · median = 55 · p75 = 59 · p95 = 80
+//
+// De gamle tersklene (75/55/35) var satt som om scoren brukte hele skalaen. Den
+// gjør den ikke: over halve miljøleddet er konstantene vegetation/terrain/soil =
+// 50 når skogdata mangler, så gulvet ligger på 26 av 50 (se
+// computeAdvancedEnvironmentScore i utils/prediction.ts). Konsekvensen var at
+// «Svake forhold» krevde en score under 35 — LAVERE ENN MINIMUM SOM FINNES.
+// Appen kunne bokstavelig talt aldri si at det var lite sopp, og «svært gode»
+// krevde p95. Alt havnet i de to midterste, som dessuten var samme setning med
+// et byttet adjektiv. Derfor opplevdes hele kartet likt.
+//
+// Dommene skal være strukturelt ulike, ikke gradbøyde: en bruker skal kunne se
+// forskjell på et halvt sekund, uten å lese tallet.
+const VERDICT_PEAK_MIN = 72; // topp ~10 % av det som faktisk forekommer
+const VERDICT_GOOD_MIN = 60; // topp ~25 %
+const VERDICT_STARTING_MIN = 50; // rundt medianen
+
 function verdictText(score: number, copy: ExplanationCopy, speciesName?: string): string {
-  const who = speciesName ? copy.verdictFor(speciesName) : '';
-  if (score >= 75) return copy.verdictExcellent(who);
-  if (score >= 55) return copy.verdictGood(who);
-  if (score >= 35) return copy.verdictOk(who);
-  return copy.verdictWeak(who);
+  if (score >= VERDICT_PEAK_MIN) return copy.verdictPeak(speciesName);
+  if (score >= VERDICT_GOOD_MIN) return copy.verdictGood(speciesName);
+  if (score >= VERDICT_STARTING_MIN) return copy.verdictStarting(speciesName);
+  return copy.verdictQuiet(speciesName);
+}
+
+/**
+ * Bare dommen, for kallere som ikke har annet enn en score.
+ *
+ * Kartet trenger den: tooltipene bygges av rasterflisene mens API-kallet
+ * fortsatt er underveis, så der finnes verken vær, skog eller sesongkontekst —
+ * bare tallet og artsnavnet. Uten denne skrev kartet ut rå «52/100», og det er
+ * nettopp tallet uten dom som får alle ruter til å se like ut.
+ */
+export function scoreVerdict(score: number, locale?: Locale, speciesName?: string): string {
+  return verdictText(score, copyFor(locale), speciesName);
 }
 
 export interface SpotSummary {

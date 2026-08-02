@@ -32,7 +32,8 @@ import {
   removeOfflineAreaTiles,
   saveOfflineAreas
 } from '@/lib/utils/offlineMap';
-import { buildExplanation } from '@/lib/utils/prediction-explanation';
+import { buildExplanation, scoreVerdict } from '@/lib/utils/prediction-explanation';
+import type { Locale } from '@/i18n/config';
 import type { AreaReport } from '@/lib/prediction/area-report';
 import { intlLocale } from '@/lib/utils/intl-locale';
 import { colorForScore } from '@/lib/utils/condition-colors';
@@ -292,17 +293,25 @@ export function MushroomMap() {
         // teksten sier det ("Best nå: …") så tallet ikke leses som en påstand
         // om sopp generelt.
         const speciesName = spot.speciesId != null ? speciesNamesRef.current.get(spot.speciesId) : undefined;
-        const label = !speciesName
-          ? t('hotspotTooltip', { score: spot.score })
-          : filters.speciesId != null
-            ? t('hotspotTooltipSpecies', { species: speciesName, score: spot.score })
-            : t('hotspotTooltipBest', { species: speciesName, score: spot.score });
 
-        shape.bindTooltip(cellDeg ? `${label} — ${t('hotspotTooltipArea')}` : label, { direction: 'top' });
+        // Dommen først, tallet i parentes. Før sto det rå «Best nå: Kantarell
+        // 52/100 — Gjelder hele ruta — ikke et bestemt punkt i den», altså et
+        // tall uten mening etterfulgt av en ren ansvarsfraskrivelse. Ingen av
+        // delene sa om det var verdt å dra ut, og alle ruter så like ut.
+        //
+        // Forbeholdet om at ruta gjelder som helhet er IKKE fjernet — det står i
+        // popupen (searchAreaExplainer), der brukeren faktisk leser detaljer. En
+        // tooltip er et halvt sekunds blikk, og er feil sted for et forbehold.
+        const label = t('hotspotTooltipVerdict', {
+          verdict: scoreVerdict(spot.score, locale as Locale, speciesName),
+          score: spot.score
+        });
+
+        shape.bindTooltip(label, { direction: 'top' });
         heatLayer.addLayer(shape);
       }
     },
-    [filters.speciesId, speciesNamesVersion, t]
+    [locale, speciesNamesVersion, t]
   );
 
   const loadPredictionTiles = useCallback(async () => {

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildExplanation,
   buildSpotSummary,
+  scoreVerdict,
   type ExplanationWeather,
   type SpeciesExplanationContext
 } from '../prediction-explanation';
@@ -463,7 +464,7 @@ describe('buildSpotSummary — language', () => {
       score: 80,
       locale: 'sv'
     });
-    expect(summary.verdict).toBe('Mycket goda förhållanden för kantarell nu');
+    expect(summary.verdict).toBe('Nu är det kantarell 🍄');
   });
 
   it('defaults to Norwegian', () => {
@@ -473,7 +474,73 @@ describe('buildSpotSummary — language', () => {
       weather: PERFECT_KANTARELL_WEATHER,
       score: 80
     });
-    expect(summary.verdict).toBe('Svært gode forhold for kantarell nå');
+    expect(summary.verdict).toBe('Nå er det kantarell 🍄');
+  });
+});
+
+/**
+ * Dommene er appens eneste stemme på kartet, og de var i praksis stumme:
+ * tersklene (75/55/35) var satt som om scoren brukte hele 0–100, mens den målte
+ * fordelingen i produksjon 2026-08-02 var 43–85 med median 55. «Svake forhold»
+ * krevde under 35 — lavere enn noe som finnes — så appen kunne aldri si at det
+ * var lite sopp. Og alle fire var samme setning med et byttet adjektiv.
+ *
+ * Disse testene holder på begge deler: at hele stigen er NÅBAR innenfor det
+ * spennet som faktisk forekommer, og at trinnene er strukturelt ulike.
+ */
+describe('scoreVerdict — kalibrert mot den faktiske fordelingen', () => {
+  const KANTARELL_NAVN = 'Kantarell';
+
+  it('kan si at det er lite sopp innenfor det spennet som finnes (43–85)', () => {
+    // Minimum i rasteret er 43. Med den gamle terskelen på 35 var den nederste
+    // dommen uoppnåelig, og 43 leste som «brukbare forhold».
+    expect(scoreVerdict(43, 'nb', KANTARELL_NAVN)).toBe('Lite kantarell i skogen nå');
+    expect(scoreVerdict(49, 'nb', KANTARELL_NAVN)).toBe('Lite kantarell i skogen nå');
+    expect(scoreVerdict(43, 'sv', KANTARELL_NAVN)).toBe('Lite kantarell i skogen nu');
+  });
+
+  it('rammer toppen innenfor spennet, ikke over det', () => {
+    // p95 er 80 og maks 85. En terskel på 85+ ville aldri fyre.
+    expect(scoreVerdict(85, 'nb', KANTARELL_NAVN)).toBe('Nå er det kantarell 🍄');
+    expect(scoreVerdict(72, 'nb', KANTARELL_NAVN)).toBe('Nå er det kantarell 🍄');
+  });
+
+  it('bruker alle fire trinnene innenfor det spennet som forekommer', () => {
+    // Hele det målte spennet, ikke plukkede punkter. Med de gamle tersklene
+    // havnet 71 % av rasteret i ÉN bøtte og 0 % i den nederste (målt mot
+    // produksjon 2026-08-02, n=1000) — da er kartet flatt uansett hva tallet
+    // er. Denne testen feiler hvis en terskel flyttes ut av det spennet igjen.
+    const heleSpennet = Array.from({ length: 85 - 43 + 1 }, (_, i) => 43 + i);
+    const dommer = new Set(heleSpennet.map((s) => scoreVerdict(s, 'nb', KANTARELL_NAVN)));
+    expect(dommer.size).toBe(4);
+  });
+
+  it('lar ingen enkelt dom sluke rasteret', () => {
+    // Fordelingen er ikke jevn, men ingen bøtte skal ta over halvparten. Den
+    // gamle «Brukbare forhold» tok 71 %.
+    const heleSpennet = Array.from({ length: 85 - 43 + 1 }, (_, i) => 43 + i);
+    const antall = new Map<string, number>();
+    for (const s of heleSpennet) {
+      const d = scoreVerdict(s, 'nb', KANTARELL_NAVN);
+      antall.set(d, (antall.get(d) ?? 0) + 1);
+    }
+    const storste = Math.max(...antall.values());
+    expect(storste / heleSpennet.length).toBeLessThan(0.5);
+  });
+
+  it('gir strukturelt ulike setninger, ikke gradbøyde adjektiv', () => {
+    const dommer = [45, 55, 65, 80].map((s) => scoreVerdict(s, 'nb', KANTARELL_NAVN));
+    // Den gamle stigen var «Svake/Brukbare/Gode/Svært gode forhold for kantarell
+    // nå» — fire setninger med samme hale. Da kan man ikke se forskjell på et
+    // blikk, som er alt en tooltip får.
+    const haler = new Set(dommer.map((d) => d.split(' ').slice(-2).join(' ')));
+    expect(haler.size).toBeGreaterThan(1);
+  });
+
+  it('faller tilbake på sopp generelt uten artsnavn', () => {
+    expect(scoreVerdict(45, 'nb')).toBe('Lite sopp i skogen nå');
+    expect(scoreVerdict(80, 'nb')).toBe('Nå er det sopp i skogen 🍄');
+    expect(scoreVerdict(45, 'sv')).toBe('Lite svamp i skogen nu');
   });
 });
 
