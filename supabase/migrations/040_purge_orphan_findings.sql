@@ -1,4 +1,4 @@
--- 039: Rydd opp i eierløse funn som overlevde en kontosletting.
+-- 040: Rydd opp i eierløse funn som overlevde en kontosletting.
 --
 -- Lanseringsrevisjon, infra/data-funn 2 og 4. Verifisert mot produksjon
 -- 2026-08-02 med tjenestenøkkel: findings har 10 rader, hvorav 5 har

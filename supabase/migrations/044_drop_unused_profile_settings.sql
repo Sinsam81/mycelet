@@ -1,4 +1,4 @@
--- 041: Drop the unused profiles.default_finding_visibility /
+-- 044: Drop the unused profiles.default_finding_visibility /
 --      profiles.notification_preferences columns.
 --
 -- Lanseringsrevisjon, infra/data-funn 3. Samme mønster og samme begrunnelse som

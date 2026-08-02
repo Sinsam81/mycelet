@@ -1,4 +1,4 @@
--- 040: gi geo-spørringene en indeks de faktisk kan bruke, og lås
+-- 043: gi geo-spørringene en indeks de faktisk kan bruke, og lås
 --      search_path på de fire SECURITY DEFINER-funksjonene.
 --
 -- ⚠️ IKKE KJØRT. Lim inn i Supabase SQL Editor når du vil ha den ute.
