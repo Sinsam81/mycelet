@@ -5,6 +5,8 @@ import { getLocale, getTranslations } from 'next-intl/server';
 import { entityFormSuffix, entityMessageValues } from '@/lib/legal/entity';
 import { PageWrapper } from '@/components/layout/PageWrapper';
 import { AnalyticsPreferencesButton } from '@/components/analytics/AnalyticsPreferencesButton';
+import { NonNativeOnly } from '@/components/native/NonNativeOnly';
+import { NativeOnly } from '@/components/native/NativeOnly';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations('Personvern');
@@ -347,7 +349,18 @@ export default async function PersonvernPage() {
             </li>
           </ul>
           <p className="text-sm text-gray-700">{t('cookiesMarketing')}</p>
-          <AnalyticsPreferencesButton label={t('cookiesManage')} />
+          {/* Knappen dispatcher et vindusevent som BARE CookieNotice lytter på,
+              og CookieNotice er pakket i NonNativeOnly i rot-layouten. I
+              App Store-bygget fantes altså knappen uten lytter: et trykk gjorde
+              ingenting, uten feilmelding — på nettopp den siden en Apple-
+              reviewer leser. Ingen data sto på spill (GA er bevisst av i det
+              native bygget), men en død kontroll her er den dyreste av alle. */}
+          <NonNativeOnly>
+            <AnalyticsPreferencesButton label={t('cookiesManage')} />
+          </NonNativeOnly>
+          <NativeOnly>
+            <p className="text-sm text-gray-700">{t('cookiesNativeNoAnalytics')}</p>
+          </NativeOnly>
         </article>
 
         {/* === 9. Sikkerhet === */}

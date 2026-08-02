@@ -590,7 +590,8 @@
     "processorAppleDesc": "(App Store) är säljare och betalningsmottagare för köp som görs i iOS-appen. Apple behandlar dina betalningsuppgifter som självständigt personuppgiftsansvarig enligt sin egen integritetspolicy, och vi tar aldrig emot kortuppgifter. Se:",
     "processorAppleNote": "Gäller endast köp som görs i appen. Köp på mycelet.com sker via Stripe.",
     "controllerNameEnk": "Sindre Øverås, som driver Mycelet genom den enskilda firman {legalName} (org.nr {orgNr}).",
-    "controllerNameAs": "{legalName} (org.nr {orgNr})."
+    "controllerNameAs": "{legalName} (org.nr {orgNr}).",
+    "cookiesNativeNoAnalytics": "I appen från App Store är analysverktyg helt avstängda, så det finns ingenting att välja bort här. Valet ovan gäller mycelet.com i webbläsare."
   },
   "Pricing": {
     "tierFree": "Gratis",
