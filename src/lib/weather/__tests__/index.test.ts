@@ -105,9 +105,33 @@ describe('fetchSmhi (via Sweden coords)', () => {
     return { key, name: `Station ${key}`, latitude: lat, longitude: lon, active };
   }
 
-  function smhiDataPoint(daysAgo: number, value: number) {
+  // SMHI har to punktformer, og fixturene MÅ skille dem — hele poenget med
+  // denne bugen var at testene bygde {date, value, quality} for alt, en form
+  // SMHI aldri returnerer for døgnparametrene. Suiten var derfor grønn på en
+  // kodesti som i produksjon alltid returnerte null.
+  // Verifisert mot ekte respons fra station 71420 (Göteborg A), 2026-08-02.
+
+  /** Timesparametre (1 lufttemperatur, 6 luftfuktighet). */
+  function smhiHourlyPoint(daysAgo: number, value: number) {
     const ms = Date.now() - daysAgo * 24 * 60 * 60 * 1000;
     return { date: ms, value: String(value), quality: 'G' };
+  }
+
+  /**
+   * Døgnparametre (5 nedbør, 19 min-temp, 20 maks-temp). Merk: INGEN 'date'.
+   * Ekte eksempel:
+   * {"from":1785564001000,"to":1785650400000,"ref":"2026-08-01","value":"0.6","quality":"G"}
+   */
+  function smhiDailyPoint(daysAgo: number, value: number) {
+    const to = Date.now() - daysAgo * 24 * 60 * 60 * 1000;
+    const from = to - 24 * 60 * 60 * 1000 + 1;
+    return {
+      from,
+      to,
+      ref: new Date(to).toISOString().slice(0, 10),
+      value: String(value),
+      quality: 'G'
+    };
   }
 
   it('returns null when SMHI station list returns nothing', async () => {
@@ -142,36 +166,36 @@ describe('fetchSmhi (via Sweden coords)', () => {
       if (u.endsWith('/parameter/19.json')) return mockJson({ station: [near] });
       if (u.endsWith('/parameter/20.json')) return mockJson({ station: [near] });
 
-      // Air temp (param 1) — latest reading
+      // Air temp (param 1) — latest reading, hourly shape
       if (u.includes('parameter/1/station/100/period/latest-hour')) {
-        return mockJson({ value: [smhiDataPoint(0, 16.5)] });
+        return mockJson({ value: [smhiHourlyPoint(0, 16.5)] });
       }
-      // Daily precip (param 5) — last 30 days, mix of values
+      // Daily precip (param 5) — last 30 days, mix of values, daily shape
       if (u.includes('parameter/5/station/100/period/latest-months')) {
         return mockJson({
           value: [
-            smhiDataPoint(15, 5.0), // outside 14d
-            smhiDataPoint(10, 3.0),
-            smhiDataPoint(6, 2.0),
-            smhiDataPoint(2, 4.0),
-            smhiDataPoint(1, 6.0)
+            smhiDailyPoint(15, 5.0), // outside 14d
+            smhiDailyPoint(10, 3.0),
+            smhiDailyPoint(6, 2.0),
+            smhiDailyPoint(2, 4.0),
+            smhiDailyPoint(1, 6.0)
           ]
         });
       }
-      // Humidity (param 6)
+      // Humidity (param 6) — hourly shape
       if (u.includes('parameter/6/station/100/period/latest-hour')) {
-        return mockJson({ value: [smhiDataPoint(0, 78)] });
+        return mockJson({ value: [smhiHourlyPoint(0, 78)] });
       }
-      // Min temp daily (param 19)
+      // Min temp daily (param 19) — daily shape
       if (u.includes('parameter/19/station/100/period/latest-months')) {
         return mockJson({
-          value: [smhiDataPoint(6, 9), smhiDataPoint(5, 11), smhiDataPoint(2, 7)]
+          value: [smhiDailyPoint(6, 9), smhiDailyPoint(5, 11), smhiDailyPoint(2, 7)]
         });
       }
-      // Max temp daily (param 20)
+      // Max temp daily (param 20) — daily shape
       if (u.includes('parameter/20/station/100/period/latest-months')) {
         return mockJson({
-          value: [smhiDataPoint(6, 22), smhiDataPoint(5, 24), smhiDataPoint(2, 19)]
+          value: [smhiDailyPoint(6, 22), smhiDailyPoint(5, 24), smhiDailyPoint(2, 19)]
         });
       }
 
@@ -205,23 +229,74 @@ describe('fetchSmhi (via Sweden coords)', () => {
     }
   });
 
+  it('leser døgnparametrenes {from, to, ref} — de har ingen date-nøkkel', async () => {
+    // Regresjonstest for feilen som gjorde at ingen svensk bruker noen gang
+    // fikk svensk stasjonsvær: adapteren gjorde Number(p.date) på ALLE punkter.
+    // Døgnparametrene (5 nedbør, 19 min-temp, 20 maks-temp) har ikke 'date', så
+    // hvert punkt ble NaN og ble filtrert bort → precipDaily tom → fetchSmhi
+    // returnerte null → hele Sverige falt stilltiende ned på Open-Meteo.
+    //
+    // Punktene under er skrevet ut i sin helhet, med ekte SMHI-form, nettopp
+    // for at ingen skal kunne «fikse» testen ved å legge til en date-nøkkel.
+    const near = smhiStation('100', 59.34, 18.05);
+    const day = 24 * 60 * 60 * 1000;
+    const dailyNoDateKey = (daysAgo: number, value: number) => {
+      const to = Date.now() - daysAgo * day;
+      return { from: to - day + 1, to, ref: new Date(to).toISOString().slice(0, 10), value: String(value), quality: 'G' };
+    };
+
+    const fetchSpy = vi.fn(async (url: unknown) => {
+      const u = String(url);
+      if (u.endsWith('.json') && u.includes('/parameter/') && !u.includes('/station/')) {
+        return mockJson({ station: [near] });
+      }
+      if (u.includes('parameter/1/')) return mockJson({ value: [smhiHourlyPoint(0, 15)] });
+      if (u.includes('parameter/5/')) {
+        return mockJson({ value: [dailyNoDateKey(2, 4.0), dailyNoDateKey(1, 6.0)] });
+      }
+      if (u.includes('parameter/6/')) return mockJson({ value: [smhiHourlyPoint(0, 80)] });
+      if (u.includes('parameter/19/')) return mockJson({ value: [dailyNoDateKey(1, 6)] });
+      if (u.includes('parameter/20/')) return mockJson({ value: [dailyNoDateKey(1, 21)] });
+      throw new Error(`Unmocked URL: ${u}`);
+    });
+    vi.stubGlobal('fetch', fetchSpy);
+
+    // Ingen av nedbørspunktene har 'date'. Leses de ikke, blir alt NaN.
+    for (const p of [dailyNoDateKey(1, 6)]) {
+      expect('date' in p).toBe(false);
+    }
+
+    const result = await fetchWeatherSummary(STOCKHOLM);
+    // Sverige må få SMHI — ikke Open-Meteo-reserven.
+    expect(result?.source).toBe('smhi');
+    // Og nedbøren må faktisk telles, ikke bare overleve som 0.
+    expect(result?.rain3dMm).toBeCloseTo(10.0, 1);
+    expect(result?.precipDailyMm).toEqual([4, 6]);
+    expect(result?.minTemp7dC).toBe(6);
+    expect(result?.maxTemp7dC).toBe(21);
+    // Open-Meteo skal aldri ha vært kontaktet.
+    for (const [calledUrl] of fetchSpy.mock.calls) {
+      expect(String(calledUrl)).not.toContain('open-meteo.com');
+    }
+  });
+
   describe('manglende nedbør er ikke det samme som ingen nedbør', () => {
     // En aktiv nedbørsstasjon som ikke leverer målinger ga tidligere
     // rain3d = rain7d = 0 — altså «vi har MÅLT at det ikke regnet». Det er
     // motsatt beskjed av «vi vet ikke», og den trakk prediksjonen rett ned for
     // svenske brukere hver gang stasjonsdataene glapp.
-    function mockWithPrecip(precipValues: ReturnType<typeof smhiDataPoint>[]) {
+    function mockWithPrecip(precipValues: ReturnType<typeof smhiDailyPoint>[]) {
       const near = smhiStation('100', 59.34, 18.05);
       return vi.fn(async (url: unknown) => {
         const u = String(url);
         if (u.endsWith('.json') && u.includes('/parameter/') && !u.includes('/station/')) {
           return mockJson({ station: [near] });
         }
-        if (u.includes('parameter/1/station/100')) return mockJson({ value: [smhiDataPoint(0, 16.5)] });
+        if (u.includes('parameter/1/station/100')) return mockJson({ value: [smhiHourlyPoint(0, 16.5)] });
         if (u.includes('parameter/5/station/100')) return mockJson({ value: precipValues });
-        if (u.includes('parameter/6/station/100')) return mockJson({ value: [smhiDataPoint(0, 78)] });
-        if (u.includes('parameter/19/station/100')) return mockJson({ value: [smhiDataPoint(2, 9)] });
-        if (u.includes('parameter/20/station/100')) return mockJson({ value: [smhiDataPoint(2, 22)] });
+        if (u.includes('parameter/6/station/100')) return mockJson({ value: [smhiHourlyPoint(0, 78)] });
+        if (u.includes('parameter/19/station/100')) return mockJson({ value: [smhiDailyPoint(2, 9)] });
+        if (u.includes('parameter/20/station/100')) return mockJson({ value: [smhiDailyPoint(2, 22)] });
         throw new Error(`Unmocked URL: ${u}`);
       });
     }
@@ -235,11 +310,21 @@ describe('fetchSmhi (via Sweden coords)', () => {
 
     it('rapporterer ekte tørke som 0, ikke som manglende data', async () => {
       // Serien FINNES og er null — det er en ekte måling av tørke.
-      vi.stubGlobal('fetch', mockWithPrecip([smhiDataPoint(2, 0), smhiDataPoint(1, 0)]));
+      vi.stubGlobal('fetch', mockWithPrecip([smhiDailyPoint(2, 0), smhiDailyPoint(1, 0)]));
       const result = await fetchWeatherSummary(STOCKHOLM);
       expect(result).not.toBeNull();
       expect(result?.rain3dMm).toBe(0);
       expect(result?.rain7dMm).toBe(0);
+    });
+
+    it('gir null når stasjonen bare har foreldet nedbør (eldre enn 30 døgn)', async () => {
+      // 'latest-months' rekker ~4 måneder bakover. En stasjon som sluttet å
+      // rapportere for to måneder siden skal ikke fylle jordvann-bøtta med
+      // gammelt regn — da ville soilMoistureIndex si «fuktig» samtidig som
+      // rain7dMm korrekt sa 0. Ærligere å ikke svare og la Open-Meteo overta.
+      vi.stubGlobal('fetch', mockWithPrecip([smhiDailyPoint(70, 12), smhiDailyPoint(65, 8)]));
+      const result = await fetchWeatherSummary(STOCKHOLM);
+      expect(result).toBeNull();
     });
   });
 
@@ -259,11 +344,11 @@ describe('fetchSmhi (via Sweden coords)', () => {
       if (match) calledStations.push(match[1]);
       // Make every data call valid so the function reaches the data-fetch
       // step on at least temp + rain (mandatory).
-      if (u.includes('parameter/1/')) return mockJson({ value: [smhiDataPoint(0, 12)] });
-      if (u.includes('parameter/5/')) return mockJson({ value: [smhiDataPoint(0, 1)] });
-      if (u.includes('parameter/6/')) return mockJson({ value: [smhiDataPoint(0, 70)] });
-      if (u.includes('parameter/19/')) return mockJson({ value: [smhiDataPoint(0, 8)] });
-      if (u.includes('parameter/20/')) return mockJson({ value: [smhiDataPoint(0, 18)] });
+      if (u.includes('parameter/1/')) return mockJson({ value: [smhiHourlyPoint(0, 12)] });
+      if (u.includes('parameter/5/')) return mockJson({ value: [smhiDailyPoint(0, 1)] });
+      if (u.includes('parameter/6/')) return mockJson({ value: [smhiHourlyPoint(0, 70)] });
+      if (u.includes('parameter/19/')) return mockJson({ value: [smhiDailyPoint(0, 8)] });
+      if (u.includes('parameter/20/')) return mockJson({ value: [smhiDailyPoint(0, 18)] });
       throw new Error(`Unmocked URL: ${u}`);
     });
     vi.stubGlobal('fetch', fetchSpy);
@@ -287,10 +372,10 @@ describe('fetchSmhi (via Sweden coords)', () => {
       // Air temp returns no data points → temperatureC null → fetchSmhi returns null
       if (u.includes('parameter/1/')) return mockJson({ value: [] });
       // Everything else has data
-      if (u.includes('parameter/5/')) return mockJson({ value: [smhiDataPoint(0, 5)] });
-      if (u.includes('parameter/6/')) return mockJson({ value: [smhiDataPoint(0, 60)] });
-      if (u.includes('parameter/19/')) return mockJson({ value: [smhiDataPoint(0, 4)] });
-      if (u.includes('parameter/20/')) return mockJson({ value: [smhiDataPoint(0, 16)] });
+      if (u.includes('parameter/5/')) return mockJson({ value: [smhiDailyPoint(0, 5)] });
+      if (u.includes('parameter/6/')) return mockJson({ value: [smhiHourlyPoint(0, 60)] });
+      if (u.includes('parameter/19/')) return mockJson({ value: [smhiDailyPoint(0, 4)] });
+      if (u.includes('parameter/20/')) return mockJson({ value: [smhiDailyPoint(0, 16)] });
       throw new Error(`Unmocked URL: ${u}`);
     });
     vi.stubGlobal('fetch', fetchSpy);
@@ -352,22 +437,38 @@ describe('fetchOpenWeather (via non-Nordic coords with key)', () => {
     // SMHI returns real temp + rain → its summary wins and we must NOT fall
     // through to OpenWeather (a worse provider) even though a key is present.
     const station = { key: '100', name: 'S', latitude: 59.34, longitude: 18.05, active: true };
-    const point = (daysAgo: number, value: number) => ({
+    // Timesparametrene har 'date'; døgnparametrene har {from, to, ref}. Blandes
+    // de, tester man en kodesti SMHI aldri treffer.
+    const hourlyPoint = (daysAgo: number, value: number) => ({
       date: Date.now() - daysAgo * 24 * 60 * 60 * 1000,
       value: String(value),
       quality: 'G'
     });
+    const dailyPoint = (daysAgo: number, value: number) => {
+      const to = Date.now() - daysAgo * 24 * 60 * 60 * 1000;
+      return {
+        from: to - 24 * 60 * 60 * 1000 + 1,
+        to,
+        ref: new Date(to).toISOString().slice(0, 10),
+        value: String(value),
+        quality: 'G'
+      };
+    };
     const fetchSpy = vi.fn(async (url: unknown) => {
       const u = String(url);
       if (u.endsWith('.json') && u.includes('/parameter/') && u.includes('/period/') === false) {
         return mockJson({ station: [station] }); // any parameter station list
       }
-      if (u.includes('parameter/1/station/100/period/latest-hour')) return mockJson({ value: [point(0, 16.5)] });
-      if (u.includes('parameter/5/station/100/period/latest-months')) {
-        return mockJson({ value: [point(2, 4.0), point(1, 6.0)] });
+      if (u.includes('parameter/1/station/100/period/latest-hour')) {
+        return mockJson({ value: [hourlyPoint(0, 16.5)] });
       }
-      if (u.includes('parameter/6/station/100/period/latest-hour')) return mockJson({ value: [point(0, 78)] });
-      if (u.includes('period/latest-months')) return mockJson({ value: [point(2, 10)] });
+      if (u.includes('parameter/5/station/100/period/latest-months')) {
+        return mockJson({ value: [dailyPoint(2, 4.0), dailyPoint(1, 6.0)] });
+      }
+      if (u.includes('parameter/6/station/100/period/latest-hour')) {
+        return mockJson({ value: [hourlyPoint(0, 78)] });
+      }
+      if (u.includes('period/latest-months')) return mockJson({ value: [dailyPoint(2, 10)] });
       return mockJson({ value: [] });
     });
     vi.stubGlobal('fetch', fetchSpy);

@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { fetchRpcPaged } from '@/lib/supabase/paged-rpc';
 import { getBillingCapabilities, getUserBillingSubscription } from '@/lib/billing/subscription';
 import { fetchWeatherSamplesForBounds, nearestWeatherSample, weatherSourceSummary } from '@/lib/weather/samples';
 import { getForestProperties, buildSpeciesHabitatPreferences, computeHabitatScore } from '@/lib/forest';
 import { computeCellPrediction } from '@/lib/prediction/cell-score';
 import { dayOfYearOf } from '@/lib/prediction/phenology';
-import { weightedOccurrenceDensity } from '@/lib/prediction/occurrences';
+import { weightedOccurrenceDensity, OCCURRENCE_FETCH_LIMIT } from '@/lib/prediction/occurrences';
 import { getElevation } from '@/lib/terrain';
 import { buildSpotSummary } from '@/lib/utils/prediction-explanation';
 import type { SpeciesContext } from '@/lib/utils/species-scoring';
@@ -168,16 +169,42 @@ export async function GET(request: NextRequest) {
 
     // Real occurrences in the bounds (all species), grouped per species so each
     // species' best-spot search gets its own "observasjoner nær her" boost.
-    const { data: occRows } = await supabase.rpc('get_occurrences_in_bounds', {
-      min_lat: minLat,
-      min_lng: minLng,
-      max_lat: maxLat,
-      max_lng: maxLng,
-      p_species_id: null,
-      p_limit: 4000
-    });
+    //
+    // MÅ pagineres. PostgREST kutter hvert svar ved 1000 rader, og RPC-en har
+    // ingen ORDER BY — så det gamle ett-kalls-svaret ga radene i tabell-
+    // rekkefølge, som etter GBIF-importen er gruppert per art. Målt mot
+    // produksjon ga et stort utsnitt 1000 rader fordelt på TO arter. Her, hvor
+    // radene bøttes per art, betydde det at ~68 arter fikk null observasjoner
+    // og dermed ingen nærhets-boost — altså feil art anbefalt, ikke bare et
+    // grovere estimat.
+    const { rows: occRows, truncated: occTruncated } = await fetchRpcPaged<{
+      latitude: number;
+      longitude: number;
+      species_id: number | null;
+    }>(
+      supabase,
+      'get_occurrences_in_bounds',
+      {
+        min_lat: minLat,
+        min_lng: minLng,
+        max_lat: maxLat,
+        max_lng: maxLng,
+        p_species_id: null,
+        p_limit: OCCURRENCE_FETCH_LIMIT
+      },
+      { limit: OCCURRENCE_FETCH_LIMIT }
+    );
+    if (occTruncated) {
+      log.warn('species_spots.occurrences_truncated', {
+        limit: OCCURRENCE_FETCH_LIMIT,
+        minLat,
+        minLng,
+        maxLat,
+        maxLng
+      });
+    }
     const occBySpecies = new Map<number, { latitude: number; longitude: number }[]>();
-    for (const o of (occRows ?? []) as { latitude: number; longitude: number; species_id: number | null }[]) {
+    for (const o of occRows) {
       if (o.species_id == null) continue;
       const arr = occBySpecies.get(o.species_id);
       if (arr) arr.push(o);

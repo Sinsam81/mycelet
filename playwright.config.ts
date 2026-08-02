@@ -37,7 +37,13 @@ export default defineConfig({
     // Offentlige flyt — ingen innlogging nødvendig. Kjører alltid.
     {
       name: 'public',
-      testMatch: ['smoke.e2e.ts', 'public-api.e2e.ts', 'auth-pages.e2e.ts', 'billing-gating.e2e.ts'],
+      testMatch: [
+        'smoke.e2e.ts',
+        'public-api.e2e.ts',
+        'auth-pages.e2e.ts',
+        'billing-gating.e2e.ts',
+        'cookie-consent.e2e.ts'
+      ],
       use: { ...devices['Desktop Chrome'] }
     },
 

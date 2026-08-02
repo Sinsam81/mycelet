@@ -4,13 +4,9 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { BillingStatus, BillingTier, hasPaidAccess, resolveTierByPriceId } from '@/lib/billing/plans';
 import { getStripeServerClient } from '@/lib/stripe/server';
 import { createRequestLogger } from '@/lib/log/request';
+import { resolveSubscriptionPeriod, type SubscriptionPeriod } from '@/lib/billing/subscription-period';
 
 export const runtime = 'nodejs';
-
-function toIso(unixSeconds?: number | null) {
-  if (!unixSeconds) return null;
-  return new Date(unixSeconds * 1000).toISOString();
-}
 
 function mapStripeStatus(status: Stripe.Subscription.Status) {
   if (status === 'active') return 'active';
@@ -42,10 +38,24 @@ async function upsertBillingByUserId(payload: {
   stripePriceId?: string | null;
   currentPeriodStart?: string | null;
   currentPeriodEnd?: string | null;
+  /**
+   * Sett når Stripe ikke oppga noen periode i det hele tatt. Da utelates
+   * periodekolonnene fra upserten, slik at en dato som allerede står i raden
+   * overlever. Alternativet — å skrive null — leses av hasPaidAccess() som
+   * «ingen utløpsdato» = tilgang for alltid.
+   */
+  periodUnknown?: boolean;
   cancelAtPeriodEnd?: boolean;
   metadata?: Record<string, unknown>;
 }) {
   const admin = createAdminClient();
+  const periodColumns = payload.periodUnknown
+    ? {}
+    : {
+        current_period_start: payload.currentPeriodStart ?? null,
+        current_period_end: payload.currentPeriodEnd ?? null
+      };
+
   const { error } = await admin.from('billing_subscriptions').upsert(
     {
       user_id: payload.userId,
@@ -54,8 +64,7 @@ async function upsertBillingByUserId(payload: {
       stripe_customer_id: payload.stripeCustomerId ?? null,
       stripe_subscription_id: payload.stripeSubscriptionId ?? null,
       stripe_price_id: payload.stripePriceId ?? null,
-      current_period_start: payload.currentPeriodStart ?? null,
-      current_period_end: payload.currentPeriodEnd ?? null,
+      ...periodColumns,
       cancel_at_period_end: payload.cancelAtPeriodEnd ?? false,
       metadata: payload.metadata ?? {}
     },
@@ -118,6 +127,33 @@ async function isRowOwnedByActiveIap(userId: string): Promise<boolean> {
 
 function isPaidStatus(status: string) {
   return status === 'active' || status === 'trialing';
+}
+
+/**
+ * Hent perioden og gjør det synlig hvor den kom fra.
+ *
+ * `items` betyr at Stripe rendret payloaden i en Basil-versjon eller nyere —
+ * verdt en linje i loggen, siden det er nettopp den flyttingen som en gang
+ * gjorde utløpsdatoen til null. `missing` er alvorlig: da vet vi ikke når
+ * tilgangen skal ta slutt, og en dato må aldri forsvinne uten spor.
+ */
+function readSubscriptionPeriod(
+  subscription: unknown,
+  log: ReturnType<typeof createRequestLogger>,
+  context: { eventType: string; subscriptionId?: string | null }
+): SubscriptionPeriod {
+  const period = resolveSubscriptionPeriod(subscription);
+
+  if (period.source === 'missing') {
+    log.warn('stripe.webhook.period_missing', {
+      ...context,
+      hint: 'Verken subscription.current_period_end eller items[].current_period_end fantes. Utløpsdatoen i basen blir stående urørt.'
+    });
+  } else if (period.source === 'items') {
+    log.info('stripe.webhook.period_from_items', { ...context, currentPeriodEnd: period.end });
+  }
+
+  return period;
 }
 
 export async function POST(request: NextRequest) {
@@ -211,6 +247,15 @@ export async function POST(request: NextRequest) {
         const userId = subscription.metadata?.user_id ?? metadataUserId ?? (customerId ? await resolveUserIdFromCustomer(customerId) : null);
 
         if (userId) {
+          // Dette objektet er hentet med SDK-en (pinnet til 2024-06-20), så
+          // her ligger perioden normalt på topnivå. Vi går likevel gjennom
+          // samme leser, så en fremtidig versjonsbump ikke stille slår ut
+          // utløpsdatoen her heller.
+          const period = readSubscriptionPeriod(subscription, log, {
+            eventType: event.type,
+            subscriptionId: subscription.id
+          });
+
           await upsertBillingByUserId({
             userId,
             tier,
@@ -218,8 +263,9 @@ export async function POST(request: NextRequest) {
             stripeCustomerId: customerId,
             stripeSubscriptionId: subscription.id,
             stripePriceId: priceId,
-            currentPeriodStart: toIso(subscription.current_period_start),
-            currentPeriodEnd: toIso(subscription.current_period_end),
+            currentPeriodStart: period.start,
+            currentPeriodEnd: period.end,
+            periodUnknown: period.source === 'missing',
             cancelAtPeriodEnd: subscription.cancel_at_period_end,
             metadata: { provider: 'stripe', source: 'checkout.session.completed' }
           });
@@ -264,6 +310,13 @@ export async function POST(request: NextRequest) {
         if (!isPaidStatus(mappedStatus) && (await isRowOwnedByActiveIap(userId))) {
           log.info('stripe.webhook.skipped_iap_active', { eventType: event.type, userId });
         } else {
+          // Her kommer objektet rått fra Stripe, rendret i kontoens
+          // API-versjon — ikke i SDK-ens. Det er denne grenen som skrev null.
+          const period = readSubscriptionPeriod(subscription, log, {
+            eventType: event.type,
+            subscriptionId: subscription.id
+          });
+
           await upsertBillingByUserId({
             userId,
             tier,
@@ -271,8 +324,9 @@ export async function POST(request: NextRequest) {
             stripeCustomerId: customerId,
             stripeSubscriptionId: subscription.id,
             stripePriceId: priceId,
-            currentPeriodStart: toIso(subscription.current_period_start),
-            currentPeriodEnd: toIso(subscription.current_period_end),
+            currentPeriodStart: period.start,
+            currentPeriodEnd: period.end,
+            periodUnknown: period.source === 'missing',
             cancelAtPeriodEnd: subscription.cancel_at_period_end,
             metadata: { provider: 'stripe', source: event.type }
           });

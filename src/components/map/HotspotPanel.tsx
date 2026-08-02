@@ -28,10 +28,24 @@ const CONDITION: Record<string, { labelKey: string; dot: string; text: string }>
   excellent: { labelKey: 'conditionExcellent', dot: 'bg-forest-600', text: 'text-forest-900' }
 };
 
-const WEATHER_SOURCE_LABEL: Record<string, string> = {
+// Alle leverandører vi kan kreditere. 'unavailable' er utelatt med vilje — da
+// finnes det ingen leverandør, og «Kilder:»-linja skal droppe værdelen.
+type CreditableWeatherSource = Exclude<
+  NonNullable<PredictionResponse['weatherSource']>,
+  'unavailable'
+>;
+
+// Typen er bevisst TOTAL (ikke Record<string, string>): mangler en leverandør
+// her, blir det typefeil i stedet for en stille utelatelse. Det var nettopp den
+// stille utelatelsen som traff 'open_meteo' — den keyless reserven som faktisk
+// brukes når Frost/SMHI ikke svarer. Værleverandøren forsvant fra kildelinja
+// akkurat når vi trengte å navngi den mest: Open-Meteo er CC BY 4.0, og
+// kreditering er en lisensforpliktelse, ikke en detalj.
+const WEATHER_SOURCE_LABEL: Record<CreditableWeatherSource, string> = {
   met_frost: 'MET Norge',
   smhi: 'SMHI',
-  openweather: 'OpenWeather'
+  openweather: 'OpenWeather',
+  open_meteo: 'Open-Meteo'
 };
 
 // Build a "Kilder: …" credit from the real providers behind this prediction.
@@ -41,7 +55,10 @@ function sourceCredit(
   t: (key: string, values?: Record<string, string | number>) => string
 ): string | null {
   const parts: string[] = [];
-  const weather = data.weatherSource ? WEATHER_SOURCE_LABEL[data.weatherSource] : undefined;
+  const weather =
+    data.weatherSource && data.weatherSource !== 'unavailable'
+      ? WEATHER_SOURCE_LABEL[data.weatherSource]
+      : undefined;
   if (weather) parts.push(t('sourceWeather', { provider: weather }));
   if (data.forest?.source === 'sr16') parts.push(t('sourceForest'));
   if (data.nearbyOccurrences && data.nearbyOccurrences > 0) parts.push(t('sourceOccurrences'));

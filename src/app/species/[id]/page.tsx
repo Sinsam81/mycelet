@@ -8,6 +8,7 @@ import { SpeciesPhotoCarousel } from '@/components/species/SpeciesPhotoCarousel'
 import { createClient } from '@/lib/supabase/server';
 import { getSpeciesDisplayName } from '@/lib/utils/species-name';
 import { edibilityNoteTone } from '@/lib/species/edibility-note';
+import { stripPoisonHotline } from '@/lib/utils/poison-hotline';
 
 interface SpeciesDetailPageProps {
   params: Promise<{ id: string }>;
@@ -97,6 +98,17 @@ export default async function SpeciesDetailPage({ params }: SpeciesDetailPagePro
     hasCriticalLookAlike
   });
 
+  // Symptom- og toksinteksten kommer fra basen og er skrevet på norsk — flere
+  // rader har «ring Giftinformasjonen 22 59 13 00» bakt inn i setningen. Den
+  // teksten står øverst i den røde boksen, over den lokaliserte linja lenger
+  // nede, så en svensk leser fikk det norske nummeret først og
+  // Giftinformationscentralen etterpå. Nummeret skal komme ett sted fra:
+  // Safety-namespacet, som er oversatt. Begge feltene under vises kun inne i
+  // blokken som også viser den lokaliserte linja, så strippingen kan aldri
+  // etterlate siden helt uten nummer.
+  const toxinInfo = stripPoisonHotline(species.toxin_info);
+  const symptoms = stripPoisonHotline(species.symptoms);
+
   return (
     <PageWrapper wide>
       <section className="space-y-6">
@@ -145,14 +157,14 @@ export default async function SpeciesDetailPage({ params }: SpeciesDetailPagePro
                     <p className="text-base font-bold uppercase tracking-wide">
                       {species.edibility === 'deadly' ? t('deadlyDoNotEat') : t('toxicDoNotEat')}
                     </p>
-                    {species.toxin_info ? (
+                    {toxinInfo ? (
                       <p className="text-sm">
-                        <span className="font-semibold">{t('toxinLabel')}</span> {species.toxin_info}
+                        <span className="font-semibold">{t('toxinLabel')}</span> {toxinInfo}
                       </p>
                     ) : null}
-                    {species.symptoms ? (
+                    {symptoms ? (
                       <p className="text-sm">
-                        <span className="font-semibold">{t('symptomsLabel')}</span> {species.symptoms}
+                        <span className="font-semibold">{t('symptomsLabel')}</span> {symptoms}
                       </p>
                     ) : null}
                     <p className="pt-1 text-sm font-medium">

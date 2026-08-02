@@ -7,6 +7,7 @@ import { useLocale, useTranslations } from 'next-intl';
 import { Check, Crown, Leaf, Loader2, ShieldCheck, Undo2 } from 'lucide-react';
 import { PageWrapper } from '@/components/layout/PageWrapper';
 import { BILLING_PLANS } from '@/lib/billing/plans';
+import { canPurchasePlan, getPlanViewState } from '@/lib/billing/plan-state';
 import { useIsNative } from '@/lib/hooks/useIsNative';
 import { trackEvent } from '@/lib/analytics';
 import { createClient } from '@/lib/supabase/client';
@@ -26,6 +27,9 @@ type BillingStatusResponse = {
     status: string;
     current_period_end: string | null;
     cancel_at_period_end: boolean;
+    // Kundeportalen krever en Stripe-kunde; uten denne svarer /api/billing/portal
+    // 400, så knappen skal ikke vises.
+    stripe_customer_id?: string | null;
   } | null;
   capabilities: {
     tier: 'free' | 'premium' | 'season_pass';
@@ -339,7 +343,15 @@ function PricingInner() {
     }
   };
 
-  const currentTier = status?.capabilities.tier ?? 'free';
+  // Hva kunden FAKTISK har tilgang til nå — ikke bare hvilken rad som finnes.
+  // En 'canceled'/'past_due'/'unpaid'-rad har fortsatt tier 'premium', og ble
+  // tidligere vist som «Aktiv plan» samtidig som kjøpsknappen forsvant.
+  const planView = getPlanViewState(status?.capabilities);
+  const currentTier = planView.activeTier;
+  // Ved betalingsproblem er «oppdater kortet» den korteste veien tilbake; da
+  // finnes det allerede en Stripe-kunde å sende dem til.
+  const canOpenPortal =
+    !native && (status?.capabilities.paid || (planView.lapsed && Boolean(status?.subscription?.stripe_customer_id)));
 
   return (
     <PageWrapper>
@@ -385,17 +397,29 @@ function PricingInner() {
         {status ? (
           <article className="rounded-2xl border border-gray-200 bg-white p-4 shadow-card">
             <p className="text-xs uppercase tracking-wide text-gray-500">{t('yourPlan')}</p>
-            <p className="mt-1 text-lg font-semibold text-forest-900">{TIER_LABELS[status.capabilities.tier]}</p>
+            <p className="mt-1 text-lg font-semibold text-forest-900">{TIER_LABELS[planView.activeTier]}</p>
             <p className="text-sm text-gray-700">
               {STATUS_LABELS[status.capabilities.status] ?? status.capabilities.status}
               {status.subscription?.current_period_end
                 ? ` • ${t('renewsEnds', { date: new Date(status.subscription.current_period_end).toLocaleDateString(intlLocale(locale)) })}`
                 : ''}
             </p>
+            {/* Abonnementet finnes, men gir ikke tilgang. Si det rett ut og pek
+                på veien tilbake — ellers leser kunden «Premium» som at alt er i
+                orden helt til en betalt funksjon nekter dem adgang. */}
+            {planView.lapsed && planView.lapsedTier ? (
+              <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                {/* «Oppdater kortet» nevnes bare når knappen faktisk står der —
+                    ellers peker teksten på noe kunden ikke finner. */}
+                {planView.needsPayment && canOpenPortal
+                  ? t('planNeedsPayment', { plan: TIER_LABELS[planView.lapsedTier] })
+                  : t('planLapsed', { plan: TIER_LABELS[planView.lapsedTier] })}
+              </p>
+            ) : null}
             {!status.capabilities.paid ? (
               <p className="mt-1 text-sm text-gray-700">{t('aiQuota', { limit: status.capabilities.aiDailyLimit ?? 0 })}</p>
             ) : null}
-            {status.capabilities.paid && !native ? (
+            {canOpenPortal ? (
               <button
                 type="button"
                 onClick={openPortal}
@@ -429,8 +453,10 @@ function PricingInner() {
         <div className="grid gap-3 md:grid-cols-3">
           {planCards.map((plan) => {
             const isCurrent = currentTier === plan.id;
+            // Planen kunden hadde, men som ikke lenger gjelder. Får «Ikke aktiv
+            // lenger» i stedet for «Aktiv plan» — og beholder kjøpsknappen.
+            const isLapsed = planView.lapsedTier === plan.id;
             const checkoutPlan = plan.id === 'premium' || plan.id === 'season_pass' ? plan.id : null;
-            const isPaidOption = checkoutPlan !== null;
             const isLoading = loadingPlan === plan.id;
             // Per-plan IAP offer: the buy button renders ONLY when this plan's
             // package actually exists in the RevenueCat offering (a global
@@ -480,10 +506,15 @@ function PricingInner() {
                 {isCurrent ? (
                   <p className="mt-4 rounded-lg bg-forest-100 px-3 py-2 text-center text-sm font-medium text-forest-900">{t('activePlan')}</p>
                 ) : null}
+                {isLapsed ? (
+                  <p className="mt-4 rounded-lg bg-amber-50 px-3 py-2 text-center text-sm font-medium text-amber-900">{t('lapsedPlan')}</p>
+                ) : null}
 
                 {/* One shared CTA: web → Stripe checkout (consent-gated),
-                    native → Apple IAP for THIS plan's package (if offered). */}
-                {!isCurrent && isPaidOption && (!native ? true : planOffer !== null) ? (
+                    native → Apple IAP for THIS plan's package (if offered).
+                    canPurchasePlan er fasiten: en plan uten faktisk tilgang kan
+                    alltid kjøpes på nytt, også den kunden nettopp mistet. */}
+                {canPurchasePlan(planView, plan.id) && (!native ? true : planOffer !== null) ? (
                   <button
                     type="button"
                     onClick={() => {
