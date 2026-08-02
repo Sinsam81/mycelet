@@ -216,6 +216,15 @@ export default async function PersonvernPage() {
               <span className="font-medium">{t('processorNibioLabel')}</span> {t('processorAnd')} <span className="font-medium">{t('processorCorineLabel')}</span>{' '}
               {t('processorForestDesc')}
             </li>
+            {/* Karttjenestene hentes av NETTLESEREN, ikke av serveren vår (se
+                connect-src/img-src i next.config.js). De får derfor IP-adressen
+                din og hvilket kartutsnitt du ser på — inkludert utsnittet rundt
+                din egen posisjon når kartet sentreres på GPS. Det er en annen
+                situasjon enn MET/SMHI/NIBIO over, der bare koordinater sendes
+                fra serveren, og det måtte stå her. */}
+            <li>
+              <span className="font-medium">{t('processorMapTilesLabel')}</span> {t('processorMapTilesDesc')}
+            </li>
             <li>
               <span className="font-medium">Wikimedia Commons</span> — {t('processorWikimediaDesc')}
             </li>

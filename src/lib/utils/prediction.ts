@@ -16,6 +16,21 @@ export interface PredictionComponents {
   seasonal: number;
 }
 
+/**
+ * Maksverdien hvert råledd kan nå. De er FASTE og ULIKE, og summerer til 100.
+ *
+ * Både API-et og panelet skal lese nevneren herfra. Uten det driftet de fra
+ * hverandre: flisbanen i /api/prediction klampet miljøleddet til 0-100 mens
+ * computeCellPrediction klamper til 0-50, så «Miljø 64» og «Miljø 46» kom fra
+ * to skalaer bak samme etikett. Og panelet skrev tallet uten nevner i det hele
+ * tatt — «Sesong: 15» på en augustdag er maksverdien, men leses som 15 av 100.
+ */
+export const COMPONENT_MAX = {
+  environment: 50,
+  historical: 35,
+  seasonal: 15
+} as const;
+
 export interface AdvancedPredictionInput {
   latitude: number;
   longitude: number;

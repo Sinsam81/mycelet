@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  COMPONENT_MAX,
   computeAdvancedEnvironmentScore,
   computeAdvancedFactors,
   computeEnvironmentScore,
@@ -7,6 +8,7 @@ import {
   computeSeasonalScore,
   scoreToCondition
 } from '../prediction';
+import { computeCellPrediction } from '@/lib/prediction/cell-score';
 
 describe('prediction utils', () => {
   it('returns stable baseline environment score within range', () => {
@@ -71,5 +73,50 @@ describe('prediction utils', () => {
     expect(historical).toBeLessThanOrEqual(35);
     expect(seasonal).toBeGreaterThanOrEqual(0);
     expect(seasonal).toBeLessThanOrEqual(15);
+  });
+});
+
+/**
+ * Panelet skriver «Miljø: {value}/{max}», og nevneren hentes fra COMPONENT_MAX.
+ * Da MÅ tallene faktisk holde seg innenfor den — ellers er nevneren en ny løgn i
+ * stedet for en oppklaring. Testene under låser de tre takene mot koden som
+ * produserer verdiene, i BEGGE retninger: maksverdien skal være nåbar (ellers
+ * er «Sesong: 15/15» ikke maks likevel) og ikke overskrides.
+ */
+describe('COMPONENT_MAX er den ekte nevneren', () => {
+  it('sesong når nøyaktig taket i høysesongen', () => {
+    expect(computeSeasonalScore(9)).toBe(COMPONENT_MAX.seasonal);
+    // …og faller aldri utenfor det, uansett måned.
+    for (let month = 1; month <= 12; month++) {
+      expect(computeSeasonalScore(month)).toBeLessThanOrEqual(COMPONENT_MAX.seasonal);
+    }
+  });
+
+  it('historikk når taket med nok funn, og ikke mer', () => {
+    expect(computeHistoricalScore(1000, 100000)).toBe(COMPONENT_MAX.historical);
+  });
+
+  it('miljø holder seg innenfor taket på fallback-banen', () => {
+    const best = computeEnvironmentScore({ temperature: 12, humidity: 95, rain3dMm: 40 });
+    expect(best).toBeLessThanOrEqual(COMPONENT_MAX.environment);
+  });
+
+  it('computeCellPrediction gir aldri et miljøledd over taket', () => {
+    // Dette er skalaen flisgeneratoren og fallback-banen deler. Flisbanen i
+    // /api/prediction klampet før til 0-100, så «Miljø 64» var umulig her —
+    // to skalaer bak samme etikett.
+    const worstCase = computeCellPrediction({
+      lat: 60,
+      lon: 10,
+      month: 9,
+      weather: { temperature: 12, humidity: 100, rain3dMm: 60, soilMoistureIndex: 1 },
+      forest: { forestType: 'gran', productivity: 20, volumePerHa: 400, ageYears: 80, source: 'sr16' },
+      elevation: 300,
+      species: null,
+      speciesHabitat: null
+    });
+    expect(worstCase.components.environment).toBeLessThanOrEqual(COMPONENT_MAX.environment);
+    expect(worstCase.components.historical).toBeLessThanOrEqual(COMPONENT_MAX.historical);
+    expect(worstCase.components.seasonal).toBeLessThanOrEqual(COMPONENT_MAX.seasonal);
   });
 });

@@ -123,6 +123,70 @@ describe('searchPlacesServer (upstream)', () => {
     expect(fetchSpy).toHaveBeenCalledTimes(2);
   });
 
+  it('does NOT ask Kartverket when Photon answered but had nothing in NO/SE', async () => {
+    // Dette er selve feilen: et vellykket Photon-svar med null nordiske treff
+    // gikk videre til Kartverkets fuzzy-søk, som aldri svarer tomt. «Reykjavik»
+    // ble til «Regavik · Bokn» og kartet fløy dit. Ingen treff skal være ingen
+    // treff — ikke et selvsikkert feil norsk sted.
+    const fetchSpy = vi.fn(async (url: unknown) => {
+      if (String(url).includes('photon')) {
+        return photonResponse([photonFeature('Reykjavík', 'IS', 64.14, -21.9, { osm_value: 'city' })]);
+      }
+      return {
+        ok: true,
+        json: async () => ({
+          navn: [
+            {
+              'skrivemåte': 'Regavik',
+              navneobjekttype: 'Vik i sjø',
+              kommuner: [{ kommunenavn: 'Bokn' }],
+              representasjonspunkt: { nord: 59.1606, 'øst': 5.4001 }
+            }
+          ]
+        })
+      };
+    });
+    vi.stubGlobal('fetch', fetchSpy);
+
+    expect(await searchPlacesServer('Reykjavik')).toEqual([]);
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(String(fetchSpy.mock.calls[0][0])).toContain('photon');
+  });
+
+  it('never suggests someone’s home as a map destination', async () => {
+    // Kartverket-fallbacken foreslo navngitte privatadresser: «Helsinki» ga
+    // «Helsing, Enebolig/mindre boligbygg · Asker».
+    const fetchSpy = vi.fn().mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        navn: [
+          {
+            'skrivemåte': 'Helsing',
+            navneobjekttype: 'Enebolig/mindre boligbygg',
+            kommuner: [{ kommunenavn: 'Asker' }],
+            representasjonspunkt: { nord: 59.8032, 'øst': 10.3658 }
+          },
+          {
+            'skrivemåte': 'Solvang',
+            navneobjekttype: 'Fritidsbolig',
+            kommuner: [{ kommunenavn: 'Asker' }],
+            representasjonspunkt: { nord: 59.8, 'øst': 10.36 }
+          },
+          {
+            'skrivemåte': 'Helsingfjellet',
+            navneobjekttype: 'Fjell',
+            kommuner: [{ kommunenavn: 'Asker' }],
+            representasjonspunkt: { nord: 59.81, 'øst': 10.37 }
+          }
+        ]
+      })
+    });
+    vi.stubGlobal('fetch', fetchSpy);
+
+    const results = await searchPlacesServer('Helsing');
+    expect(results.map((r) => r.name)).toEqual(['Helsingfjellet']);
+  });
+
   it('returns [] when both providers fail — never throws at the caller', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('offline')));
     expect(await searchPlacesServer('Hamar')).toEqual([]);

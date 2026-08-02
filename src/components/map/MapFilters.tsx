@@ -35,6 +35,9 @@ export function MapFilters({ filters, onChange, onSelectPlace }: MapFiltersProps
   const [open, setOpen] = useState(false);
   const [placeQuery, setPlaceQuery] = useState('');
   const [placeResults, setPlaceResults] = useState<PlaceResult[]>([]);
+  // Skiller «har ikke søkt ennå» fra «søkte, fant ingenting». Uten den ble et
+  // tomt svar helt stille, og et stille søkefelt leses som at appen henger.
+  const [placeSearched, setPlaceSearched] = useState(false);
   const placeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const activeCount = Number(Boolean(filters.speciesId)) + Number(filters.period !== 'all') + Number(filters.onlyMine);
@@ -65,12 +68,14 @@ export function MapFilters({ filters, onChange, onSelectPlace }: MapFiltersProps
   const searchPlace = (value: string) => {
     setPlaceQuery(value);
     if (placeTimer.current) clearTimeout(placeTimer.current);
+    setPlaceSearched(false);
     if (value.trim().length < 2) {
       setPlaceResults([]);
       return;
     }
     placeTimer.current = setTimeout(async () => {
       setPlaceResults(await searchPlaces(value));
+      setPlaceSearched(true);
     }, 300);
   };
 
@@ -136,6 +141,8 @@ export function MapFilters({ filters, onChange, onSelectPlace }: MapFiltersProps
               </button>
             ))}
           </div>
+        ) : placeSearched && placeQuery.trim().length >= 2 ? (
+          <p className="text-xs text-gray-600">{t('noPlaceResults')}</p>
         ) : null}
       </div>
 

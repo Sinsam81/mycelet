@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
 import { X } from 'lucide-react';
 import { intlLocale } from '@/lib/utils/intl-locale';
+import { pickBestForecastDay } from '@/lib/utils/forecast-best-day';
 
 interface ForecastDay {
   date: string;
@@ -67,8 +68,12 @@ export function PlaceForecastStrip({ place, onClear }: PlaceForecastStripProps) 
   // Swedish users don't get «lør» in a Swedish sentence.
   const labelFor = (day: ForecastDay, index: number) =>
     index === 0 ? t('forecastToday') : dayFormatter.format(new Date(`${day.date}T12:00:00Z`)).replace('.', '');
-  const bestIndex = days.reduce((topIdx, day, idx) => (day.score > days[topIdx].score ? idx : topIdx), 0);
-  const best = days.length > 0 ? days[bestIndex] : null;
+  // Uavgjort skal leses som uavgjort. Se pickBestForecastDay: den gamle
+  // reduce-en med streng `>` pekte alltid på «i dag» når hele uka lå likt.
+  const bestPick = pickBestForecastDay(days);
+  const bestIndex = bestPick.index;
+  const best = bestIndex != null ? days[bestIndex] : null;
+  const evenWeek = bestIndex == null && bestPick.score != null;
 
   return (
     <div className="pointer-events-auto rounded-2xl bg-white/95 p-3 shadow-lg backdrop-blur">
@@ -83,10 +88,12 @@ export function PlaceForecastStrip({ place, onClear }: PlaceForecastStripProps) 
           </p>
           {loading ? (
             <p className="text-[11px] text-gray-500">{t('forecastLoading')}</p>
-          ) : best ? (
+          ) : best && bestIndex != null ? (
             <p className="text-[11px] text-gray-600">
               {t('forecastBestDay', { day: labelFor(best, bestIndex), score: best.score })}
             </p>
+          ) : evenWeek ? (
+            <p className="text-[11px] text-gray-600">{t('forecastEvenWeek', { score: bestPick.score ?? 0 })}</p>
           ) : (
             <p className="text-[11px] text-gray-500">{t('forecastUnavailable')}</p>
           )}
@@ -107,7 +114,9 @@ export function PlaceForecastStrip({ place, onClear }: PlaceForecastStripProps) 
             // Bar height maps 0-100 → 10-34px so even a bad day stays visible.
             const safeScore = Number.isFinite(day.score) ? Math.max(0, Math.min(100, day.score)) : 0;
             const height = Math.max(10, Math.round((safeScore / 100) * 34));
-            const isBest = index === bestIndex;
+            // Ingen dag utheves når flere deler toppscoren — uthevingen ER
+            // påstanden om at nettopp den dagen er best.
+            const isBest = bestIndex != null && index === bestIndex;
             return (
               <div key={day.date} className="flex flex-1 flex-col items-center gap-0.5">
                 <span className={`text-[9px] font-semibold ${isBest ? 'text-forest-800' : 'text-gray-400'}`}>
