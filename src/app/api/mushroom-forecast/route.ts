@@ -3,6 +3,7 @@ import { fetchWeatherSummary } from '@/lib/weather';
 import { fetchDailyForecast } from '@/lib/weather/forecast';
 import { assessMushroomDay } from '@/lib/prediction/mushroom-day';
 import { assessFlush } from '@/lib/prediction/flush';
+import { reconcileFlushWithWeek } from '@/lib/prediction/flush-vs-week';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { getClientKey, rateLimitResponse } from '@/lib/rate-limit/route';
 import { createRequestLogger } from '@/lib/log/request';
@@ -229,7 +230,20 @@ export async function GET(request: NextRequest) {
       locale
     );
 
-    const payload = { today, days, flush, hasForecast: future.length > 0, weatherSource: observed.source };
+    // Banneret og stripen står rett over hverandre og kan gi motsatt råd:
+    // «soon» peker alltid 9–14 dager fram, mens stripen bare viser dag 0–6, og i
+    // 77 % av de tilfellene har stripen selv en dag som er ≥10 poeng bedre enn i
+    // dag. Se flush-vs-week.ts — når stripen har en tydelig vinner, sier
+    // banneret det først og lar projeksjonen bli tillegget.
+    const forsontFlush = reconcileFlushWithWeek(flush, days, locale);
+
+    const payload = {
+      today,
+      days,
+      flush: forsontFlush,
+      hasForecast: future.length > 0,
+      weatherSource: observed.source
+    };
     cache.set(cacheKey, { at: Date.now(), payload });
     // Coarse (~1 km) on purpose — server logs must not hold a position trail.
     log.info('mushroom_forecast.success', {

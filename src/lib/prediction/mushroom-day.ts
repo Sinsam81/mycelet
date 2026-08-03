@@ -100,20 +100,54 @@ interface DayCopy {
   titleNormal: string;
   messageOptimal: string;
   messageNormal: string;
+  /**
+   * Hvorfor dagen IKKE er optimal. Uten disse var det én setning bak hele
+   * spennet — se kommentaren over verdictFor().
+   */
+  titleDrySoil: string;
+  messageDrySoil: string;
+  titleLittleRain: string;
+  messageLittleRain: string;
+  titleOffSeason: string;
+  messageOffSeason: string;
 }
+
+/**
+ * Portene for «perfekt soppdag». Navngitt fordi verdictFor() må bruke NØYAKTIG
+ * de samme tallene når den forklarer hvorfor en dag ikke slapp gjennom — ellers
+ * kan kortet si «marka er for tørr» om en dag som strøk på noe annet.
+ */
+const OPTIMAL_SCORE_MIN = 65;
+const OPTIMAL_RAIN_MIN_MM = 15;
 
 const COPY: Record<Locale, DayCopy> = {
   nb: {
     titleOptimal: '🍄 Perfekt soppdag i dag!',
     titleNormal: 'Soppforhold i dag',
     messageOptimal: 'Forholdene er ideelle for å finne sopp i dag — ta turen ut! 🍄',
-    messageNormal: 'Forholdene er ikke helt optimale akkurat nå. Sjekk kartet for ditt nærområde.'
+    messageNormal: 'Forholdene er ikke helt optimale akkurat nå. Sjekk kartet for ditt nærområde.',
+    titleDrySoil: 'Alt stemmer — bortsett fra marka',
+    messageDrySoil:
+      'Vær og sesong er på plass, men marka er fortsatt for tørr etter tørkeperioden. Den trenger et skikkelig regn, så følger soppen på 1–2 uker.',
+    titleLittleRain: 'Mildt nok — men det har regnet for lite',
+    messageLittleRain:
+      'Temperatur og sesong stemmer, men det har kommet lite nedbør de siste to ukene. Første ordentlige regnværet setter det i gang.',
+    titleOffSeason: 'Utenom soppsesongen',
+    messageOffSeason: 'Det er utenfor hovedsesongen. Kom tilbake fra sensommeren.'
   },
   sv: {
     titleOptimal: '🍄 Perfekt svampdag i dag!',
     titleNormal: 'Svampförhållanden i dag',
     messageOptimal: 'Förhållandena är idealiska för att hitta svamp i dag — ut i skogen! 🍄',
-    messageNormal: 'Förhållandena är inte helt optimala just nu. Kolla kartan över ditt närområde.'
+    messageNormal: 'Förhållandena är inte helt optimala just nu. Kolla kartan över ditt närområde.',
+    titleDrySoil: 'Allt stämmer — utom marken',
+    messageDrySoil:
+      'Väder och säsong är på plats, men marken är fortfarande för torr efter torkan. Den behöver ett ordentligt regn, sedan följer svampen om 1–2 veckor.',
+    titleLittleRain: 'Milt nog — men det har regnat för lite',
+    messageLittleRain:
+      'Temperatur och säsong stämmer, men det har kommit lite nederbörd de senaste två veckorna. Första ordentliga regnet sätter i gång det.',
+    titleOffSeason: 'Utanför svampsäsongen',
+    messageOffSeason: 'Det är utanför högsäsongen. Kom tillbaka i slutet av sommaren.'
   }
 };
 
@@ -150,6 +184,42 @@ export function assessMushroomDay(
 
   score = Math.max(0, Math.min(100, Math.round(score)));
 
+  // Ringen viser 0–100, men teksten hadde bare TO tilstander. Da `optimal` er
+  // portet på fire vilkår som ringen ikke kjenner, kunne tallet og ordene peke
+  // hver sin vei — og de gjorde det ofte.
+  //
+  // Målt over jun–nov (ERA5, 14 steder NO+SE, 2014–2024, n = 28 182 stedsdøgn):
+  // nøyaktig 2 distinkte titler; 50 % fikk «Forholdene er ikke helt optimale»,
+  // og bak den ENE setningen lå score fra 5 til 100 (94 distinkte ringtall). I
+  // aug–okt hadde 15,8 % av dagene score ≥ 80 uten å være optimale — gul ring
+  // med 80–100 over «ikke helt optimale» — og 53 døgn viste bokstavelig
+  // «100 av 100» i gult. Ekte eksempel: Oslo 2023-09-07, score 100, 52,7 mm regn
+  // på 14 dager, men soil = 0,438 → vetoet slo inn.
+  //
+  // Vetoet er RIKTIG — marka var tørr. Feilen var at kortet ikke sa hvorfor.
+  // Nå navngir teksten porten som ikke slapp gjennom, så tallet og ordene henger
+  // sammen, og brukeren får vite hva som mangler i stedet for bare at noe gjør
+  // det.
+  function verdictFor(input: {
+    copy: DayCopy;
+    optimal: boolean;
+    score: number;
+    inSeasonWindow: boolean;
+    rain: number;
+    moistNow: boolean;
+  }): { title: string; message: string } {
+    const { copy: c, optimal: ok, score: s, inSeasonWindow: iw, rain: r, moistNow: m } = input;
+    if (ok) return { title: c.titleOptimal, message: c.messageOptimal };
+    if (!iw) return { title: c.titleOffSeason, message: c.messageOffSeason };
+    // Bare når tallet er høyt nok til at brukeren undrer seg over avviket.
+    // Under det er «ikke helt optimalt» en dekkende beskrivelse i seg selv.
+    if (s >= OPTIMAL_SCORE_MIN) {
+      if (!m) return { title: c.titleDrySoil, message: c.messageDrySoil };
+      if (r < OPTIMAL_RAIN_MIN_MM) return { title: c.titleLittleRain, message: c.messageLittleRain };
+    }
+    return { title: c.titleNormal, message: c.messageNormal };
+  }
+
   // Only celebrate inside the broad mushroom season; never in deep winter, even
   // if a freak-warm-and-wet day would otherwise score high. A genuinely good day
   // also needs a real moisture base — a dry spell never fruits, however mild or
@@ -166,7 +236,7 @@ export function assessMushroomDay(
   //
   // Null or undefined (OpenWeather, forecast days) leaves the veto inert.
   const moistNow = weather.soilMoistureIndex == null || weather.soilMoistureIndex >= 0.55;
-  const optimal = score >= 65 && inSeasonWindow && rain >= 15 && moistNow;
+  const optimal = score >= OPTIMAL_SCORE_MIN && inSeasonWindow && rain >= OPTIMAL_RAIN_MIN_MM && moistNow;
 
   const reasons = buildExplanation({ weather, month, locale })
     .filter((line) => line.level === 'positive')
@@ -175,8 +245,7 @@ export function assessMushroomDay(
     .map((line) => line.text);
 
   const copy = COPY[locale] ?? COPY[DEFAULT_LOCALE];
-  const title = optimal ? copy.titleOptimal : copy.titleNormal;
-  const message = optimal ? copy.messageOptimal : copy.messageNormal;
+  const { title, message } = verdictFor({ copy, optimal, score, inSeasonWindow, rain, moistNow });
 
   return { optimal, score, title, message, reasons };
 }
