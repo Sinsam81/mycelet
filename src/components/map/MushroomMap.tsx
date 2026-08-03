@@ -36,7 +36,7 @@ import { buildExplanation, scoreVerdict } from '@/lib/utils/prediction-explanati
 import type { Locale } from '@/i18n/config';
 import type { AreaReport } from '@/lib/prediction/area-report';
 import { intlLocale } from '@/lib/utils/intl-locale';
-import { colorForScore } from '@/lib/utils/condition-colors';
+import { colorForScore, fillOpacitiesForScores } from '@/lib/utils/condition-colors';
 import { scoreToCondition } from '@/lib/utils/prediction';
 import { bestTilePerCell } from '@/lib/prediction/collapse-tiles';
 import { getSpeciesDisplayName } from '@/lib/utils/species-name';
@@ -236,7 +236,15 @@ export function MushroomMap() {
       const leaflet = (await import('leaflet')).default;
       heatLayer.clearLayers();
 
-      for (const spot of data?.hotspots ?? []) {
+      // Dekkevnen regnes over HELE settet før noe tegnes, ikke rute for rute.
+      // Se fillOpacitiesForScores: bøttene er bredere enn variasjonen på én
+      // skjerm (median 7 poeng mot 10 i smaleste bøtte), så en absolutt skala
+      // gir samme verdi til alt som er synlig. Normalisert mot det som faktisk
+      // er på skjermen finnes det alltid kontrast.
+      const synligeRuter = data?.hotspots ?? [];
+      const dekkevner = fillOpacitiesForScores(synligeRuter.map((s) => s.score));
+
+      for (const [indeks, spot] of synligeRuter.entries()) {
         // TEGNINGEN SKAL IKKE VÆRE MER PRESIS ENN DATAENE.
         //
         // Her sto en sirkel med radius 90 + score·3 meter — 270 m ved score 60.
@@ -265,24 +273,24 @@ export function MushroomMap() {
         // varmekart — som er nettopp det et lag med 3–8 km oppløsning bør se ut
         // som. Oppløsningen står i klartekst i popupen i stedet.
         //
-        // 0,13 er valgt ved å SE på det, ikke ved å gjette. Første forsøk uten
-        // kant satte 0,07, og da forsvant laget helt — fra «rutenett» til
-        // «ingenting» i ett hopp. 0,13 gir synlig fargeforskjell mellom
-        // nabocellene uten at det oppstår streker. Prøvekartet som avgjorde det
-        // tegner de ekte rutene over ekte Kartverket-fliser, uten innlogging.
+        // Fortsatt ingen kant: cellene ligger kant i kant, og en synlig strek gjør
+        // hele kartet til et rutenett — og påstår en grense der ingen går.
+        // Ærligheten ligger i STØRRELSEN på ruta, ikke i streken.
+        const fillOpacity = dekkevner[indeks];
         const shape = cellDeg
           ? leaflet.rectangle(
               [
                 [spot.lat - cellDeg / 2, spot.lng - cellDeg / 2],
                 [spot.lat + cellDeg / 2, spot.lng + cellDeg / 2]
               ],
-              { color, fillColor: color, fillOpacity: 0.13, weight: 0, stroke: false }
+              { color, fillColor: color, fillOpacity, weight: 0, stroke: false }
             )
           : leaflet.circle([spot.lat, spot.lng], {
               radius: Math.max(120, Math.min(450, 90 + spot.score * 3)),
               color,
               fillColor: color,
-              fillOpacity: 0.2,
+              // Sirkelen er mye mindre enn ruta, så den tåler litt mer.
+              fillOpacity: Math.min(0.6, fillOpacity + 0.07),
               weight: 0,
               stroke: false
             });

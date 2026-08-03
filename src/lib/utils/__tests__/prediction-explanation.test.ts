@@ -6,6 +6,7 @@ import {
   type ExplanationWeather,
   type SpeciesExplanationContext
 } from '../prediction-explanation';
+import { scoreToCondition } from '../prediction';
 
 const KANTARELL: SpeciesExplanationContext = {
   norwegianName: 'Kantarell',
@@ -620,5 +621,39 @@ describe('fuktighet som ikke er målt', () => {
     const { humidityEstimated: _drop, ...utenFlagg } = nesodden;
     const lines = buildExplanation({ month: 9, weather: utenFlagg });
     expect(lines.some((l) => l.category === 'humidity')).toBe(true);
+  });
+});
+
+/**
+ * Fargene, dommene og `condition` i API-svaret MÅ dele stige.
+ *
+ * Da de hadde hver sin, malte kartet det beste terrenget i fargen brukeren leser
+ * som «ingenting her» (se kommentaren i condition-colors.ts). Etter at dommene
+ * ble kalibrert 2026-08-02 sto scoreToCondition igjen på de gamle tersklene
+ * (75/55/35), så kartet kunne skrive «Nå er det kantarell 🍄» over en rute malt
+ * gul for «moderat». Denne testen fanger det hvis noen flytter den ene.
+ */
+describe('dommene og fargene deler stige', () => {
+  it('bytter dom nøyaktig der fargen bytter', () => {
+    const heleSpennet = Array.from({ length: 85 - 43 + 1 }, (_, i) => 43 + i);
+    for (const score of heleSpennet) {
+      const dom = scoreVerdict(score, 'nb', 'Kantarell');
+      const farge = scoreToCondition(score);
+      const forventet = {
+        excellent: 'Nå er det kantarell 🍄',
+        good: 'Gode dager for kantarell nå',
+        moderate: 'Kantarell er så vidt i gang',
+        poor: 'Lite kantarell i skogen nå'
+      }[farge];
+      expect(dom, `score ${score} har farge «${farge}»`).toBe(forventet);
+    }
+  });
+
+  it('lar ingen fargebøtte være uoppnåelig innenfor det målte spennet', () => {
+    // «poor» krevde under 35 mens minimum er 43 — 0 % av kartet kunne bli grått,
+    // så ingenting kunne skille seg ut fra resten.
+    const heleSpennet = Array.from({ length: 85 - 43 + 1 }, (_, i) => 43 + i);
+    const brukte = new Set(heleSpennet.map(scoreToCondition));
+    expect(brukte).toEqual(new Set(['poor', 'moderate', 'good', 'excellent']));
   });
 });

@@ -58,11 +58,28 @@ describe('prediction utils', () => {
     expect(gothenburg).toEqual(oslo);
   });
 
-  it('maps total score to condition', () => {
+  // Tersklene ble flyttet 2026-08-02 fra 75/55/35 til 72/60/50, fordi de gamle
+  // var satt som om scoren brukte hele 0–100. Målt spenn i produksjon er 43–85
+  // med median 55, så «poor» (under 35) var uoppnåelig og 71 % av rasteret
+  // havnet i «moderate». Se docs/kalibrering-av-dommene.md.
+  it('maps total score to condition on the calibrated ladder', () => {
     expect(scoreToCondition(15)).toBe('poor');
-    expect(scoreToCondition(40)).toBe('moderate');
+    expect(scoreToCondition(49)).toBe('poor'); // var 'moderate' før kalibreringen
+    expect(scoreToCondition(50)).toBe('moderate');
+    expect(scoreToCondition(59)).toBe('moderate');
     expect(scoreToCondition(60)).toBe('good');
+    expect(scoreToCondition(71)).toBe('good');
+    expect(scoreToCondition(72)).toBe('excellent');
     expect(scoreToCondition(90)).toBe('excellent');
+  });
+
+  it('bruker alle fire bøttene innenfor spennet som faktisk forekommer', () => {
+    // Selve poenget med kalibreringen: med de gamle tersklene kunne ingen rute
+    // i produksjon bli 'poor', så ingenting på kartet kunne skille seg ut.
+    const maltSpenn = Array.from({ length: 85 - 43 + 1 }, (_, i) => 43 + i);
+    expect(new Set(maltSpenn.map(scoreToCondition))).toEqual(
+      new Set(['poor', 'moderate', 'good', 'excellent'])
+    );
   });
 
   it('keeps historical and seasonal score bounded', () => {

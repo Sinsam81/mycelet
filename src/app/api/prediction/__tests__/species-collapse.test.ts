@@ -113,9 +113,20 @@ describe('scoren uten artsfilter', () => {
     expect(body.score).toBe(57);
   });
 
-  it('gir «gode forhold», ikke «svake»', async () => {
+  // Poenget her er at snitting på tvers av arter ikke lenger drar dommen ned:
+  // 19 (snittet over alle rader) ville lest som 'poor'. 57 er beste art per rute,
+  // og ligger rundt medianen i det målte spennet 43–85 — altså «så vidt i gang»,
+  // ikke «lite sopp».
+  //
+  // Sto tidligere som toBe('good'), men det var mot tersklene 75/55/35, som var
+  // satt som om scoren brukte hele 0–100. Etter kalibreringen 2026-08-02
+  // (72/60/50) er 57 'moderate'. Det er den tiltenkte endringen, ikke en
+  // regresjon: en median-rute SKAL ikke selges inn som gode forhold.
+  // Se docs/kalibrering-av-dommene.md.
+  it('lar ikke artssnittet dra dommen ned til «lite sopp»', async () => {
     const { body } = await predict();
-    expect(body.condition).toBe('good');
+    expect(body.condition).not.toBe('poor');
+    expect(body.condition).toBe('moderate');
   });
 
   it('sier hvilken art tallet gjelder', async () => {

@@ -106,6 +106,33 @@ og appen rangerer fortsatt ikke område 1 mot område 4. Det som er endret er at
 appen nå **kan si at det er dårlig**, og at den sier det tydelig når det er bra.
 Det er den validerte aksen: tid, AUC 0,89.
 
+## Rettelse: fordelingstallene over gjelder feil populasjon
+
+Tabellen «gammel mot ny» er målt over **alle artsrader** i `prediction_tiles`.
+Kartet tegner ikke dem — det tegner **beste art per rute**, kuttet på 80. Over
+den populasjonen er fordelingen med de nye tersklene **78 / 15 / 5 / 2 %**, ikke
+38,5 / 44,5 / 11,9 / 5,1 %.
+
+Det er ikke en detalj. 78 % «poor» var grunnen til at første forsøk på gradert
+dekkevne gjorde laget usynlig — se [kartets-dekning.md](kartets-dekning.md) og
+kommentaren over `fillOpacitiesForScores`.
+
+**Lærdom for neste måling:** mål på det `updateHeatLayer` faktisk tegner
+(`bestTilePerCell` + `slice(0, 80)`), ikke på råtabellen.
+
+## Tersklene løser ikke flathet på én skjerm
+
+Kalibreringen er riktig, men den fikser en annen ting enn den ser ut til.
+Målt med kollapsen kartet tegner: score-spennet **inne i ett kartutsnitt** har
+median **7 poeng**, mens den smaleste bøtta er **10 poeng** bred. En absolutt
+firetrinns skala kan derfor per konstruksjon ikke skille noe på én skjerm — 68 %
+av dagens utsnitt er ensfargede ved standard zoom, 85 % ved den zoomen kartet
+lander på etter posisjonsbestemmelse.
+
+All variasjon ligger **mellom** dager og regioner, som brukeren aldri ser side om
+side. Derfor er dekkevnen nå relativ til utsnittet (`fillOpacitiesForScores`)
+mens fargen forblir absolutt.
+
 ## Hva som gjenstår
 
 - **Kompresjonen i selve modellen** (punkt 2 over). Ekte skogdata for flere ruter

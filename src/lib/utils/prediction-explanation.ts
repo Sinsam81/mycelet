@@ -27,6 +27,7 @@
 
 import { resolveSpeciesPreferences, type SpeciesContext } from '@/lib/utils/species-scoring';
 import { DEFAULT_LOCALE, type Locale } from '@/i18n/config';
+import { CONDITION_THRESHOLDS } from '@/lib/utils/prediction';
 
 export type ExplanationLevel = 'positive' | 'neutral' | 'negative';
 
@@ -697,14 +698,14 @@ const LEVEL_MARK: Record<ExplanationLevel, string> = { positive: '✓', neutral:
 //
 // Dommene skal være strukturelt ulike, ikke gradbøyde: en bruker skal kunne se
 // forskjell på et halvt sekund, uten å lese tallet.
-const VERDICT_PEAK_MIN = 72; // topp ~10 % av det som faktisk forekommer
-const VERDICT_GOOD_MIN = 60; // topp ~25 %
-const VERDICT_STARTING_MIN = 50; // rundt medianen
-
+// Tersklene DELES med fargene og med `condition` i API-svaret — se
+// CONDITION_THRESHOLDS i utils/prediction.ts. Da dommene hadde sin egen stige
+// kunne kartet skrive «Nå er det kantarell 🍄» over en rute malt i fargen for
+// «lite her», siden bare den ene av dem var kalibrert.
 function verdictText(score: number, copy: ExplanationCopy, speciesName?: string): string {
-  if (score >= VERDICT_PEAK_MIN) return copy.verdictPeak(speciesName);
-  if (score >= VERDICT_GOOD_MIN) return copy.verdictGood(speciesName);
-  if (score >= VERDICT_STARTING_MIN) return copy.verdictStarting(speciesName);
+  if (score >= CONDITION_THRESHOLDS.excellent) return copy.verdictPeak(speciesName);
+  if (score >= CONDITION_THRESHOLDS.good) return copy.verdictGood(speciesName);
+  if (score >= CONDITION_THRESHOLDS.moderate) return copy.verdictStarting(speciesName);
   return copy.verdictQuiet(speciesName);
 }
 
