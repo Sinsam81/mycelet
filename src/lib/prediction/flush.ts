@@ -12,6 +12,7 @@
  */
 import type { DailyForecast } from '@/lib/weather/forecast';
 import { dayOfYearFromMonth, phenologyFactor } from '@/lib/prediction/phenology';
+import { isInMushroomSeason } from '@/lib/prediction/mushroom-day';
 import { DEFAULT_LOCALE, type Locale } from '@/i18n/config';
 
 export type FlushStatus = 'fruiting' | 'soon' | 'building' | 'dry' | 'dormant';
@@ -160,8 +161,40 @@ export function assessFlush(
   const copy = COPY[locale] ?? COPY[DEFAULT_LOCALE];
   const { month, soilMoistureIndex, rain7dMm, currentTempC, forecast } = input;
 
-  // Off-season: the brain is dormant regardless of weather.
-  if (month < 5 || month > 11) {
+  // Per-species season gate FIRST. When we have an empirical phenology curve for
+  // this species at this latitude, that curve — not the generic month window —
+  // is the authority on whether it fruits now.
+  //
+  // Rekkefølgen er ny og den er poenget: sto den generelle månedsporten først,
+  // ville en art med egen kurve aldri fått uttale seg utenfor den generelle
+  // sesongen. Morkler fruktifiserer i mai, som er utenfor den generelle
+  // sesongen, og ville blitt meldt «utenom soppsesongen» selv om kurven deres
+  // sier at det er nettopp nå.
+  const speciesCurve =
+    species?.speciesId != null && species.lat != null
+      ? phenologyFactor(species.speciesId, species.lat, dayOfYearFromMonth(month))
+      : null;
+
+  if (speciesCurve != null && speciesCurve < PHENOLOGY_DORMANT_FACTOR) {
+    return {
+      status: 'dormant',
+      daysUntil: null,
+      title: copy.speciesOffSeasonTitle,
+      message: copy.speciesOffSeasonMessage
+    };
+  }
+
+  // Generell sesongport — bare når vi IKKE har en artskurve å gå på.
+  //
+  // Porten var `month < 5 || month > 11` her og `month >= 6` i mushroom-day.ts,
+  // og de to rendres rett over hverandre i det samme kortet. Målt over 2 212
+  // maidager: 540 (24,4 %) fikk det grønne «Forholdene er modne nå 🍄», og
+  // 100 % av dem hadde en gul ring over seg som sa det motsatte — `optimal`
+  // forekommer i 0,0 % av maidagene. Kortet motsa seg selv en hel måned i året.
+  //
+  // Nå leser begge fra isInMushroomSeason, som er UTLEDET av vekttabellen, så de
+  // ikke kan skille lag igjen.
+  if (speciesCurve == null && !isInMushroomSeason(month)) {
     return {
       status: 'dormant',
       daysUntil: null,
@@ -178,23 +211,6 @@ export function assessFlush(
       title: copy.tooColdTitle,
       message: copy.tooColdMessage
     };
-  }
-
-  // Per-species season gate. When we have an empirical phenology curve for this
-  // species at this latitude, a near-zero seasonal weight means it is out of its
-  // OWN fruiting window — dormant for this species even if the generic weather
-  // (and the month) say "go". Skipped when no species context or no curve, so
-  // the generic widget is unaffected.
-  if (species?.speciesId != null && species.lat != null) {
-    const seasonW = phenologyFactor(species.speciesId, species.lat, dayOfYearFromMonth(month));
-    if (seasonW != null && seasonW < PHENOLOGY_DORMANT_FACTOR) {
-      return {
-        status: 'dormant',
-        daysUntil: null,
-        title: copy.speciesOffSeasonTitle,
-        message: copy.speciesOffSeasonMessage
-      };
-    }
   }
 
   const flushLagDays = flushLagFor(species);

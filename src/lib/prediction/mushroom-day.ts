@@ -44,6 +44,33 @@ function cumulativeRain(weather: ExplanationWeather): number {
  */
 const SEASON_WEIGHT_BY_MONTH = [0, 0, 0, 0, 0, 10, 22, 35, 35, 35, 22, 0];
 
+/**
+ * Er måneden innenfor den generelle soppsesongen?
+ *
+ * UTLEDET av vekttabellen over, ikke skrevet ned en gang til. Det var poenget:
+ * flush.ts hadde sin egen port (`month < 5 || month > 11`) mens denne filen
+ * brukte `month >= 6`, og de to står rett over hverandre i det samme kortet på
+ * forsiden.
+ *
+ * Følgen var målt over 2 212 maidager: 540 (24,4 %) viste det grønne banneret
+ * «Forholdene er modne nå 🍄 — soppen kommer nå», og 540 av 540 (100 %) hadde en
+ * gul ring over seg som sa at forholdene ikke var optimale. `optimal` forekommer
+ * i 0,0 % av maidagene, så motsigelsen var strukturell, ikke et uhell i været.
+ *
+ * Mai er ikke et vilkårlig valg: SEASON_WEIGHT_BY_MONTH gir mai vekten 0. Appens
+ * egen scoring har hele tiden regnet mai som utenfor sesongen — det var bare
+ * flush-banneret som ikke visste det.
+ *
+ * NB: dette er den GENERELLE sesongen. Arter med egen fenologikurve (morkler om
+ * våren) vurderes mot sin egen kurve — se den artsspesifikke porten i flush.ts,
+ * som nå kjøres FØR denne.
+ */
+export function isInMushroomSeason(month: number): boolean {
+  const m = Math.round(month);
+  if (m < 1 || m > 12) return false;
+  return SEASON_WEIGHT_BY_MONTH[m - 1] > 0;
+}
+
 /** Dagen midt i hver måned, som dag-i-året (ikke-skuddår). Ankerpunktene. */
 const MID_MONTH_DAY_OF_YEAR = [15, 46, 74, 105, 135, 166, 196, 227, 258, 288, 319, 349];
 

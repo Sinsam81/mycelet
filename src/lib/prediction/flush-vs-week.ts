@@ -39,18 +39,34 @@ const MEANINGFUL_LIFT = 10;
 interface WeekCopy {
   title: (dag: string) => string;
   message: (loft: number, dager: number) => string;
+  /** Tillegget når forholdene alt ER modne, men én dag stikker seg ut. */
+  peakSuffix: (dag: string, loft: number) => string;
+  /** Når flere dager deler toppen — vi peker ikke ut én, men tier ikke heller. */
+  tiedTitle: string;
+  tiedMessage: (loft: number, dager: number) => string;
+  tiedSuffix: (loft: number) => string;
 }
 
 const COPY: Record<Locale, WeekCopy> = {
   nb: {
     title: (dag) => `Beste dagen denne uka: ${dag}`,
     message: (loft, dager) =>
-      `Forholdene er merkbart bedre enn i dag (+${loft} poeng). Det er meldt regn som kan gi en ny bølge om ~${dager} dager, men du trenger ikke vente på den.`
+      `Forholdene er merkbart bedre enn i dag (+${loft} poeng). Det er meldt regn som kan gi en ny bølge om ~${dager} dager, men du trenger ikke vente på den.`,
+    peakSuffix: (dag, loft) => ` Best blir det på ${dag} (+${loft} poeng).`,
+    tiedTitle: 'Bedre forhold senere denne uka',
+    tiedMessage: (loft, dager) =>
+      `Flere dager senere i uka ligger merkbart bedre an enn i dag (+${loft} poeng). Det er meldt regn som kan gi en ny bølge om ~${dager} dager, men du trenger ikke vente på den.`,
+    tiedSuffix: (loft) => ` Det blir enda bedre senere i uka (+${loft} poeng).`
   },
   sv: {
     title: (dag) => `Bästa dagen den här veckan: ${dag}`,
     message: (loft, dagar) =>
-      `Förhållandena är märkbart bättre än i dag (+${loft} poäng). Det är aviserat regn som kan ge en ny våg om ~${dagar} dagar, men du behöver inte vänta på den.`
+      `Förhållandena är märkbart bättre än i dag (+${loft} poäng). Det är aviserat regn som kan ge en ny våg om ~${dagar} dagar, men du behöver inte vänta på den.`,
+    peakSuffix: (dag, loft) => ` Bäst blir det på ${dag} (+${loft} poäng).`,
+    tiedTitle: 'Bättre förhållanden senare i veckan',
+    tiedMessage: (loft, dagar) =>
+      `Flera dagar senare i veckan ligger märkbart bättre till än i dag (+${loft} poäng). Det är aviserat regn som kan ge en ny våg om ~${dagar} dagar, men du behöver inte vänta på den.`,
+    tiedSuffix: (loft) => ` Det blir ännu bättre senare i veckan (+${loft} poäng).`
   }
 };
 
@@ -70,7 +86,8 @@ export function reconcileFlushWithWeek(
   days: WeekDay[],
   locale: Locale = DEFAULT_LOCALE
 ): FlushAssessment {
-  if (flush.status !== 'soon' || flush.daysUntil == null) return flush;
+  if (flush.status !== 'soon' && flush.status !== 'fruiting') return flush;
+  if (flush.status === 'soon' && flush.daysUntil == null) return flush;
   if (days.length < 2) return flush;
 
   const today = days.find((d) => d.isToday);
@@ -83,15 +100,45 @@ export function reconcileFlushWithWeek(
   const loft = best.score - today.score;
   if (loft < MEANINGFUL_LIFT) return flush;
 
-  // Uavgjort mellom flere dager er ikke en vinner å peke på — se den samme
-  // regelen for «Best {dag}» i forecast-best-day.ts.
+  // Uavgjort mellom flere dager er ikke ÉN vinner å peke på — samme regel som
+  // «Best {dag}» ellers i appen. Men å tie helt er en overkorreksjon: målt live
+  // sto Göteborg på 50 i dag mot 70 på to dager senere i uka, og banneret sa
+  // ingenting om det fordi de to delte toppen. Løftet er sant uansett hvem som
+  // vinner, så vi sier «senere denne uka» i stedet for å velge en dag.
   const delerToppen = senere.filter((d) => d.score === best.score).length > 1;
-  if (delerToppen) return flush;
 
   const copy = COPY[locale] ?? COPY[DEFAULT_LOCALE];
-  return {
-    ...flush,
-    title: copy.title(best.label),
-    message: copy.message(loft, flush.daysUntil)
-  };
+
+  // Er forholdene alt modne, skal vi IKKE be noen vente — soppen står ute nå.
+  // Da legges ukas topp til som et tillegg i stedet for å erstatte feiringen.
+  //
+  // Grunnen til at det trengs: «Forholdene er modne nå» fyrer på 52,5 % av
+  // sesongdagene, 66 % i september og 69 % i oktober. Første hypotese var at
+  // fuktbøtta metter — 26,2 % av aug–okt ligger nøyaktig på 1,000 med en
+  // kapasitet på 50 mm mot et 14-døgnsregn med median 92 mm.
+  //
+  // MEN: å øke kapasiteten gjør det verre, ikke bedre. Målt mot ekte vær
+  // (Open-Meteo ERA5, 6 steder NO+SE, 2019–2024, n = 3 312 aug–okt-døgn):
+  //
+  //      kapasitet   =1,000   andel >= 0,55 («modne»)
+  //          50 mm    26,2 %          76,6 %
+  //         120 mm    24,4 %          87,3 %
+  //         150 mm    24,0 %          91,1 %
+  //
+  // En større bøtte tar lengre tid å tømme, og fordampingen er kappet på
+  // 5 mm/døgn. Metningen står på ~25 % uansett kapasitet.
+  //
+  // Konklusjonen er derfor at modellen har rett: marka i en nordisk høst ER
+  // våt mesteparten av tiden. Banneret tar ikke feil — det er ubrukelig som
+  // RÅD når det sier det samme i tjue dager på rad. Derfor får det si hvilken
+  // dag som er best, i stedet for at fuktmodellen skrus på.
+  if (flush.status === 'fruiting') {
+    const tillegg = delerToppen ? copy.tiedSuffix(loft) : copy.peakSuffix(best.label, loft);
+    return { ...flush, message: `${flush.message}${tillegg}` };
+  }
+
+  const dager = flush.daysUntil as number;
+  return delerToppen
+    ? { ...flush, title: copy.tiedTitle, message: copy.tiedMessage(loft, dager) }
+    : { ...flush, title: copy.title(best.label), message: copy.message(loft, dager) };
 }
