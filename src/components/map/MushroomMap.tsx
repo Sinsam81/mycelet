@@ -44,6 +44,7 @@ import { PlaceResult, searchPlaces } from '@/lib/utils/place-search';
 import { filterWithinRadiusKm, haversineKm } from '@/lib/utils/geo-distance';
 import { SEARCH_AREA_RADIUS_M } from '@/lib/utils/spot-area';
 import { createTopSpotArea } from './topSpotArea';
+import { markerHtml, markerShapeFor, type MarkerShape } from './speciesMarkerIcon';
 import { buildTopSpotPopupHtml } from './topSpotPopup';
 import { readLocal, readLocalJson, removeLocal, writeLocal } from '@/lib/utils/safe-storage';
 import { PlaceForecastStrip } from './PlaceForecastStrip';
@@ -150,6 +151,8 @@ export function MushroomMap() {
   // panorering. En teller er nok — selve navnene ligger i refen.
   const [speciesNamesVersion, setSpeciesNamesVersion] = useState(0);
   const speciesEdibilityRef = useRef<Map<number, string>>(new Map());
+  /** Markørform per art, utledet av slekten. Se speciesMarkerIcon.ts. */
+  const speciesShapeRef = useRef<Map<number, MarkerShape>>(new Map());
   const occEdibilityRef = useRef<'all' | 'edible' | 'toxic'>('all');
   const occSeasonRef = useRef(false);
   const tripActiveRef = useRef(false);
@@ -813,6 +816,7 @@ export function MushroomMap() {
     cluster.clearLayers();
     const names = speciesNamesRef.current;
     const edibilities = speciesEdibilityRef.current;
+    const shapes = speciesShapeRef.current;
     const EDIBILITY_HEX: Record<string, string> = {
       edible: '#059669',
       conditionally_edible: '#f59e0b',
@@ -876,11 +880,16 @@ export function MushroomMap() {
       const edi = o.species_id != null ? edibilities.get(o.species_id) : undefined;
       const color = (edi && EDIBILITY_HEX[edi]) || '#8b5e34';
       const ediLabel = edi ? EDIBILITY_LABEL[edi] : null;
+      // Formen sier HVA som ble funnet, fargen sier om det kan spises. Alle
+      // funn var identiske prikker før — se speciesMarkerIcon.ts for hvorfor det
+      // ble silhuetter og ikke emoji (Unicode har bare to soppemoji, og hver
+      // plattform tegner dem ulikt).
+      const shape = o.species_id != null ? shapes.get(o.species_id) ?? 'generisk' : 'generisk';
       const icon = leaflet.divIcon({
         className: 'occ-marker',
-        html: `<div style="width:12px;height:12px;border-radius:9999px;background:${color};border:2px solid #fff;box-shadow:0 0 2px rgba(0,0,0,0.5)"></div>`,
-        iconSize: [12, 12],
-        iconAnchor: [6, 6]
+        html: markerHtml(shape, color, 16),
+        iconSize: [16, 16],
+        iconAnchor: [8, 8]
       });
       // SPISELIGHET UTEN KONTEKST ER EN TRYGGHETSERKLÆRING.
       //
@@ -1561,17 +1570,22 @@ export function MushroomMap() {
   useEffect(() => {
     supabase
       .from('mushroom_species')
-      .select('id,norwegian_name,swedish_name,edibility')
+      .select('id,norwegian_name,swedish_name,edibility,latin_name')
       .then(({ data }) => {
         const nameMap = new Map<number, string>();
         const ediMap = new Map<number, string>();
+        // Slekten (første ordet i latin_name) bestemmer markørformen — se
+        // speciesMarkerIcon.ts.
+        const shapeMap = new Map<number, MarkerShape>();
         for (const s of data ?? []) {
           nameMap.set(s.id as number, getSpeciesDisplayName({
             norwegian_name: s.norwegian_name as string | null,
             swedish_name: s.swedish_name as string | null
           }, locale) || t('mushroomFallback'));
           if (s.edibility) ediMap.set(s.id as number, s.edibility as string);
+          shapeMap.set(s.id as number, markerShapeFor(s.latin_name as string | null));
         }
+        speciesShapeRef.current = shapeMap;
         speciesNamesRef.current = nameMap;
         speciesEdibilityRef.current = ediMap;
         setSpeciesNamesVersion((v) => v + 1);
