@@ -1118,7 +1118,7 @@
     "hideFindingsAtLeast": "Dölj fynd (minst {count})",
     "findingsTruncated": "Vi har hämtat {count} fynd här — det finns fler. Zooma in för att se alla. Filtren gäller bara de hämtade fynden.",
     "hideFindings": "Dölj fynd",
-    "findingsButton": "📍 Visa fynd",
+    "findingsButton": "📍 Visa var folk har hittat svamp",
     "searching": "Söker…",
     "hideSpots": "Dölj områden",
     "promisingSpotsButton": "⭐ Lovande områden",

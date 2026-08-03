@@ -1118,7 +1118,7 @@
     "hideFindingsAtLeast": "Skjul funn (minst {count})",
     "findingsTruncated": "Vi har hentet {count} funn her — det finnes flere. Zoom inn for å se alle. Filtrene gjelder bare de hentede funnene.",
     "hideFindings": "Skjul funn",
-    "findingsButton": "📍 Vis funn",
+    "findingsButton": "📍 Vis hvor folk har funnet sopp",
     "searching": "Søker…",
     "hideSpots": "Skjul områder",
     "promisingSpotsButton": "⭐ Lovende områder",

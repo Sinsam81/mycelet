@@ -129,7 +129,21 @@ export function MushroomMap() {
   const tileReqRef = useRef(0);
   const occClusterRef = useRef<any>(null);
   const loadOccurrencesRef = useRef<() => Promise<void>>(async () => {});
-  const showOccurrencesRef = useRef(false);
+  // PÅ FRA START. Laget var ferdig bygget — klynger, artsnavn, spiselighets-
+  // farger, dato, sesong- og spiselighetsfilter — men sto avslått bak en knapp
+  // som bare het «Vis funn». 327 298 ekte funn var altså usynlige for nesten
+  // alle som åpnet kartet.
+  //
+  // Dette er den eneste opplysningen appen har som er KONKRET og SANN uten
+  // forbehold: noen sto her og fant denne arten, på denne datoen. Prognosen kan
+  // vi ikke selge inn som mer enn den er (romlig AUC ~0,52), men et funn er et
+  // funn. Datoen i popupen er det som gjør det til historie i stedet for et
+  // løfte — se formatFound, som med vilje skriver bare årstall når GBIF-raden
+  // mangler dag.
+  //
+  // Målt før den ble skrudd på: 277 ms–2 s per utsnitt (Oslo mobil zoom 11 ga
+  // 1000 rader på 1,9 s). Laget tømmes og hentes på nytt ved panorering.
+  const showOccurrencesRef = useRef(true);
   const speciesNamesRef = useRef<Map<number, string>>(new Map());
   // Artsnavnene lastes asynkront, og varmelaget rekker som regel å tegne før de
   // er inne. Uten dette sto de første sirklene igjen uten artsnavn til neste
@@ -167,7 +181,7 @@ export function MushroomMap() {
   // Brukernavnet vises i popupen. For «Kun mine funn» leser vi funnene rett fra
   // tabellen, som ikke har den join-en public_findings-viewet gjør.
   const [currentUsername, setCurrentUsername] = useState<string | null>(null);
-  const [showOccurrences, setShowOccurrences] = useState(false);
+  const [showOccurrences, setShowOccurrences] = useState(true);
   const [occCount, setOccCount] = useState(0);
   const [occTruncated, setOccTruncated] = useState(false);
   const [occEdibility, setOccEdibility] = useState<'all' | 'edible' | 'toxic'>('all');
