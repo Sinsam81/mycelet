@@ -51,7 +51,27 @@ if (!url || !key) {
 }
 const admin = createClient(url, key, { auth: { persistSession: false } });
 
-const PER_SPECIES_CAP = 4000;
+/**
+ * Hvor mange funn vi henter per art PER LAND.
+ *
+ * Sto på 4000 fast, altså 8000 per art over NO+SE — og det var et TAK vi traff,
+ * ikke en grense naturen satte. Målt mot GBIF 2026-08-03:
+ *
+ *   art               i GBIF (NO+SE)   vi hadde
+ *   Kantarell                 22 179      8 399
+ *   Steinsopp                 17 419      8 400
+ *   Brunskrubb                16 910      8 400
+ *   Traktkantarell            14 142      8 400
+ *
+ * Vi hadde altså under halvparten av kantarellfunnene som finnes. Taket er hevet
+ * til 15 000 per art per land, som dekker alle artene over med margin, og kan
+ * settes med PER_SPECIES_CAP i miljøet uten kodeendring.
+ *
+ * NB: kvalitetsfilteret er uendret — MAX_COORDINATE_UNCERTAINTY_M dropper rader
+ * med dårligere enn 1 km presisjon, og basisfiltret står. Flere funn skal ikke
+ * bety dårligere funn.
+ */
+const PER_SPECIES_CAP = Math.round(clampNumber(Number(process.env.PER_SPECIES_CAP || 15000), 100, 100000));
 const PAGE = 300;
 const GBIF_LICENSES = ['CC0_1_0', 'CC_BY_4_0'];
 const DEFAULT_BASIS_OF_RECORD = ['HUMAN_OBSERVATION', 'PRESERVED_SPECIMEN'];
