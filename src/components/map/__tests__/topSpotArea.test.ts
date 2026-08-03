@@ -94,3 +94,37 @@ describe('MushroomMap tegner toppstedene med hjelperen', () => {
     expect(source).not.toMatch(/\brank\b/);
   });
 });
+
+/**
+ * De 12 søkeområdene ER de høyest scorende cellene lokalt, så den globale
+ * paletten gir dem én farge i 78 % av tilfellene (målt på rasteret; resten to,
+ * aldri tre eller fire). Følgen var 12 identiske ringer — samme farge, samme
+ * gjennomsiktighet, samme størrelse — og brukeren måtte åpne popup på hver
+ * enkelt for å se tallet.
+ *
+ * Samme feil og samme løsning som kartlaget: rangér innenfor settet.
+ */
+describe('fyllstyrken kan skille områdene fra hverandre', () => {
+  const lag = (fillOpacity?: number) => {
+    const leaflet = fakeLeaflet();
+    createTopSpotArea(leaflet as unknown as TopSpotShapeFactory, SPOT, 564, '#5E9440', fillOpacity);
+    return leaflet.circle.mock.calls[0][1] as Record<string, unknown>;
+  };
+
+  it('tar imot en dekkevne per område', () => {
+    expect(lag(0.12).fillOpacity).toBe(0.12);
+    expect(lag(0.55).fillOpacity).toBe(0.55);
+  });
+
+  it('beholder den gamle verdien når ingen sendes inn', () => {
+    expect(lag().fillOpacity).toBe(0.16);
+  });
+
+  it('rører ikke fargen — den er fortsatt absolutt', () => {
+    // Ærligheten ligger i fargen: vi sier hvilket område som er best AV DEM på
+    // skjermen, ikke at det er bra i seg selv.
+    const o = lag(0.55);
+    expect(o.color).toBe('#5E9440');
+    expect(o.fillColor).toBe('#5E9440');
+  });
+});

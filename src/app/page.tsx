@@ -16,6 +16,7 @@ import { getSpeciesDisplayName } from '@/lib/utils/species-name';
 import { baseSeasonMask, isMonthInMask, peakMask } from '@/lib/utils/season-region';
 import { intlLocale } from '@/lib/utils/intl-locale';
 import { logger } from '@/lib/log';
+import { seasonHeadline } from '@/lib/utils/season-headline';
 
 type HomeTranslator = Awaited<ReturnType<typeof getTranslations<'Home'>>>;
 
@@ -66,12 +67,13 @@ function getMonthName(month: number, t: HomeTranslator) {
   return t(keys[month - 1]);
 }
 
+// Båndene ligger i season-headline.ts, som er testet. Her gjenstår bare
+// oversettelsen. Se den filen for hvorfor: tre av de fem gamle overskriftene
+// endte på «… i skogen» og dekket 10 av 12 måneder, og «headlineFewInSeason»
+// krevde 0 arter i sesong når laveste tall året rundt er 2.
 function getSeasonHeadline(month: number, edibleCount: number, t: HomeTranslator) {
-  if (edibleCount === 0) return t('headlineFewInSeason');
-  if (month >= 4 && month <= 5) return t('headlineSpring');
-  if (month >= 6 && month <= 7) return t('headlineSummer');
-  if (month >= 8 && month <= 10) return t('headlineHighSeason');
-  return t('headlineQuiet');
+  const { key, count } = seasonHeadline(month, edibleCount);
+  return count == null ? t(key) : t(key, { count });
 }
 
 export default async function HomePage() {
@@ -121,12 +123,18 @@ export default async function HomePage() {
   // med månedene der 90 % av de daterte funnene faktisk ligger. Uten posisjon,
   // så ingen regionjustering her.
   const atPeak = (s: SpeciesRow) => isMonthInMask(peakMask(s), month);
-  const inSeasonEdible = species
-    .filter(
-      (s) =>
-        (s.edibility === 'edible' || s.edibility === 'conditionally_edible') &&
-        isMonthInMask(baseSeasonMask(s), month)
-    )
+  const edibleInSeason = species.filter(
+    (s) =>
+      (s.edibility === 'edible' || s.edibility === 'conditionally_edible') &&
+      isMonthInMask(baseSeasonMask(s), month)
+  );
+  // ⚠️ HELE tallet, før kuttet på 6 under. Overskriften skal si hvor mange
+  // matsopp som er i sesong, ikke hvor mange det er plass til i lista.
+  // `inSeasonEdible.length` er `min(antall, 6)`, så den kunne aldri skille
+  // august (39) fra januar (2) — begge leste som 6 og 2. Det var en tredje grunn
+  // til at overskriften sto stille 10 av 12 måneder.
+  const edibleInSeasonCount = edibleInSeason.length;
+  const inSeasonEdible = edibleInSeason
     // Peak season first — the strongest thing we can say — then by how often
     // the species is actually encountered. Ranking alphabetically inside the
     // peak group buried kantarell and steinsopp under whatever started with B.
@@ -175,7 +183,7 @@ export default async function HomePage() {
             {getMonthName(month, t)} {new Date().getFullYear()}
           </p>
           <h1 className="mt-1 font-serif text-4xl font-bold tracking-tight text-forest-900">
-            {getSeasonHeadline(month, inSeasonEdible.length, t)}
+            {getSeasonHeadline(month, edibleInSeasonCount, t)}
           </h1>
           {inSeasonEdible.length > 0 ? (
             <p className="mt-1 text-sm text-gray-700">

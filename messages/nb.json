@@ -430,11 +430,10 @@
     "monthOctober": "oktober",
     "monthNovember": "november",
     "monthDecember": "desember",
-    "headlineFewInSeason": "Få sopp i sesong nå",
     "headlineSpring": "Vårsoppene er kommet!",
-    "headlineSummer": "Sommer i skogen",
-    "headlineHighSeason": "Høysesong i skogen",
-    "headlineQuiet": "Stille i skogen",
+    "headlineSummer": "Sommersoppen står — {count} arter i sesong",
+    "headlineHighSeason": "Høysesong! {count} matsopp i sesong nå",
+    "headlineQuiet": "Stille i skogen — {count} matsopp i sesong",
     "edibleInSeasonCount": "{count, plural, =1 {# matsopp i sesong} other {# matsopper i sesong}}",
     "dangerousToWatch": "{count, plural, =1 {# giftig å passe på} other {# giftige å passe på}}",
     "identifyTitle": "Identifiser sopp",
@@ -477,7 +476,9 @@
     "inSeasonInSeason": "i sesong",
     "inSeasonSeeAll": "Se alle →",
     "inSeasonDangerous": "{count, plural, =1 {# giftig art er også i sesong nå} other {# giftige arter er også i sesong nå}} — les deg opp før du plukker",
-    "communityUnverifiedNote": "Artene er oppgitt av den som la inn funnet, og er ikke kontrollert av Mycelet."
+    "communityUnverifiedNote": "Artene er oppgitt av den som la inn funnet, og er ikke kontrollert av Mycelet.",
+    "headlineStarting": "Sesongen er i gang — {count} matsopp ute nå",
+    "headlineLateAutumn": "Senhøsten byr fortsatt på {count} matsopp"
   },
   "Personvern": {
     "title": "Personvernerklæring",

@@ -430,11 +430,10 @@
     "monthOctober": "oktober",
     "monthNovember": "november",
     "monthDecember": "december",
-    "headlineFewInSeason": "Få svampar i säsong nu",
     "headlineSpring": "Vårsvamparna är här!",
-    "headlineSummer": "Sommar i skogen",
-    "headlineHighSeason": "Högsäsong i skogen",
-    "headlineQuiet": "Stilla i skogen",
+    "headlineSummer": "Sommarsvampen står — {count} arter i säsong",
+    "headlineHighSeason": "Högsäsong! {count} matsvampar i säsong nu",
+    "headlineQuiet": "Stilla i skogen — {count} matsvampar i säsong",
     "edibleInSeasonCount": "{count, plural, =1 {# matsvamp i säsong} other {# matsvampar i säsong}}",
     "dangerousToWatch": "{count, plural, =1 {# giftig att se upp för} other {# giftiga att se upp för}}",
     "identifyTitle": "Identifiera svamp",
@@ -477,7 +476,9 @@
     "inSeasonInSeason": "i säsong",
     "inSeasonSeeAll": "Se alla →",
     "inSeasonDangerous": "{count, plural, =1 {# giftig art är också i säsong nu} other {# giftiga arter är också i säsong nu}} — läs på innan du plockar",
-    "communityUnverifiedNote": "Arterna är uppgivna av den som lade in fyndet och är inte kontrollerade av Mycelet."
+    "communityUnverifiedNote": "Arterna är uppgivna av den som lade in fyndet och är inte kontrollerade av Mycelet.",
+    "headlineStarting": "Säsongen är i gång — {count} matsvampar ute nu",
+    "headlineLateAutumn": "Senhösten bjuder fortfarande på {count} matsvampar"
   },
   "Personvern": {
     "title": "Integritetspolicy",

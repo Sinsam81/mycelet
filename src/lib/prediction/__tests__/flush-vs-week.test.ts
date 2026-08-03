@@ -34,17 +34,62 @@ describe('reconcileFlushWithWeek', () => {
     expect(uendret).toEqual(SOON);
   });
 
-  it('peker ikke ut en vinner når flere deler toppen', () => {
-    // Samme regel som «Best {dag}» ellers i appen: uavgjort er ikke en vinner.
-    const uendret = reconcileFlushWithWeek(SOON, uke([60, 90, 90, 70, 65, 62, 61]), 'nb');
-    expect(uendret).toEqual(SOON);
+  it('peker ikke ut EN vinner når flere deler toppen — men tier ikke heller', () => {
+    // Samme regel som «Best {dag}»: uavgjort er ikke én vinner. Men å tie helt
+    // var en overkorreksjon — målt live sto Göteborg på 50 i dag mot 70 på to
+    // dager senere i uka, og banneret sa ingenting. Løftet er sant uansett
+    // hvilken av dem som vinner.
+    const ut = reconcileFlushWithWeek(SOON, uke([50, 59, 59, 70, 70, 67, 55]), 'nb');
+    expect(ut.title).toBe('Bedre forhold senere denne uka');
+    // Ingen enkeltdag navngis.
+    for (const dag of ['tor', 'fre', 'lør', 'søn', 'man', 'tir']) {
+      expect(ut.title).not.toContain(dag);
+    }
+    expect(ut.message).toContain('20'); // løftet, 70 − 50
+    expect(ut.message).toContain('12'); // projeksjonen beholdes
   });
 
-  it('rører bare status soon', () => {
-    for (const status of ['fruiting', 'building', 'dry', 'dormant'] as const) {
+  it('sier «senere i uka» også når forholdene alt er modne og toppen er delt', () => {
+    const modent = { ...SOON, status: 'fruiting' as const, daysUntil: 0 };
+    const ut = reconcileFlushWithWeek(modent, uke([50, 59, 59, 70, 70, 67, 55]), 'nb');
+    expect(ut.title).toBe(modent.title); // feiringen står
+    expect(ut.message).toContain(modent.message);
+    expect(ut.message).toContain('senere i uka');
+  });
+
+  it('rører ikke building, dry eller dormant', () => {
+    for (const status of ['building', 'dry', 'dormant'] as const) {
       const annen = { ...SOON, status };
       expect(reconcileFlushWithWeek(annen, uke([50, 90, 60, 60, 60, 60, 60]), 'nb')).toEqual(annen);
     }
+  });
+
+  /**
+   * «Forholdene er modne nå» fyrer på 52,5 % av sesongdagene — 66 % i september,
+   * 69 % i oktober. Første hypotese var at fuktbøtta metter, men målingen drepte
+   * den: å øke kapasiteten fra 50 til 150 mm tar andelen «modne» dager FRA
+   * 76,6 % TIL 91,1 % (n = 3 312 aug–okt-døgn, 6 steder, 2019–2024). En større
+   * bøtte tømmes saktere.
+   *
+   * Modellen har altså rett — nordisk høstmark ER våt. Banneret er ikke feil,
+   * det er ubrukelig som råd når det sier det samme i tjue dager. Så det får si
+   * hvilken dag som er best, uten å be noen vente.
+   */
+  it('ber ikke folk vente når soppen alt står ute — men sier når det blir best', () => {
+    const modent = { ...SOON, status: 'fruiting' as const, daysUntil: 0 };
+    const ut = reconcileFlushWithWeek(modent, uke([60, 70, 87, 72, 68, 65, 62]), 'nb');
+    // Feiringen står — vi skal ikke sende noen hjem fra en moden skog.
+    expect(ut.title).toBe(modent.title);
+    expect(ut.status).toBe('fruiting');
+    // …men tillegget forteller hvilken dag som blir toppen.
+    expect(ut.message).toContain(modent.message);
+    expect(ut.message).toContain('fre');
+    expect(ut.message).toContain('27');
+  });
+
+  it('lar modne forhold stå urørt på en jevn uke', () => {
+    const modent = { ...SOON, status: 'fruiting' as const, daysUntil: 0 };
+    expect(reconcileFlushWithWeek(modent, uke([80, 82, 79, 81, 78, 80, 83]), 'nb')).toEqual(modent);
   });
 
   it('svarer på svensk', () => {

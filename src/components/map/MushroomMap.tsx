@@ -435,7 +435,12 @@ export function MushroomMap() {
       const leaflet = (await import('leaflet')).default;
       layer.clearLayers();
       const radiusM = opts?.radiusM && opts.radiusM > 0 ? opts.radiusM : SEARCH_AREA_RADIUS_M;
-      spots.forEach((spot) => {
+      // Fyllstyrken regnes over HELE settet før noe tegnes. Sirklene er de 12
+      // høyest scorende cellene lokalt, så den globale paletten gir dem én farge
+      // i 78 % av tilfellene — 12 identiske ringer uten grunn til å velge én.
+      // Se fillOpacitiesForScores. Fargen forblir absolutt.
+      const områdeDekkevner = fillOpacitiesForScores(spots.map((s) => s.score));
+      spots.forEach((spot, spotIndex) => {
         const color = colorForScore(spot.score).hex;
         const popup = buildTopSpotPopupHtml({
           spot,
@@ -447,7 +452,7 @@ export function MushroomMap() {
           locale,
           t: t as (key: string, values?: Record<string, string | number>) => string
         });
-        const { area, center } = createTopSpotArea(leaflet, spot, radiusM, color);
+        const { area, center } = createTopSpotArea(leaflet, spot, radiusM, color, områdeDekkevner[spotIndex]);
         // Popupen henger på begge: flata åpner den der du trykker (Leaflet gir
         // Path-lag klikkpunktet), prikken er ankeret når området er lite.
         area.bindPopup(popup).addTo(layer);

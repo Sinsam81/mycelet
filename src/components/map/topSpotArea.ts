@@ -45,7 +45,26 @@ export function createTopSpotArea(
   leaflet: TopSpotShapeFactory,
   spot: { lat: number; lng: number },
   radiusM: number,
-  color: string
+  color: string,
+  /**
+   * Fyllstyrke relativt til de andre områdene på skjermen, 0–1. Utelates den,
+   * brukes den gamle faste verdien.
+   *
+   * SETTET ER PER KONSTRUKSJON ÉN FARGE. Sirklene fargelegges med den globale
+   * paletten, men de ER de 12 høyest scorende cellene lokalt — å skille dem
+   * krever at et av knekkpunktene (50/60/72) tilfeldigvis lander inne i
+   * topp-12-spennet. Målt på rasteret: 78 % av settene får nøyaktig én
+   * palettfarge, resten to, aldri tre eller fire.
+   *
+   * Følgen var 12 identiske sirkler — samme farge, samme gjennomsiktighet, samme
+   * størrelse — så brukeren måtte åpne popup på hver enkelt for å se tallet.
+   *
+   * Samme feil og samme løsning som kartlaget hadde: rangér innenfor settet. Se
+   * fillOpacitiesForScores i condition-colors.ts. Fargen forblir absolutt, så
+   * ærligheten er uendret — vi sier bare hvilket av områdene som er best av dem
+   * på skjermen, ikke at det er bra i seg selv.
+   */
+  fillOpacity = 0.16
 ): TopSpotAreaShapes {
   const area = leaflet.circle([spot.lat, spot.lng], {
     radius: radiusM,
@@ -53,7 +72,7 @@ export function createTopSpotArea(
     // Myk fyllfarge + stiplet, svak kant: området skal leses som «let her
     // omkring», ikke som en ring med et fasitpunkt i midten.
     fillColor: color,
-    fillOpacity: 0.16,
+    fillOpacity,
     // Kanten er stiplet og dempet, men MÅ være synlig: flislaget under er nå et
     // mykt vaskelag uten kant (se updateHeatLayer), og et søkeområde man ikke
     // finner er verdiløst. Stiplingen er det som skiller «let her omkring» fra

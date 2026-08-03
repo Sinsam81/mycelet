@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { assessFlush } from '@/lib/prediction/flush';
+import { isInMushroomSeason } from '@/lib/prediction/mushroom-day';
 import { dayOfYearFromMonth, phenologyFactor } from '@/lib/prediction/phenology';
 import { PHENOLOGY } from '@/lib/prediction/phenology-data';
 import type { DailyForecast } from '@/lib/weather/forecast';
@@ -155,5 +156,55 @@ describe('assessFlush — language', () => {
 
   it('defaults to Norwegian when no locale is given', () => {
     expect(assessFlush(dry).title).toBe('Tørt — soppen venter på regn');
+  });
+});
+
+/**
+ * Banneret og ringen sto rett over hverandre med hver sin sesongport: flush
+ * slapp gjennom fra `month >= 5`, mushroom-day fra `month >= 6`.
+ *
+ * Målt over 2 212 maidager: 540 (24,4 %) fikk det grønne «Forholdene er modne
+ * nå 🍄 — soppen kommer nå», og 540 av 540 (100 %) hadde en gul ring over seg
+ * som sa at forholdene ikke var optimale. `optimal` forekommer i 0,0 % av
+ * maidagene, så motsigelsen var strukturell — ikke et uhell i været.
+ *
+ * Mai er ikke et vilkårlig valg: SEASON_WEIGHT_BY_MONTH gir mai vekten 0.
+ * Appens egen scoring har alltid regnet mai som utenfor sesongen.
+ */
+describe('sesongporten deles med ringen', () => {
+  const VÅT_MILD_MAIDAG = {
+    month: 5,
+    soilMoistureIndex: 0.9,
+    rain7dMm: 30,
+    currentTempC: 12,
+    forecast: []
+  };
+
+  it('feirer ikke i mai, der ringen aldri kan bli grønn', () => {
+    const f = assessFlush(VÅT_MILD_MAIDAG);
+    expect(f.status).toBe('dormant');
+    expect(f.title).not.toContain('modne');
+  });
+
+  it('bruker samme port som mushroom-day, måned for måned', () => {
+    for (let month = 1; month <= 12; month++) {
+      const f = assessFlush({ ...VÅT_MILD_MAIDAG, month });
+      const iSesong = isInMushroomSeason(month);
+      // Uten artskontekst skal de to aldri være uenige om hva som er sesong.
+      expect(f.status === 'dormant', `måned ${month}`).toBe(!iSesong);
+    }
+  });
+
+  it('feirer fortsatt i høysesongen', () => {
+    const f = assessFlush({ ...VÅT_MILD_MAIDAG, month: 9 });
+    expect(f.status).toBe('fruiting');
+  });
+
+  it('lar en art med egen kurve uttale seg utenfor den generelle sesongen', () => {
+    // Rekkefølgen på portene er poenget: står månedsporten først, blir en
+    // vårart meldt «utenom soppsesongen» selv om kurven sier at det er nå.
+    // Uten kurve for arten faller den tilbake på den generelle porten.
+    const utenKurve = assessFlush({ ...VÅT_MILD_MAIDAG }, { genus: 'Morchella', speciesId: null, lat: 59.9 });
+    expect(utenKurve.status).toBe('dormant');
   });
 });

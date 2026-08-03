@@ -5,6 +5,15 @@ import { useLocale, useTranslations } from 'next-intl';
 import { X } from 'lucide-react';
 import { intlLocale } from '@/lib/utils/intl-locale';
 import { pickBestForecastDay } from '@/lib/utils/forecast-best-day';
+import { forecastBand } from '@/lib/utils/forecast-scale';
+import { forecastBarHeights } from '@/lib/utils/forecast-bars';
+
+/** Fargeklasse per bånd. Båndet selv kommer fra den delte skalaen. */
+const BAND_CLASS = {
+  green: 'bg-forest-600',
+  amber: 'bg-amber-500',
+  grey: 'bg-gray-300'
+} as const;
 
 interface ForecastDay {
   date: string;
@@ -78,6 +87,10 @@ export function PlaceForecastStrip({ place, onClear }: PlaceForecastStripProps) 
   // reduce-en med streng `>` pekte alltid på «i dag» når hele uka lå likt.
   const bestPick = pickBestForecastDay(days);
   const bestIndex = bestPick.index;
+  // Regnes over hele uka før noe tegnes — se forecast-bars.ts.
+  const barHeights = forecastBarHeights(
+    days.map((d) => (Number.isFinite(d.score) ? Math.max(0, Math.min(100, d.score)) : 0))
+  );
   const best = bestIndex != null ? days[bestIndex] : null;
   const evenWeek = bestIndex == null && bestPick.score != null;
 
@@ -117,9 +130,11 @@ export function PlaceForecastStrip({ place, onClear }: PlaceForecastStripProps) 
       {days.length > 0 ? (
         <div className="mt-2 flex items-end justify-between gap-1">
           {days.map((day, index) => {
-            // Bar height maps 0-100 → 10-34px so even a bad day stays visible.
             const safeScore = Number.isFinite(day.score) ? Math.max(0, Math.min(100, day.score)) : 0;
-            const height = Math.max(10, Math.round((safeScore / 100) * 34));
+            // Høyden er RELATIV til uka, ikke til 0-100. Se forecast-bars.ts:
+            // spennet innenfor én uke har median 17 poeng, som på den gamle
+            // absolutte skalaen ble under 6 piksler av 34. Fargen er absolutt.
+            const height = Math.round((barHeights[index] / 100) * 34);
             // Ingen dag utheves når flere deler toppscoren — uthevingen ER
             // påstanden om at nettopp den dagen er best.
             const isBest = bestIndex != null && index === bestIndex;
@@ -130,7 +145,7 @@ export function PlaceForecastStrip({ place, onClear }: PlaceForecastStripProps) 
                 </span>
                 <div
                   style={{ height }}
-                  className={`w-full rounded-sm ${day.optimal ? 'bg-forest-600' : safeScore >= 40 ? 'bg-amber-500' : 'bg-gray-300'}`}
+                  className={`w-full rounded-sm ${BAND_CLASS[forecastBand(safeScore, day.optimal)]}`}
                 />
                 <span className={`text-[9px] ${isBest ? 'font-bold text-forest-900' : 'text-gray-500'}`}>
                   {labelFor(day, index)}

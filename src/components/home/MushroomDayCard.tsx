@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { MapPin } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { forecastBarHeights } from '@/lib/utils/forecast-bars';
+import { forecastBand } from '@/lib/utils/forecast-scale';
 
 interface DayPoint {
   date: string;
@@ -46,28 +47,11 @@ const FLUSH_TINT: Record<FlushStatus, string> = {
 // via i18n inside the component.
 const DEFAULT = { lat: 59.91, lon: 10.75 };
 
-// Tersklene er kalibrert mot fordelingen som faktisk forekommer i sesong, ikke
-// mot en tenkt 0–100-skala. Målt aug–okt (ERA5, 14 steder NO+SE, 2014–2024,
-// n = 99 176 dagscorer):
-//
-//     min 27 · p01 45 · p05 55 · p25 73 · median 86 · p95 100
-//
-// De gamle tersklene var 40 og 65 — BEGGE under 25-persentilen. Grått (<40)
-// traff 0,37 % av dagene, altså under 1-persentilen, så stripen kunne i praksis
-// aldri si «ikke bry deg med å dra ut denne uka» i den ene perioden det betyr
-// noe. 63,7 % ble grønne. Samme feil som dommene og kartfargene hadde: en skala
-// satt for et verdiområde som ikke finnes.
-const FORECAST_GREEN_MIN = 85; // rundt medianen, og fortsatt bak optimal-porten
-const FORECAST_AMBER_MIN = 55; // p05 — under dette er dagen reelt svak
-
+// Tersklene og båndlogikken ligger i forecast-scale.ts, delt med
+// PlaceForecastStrip. De var fire ulike sett på samme skjerm.
 function colorFor(score: number, optimal: boolean): string {
-  // Green is reserved for days the model will actually celebrate. Scoring alone
-  // is not enough: a mild wet January scores 65, and after the soil-moisture
-  // veto a dried-out day can still score high — both would otherwise paint
-  // forest-green next to a grey "Tørt — soppen venter på regn" banner.
-  if (score >= FORECAST_GREEN_MIN && optimal) return '#15803d';
-  if (score >= FORECAST_AMBER_MIN) return '#d97706';
-  return '#9ca3af';
+  const band = forecastBand(score, optimal);
+  return band === 'green' ? '#15803d' : band === 'amber' ? '#d97706' : '#9ca3af';
 }
 
 /**
