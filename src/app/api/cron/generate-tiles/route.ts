@@ -70,12 +70,25 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const regionFilter = new URL(request.url).searchParams.get('region');
-  const regions = regionFilter
-    ? PREDICTION_TILE_REGIONS.filter((r) => r.name.toLowerCase() === regionFilter.toLowerCase())
-    : PREDICTION_TILE_REGIONS;
+  const params = new URL(request.url).searchParams;
+  const regionFilter = params.get('region');
+  // Landfilteret finnes fordi det svenske skogoppslaget er elleve ganger
+  // tregere enn det norske (målt 329 mot 29 ms per rute), og de to landene
+  // til sammen ikke får plass innenfor maxDuration. Se tile-regions.ts.
+  // Uten filter kjøres alt — riktig lokalt og for en manuell full kjøring.
+  const countryFilter = params.get('country')?.toUpperCase();
+  if (countryFilter && countryFilter !== 'NO' && countryFilter !== 'SE') {
+    return NextResponse.json({ error: `Ukjent land: ${countryFilter}` }, { status: 400 });
+  }
+
+  let regions = PREDICTION_TILE_REGIONS as readonly (typeof PREDICTION_TILE_REGIONS)[number][];
+  if (regionFilter) regions = regions.filter((r) => r.name.toLowerCase() === regionFilter.toLowerCase());
+  if (countryFilter) regions = regions.filter((r) => r.country === countryFilter);
   if (regions.length === 0) {
-    return NextResponse.json({ error: `Ukjent region: ${regionFilter}` }, { status: 400 });
+    return NextResponse.json(
+      { error: `Ingen regioner traff filteret: region=${regionFilter ?? '—'} country=${countryFilter ?? '—'}` },
+      { status: 400 }
+    );
   }
 
   const supabase = createAdminClient();
