@@ -24,7 +24,10 @@ describe('assessMushroomDay', () => {
   it('never marks deep winter optimal, even with otherwise great weather', () => {
     const result = assessMushroomDay(base, 1); // January
     expect(result.optimal).toBe(false);
-    expect(result.title).toBe('Soppforhold i dag');
+    // Sto som toBe('Soppforhold i dag'). Januar er utenfor sesongvinduet, og
+    // kortet navngir nå porten som stoppet dagen i stedet for å si generelt at
+    // noe ikke stemmer — se verdictFor() i mushroom-day.ts.
+    expect(result.title).toBe('Utenom soppsesongen');
   });
 
   it('is not optimal in season when it has been dry', () => {
@@ -60,14 +63,16 @@ describe('assessMushroomDay — language', () => {
     expect(result.reasons.join(' ')).not.toMatch(/regn siste|luftfuktighet — høyt/);
   });
 
-  it('says "Svampförhållanden i dag" in Swedish when the day is not optimal', () => {
+  it('answers in Swedish when the day is not optimal', () => {
+    // Poenget er språket, ikke den nøyaktige strengen: januar er utenfor
+    // sesongen, og teksten navngir nå den porten.
     const result = assessMushroomDay(base, 1, 'sv');
-    expect(result.title).toBe('Svampförhållanden i dag');
-    expect(result.message).toContain('Kolla kartan');
+    expect(result.title).toBe('Utanför svampsäsongen');
+    expect(result.message).toContain('högsäsongen');
   });
 
   it('defaults to Norwegian when no locale is given', () => {
-    expect(assessMushroomDay(base, 1).title).toBe('Soppforhold i dag');
+    expect(assessMushroomDay(base, 1).title).toBe('Utenom soppsesongen');
   });
 });
 
@@ -159,7 +164,10 @@ describe('assessMushroomDay — the moisture veto', () => {
   it('refuses to celebrate when the ground has dried out', () => {
     const dry = assessMushroomDay({ ...septemberDrought, soilMoistureIndex: 0.2 }, 9);
     expect(dry.optimal).toBe(false);
-    expect(dry.title).toBe('Soppforhold i dag');
+    // Sto som toBe('Soppforhold i dag') — den generiske. Nå NAVNGIS vetoet, som
+    // er hele poenget: 15,8 % av høstdagene hadde score >= 80 og fikk likevel
+    // bare «ikke helt optimale», uten å si at det var marka som stoppet dem.
+    expect(dry.title).toBe('Alt stemmer — bortsett fra marka');
     // …and must not still list the old rain as a reason to go.
     expect(dry.reasons.join(' ')).not.toMatch(/regn|fuktet/i);
   });
@@ -187,5 +195,78 @@ describe('assessMushroomDay — the moisture veto', () => {
     // A soaked but out-of-season day stays un-celebrated.
     const january = assessMushroomDay({ ...septemberDrought, soilMoistureIndex: 1 }, 1);
     expect(january.optimal).toBe(false);
+  });
+});
+
+/**
+ * Ringen viser 0–100, men teksten hadde bare TO tilstander. Målt over jun–nov
+ * (ERA5, 14 steder NO+SE, 2014–2024, n = 28 182 stedsdøgn): nøyaktig 2 distinkte
+ * titler, 50 % fikk «ikke helt optimale», og bak den ENE setningen lå score fra
+ * 5 til 100. I aug–okt hadde 15,8 % score ≥ 80 uten å være optimale — gul ring
+ * med 80–100 over «ikke helt optimale».
+ *
+ * Vetoet er riktig. Feilen var at kortet ikke sa hvorfor.
+ */
+describe('ringen og teksten skal peke samme vei', () => {
+  const VÅT_MILD_HØST = {
+    temperatureC: 12,
+    humidityPct: 85,
+    rain3dMm: 14,
+    rain7dMm: 34,
+    rain14dMm: 53
+  };
+
+  it('navngir tørr mark når det er den som stopper en høy score', () => {
+    // Oslo 2023-09-07, reprodusert: score 100, 52,7 mm regn på 14 dager, men
+    // soil = 0,438 → vetoet slo inn og kortet sa bare «ikke helt optimale».
+    const d = assessMushroomDay({ ...VÅT_MILD_HØST, soilMoistureIndex: 0.438 }, 9, 'nb');
+    expect(d.optimal).toBe(false);
+    expect(d.score).toBeGreaterThanOrEqual(65);
+    expect(d.title).toContain('marka');
+    expect(d.message).toContain('tørr');
+    // Den gamle, intetsigende setningen skal ikke stå her lenger.
+    expect(d.message).not.toContain('ikke helt optimale');
+  });
+
+  it('navngir for lite regn når det er den porten som ryker', () => {
+    const d = assessMushroomDay(
+      { temperatureC: 13, humidityPct: 82, rain3dMm: 2, rain7dMm: 4, rain14dMm: 6, soilMoistureIndex: 0.7 },
+      9,
+      'nb'
+    );
+    if (d.score >= 65) {
+      expect(d.optimal).toBe(false);
+      expect(d.message).toContain('nedbør');
+    }
+  });
+
+  it('feirer fortsatt når alle portene er åpne', () => {
+    const d = assessMushroomDay({ ...VÅT_MILD_HØST, soilMoistureIndex: 0.75 }, 9, 'nb');
+    expect(d.optimal).toBe(true);
+    expect(d.title).toContain('Perfekt');
+  });
+
+  it('gir flere enn to distinkte titler over et sesongspenn', () => {
+    // Det var nøyaktig 2 før. En ring med 100 nivåer trenger mer enn to ord.
+    const titler = new Set<string>();
+    for (const soil of [0.2, 0.45, 0.6, 0.8]) {
+      for (const rain of [3, 12, 40]) {
+        for (const md of [1, 9]) {
+          titler.add(
+            assessMushroomDay(
+              { temperatureC: 12, humidityPct: 84, rain3dMm: rain / 4, rain7dMm: rain / 2, rain14dMm: rain, soilMoistureIndex: soil },
+              md,
+              'nb'
+            ).title
+          );
+        }
+      }
+    }
+    expect(titler.size).toBeGreaterThanOrEqual(3);
+  });
+
+  it('svarer på svensk', () => {
+    const d = assessMushroomDay({ ...VÅT_MILD_HØST, soilMoistureIndex: 0.438 }, 9, 'sv');
+    expect(d.title).toContain('marken');
   });
 });

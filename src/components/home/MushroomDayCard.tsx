@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { MapPin } from 'lucide-react';
 import { useTranslations } from 'next-intl';
+import { forecastBarHeights } from '@/lib/utils/forecast-bars';
 
 interface DayPoint {
   date: string;
@@ -45,13 +46,27 @@ const FLUSH_TINT: Record<FlushStatus, string> = {
 // via i18n inside the component.
 const DEFAULT = { lat: 59.91, lon: 10.75 };
 
+// Tersklene er kalibrert mot fordelingen som faktisk forekommer i sesong, ikke
+// mot en tenkt 0–100-skala. Målt aug–okt (ERA5, 14 steder NO+SE, 2014–2024,
+// n = 99 176 dagscorer):
+//
+//     min 27 · p01 45 · p05 55 · p25 73 · median 86 · p95 100
+//
+// De gamle tersklene var 40 og 65 — BEGGE under 25-persentilen. Grått (<40)
+// traff 0,37 % av dagene, altså under 1-persentilen, så stripen kunne i praksis
+// aldri si «ikke bry deg med å dra ut denne uka» i den ene perioden det betyr
+// noe. 63,7 % ble grønne. Samme feil som dommene og kartfargene hadde: en skala
+// satt for et verdiområde som ikke finnes.
+const FORECAST_GREEN_MIN = 85; // rundt medianen, og fortsatt bak optimal-porten
+const FORECAST_AMBER_MIN = 55; // p05 — under dette er dagen reelt svak
+
 function colorFor(score: number, optimal: boolean): string {
   // Green is reserved for days the model will actually celebrate. Scoring alone
   // is not enough: a mild wet January scores 65, and after the soil-moisture
   // veto a dried-out day can still score high — both would otherwise paint
   // forest-green next to a grey "Tørt — soppen venter på regn" banner.
-  if (score >= 65 && optimal) return '#15803d';
-  if (score >= 40) return '#d97706';
+  if (score >= FORECAST_GREEN_MIN && optimal) return '#15803d';
+  if (score >= FORECAST_AMBER_MIN) return '#d97706';
   return '#9ca3af';
 }
 
@@ -143,6 +158,8 @@ export function MushroomDayCard() {
   if (!data) return null;
 
   const { today, days } = data;
+  // Regnes over hele uka før noe tegnes — se forecast-bars.ts.
+  const barHeights = forecastBarHeights(days.map((d) => d.score));
   const color = colorFor(today.score, today.optimal);
   const r = 46;
   const circumference = 2 * Math.PI * r;
@@ -203,12 +220,16 @@ export function MushroomDayCard() {
         <div className="mt-3 border-t border-gray-100 pt-3">
           <p className="mb-1.5 text-xs font-medium text-gray-500">{t('outlookAhead')}</p>
           <div className="flex h-16 items-end justify-between gap-1.5">
-            {days.map((d) => (
+            {days.map((d, i) => (
               <div key={d.date} className="flex flex-1 flex-col items-center gap-1" title={`${d.score}/100`}>
                 <div className="flex h-12 w-full items-end">
+                  {/* Høyden er relativ til UKA, ikke til 0–100. Se
+                      forecast-bars.ts: spennet innenfor én uke har median 17
+                      poeng, som på den gamle absolutte skalaen ble 8 piksler i
+                      en 48 px-boks — usynlig. Fargen er fortsatt absolutt. */}
                   <div
                     className="w-full rounded-t"
-                    style={{ height: `${Math.max(10, d.score)}%`, backgroundColor: colorFor(d.score, d.optimal) }}
+                    style={{ height: `${barHeights[i]}%`, backgroundColor: colorFor(d.score, d.optimal) }}
                   />
                 </div>
                 <span className={`text-[9px] ${d.isToday ? 'font-semibold text-forest-900' : 'text-gray-500'}`}>
