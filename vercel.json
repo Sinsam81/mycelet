@@ -2,8 +2,12 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "crons": [
     {
-      "path": "/api/cron/generate-tiles",
+      "path": "/api/cron/generate-tiles?country=NO",
       "schedule": "15 1 * * *"
+    },
+    {
+      "path": "/api/cron/generate-tiles?country=SE",
+      "schedule": "45 1 * * *"
     }
   ]
 }
