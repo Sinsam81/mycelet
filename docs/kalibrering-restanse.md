@@ -34,7 +34,35 @@ brukeren aldri ser side om side.
 
 ---
 
-## Gjenstående funn
+## Status: alt utenom ett er ryddet
+
+Fikset i [#131](https://github.com/Sinsam81/mycelet/pull/131):
+
+| funn | hva som ble gjort |
+|---|---|
+| Mai motsa seg selv (`flush.ts:164`) | Begge portene leser `isInMushroomSeason`, utledet av vekttabellen. Artsporten kjøres først, så vårarter med egen kurve fortsatt får uttale seg. |
+| Grå «dårlig dag» uoppnåelig (`PlaceForecastStrip.tsx:133`) | Begge stripene deler `forecast-scale.ts`, rekalibrert til 55/85. Søylehøydene er relative til uka. |
+| Overskriften sto stille (`page.tsx:70`) | `season-headline.ts`. **Og en verre feil sveipen ikke fanget:** tallet som ble sendt inn var `inSeasonEdible.length`, kappet på 6, så august (39) og januar (2) leste likt. Det fulle tallet regnes nå før kuttet. 8 distinkte setninger mot 4. |
+| 12 like søkeområder (`topSpotArea.ts:56`) | Rangeres innenfor settet, som flislaget. |
+
+### «Forholdene er modne nå» — ikke en feil
+
+Hypotesen var at fuktbøtta metter. **Målingen drepte den.** Å øke kapasiteten
+gjør det verre, fordi en større bøtte tømmes saktere og fordampingen er kappet
+på 5 mm/døgn (Open-Meteo ERA5, 6 steder NO+SE, 2019–2024, n = 3 312 aug–okt):
+
+| kapasitet | = 1,000 | andel ≥ 0,55 |
+|---|---|---|
+| 50 mm | 26,2 % | 76,6 % |
+| 150 mm | 24,0 % | **91,1 %** |
+
+Modellen har rett: nordisk høstmark **er** våt. Banneret er ikke feil — det er
+ubrukelig som *råd* når det gjentar seg i tjue dager. Det sier nå hvilken dag som
+blir best i stedet. **Ikke rør fuktmodellen på dette grunnlaget.**
+
+---
+
+## Det ene som gjenstår
 
 ### terrain er konstanten 50 i 100 % av rasteret · `api/cron/generate-tiles/route.ts:153`
 
@@ -46,80 +74,17 @@ sender den; **flisgeneratoren gjør det ikke**. Signalet fantes til 2026-07-14
 Målt: `components.terrain = 50` i **15 260 av 15 260 fliser**, hver dag fra
 2026-07-14 til 2026-08-02.
 
-⚠️ **Ikke prioriter dette som «grunnen til at kartet er flatt».** Sveipens egen
-skeptiker regnet etter: terrain bidrar `terrain × 0,024` til den lagrede scoren,
-altså **0,62 poeng** over hele sitt realiserte spenn — ~0,7 % av verdiområdet.
+**Bevisst nedprioritert, av to grunner:**
 
-⚠️ **Og ikke bare koble på elevation.** `elevationToTerrainScore` gir flat 90
-under 500 m. Ekte høyde for alle 109 flisceller er 10–709 m, median 247 → **94,5 %
-ville fått nøyaktig 90**. Da byttes konstanten 50 mot konstanten 90, og kartet
-blir like flatt, bare litt lysere. Skalaen må rekalibreres mot høydene som
-faktisk finnes, ellers er fiksen kosmetisk.
+⚠️ Terrain bidrar `terrain × 0,024` til den lagrede scoren — **0,62 poeng** over
+hele sitt realiserte spenn, ~0,7 % av verdiområdet. Dette er *ikke* grunnen til
+at kartet ser flatt ut, og må ikke selges som det.
 
-### Grå «dårlig dag» er uoppnåelig i sesong · `PlaceForecastStrip.tsx:133`
-
-Uttømmende oppregning av alle 36 nåbare værkombinasjoner mot `seasonWeight`:
-i aug/sep/okt er sesongvekten 35, så laveste nåbare score er 35. Grått krever
-< 40.
-
-- **aug–okt:** grå 1 av 36 = **2,8 %**, og den ene krever døgnmiddel utenfor
-  6–22 °C *og* < 10 mm regn på 14 dager *og* luftfuktighet < 65 % samtidig.
-- juni til sammenligning: grå 41,7 %.
-
-Stripen kan altså ikke si «ikke bry deg denne uka» i den ene perioden det betyr
-noe. Dette er et **fjerde** terskelsett på samme skjerm — vurder å la den lese
-fra samme sted som resten.
-
-### «Forholdene er modne nå» sluker to av tre høysesongdager · `flush.ts:207`
-
-Mai–nov, n = 17 584: fruiting **52,5 %** (september 66 %, oktober 69 %).
-
-Årsaken er at fuktindeksen er en bryter, ikke en skala: **21,1 %** av aug–okt
-ligger nøyaktig på 1,000 og 40,7 % ≥ 0,9, mens bare 12,5 % ligger i ±0,1 rundt
-terskelen 0,55. Blant de fastlåste dagene er regn over 14 døgn median 92 mm,
-p95 193 mm, maks 307 mm — mot en **bøttekapasitet på 50 mm**. Bøtta renner over
-og mister all oppløsning i den øvre enden.
-
-Banneret som skal svare «gå nå eller vent?» sier «gå nå» nesten alltid, og
-skiller ikke en gjennomvåt uke fra en akkurat-passe-fuktig.
-
-### Sesongporten spriker i mai · `flush.ts:164`
-
-`assessFlush` slipper gjennom fra `month >= 5`, `assessMushroomDay` fra
-`month >= 6`. Mai, n = 2212: **540 dager (24,4 %)** viser det grønne
-«Forholdene er modne nå 🍄», og **540 av 540 (100 %)** har en ring som ikke er
-grønn over seg, fordi `optimal` forekommer i 0,0 % av maidagene.
-
-Kortet motsier seg selv i en hel måned. Enkleste fiks: la de to lese samme
-sesongport.
-
-### `headlineFewInSeason` er uoppnåelig · `page.tsx:70`
-
-`edibleCount` er antall matsopp i sesong. Målt mot ekte `mushroom_species`
-(n = 72), per måned jan→des: **2, 2, 2, 4, 5, 8, 20, 39, 46, 46, 16, 4**.
-Minimum over året er 2, og `baseSeasonMask` kan bare *legge til* måneder — så
-terskelen for «få arter i sesong» treffer aldri.
-
-Følgen: **10 av 12 måneder** får samme setning «… i skogen». Årets viktigste
-overgang for en soppapp, 31. juli → 1. august, endrer «Sommer i skogen» til
-«Høysesong i skogen» — 9 av 15 tegn står stille.
-
-### De 12 søkeområdene er per konstruksjon én farge · `topSpotArea.ts:56`
-
-Sirklene fargelegges med den globale paletten, men settet ER de 12 høyest
-scorende cellene lokalt. Proxy-måling på rasteret: **78 %** av settene får
-nøyaktig én palettfarge, resten to, aldri tre eller fire.
-
-12 identiske sirkler — samme farge, samme gjennomsiktighet, samme størrelse.
-Brukeren må åpne popup på hver enkelt for å se tallet.
-
-Dette er samme feil kartlaget hadde, og har samme løsning: rangér innenfor
-settet. Se `fillOpacitiesForScores` i `condition-colors.ts`.
-
-*(Proxy-forbehold: grid-ruta regner live på ~1,4 km oppløsning, ikke fra fliser,
-så tallet viser klassen — ikke den eksakte andelen for søkeområdene.)*
-
----
+⚠️ Å bare koble på elevation løser ingenting: `elevationToTerrainScore` gir flat
+90 under 500 m, og ekte høyde for alle 109 flisceller er 10–709 m med median 247
+— **94,5 % ville fått nøyaktig 90**. Konstanten 50 byttes mot konstanten 90.
+Skalaen må rekalibreres mot høydene som faktisk finnes, ellers er fiksen
+kosmetisk.
 
 ## Hvordan måle på nytt
 
