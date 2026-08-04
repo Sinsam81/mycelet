@@ -483,7 +483,9 @@
     "bestRegionsSubtitle": "Forholdene der de er best i hver region — trykk for å se på kartet.",
     "bestRegionsExpand": "Vis {count} til",
     "bestRegionsCollapse": "Vis færre",
-    "bestRegionsDisclaimer": "Sammenligner VÆR, SESONG og FUKT mellom landsdeler — ikke hvor soppen står. Forskjellen mellom landsdeler er den modellen måler best."
+    "bestRegionsDisclaimer": "Sammenligner VÆR, SESONG og FUKT mellom landsdeler — ikke hvor soppen står. Forskjellen mellom landsdeler er den modellen måler best.",
+    "bestRegionsNorway": "Norge",
+    "bestRegionsSweden": "Sverige"
   },
   "Personvern": {
     "title": "Personvernerklæring",
