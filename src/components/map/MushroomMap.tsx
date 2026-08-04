@@ -189,6 +189,20 @@ export function MushroomMap() {
 
   const [filters, setFilters] = useState<MapFilterState>(initialFilters);
   const [showAddSheet, setShowAddSheet] = useState(false);
+  /**
+   * Posisjonen «Legg til funn» skal bruke når GPS ikke er å få tak i.
+   *
+   * Skjemaet krevde `useGeolocation()` og avviste lagring uten. Det låste ute
+   * fire helt vanlige tilfeller: desktop uten GPS, avslått posisjonstillatelse,
+   * dårlig signal under tregrenser — og det vanligste av alt, å registrere et
+   * funn i etterkant hjemmefra. «Jeg fant kantarell ved den lysningen i går»
+   * lot seg rett og slett ikke lagre.
+   *
+   * Kartsenteret er svaret som allerede ligger på skjermen: brukeren panorerer
+   * dit hen var, og trykker pluss. Skjemaet sier tydelig hvilken av de to
+   * posisjonene det bruker, så ingen tror de lagrer en GPS-måling de ikke har.
+   */
+  const [addSheetFallback, setAddSheetFallback] = useState<{ lat: number; lng: number } | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   // Brukernavnet vises i popupen. For «Kun mine funn» leser vi funnene rett fra
   // tabellen, som ikke har den join-en public_findings-viewet gjør.
@@ -2150,7 +2164,11 @@ export function MushroomMap() {
       </button>
 
       <button
-        onClick={() => setShowAddSheet(true)}
+        onClick={() => {
+          const senter = mapRef.current?.getCenter();
+          setAddSheetFallback(senter ? { lat: senter.lat, lng: senter.lng } : null);
+          setShowAddSheet(true);
+        }}
         className="absolute bottom-4 right-4 z-[1000] h-14 w-14 rounded-full bg-forest-800 text-3xl text-white shadow-xl transition-colors hover:bg-forest-700"
         aria-label={t('addFinding')}
       >
@@ -2185,6 +2203,8 @@ export function MushroomMap() {
         <AddFindingSheet
           latitude={latitude}
           longitude={longitude}
+          fallbackLatitude={addSheetFallback?.lat ?? null}
+          fallbackLongitude={addSheetFallback?.lng ?? null}
           onClose={() => setShowAddSheet(false)}
           onSaved={(speciesName) => {
             setShowAddSheet(false);

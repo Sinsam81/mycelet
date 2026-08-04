@@ -411,7 +411,12 @@
     "cardSeasons": " · {seasons} sesonger ({first}–{last})",
     "moreSpecies": "+{count} til",
     "openInMap": "Åpne i kart",
-    "privacyNote": "Steder der alle funn er private, er merket som hemmelige. Posisjonene her vises aldri til andre — offentlige funn deles kun med den synligheten du valgte da du logget dem."
+    "privacyNote": "Steder der alle funn er private, er merket som hemmelige. Posisjonene her vises aldri til andre — offentlige funn deles kun med den synligheten du valgte da du logget dem.",
+    "searchPlaceholder": "Søk på sted eller art",
+    "sortRecent": "Sist besøkt",
+    "sortMostFinds": "Flest funn",
+    "noSearchHits": "Ingen steder matcher «{query}».",
+    "searchHits": "{count} av {total} steder"
   },
   "Home": {
     "timeAgoToday": "i dag",
@@ -992,7 +997,7 @@
     "addPhoto": "Ta bilde / velg bilde",
     "adjustPosition": "Juster posisjon (meter)",
     "offset": "Offset: {meters}m",
-    "coordinatePreview": "Koordinat-preview: {lat}, {lng}",
+    "coordinatePreview": "Lagres på: {lat}, {lng}",
     "sharingLevel": "Delingsnivå",
     "sharingPublic": "Eksakt punkt (offentlig)",
     "sharingApproximate": "Omtrentlig (±500m)",
@@ -1004,7 +1009,9 @@
     "zoneGranularity": "Grovhet (km-grid)",
     "zonePrecisionKm": "{km} km",
     "cancel": "Avbryt",
-    "saveFinding": "Lagre funn"
+    "saveFinding": "Lagre funn",
+    "errorNoPosition": "Ingen posisjon å lagre på. Tillat GPS, eller flytt kartet dit du fant soppen og prøv igjen.",
+    "usingMapCentre": "📍 Uten GPS lagres funnet der kartet står nå. Flytt kartet til rett sted før du lagrer."
   },
   "HotspotPanel": {
     "conditionPoor": "Lite sopp her nå",

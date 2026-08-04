@@ -411,7 +411,12 @@
     "cardSeasons": " · {seasons} säsonger ({first}–{last})",
     "moreSpecies": "+{count} till",
     "openInMap": "Öppna i karta",
-    "privacyNote": "Platser där alla fynd är privata är märkta som hemliga. Positionerna här visas aldrig för andra — offentliga fynd delas endast med den synlighet du valde när du loggade dem."
+    "privacyNote": "Platser där alla fynd är privata är märkta som hemliga. Positionerna här visas aldrig för andra — offentliga fynd delas endast med den synlighet du valde när du loggade dem.",
+    "searchPlaceholder": "Sök på plats eller art",
+    "sortRecent": "Senast besökt",
+    "sortMostFinds": "Flest fynd",
+    "noSearchHits": "Inga platser matchar ”{query}”.",
+    "searchHits": "{count} av {total} platser"
   },
   "Home": {
     "timeAgoToday": "i dag",
@@ -992,7 +997,7 @@
     "addPhoto": "Ta bild / välj bild",
     "adjustPosition": "Justera position (meter)",
     "offset": "Offset: {meters}m",
-    "coordinatePreview": "Koordinatförhandsvisning: {lat}, {lng}",
+    "coordinatePreview": "Sparas på: {lat}, {lng}",
     "sharingLevel": "Delningsnivå",
     "sharingPublic": "Exakt punkt (offentlig)",
     "sharingApproximate": "Ungefärlig (±500m)",
@@ -1004,7 +1009,9 @@
     "zoneGranularity": "Grovhet (km-rutnät)",
     "zonePrecisionKm": "{km} km",
     "cancel": "Avbryt",
-    "saveFinding": "Spara fynd"
+    "saveFinding": "Spara fynd",
+    "errorNoPosition": "Ingen position att spara på. Tillåt GPS, eller flytta kartan dit du hittade svampen och försök igen.",
+    "usingMapCentre": "📍 Utan GPS sparas fyndet där kartan står nu. Flytta kartan till rätt plats innan du sparar."
   },
   "HotspotPanel": {
     "conditionPoor": "Lite svamp här nu",

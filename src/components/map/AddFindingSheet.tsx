@@ -26,8 +26,21 @@ type SharingMode = 'public' | 'approximate' | 'zone' | 'private';
 type FindingType = 'positive' | 'negative';
 
 interface AddFindingSheetProps {
+  /** Målt GPS-posisjon. Null når nettleseren ikke gir den. */
   latitude: number | null;
   longitude: number | null;
+  /**
+   * Kartsenteret, brukt når GPS ikke er å få tak i.
+   *
+   * Skjemaet krevde GPS og avviste lagring uten. Det låste ute desktop, avslått
+   * posisjonstillatelse, dårlig signal under tregrenser — og det vanligste av
+   * alt: å registrere et funn i etterkant hjemmefra.
+   *
+   * Fallbacken er IKKE stille. Skjemaet skriver hvilken posisjon det bruker, så
+   * ingen tror de lagrer en GPS-måling de ikke har.
+   */
+  fallbackLatitude?: number | null;
+  fallbackLongitude?: number | null;
   onClose: () => void;
   onSaved: (speciesName?: string) => void;
 }
@@ -38,7 +51,20 @@ interface SpeciesOption {
   latin_name: string;
 }
 
-export function AddFindingSheet({ latitude, longitude, onClose, onSaved }: AddFindingSheetProps) {
+export function AddFindingSheet({
+  latitude,
+  longitude,
+  fallbackLatitude = null,
+  fallbackLongitude = null,
+  onClose,
+  onSaved
+}: AddFindingSheetProps) {
+  // GPS først, kartsenteret som reserve. `brukerKartsenter` styrer teksten —
+  // brukeren skal vite hvilken av de to som lagres.
+  const harGps = latitude != null && longitude != null;
+  const lagretLat = harGps ? latitude : fallbackLatitude;
+  const lagretLng = harGps ? longitude : fallbackLongitude;
+  const brukerKartsenter = !harGps && lagretLat != null && lagretLng != null;
   const t = useTranslations('AddFindingSheet');
   const locale = useLocale();
   const supabase = useMemo(() => createClient(), []);
@@ -144,8 +170,8 @@ export function AddFindingSheet({ latitude, longitude, onClose, onSaved }: AddFi
     event.preventDefault();
     setError(null);
 
-    if (!latitude || !longitude) {
-      setError(t('errorGpsMissing'));
+    if (lagretLat == null || lagretLng == null) {
+      setError(t('errorNoPosition'));
       return;
     }
 
@@ -160,7 +186,7 @@ export function AddFindingSheet({ latitude, longitude, onClose, onSaved }: AddFi
         throw new Error(t('errorNotLoggedIn'));
       }
 
-      const adjusted = applyPositionOffset(latitude, longitude, positionOffsetMeters, offsetBearing);
+      const adjusted = applyPositionOffset(lagretLat, lagretLng, positionOffsetMeters, offsetBearing);
       const isNegative = findingType === 'negative';
       // No image for negative observations — there's nothing to photograph.
       const imageUrl = !isNegative && imageFile ? await uploadImage(imageFile) : null;
@@ -327,11 +353,20 @@ export function AddFindingSheet({ latitude, longitude, onClose, onSaved }: AddFi
           <span className="text-xs text-gray-600">{t('offset', { meters: positionOffsetMeters })}</span>
         </label>
 
-        {latitude && longitude ? (
+        {/* Brukeren skal ALDRI være i tvil om hvilken posisjon som lagres.
+            Uten dette ville et funn lagret fra kartsenteret sett ut som en
+            GPS-måling. */}
+        {brukerKartsenter ? (
+          <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs leading-relaxed text-amber-900">
+            {t('usingMapCentre')}
+          </p>
+        ) : null}
+
+        {lagretLat != null && lagretLng != null ? (
           <p className="text-xs text-gray-600">
             {t('coordinatePreview', {
-              lat: applyPositionOffset(latitude, longitude, positionOffsetMeters, offsetBearing).lat.toFixed(5),
-              lng: applyPositionOffset(latitude, longitude, positionOffsetMeters, offsetBearing).lng.toFixed(5)
+              lat: applyPositionOffset(lagretLat, lagretLng, positionOffsetMeters, offsetBearing).lat.toFixed(5),
+              lng: applyPositionOffset(lagretLat, lagretLng, positionOffsetMeters, offsetBearing).lng.toFixed(5)
             })}
           </p>
         ) : null}
