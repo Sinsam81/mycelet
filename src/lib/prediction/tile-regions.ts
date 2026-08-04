@@ -64,7 +64,11 @@ export const PREDICTION_TILE_REGIONS: readonly PredictionTileRegion[] = [
   { name: 'Linköping', country: 'SE', minLat: 58.3, maxLat: 58.55, minLng: 15.35, maxLng: 15.95, step: 0.07 },
   { name: 'Växjö', country: 'SE', minLat: 56.75, maxLat: 57.0, minLng: 14.55, maxLng: 15.1, step: 0.07 },
   { name: 'Göteborg', country: 'SE', minLat: 57.6, maxLat: 57.85, minLng: 11.75, maxLng: 12.3, step: 0.07 },
-  { name: 'Malmö', country: 'SE', minLat: 55.5, maxLat: 55.8, minLng: 13.0, maxLng: 13.6, step: 0.07 }
+  // Flyttet østover 2026-08-04: den opprinnelige boksen startet på 13,0, som er
+  // Øresund og Malmö sentrum. Målt etter første nattlige kjøring lå alle de 49
+  // rutene som faktisk fikk skogdata mellom 13,35 og 13,56 — de fem vestligste
+  // kolonnene ga null. Nå dekker den Romeleåsen og skogen øst for byen i stedet.
+  { name: 'Malmö', country: 'SE', minLat: 55.5, maxLat: 55.85, minLng: 13.25, maxLng: 13.95, step: 0.07 }
 ];
 
 export function predictionTileGridCells(

@@ -63,7 +63,10 @@ export async function GET(request: NextRequest) {
       // Står her når gårsdagens fliser fortsatt teller som ferske, så en
       // operatør ser hvorfor svaret er 200 uten dagens dato i regions.
       acceptedFallbackDate: graceDate,
-      schedule: '15 1 * * * (UTC)',
+      // To kjøringer siden 2026-08-03: det svenske skogoppslaget er elleve
+      // ganger tregere enn det norske, og landene får ikke plass i samme
+      // maxDuration. Se vercel.json og tile-regions.ts.
+      schedule: 'NO 15 1 * * * · SE 45 1 * * * (UTC)',
       regions: assessment.regions
     },
     {
