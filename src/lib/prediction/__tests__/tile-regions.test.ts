@@ -66,12 +66,14 @@ describe('PREDICTION_TILE_REGIONS', () => {
     }
   });
 
-  it('holder totalen innenfor det en nattlig kjøring tåler', () => {
-    // Hver rute koster ett skogoppslag mot en ekstern WMS. Grensen er satt for å
-    // tvinge fram en bevisst vurdering, ikke fordi 700 er magisk: vokser lista
-    // forbi den, sjekk kjøretiden i generatorloggen før du hever tallet.
-    const total = PREDICTION_TILE_REGIONS.reduce((n, r) => n + predictionTileGridCells(r).length, 0);
-    expect(total).toBeLessThan(700);
-    expect(total).toBeGreaterThan(400); // fanger at svenske regioner blir slettet
+  it('har regioner i begge land, så en sletting ikke går ubemerket', () => {
+    // Det finnes bevisst INGEN grense på totalen. Landene kjøres hver for seg
+    // (se vercel.json), så det som faktisk begrenser er kjøretiden PER LAND —
+    // og den vokter testen over. En totalgrense ville bare hindret at billige
+    // norske regioner ble lagt til, uten å beskytte mot noe.
+    for (const land of ['NO', 'SE'] as const) {
+      const n = PREDICTION_TILE_REGIONS.filter((r) => r.country === land).length;
+      expect(n, `${land} må ha regioner`).toBeGreaterThanOrEqual(5);
+    }
   });
 });

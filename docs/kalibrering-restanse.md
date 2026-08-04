@@ -62,29 +62,66 @@ blir best i stedet. **Ikke rør fuktmodellen på dette grunnlaget.**
 
 ---
 
-## Det ene som gjenstår
+## Ryddet 2026-08-04: terrain og dekningen
 
-### terrain er konstanten 50 i 100 % av rasteret · `api/cron/generate-tiles/route.ts:153`
+### terrain — MÅLT, og svaret er at høyde ikke tilfører noe
 
-`cell-score.ts:118` faller til 50 når `elevation` mangler. De tre live-rutene
-sender den; **flisgeneratoren gjør det ikke**. Signalet fantes til 2026-07-14
-(commit `fb6d1c5` innførte elevation uten å oppdatere generatoren) — i
-23. mai-batchen spente terrain 25–84 med 57 unike verdier.
+`terrain` var konstanten 50 i alle 15 260 fliser fordi generatoren aldri sendte
+`elevation`. Den nærliggende «fiksen» var å koble den på. **Det ville vært feil.**
 
-Målt: `components.terrain = 50` i **15 260 av 15 260 fliser**, hver dag fra
-2026-07-14 til 2026-08-02.
+Testet med samme metode som fuktkartet — matchet kasus-kontroll, 400 par,
+bakgrunn fra andre arters funn 0,3–10 km unna, høyder fra Open-Meteo:
 
-**Bevisst nedprioritert, av to grunner:**
+| | kantarellfunn | bakgrunn |
+|---|---|---|
+| p10 | 27 m | 18 m |
+| median | **89 m** | **90 m** |
+| p90 | 172 m | 183 m |
+| **AUC** | colspan | **0,509** |
 
-⚠️ Terrain bidrar `terrain × 0,024` til den lagrede scoren — **0,62 poeng** over
-hele sitt realiserte spenn, ~0,7 % av verdiområdet. Dette er *ikke* grunnen til
-at kartet ser flatt ut, og må ikke selges som det.
+Rent terningkast. Og **100 % av funnene ligger under 500 m**, som er nøyaktig
+der `elevationToTerrainScore` gir flat 90. Å koble på elevation ville byttet
+konstanten 50 mot konstanten 90 og ikke tilført én bit informasjon.
 
-⚠️ Å bare koble på elevation løser ingenting: `elevationToTerrainScore` gir flat
-90 under 500 m, og ekte høyde for alle 109 flisceller er 10–709 m med median 247
-— **94,5 % ville fått nøyaktig 90**. Konstanten 50 byttes mot konstanten 90.
-Skalaen må rekalibreres mot høydene som faktisk finnes, ellers er fiksen
-kosmetisk.
+**terrain er derfor bevisst inert.** Ikke «fiks» det ved å sende elevation — det
+er målt, og det gir ingenting. Skulle noen ta det opp igjen, må de først vise at
+høyde diskriminerer, ikke bare at konstanten ser stygg ut.
+
+Dette er nå **fjerde** romlige prediktor på tilfeldighetsnivå:
+
+| lag | AUC |
+|---|---|
+| forekomstkjerne | 0,52 |
+| SGU drenering (SE) | 0,47 |
+| NIBIO DTW (NO) | 0,49 |
+| **høyde over havet** | **0,509** |
+
+Mønsteret er entydig nok til å slutte å lete etter romlige terrengprediktorer.
+Den validerte aksen er tid (fenologi, AUC 0,89) — og siden 2026-08-04 også
+**forskjellen mellom landsdeler**, som er 47 poeng mot 7 inne i ett utsnitt.
+Se `/api/prediction/regions`.
+
+### Dekningen — utvidet fra 13 til 22 regioner
+
+Ni nye, valgt etter funntetthet i områder som sto uten dekning:
+
+**Norge** (29 ms/rute, ~3 s til sammen): Kristiansand 3297 funn, Tromsø 1470,
+Ålesund 1190, Bodø 762.
+
+**Sverige** (329 ms/rute): Kalmar 6376, Falun 2682, Jönköping 2560,
+Sundsvall 2553, Östersund 2299. **Kiruna er utelatt** — 191 funn forsvarer ikke
+kostnaden hver natt.
+
+De svenske boksene er bevisst smalere enn de norske. Etter utvidelsen:
+
+```
+NO   9 regioner · 399 ruter · ~12 s
+SE  13 regioner · 420 ruter · ~138 s   (grense 150)
+```
+
+Vokser lista videre: **krymp boksene, ikke hev grensen.** Testen «lar hvert land
+kjøres for seg» er det som står mellom oss og en cron som timer ut midt i
+kjøringen.
 
 ## Hvordan måle på nytt
 
