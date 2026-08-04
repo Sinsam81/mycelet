@@ -60,9 +60,30 @@ Den samme oppslaget avslørte sju uoffisielle norske navn, rettet i `046`.
       Artsdatabanken bruker «blek piggsopp» (art) / gruppa inneholder flere
       svært like arter. Dette er en **produktbeslutning** om hvilket nivå appen
       skal operere på, ikke en ren navnefeil.
-- [ ] Vurder en `matstatus`-kolonne skilt fra `edibility`: normlisten skiller
-      mellom «matsopp», «matsopp etter avkoking» og «ikke matsopp», og hulriske
-      og skjeggriske hører i midtkategorien. I dag ligger det i
-      `conditionally_edible` + fritekst.
+- [x] ~~Vurder en `matstatus`-kolonne skilt fra `edibility`~~ — **vurdert og
+      avvist 2026-08-04.**
+
+      Alle sju artene i `conditionally_edible` har allerede notater som sier
+      det: «Må kokes minst 15 min – rå er den giftig» (honningsopp), «Spiselig
+      KUN gjennomstekt» (rødnende fluesopp), «aldri rå» (hulriske), «Må
+      forvelles og saltlegges» (skjeggriske), «Må stekes godt» (begge morkler),
+      «Noen reagerer selv etter koking» (stankmorkel).
+
+      En ny enum-verdi ville flyttet informasjon som allerede finnes, og rørt
+      database, typer, merker, filtre, AI-resultat og kartfarger uten å fortelle
+      brukeren noe nytt.
+
+      **DEN EKTE LUKEN LÅ ET ANNET STED.** `edibility_notes` vises bare på
+      artsdetaljsiden. Målt fravær i `/species`, i kalenderen (`SeasonNow`,
+      `YearTable`) og i `IdentifyResult` — skjermen der noen står med soppen i
+      hånda og skal bestemme seg. Der sto merket «Betinget spiselig» helt alene,
+      uten å si hva betingelsen var.
+
+      Rettet ved å la etiketten bære advarselen: **«Spiselig — giftig rå»**.
+      Én streng, fire skjermer, ingen skjemaendring. Se `EdibilityBadge.tsx`.
+
+      **Lærdom:** spør alltid HVOR sikkerhetsinformasjonen vises, ikke bare om
+      den finnes. Notatet var riktig hele tiden — det var bare usynlig der det
+      betydde mest.
 - [ ] 25 av 52 matsopp mangler fortsatt forvekslingsdata — se
       [kalibrering-restanse.md](kalibrering-restanse.md) for kontekst.
