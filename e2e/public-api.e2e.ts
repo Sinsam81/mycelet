@@ -1,4 +1,5 @@
 import { test, expect } from './_setup/fixtures';
+import { PREDICTION_TILE_REGIONS } from '../src/lib/prediction/tile-regions';
 
 // Offentlige API-er — ingen auth. Kjøres mot localhost (gjeldende kode) i `npm run qa`.
 
@@ -27,7 +28,18 @@ test.describe('Helse', () => {
     const body = await res.json();
     expect(body.status === 'ok' || body.status === 'degraded').toBeTruthy();
     expect(body.expectedDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
-    expect(body.regions).toHaveLength(5);
+    // Ikke hardkodet antall: lista vokser når nye regioner legges til (Sverige
+    // kom inn 2026-08-03 og tok den fra 5 til 13). Testen skal fange at
+    // helsesjekken mangler regioner, ikke at noen la til en.
+    expect(body.regions.length).toBe(PREDICTION_TILE_REGIONS.length);
+    // Begge landene må rapporteres — hver kjøres av sin egen cron, og en stille
+    // svikt i den ene skal ikke se ut som at alt er friskt.
+    const land = new Set(
+      body.regions.map((r: { region: string }) =>
+        PREDICTION_TILE_REGIONS.find((x) => x.name === r.region)?.country)
+    );
+    expect(land.has('NO')).toBe(true);
+    expect(land.has('SE')).toBe(true);
     expect(body.regions.every((region: { fresh?: unknown }) => typeof region.fresh === 'boolean')).toBe(true);
   });
 });
