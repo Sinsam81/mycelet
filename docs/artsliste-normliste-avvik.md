@@ -210,7 +210,93 @@ egen vurdering, og nå er det synlig.
       **Lærdom:** spør alltid HVOR sikkerhetsinformasjonen vises, ikke bare om
       den finnes. Notatet var riktig hele tiden — det var bare usynlig der det
       betydde mest.
-- [ ] **Forvekslingsdataene er nå det største hullet.** 24 av 51 matsopp har
+- [x] ~~**Forvekslingsdataene er nå det største hullet.**~~ — **tettet 2026-08-04**,
+      se eget avsnitt nedenfor. 24 → 45 av 48 matsopper har nå forvekslingsdata.
+
+---
+
+# Forvekslingsdataene — og de to reglene som kom ut av dem
+
+**Gjort 2026-08-04**, migrasjon `048`, `049` og `050`.
+
+Dette var viktigere enn spiselighetsklassene, og grunnen tåler å gjentas:
+
+> **Ingen blir forgiftet fordi en database har feil kategori. Folk blir forgiftet
+> fordi de tok feil sopp.**
+
+## Hullet var delvis et KATALOGHULL
+
+24 matsopper manglet forvekslingsdata. 14 lot seg fylle direkte (`048`). De sju
+siste kunne ikke fylles — **ikke fordi det manglet dokumenterte forvekslinger, men
+fordi dobbeltgjengerne ikke fantes i katalogen.**
+
+Verst for gråmusserong: alle dens forvekslinger er musseronger, og gråmusserong var
+appens **eneste** Tricholoma. Den mest etterspurte matmusserongen sto uten en eneste
+rad — ikke fordi den er trygg, men fordi det ikke fantes noe å peke på.
+
+`049` legger inn åtte arter som låser opp de sju: pantermusserong, gallemusserong,
+såpemusserong, brungul musserong, lakrisriske, klubbetraktsopp, brunkjøttbukkesopp
+og krittøsterssopp. Klasse og norsk navn fra normlisten, svenske navn fra Dyntaxa.
+
+## ⚠️ REGEL 1: en felttest kan dømme et funn ute — aldri frikjenne det
+
+Dette er den dyrest kjøpte lærdommen i hele artsarbeidet. Forvekslingstekstene tok
+**tre motprøverunder**, og feilen var den samme hver gang — den flyttet seg bare:
+
+| runde | formuleringen som ble stoppet |
+|---|---|
+| 1 | «mild smak = gråmusserong» — den **giftige** pantermusserongen smaker også mildt og lukter mel |
+| 2 | «bare hatt, skiver og voksested kan frikjenne» |
+| 2 | «hvitt betyr hulriske, vannklart betyr lakrisriske» |
+| 2 | «gir ingen forgiftning hvis du holder deg unna alkohol» |
+| 2 | hvitt sporeavtrykk lest som **bekreftelse** på blå ridderhatt |
+
+Alle leses av en nybegynner som «da er jeg trygg».
+
+**Hvorfor frikjennelse er farligere enn utelatelse:** utelater vi en advarsel, står
+brukeren igjen med sin egen usikkerhet — en trygg tilstand, for da lar folk soppen
+stå. Frikjenner vi feil, har vi *erstattet* usikkerheten med falsk trygghet.
+
+```
+ALLTID  «ser du X, er funnet ute»
+ALDRI   «ser du Y, er du trygg»
+```
+
+Regelen er kode: `finnFrikjennendeFormuleringer()` i
+[`src/lib/species/forvekslingstekst.ts`](../src/lib/species/forvekslingstekst.ts),
+med en test som kjører mot **selve migrasjonstekstene**.
+
+## ⚠️ REGEL 2: en alvorlig advarsel må ende i noe brukeren kan GJØRE
+
+Og den regelen fant med én gang at den ikke var fulgt i det som allerede **sto i
+produksjon**: **17 av 22** kritiske og høye advarsler manglet handlingsråd — blant
+dem grønnkremle mot grønn fluesopp, morklene mot sandmorkel, og honningsopp mot
+flatklokkehatt.
+
+Tekstene beskrev faren presist. De sa bare aldri hva man skulle gjøre med den.
+`050` legger til «Ved tvil — la den stå.» på alle som mangler det, idempotent.
+
+De eldre migrasjonsfilene er **ikke** redigert — de er kjørt i produksjon, og å endre
+dem ville vært en løgn om hva som faktisk ble kjørt. Testen har derfor et
+dokumentert unntak for filer før `048`, med en egen test som vokter at `050` finnes.
+
+## Det som fortsatt står åpent
+
+- **Tre arter har bevisst ingen rad:** frostvokssopp, blomkålsopp og judasøre har
+  ingen dokumentert forveksling verdt å vise. Tomt er riktigere enn oppspinn, og
+  appen sier allerede eksplisitt at fravær av advarsel ikke betyr trygghet.
+- **Motprøven avviste 17 av 35 foreslåtte par.** Blant dem: «ingen andre risker har
+  oransje melkesaft» (vår egen katalog motbeviser det), og et par der den oppgitte
+  kilden handlet om grønnkremle, ikke nøttekremle. **Ikke ta imot forvekslingsdata
+  uten å etterprøve kjennetegnene mot kilde.**
+- **Ikke tving inn en forveksling for å fylle en tom rubrikk.** Motprøven stoppet
+  et forsøk på å bruke våre to rustbrune giftslørsopper som forveksling for blå
+  ridderhatt. De er ikke lilla, og paret ville lært brukeren et falskt kjennetegn.
+
+<details>
+<summary>Den opprinnelige beskrivelsen av hullet (for kontekst)</summary>
+
+24 av 51 matsopp har
       ingen forvekslingsrad i det hele tatt, og én dødelig art (butt
       giftslørsopp) har ingen matsopp som peker på seg.
 
@@ -232,3 +318,5 @@ egen vurdering, og nå er det synlig.
       **Sjekk også** at giftsjampinjong (*Agaricus xanthodermus*, «Giftig» hos
       NSNF) er dekket som forveksling for alle tre sjampinjongene våre — i dag
       peker bare sjampinjong på karbol-sjampinjong.
+
+</details>
