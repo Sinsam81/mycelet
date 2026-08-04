@@ -6,6 +6,7 @@ import { PageWrapper } from '@/components/layout/PageWrapper';
 import { LandingPage } from '@/components/landing/LandingPage';
 import { EdibilityBadge } from '@/components/ui/EdibilityBadge';
 import { MushroomDayCard } from '@/components/home/MushroomDayCard';
+import { BestRegionsCard } from '@/components/home/BestRegionsCard';
 import { LastTripCard } from '@/components/home/LastTripCard';
 import { LanguageToggle } from '@/components/layout/LanguageToggle';
 import { createClient } from '@/lib/supabase/server';
@@ -196,6 +197,12 @@ export default async function HomePage() {
         </header>
 
         <MushroomDayCard />
+
+        {/* Rett under «hvordan er det her i dag» kommer «hvor er det best i
+            landet». Det er den ene romlige sammenligningen modellen bærer —
+            47 poengs spenn mellom regioner mot 7 inne i ett kartutsnitt. Se
+            BestRegionsCard. */}
+        <BestRegionsCard />
 
         {inSeasonEdible.length > 0 ? (
           <article className="rounded-2xl border border-gray-200 bg-white p-4">
