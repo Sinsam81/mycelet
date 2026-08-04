@@ -59,8 +59,17 @@ type LeafletType = typeof import('leaflet');
  * — den hentes nå over flere sider fordi PostgREST kutter hvert enkelt svar ved
  * 1000 rader. Treffer vi taket, sier kartet fra i stedet for å late som det
  * viser alt. Se src/lib/supabase/paged-rpc.ts.
+ *
+ * Hevet fra 3000 til 6000 etter GBIF-importen 2026-08-04, som tok tabellen fra
+ * 327 298 til 428 829 funn. Med 3000 traff Oslo-utsnittet taket ved vanlig zoom
+ * — brukeren fikk «det finnes flere, zoom inn» på selve hjemstedet sitt, og
+ * artsfiltrene gjaldt da bare de hentede radene, ikke alle.
+ *
+ * Målt før hevingen: 1000 rader på 1,9 s for Oslo ved mobil zoom 11, hentet over
+ * flere sider. Budsjettet er tegnetid, ikke databasen — klyngelaget takler
+ * størrelsen, og laget tømmes og hentes på nytt ved panorering uansett.
  */
-const OCCURRENCE_FETCH_LIMIT = 3000;
+const OCCURRENCE_FETCH_LIMIT = 6000;
 
 const FOREST_LABEL: Record<string, string> = {
   gran: 'granskog',

@@ -116,7 +116,12 @@ describe('hvorfor akkurat dette området', () => {
     const lines = section(FULLT, 'distinctive')!.lines;
     expect(lines.join(' ')).toContain('skiller seg lite fra nabolaget');
     expect(lines.join(' ')).toContain('62 mot median 59 for de 18 rutene');
-    expect(lines.join(' ')).toContain('Forholdene i regionen er gode nå');
+    // Sto som 'gode'. Median 59 er under den kalibrerte grensen for «gode»
+    // (CONDITION_THRESHOLDS.good = 60), så riktig ord er nå «brukbare».
+    // conditionsLevel her sto igjen på de gamle tersklene 75/55/35 mens resten
+    // av appen ble rekalibrert — området kunne dermed kalles «gode forhold»
+    // mens ruta rett over sa «Lite kantarell i skogen nå» om samme tall.
+    expect(lines.join(' ')).toContain('Forholdene i regionen er brukbare nå');
   });
 
   it('sier hva som er annerledes bare når ruta faktisk skiller seg ut', () => {

@@ -1007,10 +1007,10 @@
     "saveFinding": "Spara fynd"
   },
   "HotspotPanel": {
-    "conditionPoor": "Svaga förhållanden",
-    "conditionModerate": "Måttliga förhållanden",
-    "conditionGood": "Goda förhållanden",
-    "conditionExcellent": "Mycket goda förhållanden",
+    "conditionPoor": "Lite svamp här nu",
+    "conditionModerate": "Precis i gång",
+    "conditionGood": "Bra dagar nu",
+    "conditionExcellent": "Nu är det svamp 🍄",
     "sourceWeather": "{provider} (väder)",
     "sourceForest": "NIBIO (skog)",
     "sourceOccurrences": "Artsdatabanken (fynd)",
