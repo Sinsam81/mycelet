@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import { colorForScore } from '@/lib/utils/condition-colors';
 
 /**
@@ -20,6 +20,16 @@ import { colorForScore } from '@/lib/utils/condition-colors';
  * En som står i Oslo skal få vite at Vestlandet ligger 47 poeng over, selv om
  * det er fem timer å kjøre. Det er brukerens valg om det er verdt turen; vår
  * jobb er å ikke skjule at forskjellen finnes.
+ *
+ * ETT LAND OM GANGEN. Lista blandet først norske og svenske regioner, og da
+ * druknet den lokale rangeringen: 2026-08-04 lå fire av de fem øverste i Norge,
+ * så en svensk bruker måtte lete nedover for å finne noe hen kunne kjøre til.
+ * «Best i landet» skal bety brukerens eget land.
+ *
+ * Standardvalget følger SPRÅKET, som er det appen allerede bruker til å avgjøre
+ * hvor brukeren hører hjemme (MYCELET_LOCALE → Accept-Language → nb). Men språk
+ * er ikke posisjon — en nordmann kan stå i Värmland — så bryteren er der, og
+ * valget huskes ikke lenger enn økta. Vi gjetter, vi låser ikke.
  */
 
 interface RegionRad {
@@ -36,7 +46,9 @@ const FLAGG: Record<string, string> = { NO: '🇳🇴', SE: '🇸🇪' };
 
 export function BestRegionsCard() {
   const t = useTranslations('Home');
+  const locale = useLocale();
   const [regions, setRegions] = useState<RegionRad[] | null>(null);
+  const [land, setLand] = useState<'NO' | 'SE'>(locale === 'sv' ? 'SE' : 'NO');
   const [utvidet, setUtvidet] = useState(false);
   const [feilet, setFeilet] = useState(false);
 
@@ -57,14 +69,49 @@ export function BestRegionsCard() {
     };
   }, []);
 
+  // Land som faktisk har regioner i rasteret. Uten dette ville bryteren tilbudt
+  // et land der lista er tom — verre enn å ikke tilby valget.
+  const tilgjengeligeLand = useMemo(
+    () => (['NO', 'SE'] as const).filter((l) => (regions ?? []).some((r) => r.country === l)),
+    [regions]
+  );
+  const iLandet = useMemo(
+    () => (regions ?? []).filter((r) => r.country === land),
+    [regions, land]
+  );
+
   if (feilet || (regions && regions.length === 0)) return null;
 
-  const vist = regions ? (utvidet ? regions : regions.slice(0, 5)) : [];
+  const vist = regions ? (utvidet ? iLandet : iLandet.slice(0, 5)) : [];
 
   return (
     <article className="rounded-xl bg-white p-4 shadow-sm">
-      <h2 className="text-sm font-semibold text-gray-900">{t('bestRegionsTitle')}</h2>
-      <p className="mt-0.5 text-xs text-gray-500">{t('bestRegionsSubtitle')}</p>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h2 className="text-sm font-semibold text-gray-900">{t('bestRegionsTitle')}</h2>
+          <p className="mt-0.5 text-xs text-gray-500">{t('bestRegionsSubtitle')}</p>
+        </div>
+        {tilgjengeligeLand.length > 1 ? (
+          <div className="flex shrink-0 gap-1 rounded-full bg-gray-100 p-0.5" role="group">
+            {tilgjengeligeLand.map((l) => (
+              <button
+                key={l}
+                type="button"
+                onClick={() => {
+                  setLand(l);
+                  setUtvidet(false);
+                }}
+                aria-pressed={land === l}
+                className={`rounded-full px-2.5 py-1 text-xs font-medium transition ${
+                  land === l ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-800'
+                }`}
+              >
+                {FLAGG[l]} {t(l === 'NO' ? 'bestRegionsNorway' : 'bestRegionsSweden')}
+              </button>
+            ))}
+          </div>
+        ) : null}
+      </div>
 
       {!regions ? (
         <div className="mt-3 space-y-2" aria-hidden>
@@ -101,13 +148,13 @@ export function BestRegionsCard() {
         </ol>
       )}
 
-      {regions && regions.length > 5 ? (
+      {regions && iLandet.length > 5 ? (
         <button
           type="button"
           onClick={() => setUtvidet((v) => !v)}
           className="mt-2 w-full rounded-lg py-1.5 text-xs font-medium text-forest-800 transition hover:bg-forest-50"
         >
-          {utvidet ? t('bestRegionsCollapse') : t('bestRegionsExpand', { count: regions.length - 5 })}
+          {utvidet ? t('bestRegionsCollapse') : t('bestRegionsExpand', { count: iLandet.length - 5 })}
         </button>
       ) : null}
 
