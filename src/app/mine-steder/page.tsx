@@ -6,6 +6,7 @@ import { Camera, ExternalLink, Lock, Map as MapIcon, MapPin } from 'lucide-react
 import { PageWrapper } from '@/components/layout/PageWrapper';
 import { createClient } from '@/lib/supabase/server';
 import { intlLocale } from '@/lib/utils/intl-locale';
+import { MyPlacesFilter } from '@/components/places/MyPlacesFilter';
 
 export async function generateMetadata() {
   const t = await getTranslations('MineSteder');
@@ -163,7 +164,15 @@ export default async function MineStederPage() {
             </div>
           </article>
         ) : (
-          <ul className="space-y-3">
+          <MyPlacesFilter
+            places={spots.map((s) => ({
+              key: `${s.label}-${s.lat}`,
+              label: s.label,
+              species: [...s.species.keys()],
+              count: s.count,
+              lastVisit: s.lastVisit
+            }))}
+          >
             {spots.map((spot) => {
               const topSpecies = [...spot.species.entries()].sort((a, b) => b[1] - a[1]);
               const shown = topSpecies.slice(0, 4);
@@ -215,7 +224,7 @@ export default async function MineStederPage() {
                 </li>
               );
             })}
-          </ul>
+          </MyPlacesFilter>
         )}
 
         <p className="text-xs text-gray-500">
