@@ -1007,10 +1007,10 @@
     "saveFinding": "Lagre funn"
   },
   "HotspotPanel": {
-    "conditionPoor": "Svake forhold",
-    "conditionModerate": "Moderate forhold",
-    "conditionGood": "Gode forhold",
-    "conditionExcellent": "Svært gode forhold",
+    "conditionPoor": "Lite sopp her nå",
+    "conditionModerate": "Så vidt i gang",
+    "conditionGood": "Gode dager nå",
+    "conditionExcellent": "Nå er det sopp 🍄",
     "sourceWeather": "{provider} (vær)",
     "sourceForest": "NIBIO (skog)",
     "sourceOccurrences": "Artsdatabanken (funn)",

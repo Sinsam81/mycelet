@@ -29,6 +29,7 @@
 
 import { DEFAULT_LOCALE, type Locale } from '@/i18n/config';
 import { forestTypeLabel } from '@/lib/utils/prediction-explanation';
+import { CONDITION_THRESHOLDS } from '@/lib/utils/prediction';
 
 /** Skogdataene slik NIBIO SR16 (Norge) eller CORINE (Sverige/Europa) gir dem. */
 export interface AreaReportForest {
@@ -288,10 +289,20 @@ function formatDistance(km: number, copy: AreaReportCopy): string {
   return copy.distanceKilometers(formatNumber(Math.round(safe * 10) / 10, 1));
 }
 
+/**
+ * Siste kopi av dommestigen som sto igjen på de gamle tersklene.
+ *
+ * Sto på 75/55/35 mens kartfargene, dommene og forsidens ring alle ble
+ * rekalibrert til 72/60/50 (se CONDITION_THRESHOLDS). Følgen var at
+ * områderapporten kunne kalle et nabolag «brukbare forhold» mens ruta rett over
+ * sa «Lite kantarell i skogen nå» om nøyaktig samme tall.
+ *
+ * Leser nå fra samme sted som alt annet.
+ */
 function conditionsLevel(score: number, copy: AreaReportCopy): string {
-  if (score >= 75) return copy.conditionsExcellent;
-  if (score >= 55) return copy.conditionsGood;
-  if (score >= 35) return copy.conditionsOk;
+  if (score >= CONDITION_THRESHOLDS.excellent) return copy.conditionsExcellent;
+  if (score >= CONDITION_THRESHOLDS.good) return copy.conditionsGood;
+  if (score >= CONDITION_THRESHOLDS.moderate) return copy.conditionsOk;
   return copy.conditionsWeak;
 }
 
