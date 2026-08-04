@@ -29,6 +29,7 @@ if (args.some((a) => HELP.has(a))) {
 
 Environment:
   ONLY_MISSING=1                         Only import species with no current rows
+  SPECIES="Boletus edulis"                Only these latin names (comma-separated)
   MAX_COORDINATE_UNCERTAINTY_M=1000      Drop rows above this coordinate uncertainty
   ALLOW_UNKNOWN_COORDINATE_UNCERTAINTY=1 Keep rows where GBIF lacks uncertainty
   GBIF_BASIS_OF_RECORD=HUMAN_OBSERVATION,PRESERVED_SPECIMEN
@@ -307,6 +308,29 @@ if (spErr) {
 // skips the license-prune step, which is only meant to run after a full sweep.
 const onlyMissing = process.env.ONLY_MISSING === '1';
 let species = allSpecies;
+
+// SPECIES=«latinsk navn»[,«...»] kjører BARE de artene.
+//
+// Finnes fordi en enkelt art kan feile midt i en ellers vellykket kjøring: GBIF
+// svarte «terminated» på Boletus edulis [SE] i importen 2026-08-03, og da sto
+// steinsoppen igjen med bare det norske uttrekket mens de 71 andre artene var
+// komplette. Uten dette filteret er eneste vei å kjøre hele landet på nytt —
+// 71 unødvendige arter mot GBIF for å rette én.
+//
+// Kombineres med landargumentet: `... .mjs SE` med SPECIES satt henter bare den
+// artens svenske rader.
+const speciesFilter = (process.env.SPECIES || '')
+  .split(',')
+  .map((s) => s.trim().toLowerCase())
+  .filter(Boolean);
+if (speciesFilter.length) {
+  species = species.filter((sp) => speciesFilter.includes(String(sp.latin_name).toLowerCase()));
+  if (species.length === 0) {
+    console.log(`SPECIES traff ingen arter: ${process.env.SPECIES}`);
+    process.exit(1);
+  }
+  console.log(`SPECIES-filter: ${species.map((s) => s.latin_name).join(', ')}`);
+}
 if (onlyMissing) {
   const filtered = [];
   for (const sp of allSpecies) {

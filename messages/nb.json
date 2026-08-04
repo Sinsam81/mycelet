@@ -478,7 +478,12 @@
     "inSeasonDangerous": "{count, plural, =1 {# giftig art er også i sesong nå} other {# giftige arter er også i sesong nå}} — les deg opp før du plukker",
     "communityUnverifiedNote": "Artene er oppgitt av den som la inn funnet, og er ikke kontrollert av Mycelet.",
     "headlineStarting": "Sesongen er i gang — {count} matsopp ute nå",
-    "headlineLateAutumn": "Senhøsten byr fortsatt på {count} matsopp"
+    "headlineLateAutumn": "Senhøsten byr fortsatt på {count} matsopp",
+    "bestRegionsTitle": "Best i landet i dag",
+    "bestRegionsSubtitle": "Forholdene der de er best i hver region — trykk for å se på kartet.",
+    "bestRegionsExpand": "Vis {count} til",
+    "bestRegionsCollapse": "Vis færre",
+    "bestRegionsDisclaimer": "Sammenligner VÆR, SESONG og FUKT mellom landsdeler — ikke hvor soppen står. Forskjellen mellom landsdeler er den modellen måler best."
   },
   "Personvern": {
     "title": "Personvernerklæring",
