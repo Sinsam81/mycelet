@@ -1242,7 +1242,7 @@
   },
   "EdibilityBadge": {
     "edible": "Ätlig",
-    "conditionallyEdible": "Villkorligt ätlig",
+    "conditionallyEdible": "Ätlig — giftig rå",
     "inedible": "Oätlig",
     "toxic": "Giftig",
     "deadly": "Dödligt giftig",
