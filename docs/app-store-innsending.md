@@ -28,27 +28,37 @@ hvis noen skriver et passord i klartekst under `docs/`.
 
 ---
 
-## Steg 1 — Én innlogging som avklarer alt (👤 30 min)
+## ~~Steg 1 — avtalene~~ ✅ AVKLART 2026-08-05
 
-**Gjør dette først.** Tre ting i prosjektdokumentasjonen motsier hverandre, og
-ingen av dem kan avgjøres uten din konto. Ett av dem kan legge en måned på planen.
+**Alle Apple-sperrene er borte.** Kontrollert på
+[appstoreconnect.apple.com/agreements](https://appstoreconnect.apple.com/agreements/):
 
-Logg inn på App Store Connect og sjekk i denne rekkefølgen:
+| | status |
+|---|---|
+| Free Apps Agreement | **Active** (26.06.2026 – 17.06.2027) |
+| **Paid Apps Agreement** | **Active** (17.06.2026 – 17.06.2027) |
+| Bankkonto — Mycelet (2345), NOK | **Active** |
+| W-8BEN + Certificate of Foreign Status | **Active** (26.06.2026) |
+| **Digital Services Act / EU trader** | **Active** — 27 land, oppdatert 17.06.2026 |
 
-- [ ] **Banner om ny Program License Agreement?** Godta den. En ventende avtale
-      sperrer både opplasting av bygg og innsending.
-- [ ] **DSA / EU trader status — er den Active?**
-      ⚠️ `launch-critical-path.md:31` sier Active siden 26. juni.
-      `neste-okt.md` (12 dager nyere) sier den mangler.
-      **Uten den kan appen ikke selges i EU/EØS i det hele tatt.** Er den ikke
-      aktiv, må Apple verifisere identiteten din — dager til uker.
-- [ ] **Agreements, Tax and Banking — står Paid Apps som Active?**
-      Bankkontoen sto som «Processing» 26. juni. Uten aktiv Paid Apps-avtale kan
-      ingen IAP selges, uansett hvor ferdig koden er.
-- [ ] **Bekreft at app-oppføringen finnes** — app-id `6784672944`, SKU
-      `mycelet-ios`, status «Prepare for Submission».
-      ⚠️ **Ikke opprett en ny.** `launch-critical-path.md:43` ber deg gjøre det;
-      det er feil, appen finnes allerede.
+Motsigelsen mellom dokumentene er dermed avgjort: `launch-critical-path.md` hadde
+rett, `neste-okt.md` tok feil om DSA. **Ingenting på Apples avtaleside blokkerer
+lenger** — verken salg av abonnementer eller distribusjon i EU/EØS.
+
+Det som gjensto av frykt her — at Apple måtte verifisere identiteten og legge
+dager til uker på planen — er **allerede gjort**.
+
+- [ ] Det ene som gjenstår å se etter: **banner om ny Program License Agreement**
+      på [developer.apple.com/account](https://developer.apple.com/account). En
+      ventende avtale sperrer både opplasting og innsending. Ikke observert ennå.
+
+ℹ️ **Verdt å vite:** DSA-statusen betyr at navn, adresse og telefonnummer vises
+offentlig på App Store-produktsiden. Det er hele poenget med regelverket, og det
+er ikke til å komme unna for en næringsdrivende — men det er greit å ha registrert.
+
+⚠️ **App-oppføringen finnes allerede** — app-id `6784672944`, SKU `mycelet-ios`,
+status «Prepare for Submission». `launch-critical-path.md:43` ber deg opprette
+den; det er feil.
 
 ## Steg 2 — Bekreft nøklene i Vercel (👤 10 min)
 
@@ -108,13 +118,17 @@ Alle svarene ligger ferdig i [`app-store-metadata.md`](app-store-metadata.md).
 
 ## Ærlig tidsanslag
 
-**3–6 uker**, ikke dager. Regnestykket sier under to uker hvis alt går på skinner.
-Det gjør det sjelden:
+**Nedjustert 2026-08-05 til 1–3 uker** (var 3–6). Grunnen er at det store
+usikkerhetsmomentet forsvant: DSA/EU trader-status og Paid Apps er begge Active,
+så Apple-verifiseringen som kunne tatt uker er allerede unnagjort.
 
-- **DSA-statusen** kan alene legge en måned på planen. Sjekk den i dag.
+Det som fortsatt kan sprekke:
+
 - **Sandbox-kjøpet** feiler som regel første gang — feil produkt-ID, feil
-  sandbox-konto, gammelt bygg. Regn med to økter.
+  sandbox-konto, gammelt bygg. Regn med to økter. Dette er nå den største
+  gjenværende usikkerheten, fordi betalingsstien aldri har kjørt mot ekte StoreKit.
 - **Minst én avvisningsrunde** er normalt. 1–3 dager per runde.
+- **Xcode-signering** første gang. Distribusjonssertifikatet finnes ikke ennå.
 
 ## Største avvisningsrisiko
 
