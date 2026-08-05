@@ -696,7 +696,10 @@
     "goToProfile": "Gå til profilen din →",
     "loading": "Laster...",
     "purchaseConsentPrefix": "Jeg vil at tjenesten leveres umiddelbart, så jeg får tilgang med én gang. Jeg beholder angreretten i 14 dager, men det kan bli beregnet et forholdsmessig beløp for den tiden jeg har hatt tilgang. Jeg godtar",
-    "purchaseTermsLink": "kjøpsvilkårene"
+    "purchaseTermsLink": "kjøpsvilkårene",
+    "termsLink": "vilkårene",
+    "privacyLink": "personvern",
+    "legalLinksLabel": "Juridiske lenker"
   },
   "Profile": {
     "categoryFind": "Funn",

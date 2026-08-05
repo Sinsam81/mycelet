@@ -10,24 +10,33 @@ Status: fase 1 (avtaler/bank/skatt) påbegynt — se nederst for Sindres sjekkli
 | Navn | `Mycelet` |
 | Undertittel (maks 30 tegn) | `Soppkart, AI og sesongvarsler` |
 | Bundle ID | `no.mycelet.app` (ligger allerede i capacitor.config.ts) |
-| SKU | `mycelet-ios-001` |
+| SKU | `mycelet-ios` — ⚠️ appen ER ALLEREDE OPPRETTET (ASC app-id `6784672944`, status «Prepare for Submission»). Ikke lag en ny. Doket sa tidligere `mycelet-ios-001`; det var aldri SKU-en som faktisk ble brukt. |
 | Primær kategori | Vær og friluftsliv → **Lifestyle** (alt: **Reference**) |
 | Sekundær kategori | **Food & Drink** |
 | Tilgjengelighet | Norge + Sverige (utvid senere ved behov) |
-| Aldersgrense | 4+ (ingen flagg utløses — se aldersvurdering under) |
+| Aldersgrense | **12+** — appen har forum med brukerskapt innhold. Se aldersvurdering under. |
 | Pris på selve appen | Gratis (inntekter via abonnement) |
-| Support-URL | `https://www.mycelet.com/sikkerhet` (evt. egen /support-side senere) |
+| Support-URL | `https://www.mycelet.com/kontakt` — Apple krever en side der brukeren finner KONTAKTINFO. `/sikkerhet` er soppfaglige råd, ikke support. |
 | Markedsførings-URL (valgfri) | `https://www.mycelet.com` |
 | Personvern-URL | `https://www.mycelet.com/personvern` |
 | Copyright | `© 2026 ØVERÅS APPS (org.nr 937 880 871)` |
 
 ## Beskrivelse (norsk)
 
+> ⚠️ **Beskrivelsen må matche det appen FAKTISK gjør.** Apples regel 2.3 handler om
+> nøyaktig metadata, og en reviewer som leter etter en lovet funksjon og ikke finner
+> den, avviser. Teksten under lovet tidligere «Del funn og bilder i forumet» og
+> «Sopptur-modus» — begge står bak feature-flagg satt til `false`
+> (`src/lib/flags.ts`), og forumfanen er fjernet fra bunnmenyen. De er strøket.
+>
+> **Skrur du på et flagg igjen, må teksten oppdateres samtidig.** Det finnes en test
+> som vokter dette: `src/lib/__tests__/app-store-metadata.test.ts`.
+
 ```
 Mycelet er sopplukkerens beste turvenn — laget for norske og svenske skoger.
 
 FINN SOPPEN
-• Soppkart med over 185 000 registrerte funn, fargekodet etter spiselighet
+• Soppkart med over 400 000 registrerte funn, fargekodet etter spiselighet
 • «Lovende steder» — prediksjon basert på ekte skogdata, vær og sesong peker på
   steder som ser mest lovende ut akkurat nå
 • Dagens soppforhold: én score som forteller om det er en god soppdag
@@ -35,14 +44,14 @@ FINN SOPPEN
 IDENTIFISER TRYGT
 • AI-soppkjenner: ta bilde, få artsforslag med treffsikkerhet
 • Tydelige advarsler for giftige forvekslingsarter på hver art
-• Artsbibliotek med over 70 arter, sesongkalender og kjennetegn
+• Artsbibliotek med over 75 arter, sesongkalender og kjennetegn
 • Viktig: Mycelet erstatter aldri soppkontroll — vi lenker alltid til
   Soppkontrollen og Giftinformasjonen (22 59 13 00)
 
-BLI MED I FELLESSKAPET
-• Del funn og bilder i forumet (posisjonen din deles aldri mer presist
-  enn du selv velger — offentlig, omtrentlig eller privat)
-• Sopptur-modus: logg turen og se fangsten din etterpå
+MED DEG UT I SKOGEN
+• Lagre egne funn med kamera og GPS, rett der du står
+• Mine steder: finn tilbake til plassene som leverte i fjor
+• Du bestemmer hvor synlig hvert funn er — offentlig, omtrentlig eller privat
 
 PREMIUM (valgfritt abonnement)
 • Ubegrenset AI-identifikasjon (gratis: 5 per døgn)
@@ -83,11 +92,37 @@ holder for innsending; polerte rammer/tekst kan legges på senere.
 
 ## Aldersvurdering — svar på Apples spørsmål
 
-Alle kategorier: **None** (ingen vold, gambling, rus, medisinsk innhold osv.).
-- «Unrestricted Web Access»: **No** (appen viser kun eget innhold)
-- «Medical/Treatment Information»: **No** (giftinfo er sikkerhetsinnhold, ikke
-  medisinsk rådgivning — vi henviser til Giftinformasjonen)
-→ Resultat: **4+**
+> ⚠️ **Rettet 2026-08-05. Det gamle svaret var 4+, og det ville ikke holdt.**
+> Appen har forum med brukerskapte innlegg, kommentarer og bildeopplasting
+> (`src/app/forum/`). Apples skjema har egne spørsmål om nettopp dette, og et
+> 4+-svar for en app med UGC blir enten overstyrt av Apple eller brukt som
+> avvisningsgrunn. Våre egne vilkår sier dessuten **13 år** som minstealder for
+> konto — det motsier 4+ direkte.
+>
+> At forumfanen er skjult i navigasjonen (`flags.ts: forumInNav = false`) endrer
+> ingenting: `/forum` er fortsatt nåbar på URL, og innholdet finnes i appen.
+> Svar på hva appen KAN, ikke på hva som er lett å finne.
+
+Innholdskategorier (vold, gambling, rus, seksuelt innhold osv.): **None** — alle.
+
+Spørsmålene som faktisk gjelder oss:
+
+| Apples spørsmål | Svar | Hvorfor |
+|---|---|---|
+| Unrestricted Web Access | **No** | Appen er låst til egne domener via `WKAppBoundDomains`; eksterne lenker åpnes i systemnettleseren |
+| Medical/Treatment Information | **No** | Giftinformasjonens nummer er en sikkerhetshenvisning, ikke medisinsk rådgivning |
+| **User Generated Content** | **Yes** | Forum, kommentarer og bildeopplasting |
+| ├ Moderering før publisering | **Yes** | Innholdsfilter kjører før innlegg lagres |
+| ├ Rapportering av innhold | **Yes** | Rapportknapp på innlegg og kommentarer |
+| ├ Blokkering av brukere | **Yes** | Bygget for Apple-krav 1.2 |
+| └ Kontaktinfo til utvikler | **Yes** | `/kontakt` med post@mycelet.com |
+
+→ Resultat: **12+**
+
+**Dette er en styrke, ikke en svakhet.** Apples 1.2-krav for UGC-apper er
+moderering, rapportering, blokkering og kontaktinfo — vi har alle fire. Å svare
+ærlig «Yes» og vise de fire mekanismene er langt tryggere enn å svare «No» og la
+reviewer finne forumet selv.
 
 ## App Privacy («nutrition labels») — svar
 

@@ -573,15 +573,35 @@ function PricingInner() {
             >
               {t('iapManageOnApple')}
             </a>
-            <Link href="/kjopsvilkar" className="text-xs text-gray-600 underline">
-              {t('purchaseTermsLink')}
-            </Link>
           </div>
         ) : null}
 
         <p className="text-center text-xs text-gray-500">
           {storePrices ? t('priceNoteNative') : t('priceNote')}
         </p>
+
+        {/*
+          Apple-krav 3.1.2: der et abonnement selges, må BÅDE bruksvilkår (EULA)
+          og personvernerklæring være lenket i selve appen. Bare kjøpsvilkårene
+          sto her, og manglende personvernlenke er en av de vanligste
+          avvisningsgrunnene for abonnementsapper.
+
+          Lenkene står UTENFOR `native && iapReady`-blokken med vilje. Feiler
+          RevenueCat-initieringen — f.eks. hvis SDK-nøkkelen mangler — forsvinner
+          hele den blokken, og da ville en reviewer sett en prisside uten
+          juridiske lenker i det hele tatt. Her koster de ingenting og står alltid.
+        */}
+        <nav aria-label={t('legalLinksLabel')} className="flex flex-wrap justify-center gap-x-4 gap-y-1">
+          <Link href="/kjopsvilkar" className="text-xs text-gray-600 underline">
+            {t('purchaseTermsLink')}
+          </Link>
+          <Link href="/vilkar" className="text-xs text-gray-600 underline">
+            {t('termsLink')}
+          </Link>
+          <Link href="/personvern" className="text-xs text-gray-600 underline">
+            {t('privacyLink')}
+          </Link>
+        </nav>
 
         <article className="rounded-2xl bg-white p-4 shadow-card">
           <h2 className="font-serif text-xl font-semibold text-forest-900">{t('faqHeading')}</h2>

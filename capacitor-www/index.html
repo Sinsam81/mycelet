@@ -33,6 +33,18 @@
         font-size: 1rem;
         font-weight: 600;
       }
+      button.ghost {
+        margin-top: 0.6rem;
+        background: transparent;
+        color: #f5f0e6;
+        border: 1px solid rgba(245, 240, 230, 0.4);
+        font-weight: 500;
+      }
+      button + button {
+        display: block;
+        margin-left: auto;
+        margin-right: auto;
+      }
     </style>
   </head>
   <body>
@@ -40,17 +52,38 @@
       Offline fallback: shown via server.errorPath when the hosted web app
       can't load (no coverage in the forest, server down). Retries the remote
       app on tap, and automatically as soon as the device comes back online.
+
+      ⚠️ TEKSTEN HER SA TIDLIGERE «Kartet og funnene trenger nett». Det var både
+      GALT og farlig å si til en App Review-tester.
+
+      Galt fordi appen HAR ekte offline-bruk: nedlastede kartfliser ligger i
+      TILE_CACHE, og '/offline' (public/offline/index.html) er et precachet skall
+      som viser dem uten nett. Se kommentaren øverst i public/sw.js.
+
+      Farlig fordi en reviewer som slår på flymodus og leser at ingenting virker
+      uten nett, får nøyaktig den bekreftelsen guideline 4.2 handler om: at dette
+      bare er en nettside i et skall. Siden peker nå til offline-kartet i stedet.
+
+      NB: knappen virker bare når service workeren allerede har rukket å
+      registrere seg (altså etter minst ett besøk med nett). Første start i
+      flymodus har ingen fliser å vise uansett, og da er «prøv igjen» riktig svar.
     -->
     <div>
       <h1>🍄 Mycelet</h1>
       <p>Ingen nettforbindelse akkurat nå.</p>
-      <p>Kartet og funnene trenger nett — prøv igjen når du har dekning.</p>
-      <button type="button" onclick="retry()">Prøv igjen</button>
+      <p>Har du lastet ned kartområder, kan du fortsatt bruke dem offline.</p>
+      <button type="button" onclick="openOffline()">Åpne offline-kart</button>
+      <button type="button" class="ghost" onclick="retry()">Prøv igjen</button>
     </div>
     <script>
       var APP_URL = 'https://www.mycelet.com';
       function retry() {
         window.location.replace(APP_URL);
+      }
+      // Service workeren precacher '/offline', så denne kan serveres uten nett
+      // så lenge appen har vært åpnet med dekning minst én gang.
+      function openOffline() {
+        window.location.replace(APP_URL + '/offline');
       }
       window.addEventListener('online', retry);
     </script>
