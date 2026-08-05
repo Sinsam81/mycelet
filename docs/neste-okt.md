@@ -1,5 +1,11 @@
 # Neste økt — start her
 
+> ⚠️ **ERSTATTET 2026-08-05.** Statustabellen under motsa `launch-critical-path.md`
+> på tre punkter (DSA-status, Paid Apps, og om app-oppføringen skulle opprettes),
+> og ingen av dem kan avgjøres uten Sindres Apple-innlogging. Bruk
+> [`app-store-innsending.md`](app-store-innsending.md) — denne beholdes for
+> historikk, og sandbox-oppskriften i punkt 1 er fortsatt gyldig.
+
 > Oppdatert 2026-07-31 etter at PR #99 gikk live. Lim kickoff-linja nederst inn i et nytt Claude Code-vindu.
 
 ## Neste oppgave: gjennomgå Codex sin tekniske rapport
@@ -36,13 +42,35 @@ Nyttig å vite før du leser den:
 
 ## 1. Sandbox-kjøpet (2 min, på iPhonen)
 
-Appen ligger allerede på telefonen. **Ett passord til alt: `Kantarell2026!`**
+> 🔴 **PASSORDET SOM STO HER ER KOMPROMITTERT — BYTT DET.**
+>
+> Fram til 2026-08-05 sto passordet til både QA-brukeren og sandbox-Apple-ID-en
+> i klartekst i denne fila. **Repoet er offentlig**, og passordet står fortsatt i
+> git-historikken. Å fjerne det herfra stopper bare blødningen; det hjelper ikke
+> mot noen som allerede har lest det.
+>
+> Passordet ga tilgang til `qa-autotest@mycelet.com` — en **ekte konto på den
+> live appen** — og til Apple sandbox-testeren.
+>
+> **Gjør dette:**
+> 1. Bytt passord på `qa-autotest@mycelet.com` (Supabase → Authentication → Users)
+> 2. Oppdater `QA_TEST_PASSWORD` i `.env.local` og i GitHub Actions-hemmelighetene
+> 3. Bytt passord på sandbox-Apple-ID-en i App Store Connect → Sandbox Testers
+> 4. La de nye passordene ligge i passordbehandleren, aldri i en fil i repoet
+>
+> Dette er det tredje passordet som har lekket denne veien (se også
+> `docs/app-store-metadata.md`, om `applereview@mycelet.com` og IBAN-et). Mønsteret
+> er at oppskrifter skrives med ekte verdier «bare for nå». **Skriv aldri en
+> hemmelighet i en fil under `docs/`** — skriv hvor den ligger i stedet.
+
+Appen ligger allerede på telefonen. Passordene finner du i passordbehandleren.
 
 1. Force-quit Mycelet, åpne den på nytt
-2. Person-ikonet øverst til høyre → logg inn: `qa-autotest@mycelet.com` / `Kantarell2026!`
+2. Person-ikonet øverst til høyre → logg inn som `qa-autotest@mycelet.com`
 3. Trykk «Gratis»-merket øverst → Priser
 4. «Velg Premium» → Apple-arket skal vise **[Environment: Sandbox]** → bekreft
-   - Sandbox-Apple-ID (Innstillinger → Utvikler → Sandbox Apple Account): `sindre.alstad+sandbox@gmail.com` / `Kantarell2026!`
+   - Sandbox-Apple-ID settes i Innstillinger → Utvikler → Sandbox Apple Account
+     (`sindre.alstad+sandbox@gmail.com`)
 5. Claude verifiserer at `billing_subscriptions` får rad med `metadata.provider = 'revenuecat'` for QA-brukeren, og at appen flipper til aktiv plan
 
 Blir bygget for gammelt: bygg på nytt fra worktreet med
