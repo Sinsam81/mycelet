@@ -1,5 +1,24 @@
 # App Store-innsending — én liste, i rekkefølge
 
+> ## 📍 START HER — status 2026-08-05, kl. 23:45
+>
+> **Alt i App Store Connect er ferdig. Det eneste som gjenstår er å laste opp et bygg.**
+>
+> ```
+> ✅ Steg 0   Tre lekkede passord rotert og verifisert
+> ✅ Steg 1   Paid Apps, bank, skatt og DSA — alle Active
+> ✅ Steg 2   Tre RevenueCat-nøkler på Production i Vercel
+> ⛔ Steg 3   Sandbox-kjøp — BLOKKERT til en binær er lastet opp (se under)
+> 🔜 Steg 4   Xcode: IAP-capability + distribusjonssertifikat  ← NESTE
+> ✅ Steg 5   Alle skjemaene i App Store Connect
+> 🔜 Steg 6   Arkiver, last opp, send inn
+> ```
+>
+> **Neste økt starter på steg 4.** Rekkefølgen er snudd: bygget må opp FØR
+> sandbox-kjøpet kan testes. Begrunnelsen står under steg 3.
+>
+> Alt agenten kunne gjøre i repoet er gjort og merget (PR #148–#151).
+
 **Skrevet 2026-08-05.** Erstatter rekkefølgen i `launch-critical-path.md` og
 `neste-okt.md`, som motsa hverandre på tre punkter. De to filene beholdes for
 historikk; **denne gjelder.**
@@ -91,35 +110,91 @@ begge; kodefiksene gjør det ikke.
 **Slett prosjektet**, eller fjern i det minste miljøvariablene så det ikke lenger
 når databasen.
 
-## Steg 3 — Sandbox-kjøp på din iPhone (👤 + agent, 1–2 timer)
+## ~~Steg 5 — skjemaene i App Store Connect~~ ✅ FERDIG 2026-08-05, kveld
 
-**Hele betalingsstien har aldri kjørt mot ekte StoreKit.** All testing så langt er
-enhetstester med mocket plugin. Å sende inn uten dette er å sende inn en
-betalingsflyt ingen har sett virke.
+Alt er fylt ut og lagret. Hva som ble funnet underveis:
 
-Agenten bygger og installerer på telefonen; du trykker gjennom Apples kjøpsark;
-agenten verifiserer at det faktisk kommer en rad i `billing_subscriptions`.
-Oppskrift i `neste-okt.md` punkt 1. **Regn med at det feiler første gang.**
+| felt | status | merknad |
+|---|---|---|
+| App Information | ✅ | var nesten ferdig; SKU bekreftet `mycelet-ios` |
+| **Content Rights** | ✅ | «Yes» — appen viser GBIF, Kartverket, Artsdatabanken m.fl. |
+| **Aldersvurdering** | ✅ **13+** | UGC = Yes var allerede riktig satt. Apples nye skala (iOS 26) har 4/9/13/16/18, så 13+ er det jeg tidligere kalte 12+. Matcher våre egne vilkår (13 år). |
+| Beskrivelse | ✅ | **måtte byttes** — den gamle lovet forum + sopptur-modus (avslåtte flagg) og sa 185 000 funn mot faktiske 428 829 |
+| Promotional Text, Keywords, URL-er | ✅ | support-URL rettet til `/kontakt` |
+| Skjermbilder | ✅ | seks nye fra august, via **Media Manager** (den innebygde visningen låste seg) |
+| **App Privacy** | ✅ | var allerede publisert 29. juli, og de seks datatypene stemmer eksakt med `PrivacyInfo.xcprivacy` |
+| **App Review Information** | ✅ | demo-passord synkronisert mot Supabase og verifisert; notatene skrevet om |
+| Pricing and Availability | ✅ | 2 land (NO+SE), Public, ikke Mac/Vision Pro |
 
-## Steg 4 — Xcode (👤 15–30 min)
+⚠️ **To feller å huske:**
+
+1. **Tegntelleren i App Store Connect teller NEDOVER fra grensen.** «2 977» betyr
+   1 023 tegn brukt av 4 000. Jeg leste den feil og trodde tekst hadde forsvunnet.
+2. **Emoji avvises i Description.** Én 🍄 ga «This field contains one or more
+   invalid characters». Kulepunkt, tankestrek og «» er greie. Nå voktet av
+   `app-store-metadata.test.ts`.
+
+## ⛔ Steg 3 — sandbox-kjøpet BLOKKERES av at ingen binær er lastet opp
+
+**Forsøkt 2026-08-05 kl. 23:00–23:45. Virket ikke, og årsaken er funnet.**
+
+Prissiden i appen viser fortsatt web-modus: prisene i kroner, bunnteksten
+«Prisene er i norske kroner», ingen kjøpsknapper i det hele tatt.
+
+### Hva som er utelukket (ikke gjør dette om igjen)
+
+| hypotese | resultat |
+|---|---|
+| Appen kjøres ikke native | ❌ utelukket — var den ikke native, ville Stripe-knappene vist seg (`!native ? true : planOffer !== null`) |
+| RevenueCat-nøkkelen mangler i web-bygget | ❌ utelukket — `isIapAvailable` kompilerte til `isNativePlatform() && !0`, altså er nøkkelen bakt inn |
+| RevenueCat ikke lenket inn i app-bygget | ❌ utelukket — `RevenueCat_RevenueCat.bundle` ligger i `App.app`. NB: SPM-pakker lenkes **statisk**, så de vises IKKE i `Frameworks/` — jeg trakk feil konklusjon der først |
+| Appen på telefonen var for gammel | ❌ utelukket — bygget på nytt med Capacitor 8.3.4 og installert, samme resultat |
+| Paid Apps / bundle-ID / produkt-ID-er | ❌ alle verifisert riktige |
+
+### Det som står igjen
+
+**Ingen binær er lastet opp til App Store Connect.** Apples egen tekst på
+Subscriptions-siden sier det rett ut:
+
+> «Once your **binary has been uploaded** and your first subscription has been
+> submitted for review, additional subscriptions can be submitted…»
+
+Dette er den vanligste årsaken til tomme RevenueCat-offerings, og den siste som
+står igjen på RevenueCats egen feilsøkingsliste.
+
+### Rekkefølgen snus derfor
+
+```
+FØR:  test sandbox  →  arkiver  →  last opp  →  send inn
+NÅ:   arkiver  →  last opp  →  test via TestFlight  →  send inn
+```
+
+Det er ikke et tap. Bygget skal opp uansett, og en TestFlight-test er nærmere det
+reviewer faktisk gjør enn et lokalt debug-bygg.
+
+## Steg 4 — Xcode (👤 15–30 min) ← **NESTE**
 
 - [ ] Slå på **In-App Purchase**-capability på App-targetet
       (Signing & Capabilities → + Capability)
 - [ ] La Xcode utstede distribusjonssertifikatet — skjer automatisk første gang
       du velger «Distribute App». Du har i dag bare et utviklersertifikat.
-      Krever at avtalene i steg 1 er i orden.
 
-## Steg 5 — Fyll skjemaene i App Store Connect (👤 1,5–2 timer)
+ℹ️ **Bygging fra kommandolinja VIRKER**, i motsetning til hva gamle notater sier.
+Det gamle rådet om at codesign feiler i iCloud-mappa er feildiagnostisert — det
+går fint så lenge byggemappa ligger utenfor iCloud:
 
-Alle svarene ligger ferdig i [`app-store-metadata.md`](app-store-metadata.md).
+```bash
+npx cap sync ios
+xcodebuild -project ios/App/App.xcodeproj -scheme App -configuration Debug \
+  -destination 'id=EBCC8060-6E43-519C-A25F-B1D5CDD76E54' \
+  -derivedDataPath /private/tmp/mycelet-ios-build \
+  -allowProvisioningUpdates DEVELOPMENT_TEAM=WUFJ6UBMPG CODE_SIGN_STYLE=Automatic build
+xcrun devicectl device install app --device EBCC8060-6E43-519C-A25F-B1D5CDD76E54 \
+  /private/tmp/mycelet-ios-build/Build/Products/Debug-iphoneos/App.app
+```
 
-- [ ] Butikktekst (navn, undertittel, nøkkelord, beskrivelse)
-- [ ] Skjermbilder — de seks i `app-store-screenshots/`, slot **6.9-inch**.
-      iPad-bilder trengs ikke; appen er satt til iPhone-only.
-- [ ] **App Privacy** («nutrition labels») — svarene er kodeverifiserte
-- [ ] **Aldersvurdering → 12+**, ikke 4+. Appen har forum med brukerinnhold.
-      Svar ærlig «Yes» på UGC og vis de fire 1.2-mekanismene; alle finnes.
-- [ ] **App Review Information** — demo-konto + det nye passordet fra steg 0
+Selve **arkiveringen** for App Store gjøres likevel i Xcode-vinduet første gang,
+siden distribusjonssertifikatet utstedes der.
 
 ## Steg 6 — Arkiver, last opp, send inn (👤 1–2 timer)
 
