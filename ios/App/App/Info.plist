@@ -4,6 +4,17 @@
 <dict>
     <key>CAPACITOR_DEBUG</key>
 	<string>$(CAPACITOR_DEBUG)</string>
+	<!--
+	  Eksportkontroll. Uten denne nøkkelen stopper hvert eneste bygg i App Store
+	  Connect med «Missing Compliance», og du må svare på spørsmålet manuelt før
+	  bygget kan velges til innsending.
+
+	  `false` er riktig her: appen bruker bare HTTPS (standard TLS via WKWebView
+	  og fetch), og det er unntatt fra amerikansk eksportregelverk. Vi har ingen
+	  egen kryptografi. Legger noen inn egen kryptering senere, må dette endres.
+	-->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>NSCameraUsageDescription</key>
 	<string>Mycelet bruker kameraet til å ta bilde av sopp du vil identifisere.</string>
 	<key>NSPhotoLibraryUsageDescription</key>

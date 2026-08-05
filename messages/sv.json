@@ -696,7 +696,10 @@
     "goToProfile": "Gå till din profil →",
     "loading": "Laddar...",
     "purchaseConsentPrefix": "Jag vill att tjänsten levereras omedelbart, så att jag får tillgång direkt. Jag behåller ångerrätten i 14 dagar, men ett proportionellt belopp kan beräknas för den tid jag haft tillgång. Jag godkänner",
-    "purchaseTermsLink": "köpvillkoren"
+    "purchaseTermsLink": "köpvillkoren",
+    "termsLink": "användarvillkoren",
+    "privacyLink": "integritetspolicy",
+    "legalLinksLabel": "Juridiska länkar"
   },
   "Profile": {
     "categoryFind": "Fynd",
