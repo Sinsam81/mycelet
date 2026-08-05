@@ -60,14 +60,36 @@ er ikke til å komme unna for en næringsdrivende — men det er greit å ha reg
 status «Prepare for Submission». `launch-critical-path.md:43` ber deg opprette
 den; det er feil.
 
-## Steg 2 — Bekreft nøklene i Vercel (👤 10 min)
+## ~~Steg 2 — nøklene i Vercel~~ ✅ BEKREFTET 2026-08-05
 
-- [ ] `NEXT_PUBLIC_REVENUECAT_APPLE_KEY` — uten den forsvinner kjøpsknappene, og
-      reviewer møter en abonnementsapp uten kjøpsmulighet
-- [ ] `REVENUECAT_WEBHOOK_AUTH`
-- [ ] `REVENUECAT_ALLOW_SANDBOX=1` — **må stå PÅ gjennom hele reviewen.**
-      Reviewere kjøper i sandbox, og uten flagget forkaster webhooken kjøpet
-      deres. Fjernes først etter godkjenning.
+Alle tre finnes på **Production** i prosjektet `mycelet` (team **Mycelet**, Pro):
+`NEXT_PUBLIC_REVENUECAT_APPLE_KEY`, `REVENUECAT_WEBHOOK_AUTH`,
+`REVENUECAT_ALLOW_SANDBOX`.
+
+`REVENUECAT_WEBHOOK_AUTH` er i tillegg verifisert utenfra: webhooken svarer
+**401** på en uautorisert forespørsel. Koden gir **503** når nøkkelen mangler, så
+401 beviser at serveren har en verdi å sammenligne mot.
+
+⚠️ **Verdien av `REVENUECAT_ALLOW_SANDBOX` er IKKE verifisert.** Den må være
+nøyaktig strengen `1` (`route.ts:148` sjekker `!== '1'`), og fordi variabelen er
+merket «Sensitive» kan den ikke leses tilbake i Vercel. Sandbox-kjøpet i steg 3
+beviser den ende-til-ende. **Uteblir raden i `billing_subscriptions`, er dette
+mistenkt nummer én** — sett den til `1` og redeploy.
+
+### ⚠️ Feil Vercel-prosjekt finnes — ikke sett nøkler der
+
+Det finnes et duplikat, `mycelet-7uj6`, under Hobby-teamet. Det er **ikke** den
+live appen (siste deploy 5. juni, ingen custom domain), men det er koblet til
+**produksjonsdatabasen** — `/api/health` rapporterer `database: ok` og Next
+16.2.6 mot live-appens 16.2.12.
+
+Det betyr en offentlig tilgjengelig deploy med to måneders manglende
+kodefiks mot ekte data: private funn-bilder til feil bøtte, dataeksport som ikke
+var fail-closed, prediksjonsfliser kallbare av anonyme. Databasefiksene gjelder
+begge; kodefiksene gjør det ikke.
+
+**Slett prosjektet**, eller fjern i det minste miljøvariablene så det ikke lenger
+når databasen.
 
 ## Steg 3 — Sandbox-kjøp på din iPhone (👤 + agent, 1–2 timer)
 
