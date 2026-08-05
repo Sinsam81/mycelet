@@ -1,5 +1,9 @@
 # Mycelet — kritisk sti til lansering
 
+> ⚠️ **ERSTATTET 2026-08-05.** Rekkefølgen her motsa `neste-okt.md` på tre punkter
+> (DSA-status, Paid Apps, og om app-oppføringen skulle opprettes). Bruk
+> [`app-store-innsending.md`](app-store-innsending.md) — denne beholdes for historikk.
+
 > Sist oppdatert: 2026-07-19 · Strategi valgt: **IAP fra start · iOS først, Android rett etter**
 > Verifisert mot faktisk kode 2026-07-19. Erstatter statusdelen i `app-store-plan.md` (som er fra 23. mai).
 
