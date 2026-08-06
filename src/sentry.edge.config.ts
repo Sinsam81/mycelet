@@ -1,4 +1,5 @@
 import * as Sentry from '@sentry/nextjs';
+import { scrubBreadcrumb, scrubEvent } from '@/lib/sentry/scrub';
 
 /**
  * Sentry i edge-runtimen — middleware.ts kjører her, ikke i Node.
@@ -28,14 +29,8 @@ Sentry.init({
   sampleRate: 1.0,
   maxBreadcrumbs: 20,
 
-  beforeSend(event) {
-    delete event.user;
-    if (event.request) {
-      delete event.request.cookies;
-      delete event.request.headers;
-      delete event.request.query_string;
-      if (event.request.url) event.request.url = event.request.url.split('?')[0];
-    }
-    return event;
-  }
+  // Middleware ser HVER forespørsel, også /auth/callback?code=<engangskode> og
+  // /map?lat=…&lng=…. Samme renser som de to andre — se @/lib/sentry/scrub.
+  beforeSend: scrubEvent,
+  beforeBreadcrumb: scrubBreadcrumb
 });

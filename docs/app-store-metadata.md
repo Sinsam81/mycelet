@@ -135,18 +135,42 @@ Tracking (på tvers av apper/ATT): **NEI** — ingen sporing, ingen annonser.
 > denne gatingen uten samtidig å oppdatere App Privacy i App Store Connect
 > (Usage Data → Product Interaction).
 
-Data som samles inn (alle «Linked to you», ingen til tracking):
-| Datatype | Formål |
-|---|---|
-| Contact Info → Email Address | Kontoopprettelse |
-| User Content → Photos | Soppbilder (funn/forum/AI-id). GPS-strippes før opplasting |
-| User Content → Other User Content | Funn, innlegg, kommentarer |
-| Location → Precise Location | Kart, funnregistrering, prediksjon (kun når bruker tillater) |
-| Identifiers → User ID | Kontodrift |
-| Purchases → Purchase History | Abonnementsstatus (når IAP er aktiv) |
+Data som samles inn — **åtte** datatyper, ingen til tracking. De seks første er
+«Linked to you», de to siste er «**Not** Linked to You»:
 
-Ikke samlet: Diagnostics, Usage Data, Browsing History, Contacts, Financial Info
+| Datatype | Kobling | Formål |
+|---|---|---|
+| Contact Info → Email Address | Linked | Kontoopprettelse |
+| User Content → Photos | Linked | Soppbilder (funn/forum/AI-id). GPS-strippes før opplasting |
+| User Content → Other User Content | Linked | Funn, innlegg, kommentarer |
+| Location → Precise Location | Linked | Kart, funnregistrering, prediksjon (kun når bruker tillater) |
+| Identifiers → User ID | Linked | Kontodrift |
+| Purchases → Purchase History | Linked | Abonnementsstatus (når IAP er aktiv) |
+| Diagnostics → Crash Data | **Not Linked** | Feilrapportering (Sentry) |
+| Diagnostics → Other Diagnostic Data | **Not Linked** | Brødsmuler før en krasj (Sentry) |
+
+Ikke samlet: Usage Data, Browsing History, Contacts, Financial Info
 (betalingskort håndteres av Apple/Stripe, aldri av oss).
+
+> **NB (2026-08-06):** De to Diagnostics-radene kom med Sentry. At de kan stå som
+> «Not Linked to You» er ikke en antakelse — det hviler på tre ting som alle må
+> holdes ved like samtidig:
+>
+> 1. **«Prevent Storing of IP Addresses» er skrudd PÅ** i Sentry-organisasjonen
+>    (Settings → Security & Privacy). En IP-adresse er en identifikator; uten
+>    denne er «Not Linked» usant.
+> 2. **Rensingen i `src/lib/sentry/scrub.ts`** fjerner bruker, cookies, headere,
+>    query-strenger og kartfliser fra både hendelser og brødsmuler — i alle tre
+>    runtimene. Vokternes tester ligger i `src/lib/sentry/__tests__/scrub.test.ts`
+>    og `src/lib/__tests__/sentry-personvern.test.ts`.
+> 3. **Ingen tracing.** `tracesSampleRate` settes bevisst ikke. Skrur du den på,
+>    blir det «Performance Data», som IKKE er erklært — da må denne tabellen og
+>    App Store Connect oppdateres i samme slengen.
+>
+> Manifestet i `ios/App/App/PrivacyInfo.xcprivacy` må stemme med tabellen over.
+> `NSPrivacyTrackingDomains` skal være TOM: Apple blokkerer nettverkskall til
+> domener som står der når ATT-tillatelse mangler — feilrapporteringen ville dødd
+> stille.
 
 ## Abonnementer (IAP) — opprettes i App Store Connect → Subscriptions
 

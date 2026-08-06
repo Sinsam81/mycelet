@@ -61,7 +61,10 @@ export default function GlobalError({
     // NB: Sentrys standardoppskrift for global-error rendrer <NextError/> og
     // ville dermed byttet ut hele den lokaliserte siden over med Next.js' egen
     // engelske «Application error». Vi fanger feilen og beholder siden.
-    Sentry.captureException(error);
+    //
+    // Som i src/app/error.tsx: `digest` ⇒ serverfeil, allerede sendt av
+    // onRequestError med ekte melding. Dette objektet er sensurert.
+    if (!error.digest) Sentry.captureException(error);
   }, [error]);
 
   const copy = COPY[locale];

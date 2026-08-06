@@ -1,10 +1,16 @@
 import * as Sentry from '@sentry/nextjs';
+import { scrubBreadcrumb, scrubEvent } from '@/lib/sentry/scrub';
 
 /**
  * Sentry i Node-runtimen — alle API-ruter og server-komponenter.
  *
  * dataCollection-objektet er FULLSTENDIG med vilje. Se den lange forklaringen
  * i src/instrumentation-client.ts: et delvis objekt slår PÅ alt du ikke nevner.
+ *
+ * ⚠️ SERVEREN ER FARLIGERE ENN NETTLESEREN. Det er her Supabase-spørringene går
+ * (`?user_id=eq.<uuid>`) og her Geonorge spørres om høyde på meteren
+ * (`?nord=59.91342&ost=10.74609`). Rensingen ligger i @/lib/sentry/scrub og
+ * DELES med klient og edge — nettopp fordi den en gang manglet akkurat her.
  */
 Sentry.init({
   dsn: process.env.SENTRY_DSN ?? process.env.NEXT_PUBLIC_SENTRY_DSN,
@@ -60,14 +66,17 @@ Sentry.init({
       return null;
     }
 
-    delete event.user;
-    if (event.request) {
-      delete event.request.cookies;
-      delete event.request.headers;
-      delete event.request.data;
-      delete event.request.query_string;
-      if (event.request.url) event.request.url = event.request.url.split('?')[0];
-    }
-    return event;
-  }
+    return scrubEvent(event);
+  },
+
+  /**
+   * Uten denne sto serveren helt uten brødsmulerensing.
+   *
+   * NodeFetch-integrasjonen lager en brødsmule av HVERT utgående kall og legger
+   * hele query-strengen i feltet `http.query`. Verifisert ved kjøring: en
+   * hendelse bar med seg både `?select=id&user_id=eq.<uuid>` fra Supabase og
+   * `?koordsys=4258&nord=59.91342&ost=10.74609` fra Geonorge. `url`-feltet var
+   * allerede sanert av SDK-en — det var sidefeltet som lakk.
+   */
+  beforeBreadcrumb: scrubBreadcrumb
 });

@@ -102,6 +102,66 @@ describe('Sentry: datainnsamlingen er slått av', () => {
   });
 });
 
+describe('Sentry: alle tre runtimene bruker SAMME renser', () => {
+  // Rensingen lå først som tre håndskrevne kopier. De hadde allerede glidd fra
+  // hverandre da det ble oppdaget: klienten hadde beforeBreadcrumb, serveren
+  // ingen — og det var serveren som snakket med Supabase og Geonorge.
+  //
+  // Denne testen er grunnen til at det ikke kan skje igjen. Oppførselen til
+  // selve renseren er testet i src/lib/sentry/__tests__/scrub.test.ts.
+  const FILER = [
+    'src/instrumentation-client.ts',
+    'src/sentry.server.config.ts',
+    'src/sentry.edge.config.ts'
+  ];
+
+  for (const fil of FILER) {
+    it(`${fil} importerer den delte renseren`, () => {
+      expect(les(fil)).toMatch(/from\s+'@\/lib\/sentry\/scrub'/);
+    });
+
+    it(`${fil} har BÅDE beforeSend og beforeBreadcrumb`, () => {
+      const t = les(fil);
+      expect(t, `${fil} mangler beforeSend`).toMatch(/beforeSend/);
+      expect(
+        t,
+        `${fil} mangler beforeBreadcrumb. Uten den legger SDK-en hele ` +
+          `query-strengen i brødsmulefeltet http.query — inkludert ` +
+          `user_id=eq.<uuid> og nord=…&ost=… (presis posisjon).`
+      ).toMatch(/beforeBreadcrumb/);
+    });
+
+    it(`${fil} renser ikke på egen hånd ved siden av den delte`, () => {
+      // En håndskrevet `url.split('?')` her betyr at noen har begynt å bygge en
+      // fjerde kopi av regelen. Det var nøyaktig slik lekkasjen oppsto.
+      expect(les(fil), `${fil} har egen ad hoc-rensing — bruk scrub.ts`).not.toMatch(
+        /\.split\('\?'\)/
+      );
+    });
+  }
+});
+
+describe('Sentry: serverfeil rapporteres bare én gang', () => {
+  // Feil kastet på serveren når error.tsx som et SENSURERT objekt: Next bytter
+  // meldingen med «The specific message is omitted in production builds».
+  // Sendes den videre, grupperer Sentry ALLE serverfeil i appen til én sak med
+  // den teksten — og skjuler de ekte feilene bak seg. onRequestError har
+  // allerede sendt den ekte, med melding og stacktrace.
+  for (const fil of ['src/app/error.tsx', 'src/app/global-error.tsx']) {
+    it(`${fil} hopper over feil som har digest`, () => {
+      expect(les(fil), `${fil} sender serverfeil på nytt`).toMatch(
+        /if\s*\(!error\.digest\)\s*Sentry\.captureException/
+      );
+    });
+  }
+
+  it('onRequestError er koblet opp — ellers mistes serverfeilene helt', () => {
+    expect(les('src/instrumentation.ts')).toMatch(
+      /export const onRequestError\s*=\s*Sentry\.captureRequestError/
+    );
+  });
+});
+
 describe('Sentry: filnavnene virker under Turbopack', () => {
   it('bruker instrumentation-client.ts', () => {
     expect(existsSync(join(ROT, 'src/instrumentation-client.ts'))).toBe(true);

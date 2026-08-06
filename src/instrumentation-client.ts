@@ -1,4 +1,5 @@
 import * as Sentry from '@sentry/nextjs';
+import { scrubBreadcrumb, scrubEvent } from '@/lib/sentry/scrub';
 
 /**
  * Sentry på klientsiden — nettleser OG WKWebView-en i iOS-appen.
@@ -157,28 +158,35 @@ Sentry.init({
   beforeSend(event) {
     if (sentThisPageLoad >= MAX_EVENTS_PER_PAGE_LOAD) return null;
     sentThisPageLoad += 1;
-
-    // Belte og seler oppå dataCollection — robust mot at SDK-standarder endres.
-    delete event.user;
-    if (event.request) {
-      delete event.request.cookies;
-      delete event.request.headers;
-      delete event.request.data;
-      delete event.request.query_string;
-      // /map?lat=59.9&lng=10.7 og /api/prediction?lat=…&lon=… ER posisjon.
-      if (event.request.url) event.request.url = event.request.url.split('?')[0];
-    }
-    return event;
+    // Belte og seler oppå dataCollection — se @/lib/sentry/scrub. Delt med
+    // server og edge, slik at de tre ikke kan gli fra hverandre igjen.
+    return scrubEvent(event);
   },
 
-  beforeBreadcrumb(breadcrumb) {
-    // Appen runder bevisst av koordinater før de sendes videre, nettopp for at
-    // meterpresis GPS ikke skal havne i noen forespørselslogg. Uten dette ville
-    // fetch-brødsmulene reversert den beslutningen.
-    const url = breadcrumb.data?.url;
-    if (typeof url === 'string' && url.includes('?')) {
-      breadcrumb.data = { ...breadcrumb.data, url: url.split('?')[0] };
-    }
-    return breadcrumb;
-  }
+  /**
+   * Appen runder bevisst av koordinater før de sendes videre, nettopp for at
+   * meterpresis GPS ikke skal havne i noen forespørselslogg. Uten dette ville
+   * fetch-brødsmulene reversert den beslutningen.
+   *
+   * Merk at det IKKE holder å stryke query-strengen her: kartfliser har
+   * posisjonen i selve stien (`/{z}/{y}/{x}`), og de kastes derfor i sin helhet.
+   */
+  beforeBreadcrumb: scrubBreadcrumb
 });
+
+/**
+ * ⚠️ IKKE legg til `onRouterTransitionStart` — selv om bygget ber om det.
+ *
+ * Hvert `npm run build` skriver ut:
+ *
+ *   [@sentry/nextjs] ACTION REQUIRED: To instrument navigations, the Sentry SDK
+ *   requires you to export an `onRouterTransitionStart` hook …
+ *
+ * «ACTION REQUIRED» er misvisende her. Hooken finnes for å måle NAVIGASJON,
+ * altså tracing. Vi setter bevisst ikke `tracesSampleRate` (se over), fordi
+ * tracing er «Performance Data» hos Apple — og App Privacy for denne appen
+ * erklærer Crash Data og Other Diagnostic Data, ikke Performance Data.
+ *
+ * Advarselen er altså riktig å la stå. Skal den bort, må App Privacy i App Store
+ * Connect og tabellen i docs/app-store-metadata.md endres i samme slengen.
+ */

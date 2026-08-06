@@ -122,7 +122,7 @@ Alt er fylt ut og lagret. Hva som ble funnet underveis:
 | Beskrivelse | ✅ | **måtte byttes** — den gamle lovet forum + sopptur-modus (avslåtte flagg) og sa 185 000 funn mot faktiske 428 829 |
 | Promotional Text, Keywords, URL-er | ✅ | support-URL rettet til `/kontakt` |
 | Skjermbilder | ✅ | seks nye fra august, via **Media Manager** (den innebygde visningen låste seg) |
-| **App Privacy** | ✅ | var allerede publisert 29. juli, og de seks datatypene stemmer eksakt med `PrivacyInfo.xcprivacy` |
+| **App Privacy** | ✅ | publisert 29. juli med seks datatyper; **oppdatert 6. august til åtte** — Sentry la til Diagnostics → Crash Data + Other Diagnostic Data, begge «Not Linked to You». Stemmer med `PrivacyInfo.xcprivacy`. |
 | **App Review Information** | ✅ | demo-passord synkronisert mot Supabase og verifisert; notatene skrevet om |
 | Pricing and Availability | ✅ | 2 land (NO+SE), Public, ikke Mac/Vision Pro |
 
