@@ -18,6 +18,22 @@
 > sandbox-kjøpet kan testes. Begrunnelsen står under steg 3.
 >
 > Alt agenten kunne gjøre i repoet er gjort og merget (PR #148–#151).
+>
+> ---
+>
+> ### Tillegg 2026-08-07: Sentry (PR #153)
+>
+> ```
+> ✅ Kode, rensing, tester (1472), App Privacy → 8 datatyper
+> 🔜 A  Merge #153            ← blokkert av GitHub-driftsforstyrrelse, ikke av oss
+> 🔜 B  Source maps: 3 variabler i Vercel   (~5 min, din Sentry-innlogging)
+> 🛑 C  RØYKTEST på prod — HARD STOPP før innsending
+> ```
+>
+> **C er ikke en formalitet.** Lander ikke en ekte testfeil i dashbordet, har vi
+> betalt hele papirarbeidet mot Apple for ingenting — og da skal Sentry ut igjen
+> FØR innsending, ikke sendes inn i blinde. CSP-en er håndhevende: er verten feil,
+> blokkeres hver rapport stille og dashbordet er tomt for alltid uten én feilmelding.
 
 **Skrevet 2026-08-05.** Erstatter rekkefølgen i `launch-critical-path.md` og
 `neste-okt.md`, som motsa hverandre på tre punkter. De to filene beholdes for
@@ -171,6 +187,48 @@ NÅ:   arkiver  →  last opp  →  test via TestFlight  →  send inn
 
 Det er ikke et tap. Bygget skal opp uansett, og en TestFlight-test er nærmere det
 reviewer faktisk gjør enn et lokalt debug-bygg.
+
+## Sentry-tillegg B — source maps (👤 ~5 min, valgfritt men anbefalt)
+
+**Uten dette virker feilovervåkingen, men rapportene blir vanskelige å lese.**
+Du ser hvilken feil som skjedde og hvor i appen — men i stedet for en kodelinje
+står det `a.b.c()`. Sentry trenger tre variabler for å oversette tilbake.
+
+1. Lag en nøkkel: https://mycelet.sentry.io/settings/auth-tokens/ → **Create New Token**.
+   Navn: `vercel-sourcemaps`. Rettighet: **`project:releases`** (den ene holder).
+   Kopier verdien med én gang — Sentry viser den bare denne ene gangen.
+2. Finn prosjekt-slugen: åpne prosjektet i Sentry og se på adressen —
+   `.../projects/<HER>/`. Organisasjonsslugen er `mycelet`.
+3. Legg dem inn på https://vercel.com/mycelet/mycelet/settings/environment-variables
+   — alle tre med miljø **Production**:
+
+   | navn | verdi |
+   |---|---|
+   | `SENTRY_ORG` | `mycelet` |
+   | `SENTRY_PROJECT` | slugen fra punkt 2 |
+   | `SENTRY_AUTH_TOKEN` | nøkkelen fra punkt 1 — huk av **Sensitive** |
+
+⚠️ `SENTRY_AUTH_TOKEN` er en ekte hemmelighet. Den skal **bare** limes inn i
+Vercel — aldri i en fil i repoet, som er offentlig.
+
+Kildekartene lekker ikke uten dette: `withSentryConfig` lager dem under bygget og
+sletter dem igjen etterpå. Verifisert — `.next/static` inneholder null `.map`-filer
+etter et bygg uten nøkkel.
+
+## Sentry-tillegg C — 🛑 røyktesten (må gjøres FØR innsending)
+
+Åpne https://www.mycelet.com i en nettleser, åpne utviklerkonsollen og kjør:
+
+```
+setTimeout(() => { throw new Error('Mycelet roykttest ' + Date.now()) })
+```
+
+Feilen skal dukke opp i https://mycelet.sentry.io/issues/ innen et minutt.
+
+**Gjør den ikke det, skal Sentry ut av appen før innsending.** Da har vi erklært
+til Apple at vi samler inn diagnostikk uten at vi faktisk gjør det, og det er en
+erklæring som er feil. Mest sannsynlige årsak i så fall: `NEXT_PUBLIC_SENTRY_DSN`
+manglet på det bygget, eller CSP-verten i `next.config.js` matcher ikke DSN-en.
 
 ## Steg 4 — Xcode (👤 15–30 min) ← **NESTE**
 
