@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
+import * as Sentry from '@sentry/nextjs';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { AlertTriangle } from 'lucide-react';
@@ -32,6 +33,9 @@ export default function RouteError({
     // Havner i Vercels loggstrøm sammen med resten. `digest` er nøkkelen som
     // knytter denne visningen til server-stacktracen.
     console.error('route_error', { message: error.message, digest: error.digest });
+    // Samme grep ett nivå ned: feil i et rute-segment. All lokalisert copy
+    // under beholdes — vi legger bare rapporteringen ved siden av loggingen.
+    Sentry.captureException(error);
   }, [error]);
 
   return (

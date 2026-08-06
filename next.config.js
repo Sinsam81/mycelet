@@ -39,7 +39,11 @@ const cspDirectives = [
   // worker fetches too, so every provider in offlineMap.ts must be listed here.
   // Google-domains: GA4 event beacons + regional/config endpoints per
   // Google's documented CSP minimum (only contacted after explicit consent).
-  "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.openweathermap.org https://opendata-download-metobs.smhi.se https://frost.met.no https://api.stripe.com https://*.kindwise.com https://ws.geonorge.no https://cache.kartverket.no https://tile.openstreetmap.org https://*.tile.openstreetmap.org https://server.arcgisonline.com https://*.google-analytics.com https://*.analytics.google.com https://*.googletagmanager.com",
+  // ⚠️ *.ingest.de.sentry.io er IKKE valgfri. CSP-en her er HÅNDHEVENDE, og
+  // uten denne verten blokkerer nettleseren hver eneste feilrapport — stille.
+  // Alt ser da ut til å virke, Sentry-dashbordet er bare tomt for alltid.
+  // `.de.` er EU-regionen; endres organisasjonen til USA må denne endres med.
+  "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.openweathermap.org https://opendata-download-metobs.smhi.se https://frost.met.no https://api.stripe.com https://*.kindwise.com https://ws.geonorge.no https://cache.kartverket.no https://tile.openstreetmap.org https://*.tile.openstreetmap.org https://server.arcgisonline.com https://*.google-analytics.com https://*.analytics.google.com https://*.googletagmanager.com https://*.ingest.de.sentry.io",
   // We embed Stripe Checkout / Elements in iframes.
   "frame-src https://js.stripe.com https://hooks.stripe.com https://checkout.stripe.com",
   // Service worker (next-pwa) + blob: for any dynamically created workers.
@@ -149,4 +153,34 @@ const nextConfig = {
 };
 
 const withNextIntl = require('next-intl/plugin')('./src/i18n/request.ts');
-module.exports = withNextIntl(nextConfig);
+
+/**
+ * Sentry pakkes UTENPÅ next-intl.
+ *
+ * withSentryConfig er ikke pynt: den setter opp opplasting av source maps, slik
+ * at en stacktrace peker på vår faktiske kildekode og ikke på minifisert
+ * `a.b.c()`. Uten den er hver eneste feilrapport praktisk talt uleselig.
+ *
+ * ⚠️ IKKE sett `productionBrowserSourceMaps` manuelt. withSentryConfig setter
+ * den selv OG setter samtidig deleteSourcemapsAfterUpload — men bare hvis du
+ * ikke har rørt den. Rører du den, faller sletteflagget til false, og
+ * fullstendige source maps av hele appen blir liggende offentlig tilgjengelig.
+ *
+ * Opplastingen krever SENTRY_AUTH_TOKEN. Mangler den, bygger prosjektet
+ * fortsatt — det blir bare ingen source maps.
+ */
+const { withSentryConfig } = require('@sentry/nextjs');
+
+module.exports = withSentryConfig(withNextIntl(nextConfig), {
+  org: process.env.SENTRY_ORG,
+  project: process.env.SENTRY_PROJECT,
+  authToken: process.env.SENTRY_AUTH_TOKEN,
+  // Stille i byggeloggen når alt går bra; feil vises fortsatt.
+  silent: !process.env.CI,
+  // Vi bruker IKKE tunnelRoute. Den ville krevd en endring i middleware.ts —
+  // samme regex som gater /profile, /map, /admin og /mine-steder for betalende
+  // kunder — og den kan ikke testes lokalt, siden Turbopack ikke kjører
+  // middleware i dev. Tunnelen finnes for å omgå annonseblokkere, og i en
+  // WKWebView finnes ingen. CSP-oppføringen over gjør samme nytte til null risiko.
+  telemetry: false
+});

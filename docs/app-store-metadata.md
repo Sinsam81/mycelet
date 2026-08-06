@@ -61,7 +61,7 @@ PREMIUM (valgfritt abonnement)
 Personvern først: bildene dine renses for GPS-data før opplasting, og du
 bestemmer selv hvor synlige funnene dine er. Data lagres i EU.
 
-God soppjakt! 🍄
+God soppjakt!
 ```
 
 ## Nøkkelord (maks 100 tegn)
