@@ -1,5 +1,6 @@
 'use client';
 
+import * as Sentry from '@sentry/nextjs';
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
@@ -187,9 +188,12 @@ function PricingInner() {
         const offers = await getIapOffers();
         if (unmountedRef.current) return;
         setIapOffers(offers);
-      } catch {
-        // Old shell build without the plugin, or store unreachable — fall back
-        // to the informational message below.
+      } catch (error) {
+        // Sto som `catch {}` — helt stille. Da kjøpsknappen uteble i testingen
+        // før innsending, fantes det ingenting å lete i. Feilen kan være helt
+        // ufarlig (gammelt skall uten plugin), men den kan også være hele
+        // grunnen til at ingen kan kjøpe. Nå vet vi forskjellen.
+        Sentry.captureException(error, { tags: { område: 'iap', grunn: 'oppsett-kastet' } });
       }
     })();
   }, [native]);

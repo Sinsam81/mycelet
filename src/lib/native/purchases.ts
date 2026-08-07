@@ -1,3 +1,4 @@
+import * as Sentry from '@sentry/nextjs';
 import { isNativePlatform } from './platform';
 import { IapPlan, guessTierFromProductId } from '@/lib/billing/plans';
 import { PlanViewState, getBlockingPaidPlan } from '@/lib/billing/plan-state';
@@ -45,7 +46,9 @@ interface PurchasesPluginLike {
   configure(options: { apiKey: string; appUserID?: string | null }): Promise<void>;
   isConfigured(): Promise<{ isConfigured: boolean }>;
   logIn(options: { appUserID: string }): Promise<unknown>;
-  getOfferings(): Promise<{ current?: { availablePackages?: PurchasesPackageLike[] } | null }>;
+  getOfferings(): Promise<{
+    current?: { identifier?: string; availablePackages?: PurchasesPackageLike[] } | null;
+  }>;
   purchasePackage(options: { aPackage: PurchasesPackageLike }): Promise<{ customerInfo: CustomerInfoLike }>;
   restorePurchases(): Promise<{ customerInfo: CustomerInfoLike }>;
 }
@@ -92,12 +95,52 @@ function packageToPlan(pkg: PurchasesPackageLike): IapPlan | null {
   return tier === 'free' ? null : tier;
 }
 
+/**
+ * Hvorfor det ikke ble noen kjøpsknapp.
+ *
+ * ⚠️ DENNE FUNKSJONEN SVARTE TOMT I STILLE FRA FIRE ULIKE ÅRSAKER, og kallstedet
+ * i /pricing hadde `catch {}` — altså null spor. Da kjøpsknappen uteble i
+ * testingen før innsending, var det ingenting å lete i: ingen logg, ingen feil,
+ * bare en side uten knapp. Vi gjettet tre ganger.
+ *
+ * Nå navngis årsaken og sendes til Sentry. Ingen persondata — bare hvilket ledd
+ * i kjeden som ryker, og hvilke produkt-ID-er butikken faktisk tilbød.
+ */
+type OfferMiss = 'ikke-native' | 'ingen-nokkel' | 'ingen-aktiv-offering' | 'ingen-pakker' | 'ingen-mappbare';
+
+function meldTomtTilbud(grunn: OfferMiss, detaljer?: Record<string, unknown>) {
+  Sentry.captureMessage(`iap: ingen kjøpstilbud (${grunn})`, {
+    level: 'warning',
+    tags: { område: 'iap', grunn },
+    extra: detaljer
+  });
+}
+
 /** Load the current offering's packages mapped to Mycelet plans. */
 export async function getIapOffers(): Promise<IapOffer[]> {
-  if (!isIapAvailable()) return [];
+  if (!isNativePlatform()) return []; // nettleser — helt normalt, ikke meld fra
+  if (!process.env.NEXT_PUBLIC_REVENUECAT_APPLE_KEY) {
+    meldTomtTilbud('ingen-nokkel');
+    return [];
+  }
+
   const purchases = await loadPlugin();
   const offerings = await purchases.getOfferings();
-  const packages = offerings.current?.availablePackages ?? [];
+  if (!offerings.current) {
+    // Ingen «current offering» i RevenueCat — enten er ingen offering satt som
+    // standard, eller så klarte ikke RevenueCat å hente produktene fra App Store.
+    meldTomtTilbud('ingen-aktiv-offering');
+    return [];
+  }
+
+  const packages = offerings.current.availablePackages ?? [];
+  if (packages.length === 0) {
+    // Offeringen finnes, men er tom. Det betyr nesten alltid at StoreKit ikke
+    // ga fra seg produktene — feil bundle-ID, produkter ikke klare, eller at
+    // butikken ennå ikke har rukket å publisere dem.
+    meldTomtTilbud('ingen-pakker', { offering: offerings.current.identifier });
+    return [];
+  }
 
   const offers: IapOffer[] = [];
   for (const pkg of packages) {
@@ -109,6 +152,13 @@ export async function getIapOffers(): Promise<IapOffer[]> {
       priceString: pkg.product.priceString,
       packageIdentifier: pkg.identifier,
       rcPackage: pkg
+    });
+  }
+
+  if (offers.length === 0) {
+    // Pakker finnes, men ingen av dem lot seg mappe til en Mycelet-plan.
+    meldTomtTilbud('ingen-mappbare', {
+      pakker: packages.map((p) => `${p.packageType}:${p.product.identifier}`)
     });
   }
   return offers;
