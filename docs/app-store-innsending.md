@@ -209,11 +209,17 @@ reviewer faktisk gjør enn et lokalt debug-bygg.
 Du ser hvilken feil som skjedde og hvor i appen — men i stedet for en kodelinje
 står det `a.b.c()`. Sentry trenger tre variabler for å oversette tilbake.
 
-1. Lag en nøkkel: https://mycelet.sentry.io/settings/auth-tokens/ → **Create New Token**.
-   Navn: `vercel-sourcemaps`. Rettighet: **`project:releases`** (den ene holder).
-   Kopier verdien med én gang — Sentry viser den bare denne ene gangen.
-2. Finn prosjekt-slugen: åpne prosjektet i Sentry og se på adressen —
-   `.../projects/<HER>/`. Organisasjonsslugen er `mycelet`.
+1. Lag en **organisasjonsnøkkel** (ikke en personlig):
+   https://sentry.io/orgredirect/organizations/mycelet/settings/auth-tokens/
+   → **Create New Token**. Navn: `vercel-sourcemaps`.
+   **Du skal ikke velge rettigheter** — organisasjonsnøkler har faste, begrensede
+   rettigheter, satt nettopp for byggejobber. (Det er personlige nøkler som har
+   valgbare scopes; de gir tilgang til ALT du selv har tilgang til, og hører ikke
+   hjemme i et byggemiljø.) Kopier verdien med én gang — Sentry viser den bare
+   denne ene gangen.
+2. Finn prosjekt-slugen: https://mycelet.sentry.io/settings/projects/ → klikk
+   prosjektet → slugen står i adressen som `.../projects/<HER>/`.
+   Organisasjonsslugen er `mycelet`.
 3. Legg dem inn på https://vercel.com/mycelet/mycelet/settings/environment-variables
    — alle tre med miljø **Production**:
 
