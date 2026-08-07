@@ -618,7 +618,9 @@
     "processorAppleNote": "Gäller endast köp som görs i appen. Köp på mycelet.com sker via Stripe.",
     "controllerNameEnk": "Sindre Øverås, som driver Mycelet genom den enskilda firman {legalName} (org.nr {orgNr}).",
     "controllerNameAs": "{legalName} (org.nr {orgNr}).",
-    "cookiesNativeNoAnalytics": "I appen från App Store är analysverktyg helt avstängda, så det finns ingenting att välja bort här. Valet ovan gäller mycelet.com i webbläsare."
+    "cookiesNativeNoAnalytics": "I appen från App Store är analysverktyg helt avstängda, så det finns ingenting att välja bort här. Valet ovan gäller mycelet.com i webbläsare.",
+    "processorSentryLabel": "Sentry",
+    "processorSentryDesc": "(felövervakning) — när något kraschar i appen skickas felmeddelandet och de senaste nätverksanropen till Sentry, så att vi kan rätta felet. Vi skickar inte användar-ID, e-post eller IP-adress, och positionsdata tas bort från adresserna innan de skickas. Uppgifterna lagras inom EU. Personuppgiftsbiträdesavtal:"
   },
   "Pricing": {
     "tierFree": "Gratis",

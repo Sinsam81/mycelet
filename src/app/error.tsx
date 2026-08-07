@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
+import * as Sentry from '@sentry/nextjs';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { AlertTriangle } from 'lucide-react';
@@ -32,6 +33,12 @@ export default function RouteError({
     // Havner i Vercels loggstrøm sammen med resten. `digest` er nøkkelen som
     // knytter denne visningen til server-stacktracen.
     console.error('route_error', { message: error.message, digest: error.digest });
+    // `digest` betyr at feilen ble kastet på SERVEREN. Da har onRequestError
+    // allerede sendt den, med ekte melding og stacktrace — mens dette objektet
+    // er sensurert av Next til «The specific message is omitted in production
+    // builds». Sendte vi den videre, ville alle serverfeil i hele appen
+    // gruppert seg til ÉN sak med den teksten, og skjult de ekte feilene bak seg.
+    if (!error.digest) Sentry.captureException(error);
   }, [error]);
 
   return (

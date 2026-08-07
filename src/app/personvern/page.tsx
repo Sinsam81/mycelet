@@ -210,6 +210,25 @@ export default async function PersonvernPage() {
               </a>
               .
             </li>
+            {/*
+              Sentry, lagt til 2026-08-06 sammen med feilovervåkingen.
+              Denne oppføringen er IKKE valgfri: App Privacy hos Apple erklærer
+              nå «Diagnostics», og en databehandler som mottar persondata må stå
+              her. Fjernes Sentry fra koden, må denne bort samtidig — og motsatt.
+            */}
+            <li>
+              <span className="font-medium">{t('processorSentryLabel')}</span>{' '}
+              {t('processorSentryDesc')}{' '}
+              <a
+                href="https://sentry.io/legal/dpa/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-medium text-forest-700 underline"
+              >
+                sentry.io/legal/dpa
+              </a>
+              .
+            </li>
             <li>
               <span className="font-medium">{t('processorMetLabel')}</span> {t('processorAnd')} <span className="font-medium">{t('processorSmhiLabel')}</span>{' '}
               {t('processorWeatherDesc')}

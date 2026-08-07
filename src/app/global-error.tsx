@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import * as Sentry from '@sentry/nextjs';
 import './globals.css';
 import { DEFAULT_LOCALE, LOCALE_COOKIE, isLocale, type Locale } from '@/i18n/config';
 
@@ -54,6 +55,16 @@ export default function GlobalError({
 
   useEffect(() => {
     console.error('global_error', { message: error.message, digest: error.digest });
+    // Kast i rot-layouten er de verste feilene som finnes i WKWebView-skallet:
+    // hele dokumentet er borte, og brukeren ser bare denne siden.
+    //
+    // NB: Sentrys standardoppskrift for global-error rendrer <NextError/> og
+    // ville dermed byttet ut hele den lokaliserte siden over med Next.js' egen
+    // engelske «Application error». Vi fanger feilen og beholder siden.
+    //
+    // Som i src/app/error.tsx: `digest` ⇒ serverfeil, allerede sendt av
+    // onRequestError med ekte melding. Dette objektet er sensurert.
+    if (!error.digest) Sentry.captureException(error);
   }, [error]);
 
   const copy = COPY[locale];

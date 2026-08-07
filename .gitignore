@@ -29,3 +29,9 @@ supabase/.temp/
 Rørlegger.no/
 .vercel
 .env*
+
+# Sentry. SENTRY_AUTH_TOKEN gir SKRIVETILGANG til prosjektet, og dette repoet er
+# OFFENTLIG — tre passord og et kontonummer har allerede lekket denne veien.
+# Se docs-uten-hemmeligheter.test.ts.
+.env.sentry-build-plugin
+.sentryclirc

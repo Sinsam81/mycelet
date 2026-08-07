@@ -68,6 +68,29 @@ describe('App Store-beskrivelsen mot feature-flaggene', () => {
   }
 });
 
+describe('tegn App Store Connect nekter', () => {
+  it('inneholder ingen emoji i beskrivelsen', () => {
+    // App Store Connect avviste beskrivelsen med «This field contains one or
+    // more invalid characters». Årsaken var én enkelt 🍄 på siste linje.
+    //
+    // Feilen er dyr fordi den ikke oppdages før noen limer teksten inn i
+    // skjemaet — altså helt til slutt, når man tror man er ferdig.
+    //
+    // Kulepunkt (•), tankestrek (—), «hermetegn» og é er derimot GREIE. Det er
+    // bare tegn over U+2500, altså emoji og symboler, som ryker.
+    const emoji = [...beskrivelsen()].filter((c) => (c.codePointAt(0) ?? 0) > 0x2500);
+    expect(
+      emoji,
+      `Beskrivelsen inneholder ${emoji.join(' ')} — App Store Connect avviser feltet. ` +
+        `Kulepunkt, tankestrek og «» er greie; emoji er det ikke.`
+    ).toEqual([]);
+  });
+
+  it('holder seg innenfor Apples 4000 tegn', () => {
+    expect(beskrivelsen().length).toBeLessThan(4000);
+  });
+});
+
 describe('metadata-tall som eldes', () => {
   it('lover ikke flere arter enn katalogen har', () => {
     // Beskrivelsen sier «over N arter». N må være lavere enn det katalogen
