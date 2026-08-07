@@ -14,6 +14,7 @@
  */
 
 import { buildExplanation, type ExplanationWeather } from '@/lib/utils/prediction-explanation';
+import { FORECAST_GREEN_MIN } from '@/lib/utils/forecast-scale';
 import { DEFAULT_LOCALE, type Locale } from '@/i18n/config';
 
 export interface MushroomDayAssessment {
@@ -140,12 +141,36 @@ interface DayCopy {
 }
 
 /**
- * Portene for «perfekt soppdag». Navngitt fordi verdictFor() må bruke NØYAKTIG
- * de samme tallene når den forklarer hvorfor en dag ikke slapp gjennom — ellers
- * kan kortet si «marka er for tørr» om en dag som strøk på noe annet.
+ * Portene for «perfekt soppdag».
+ *
+ * ⚠️ TERSKELEN ER DEN SAMME SOM FARGEN BRUKER, OG MÅ FORBLI DET.
+ *
+ * Den sto på 65 mens ringen krevde 85 for å bli grønn — to terskler, tjue poeng
+ * fra hverandre, som dømte nøyaktig samme tall på nøyaktig samme kort. Følgen
+ * var at overskriften «🍄 Perfekt soppdag i dag!» sto over en GUL ring.
+ * Uttømmende oppregning av nåbare værkombinasjoner i høysesong: 31 passerer
+ * optimal-porten, og 25 av dem (81 %) tegnes gult.
+ *
+ * 65 var dessuten under 25-persentilen i appens egen målte sesongfordeling
+ * (p25 = 73, median = 86, n = 99 176 dagscorer). «Perfekt» kunne altså fyre på
+ * en dag som var dårligere enn fem av seks dager i sesongen.
+ *
+ * forecast-scale.ts hevdet å ha samlet «fire ulike terskelsett». Denne var det
+ * femte, og den styrte den mest bombastiske setningen appen har.
  */
-const OPTIMAL_SCORE_MIN = 65;
+const OPTIMAL_SCORE_MIN = FORECAST_GREEN_MIN;
 const OPTIMAL_RAIN_MIN_MM = 15;
+
+/**
+ * Fra hvilket tall kortet skal FORKLARE hvorfor dagen ikke ble perfekt.
+ *
+ * Bevisst lavere enn feiringsporten, og bevisst et eget tall. Da OPTIMAL_SCORE_MIN
+ * ble hevet til 85, ville en felles konstant tatt med seg forklaringene i fallet:
+ * en dag på 78 med tørr mark ville mistet «Alt stemmer — bortsett fra marka» og
+ * fått den intetsigende «ikke helt optimale» i stedet. Det var nettopp den
+ * intetsigende varianten forrige runde fjernet.
+ */
+const EXPLAIN_SCORE_MIN = 65;
 
 const COPY: Record<Locale, DayCopy> = {
   nb: {
@@ -240,7 +265,8 @@ export function assessMushroomDay(
     if (!iw) return { title: c.titleOffSeason, message: c.messageOffSeason };
     // Bare når tallet er høyt nok til at brukeren undrer seg over avviket.
     // Under det er «ikke helt optimalt» en dekkende beskrivelse i seg selv.
-    if (s >= OPTIMAL_SCORE_MIN) {
+    // NB: EXPLAIN_SCORE_MIN, ikke OPTIMAL_SCORE_MIN — se kommentaren ved dem.
+    if (s >= EXPLAIN_SCORE_MIN) {
       if (!m) return { title: c.titleDrySoil, message: c.messageDrySoil };
       if (r < OPTIMAL_RAIN_MIN_MM) return { title: c.titleLittleRain, message: c.messageLittleRain };
     }

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { assessMushroomDay, seasonWeight } from '@/lib/prediction/mushroom-day';
 import type { ExplanationWeather } from '@/lib/utils/prediction-explanation';
+import { forecastBand } from '@/lib/utils/forecast-scale';
 
 const base: ExplanationWeather = {
   temperatureC: 14,
@@ -268,5 +269,53 @@ describe('ringen og teksten skal peke samme vei', () => {
   it('svarer på svensk', () => {
     const d = assessMushroomDay({ ...VÅT_MILD_HØST, soilMoistureIndex: 0.438 }, 9, 'sv');
     expect(d.title).toContain('marken');
+  });
+});
+
+/**
+ * REGRESJONSVAKT — overskriften og ringfargen dømmer samme tall.
+ *
+ * «🍄 Perfekt soppdag i dag!» fyrte på score 65 mens ringen krevde 85 for å bli
+ * grønn. Brukeren så altså «Perfekt soppdag» over en GUL ring: uttømmende
+ * oppregning av nåbare værkombinasjoner i høysesong ga 31 dager gjennom
+ * optimal-porten, hvorav 25 (81 %) ble tegnet gult.
+ *
+ * 65 lå dessuten under 25-persentilen i appens egen målte sesongfordeling
+ * (p25 = 73, median = 86) — «perfekt» kunne fyre på en dag som var dårligere
+ * enn fem av seks dager i sesongen.
+ */
+describe('«perfekt» og fargen kan ikke si hver sin ting', () => {
+  const VÆR: Array<[string, Partial<ExplanationWeather>]> = [
+    ['vått og mildt', { temperatureC: 14, humidityPct: 88, rain3dMm: 12, rain7dMm: 35, rain14dMm: 60 }],
+    ['grensetilfelle', { temperatureC: 14, humidityPct: 70, rain3dMm: 5, rain7dMm: 15, rain14dMm: 25 }],
+    ['kjølig og fuktig', { temperatureC: 8, humidityPct: 90, rain3dMm: 8, rain7dMm: 25, rain14dMm: 45 }],
+    ['varmt og tørt', { temperatureC: 24, humidityPct: 45, rain3dMm: 0, rain7dMm: 2, rain14dMm: 4 }],
+    ['perfekt', { temperatureC: 13, humidityPct: 92, rain3dMm: 15, rain7dMm: 45, rain14dMm: 80 }]
+  ];
+
+  it('feirer aldri en dag som ikke også ville fått grønn ring', () => {
+    for (let month = 1; month <= 12; month++) {
+      for (const [navn, vær] of VÆR) {
+        const d = assessMushroomDay({ ...base, ...vær }, month);
+        if (!d.optimal) continue;
+        expect(
+          forecastBand(d.score, d.optimal),
+          `${navn} i måned ${month}: score ${d.score} feires som perfekt, men ringen er ikke grønn`
+        ).toBe('green');
+      }
+    }
+  });
+
+  it('beholder forklaringen på hvorfor en god dag ikke ble perfekt', () => {
+    // 78 poeng med tørr mark skal fortsatt si HVA som mangler — ikke falle
+    // tilbake på den intetsigende «ikke helt optimale». Det var nettopp den
+    // forrige runde fjernet, og en felles konstant ville tatt den med i fallet.
+    const d = assessMushroomDay(
+      { ...base, temperatureC: 14, humidityPct: 88, rain3dMm: 12, rain7dMm: 35, rain14dMm: 60, soilMoistureIndex: 0.4 },
+      9
+    );
+    expect(d.optimal).toBe(false);
+    expect(d.score).toBeGreaterThanOrEqual(65);
+    expect(d.title, 'skal navngi porten som ikke slapp gjennom').toContain('marka');
   });
 });
