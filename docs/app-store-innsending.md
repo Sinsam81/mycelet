@@ -25,15 +25,30 @@
 >
 > ```
 > ✅ Kode, rensing, tester (1472), App Privacy → 8 datatyper
-> 🔜 A  Merge #153            ← blokkert av GitHub-driftsforstyrrelse, ikke av oss
+> ✅ A  Merge #153 — merget 2026-08-07 kl. 09:10, deployet til prod
+> ✅ C  RØYKTEST BESTÅTT på prod 2026-08-07 kl. 09:22
 > 🔜 B  Source maps: 3 variabler i Vercel   (~5 min, din Sentry-innlogging)
-> 🛑 C  RØYKTEST på prod — HARD STOPP før innsending
 > ```
 >
-> **C er ikke en formalitet.** Lander ikke en ekte testfeil i dashbordet, har vi
-> betalt hele papirarbeidet mot Apple for ingenting — og da skal Sentry ut igjen
-> FØR innsending, ikke sendes inn i blinde. CSP-en er håndhevende: er verten feil,
-> blokkeres hver rapport stille og dashbordet er tomt for alltid uten én feilmelding.
+> **Røyktesten er verifisert ende til ende på www.mycelet.com**, ikke antatt:
+>
+> | ledd | bevis |
+> |---|---|
+> | DSN bakt inn i prod-bundelen | funnet i `/_next/static/chunks/0jpesu4w67i29.js` |
+> | CSP slipper verten gjennom | `connect-src` på prod inneholder `https://*.ingest.de.sentry.io` |
+> | SDK-en initialisert | `window.__SENTRY__.version === '10.69.0'` |
+> | feilen faktisk fanget | feilobjektet fikk `__sentry_captured__: true` |
+> | pakken sendt til riktig sted | `POST o4511865662406656.ingest.de.sentry.io/api/4511865728270416/envelope/` |
+> | Sentry tok imot | **HTTP 200** — tre av tre |
+>
+> Testen ble kjørt fra `/auth/login`, ikke fra `/`. Rot-URL-en serverer
+> landingssiden til utloggede, og den har **all JavaScript strippet** — Sentry
+> finnes ikke der. En røyktest på forsiden ville gitt falsk negativ.
+>
+> Nyttig å vite senere: `window.fetch` kan ikke avlyttes for å inspisere det
+> Sentry sender. SDK-en beholder en egen, uinstrumentert `fetch` for å unngå at
+> feilrapportering utløser nye feilrapporter. Innholdet må verifiseres med tester
+> i stedet — se `src/lib/sentry/__tests__/scrub.test.ts`.
 
 **Skrevet 2026-08-05.** Erstatter rekkefølgen i `launch-critical-path.md` og
 `neste-okt.md`, som motsa hverandre på tre punkter. De to filene beholdes for
@@ -215,20 +230,39 @@ Kildekartene lekker ikke uten dette: `withSentryConfig` lager dem under bygget o
 sletter dem igjen etterpå. Verifisert — `.next/static` inneholder null `.map`-filer
 etter et bygg uten nøkkel.
 
-## Sentry-tillegg C — 🛑 røyktesten (må gjøres FØR innsending)
+## ~~Sentry-tillegg C — røyktesten~~ ✅ BESTÅTT 2026-08-07
 
-Åpne https://www.mycelet.com i en nettleser, åpne utviklerkonsollen og kjør:
+Kjørt mot produksjon. Bevisene står i START HER-boksen øverst. Tre testfeil ble
+sendt og kvittert med HTTP 200 av Sentry:
+
+- `Mycelet roykttest 2026-08-07T07:21:49.884Z`
+- `Mycelet roykttest 2026-08-07T07:22:17.669Z`
+- `Mycelet personvern-roykttest`
+
+👤 **Bekreft gjerne selv** at de tre står i https://mycelet.sentry.io/issues/ —
+det er det siste leddet jeg ikke kan se, siden dashbordet krever din innlogging.
+
+**Slik gjentar du testen** (etter en større endring i Sentry-oppsettet, eller
+hvis dashbordet en dag blir mistenkelig stille). Gå til
+https://www.mycelet.com/auth/login — **ikke** forsiden, den har ingen JavaScript —
+åpne utviklerkonsollen og kjør:
 
 ```
 setTimeout(() => { throw new Error('Mycelet roykttest ' + Date.now()) })
 ```
 
-Feilen skal dukke opp i https://mycelet.sentry.io/issues/ innen et minutt.
+Sjekk så at det gikk ut på nettverket:
 
-**Gjør den ikke det, skal Sentry ut av appen før innsending.** Da har vi erklært
-til Apple at vi samler inn diagnostikk uten at vi faktisk gjør det, og det er en
-erklæring som er feil. Mest sannsynlige årsak i så fall: `NEXT_PUBLIC_SENTRY_DSN`
-manglet på det bygget, eller CSP-verten i `next.config.js` matcher ikke DSN-en.
+```
+performance.getEntriesByType('resource').filter(e=>/ingest.*sentry/.test(e.name)).map(e=>e.responseStatus)
+```
+
+Får du `[200]`, virker kjeden. Får du en tom liste, er rapporten blokkert — se på
+CSP-en i `next.config.js` og på `NEXT_PUBLIC_SENTRY_DSN` i Vercel.
+
+Hvis testen en gang IKKE går gjennom: **da skal Sentry ut av appen før
+innsending.** Vi skal ikke erklære til Apple at vi samler inn diagnostikk vi
+ikke samler inn.
 
 ## Steg 4 — Xcode (👤 15–30 min) ← **NESTE**
 
