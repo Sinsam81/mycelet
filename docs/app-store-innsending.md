@@ -27,8 +27,10 @@
 > ✅ Kode, rensing, tester (1472), App Privacy → 8 datatyper
 > ✅ A  Merge #153 — merget 2026-08-07 kl. 09:10, deployet til prod
 > ✅ C  RØYKTEST BESTÅTT på prod 2026-08-07 kl. 09:22
-> 🔜 B  Source maps: 3 variabler i Vercel   (~5 min, din Sentry-innlogging)
+> ✅ B  Source maps på plass 2026-08-07 kl. 10:05 — stacktracene er lesbare
 > ```
+>
+> **Sentry er ferdig. Ingenting gjenstår der.**
 >
 > **Røyktesten er verifisert ende til ende på www.mycelet.com**, ikke antatt:
 >
@@ -203,7 +205,22 @@ NÅ:   arkiver  →  last opp  →  test via TestFlight  →  send inn
 Det er ikke et tap. Bygget skal opp uansett, og en TestFlight-test er nærmere det
 reviewer faktisk gjør enn et lokalt debug-bygg.
 
-## Sentry-tillegg B — source maps (👤 ~5 min, valgfritt men anbefalt)
+## ~~Sentry-tillegg B — source maps~~ ✅ FERDIG 2026-08-07
+
+De tre variablene ligger på Production i Vercel. Byggeloggen bekrefter det:
+`[@sentry/nextjs - After Production Compile] Info: Successfully uploaded source maps to Sentry`.
+
+⚠️ **Kildekartene lastes opp og slettes så fra serveren.** Verifisert: seks
+tilfeldige `.map`-filer på www.mycelet.com svarer **403**. Det er ikke en
+selvfølge — blir de liggende, kan hvem som helst laste ned hele kildekoden til
+appen. Sentry rydder dem selv, men KUN så lenge ingen setter
+`productionBrowserSourceMaps` manuelt i `next.config.js`. Advarselen står i den
+fila; ikke rør den linja.
+
+Nøkkelen er en **organisasjonsnøkkel** (`vercel-sourcemaps`), ikke en personlig.
+Må den lages på nytt en dag, står framgangsmåten under.
+
+### Slik ble det satt opp
 
 **Uten dette virker feilovervåkingen, men rapportene blir vanskelige å lese.**
 Du ser hvilken feil som skjedde og hvor i appen — men i stedet for en kodelinje
