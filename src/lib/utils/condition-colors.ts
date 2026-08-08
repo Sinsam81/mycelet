@@ -1,4 +1,5 @@
 import { scoreToCondition } from '@/lib/utils/prediction';
+import { DISTINCT_SCORE_DELTA } from '@/lib/prediction/area-report';
 
 /**
  * One colour table for everything on the map that is coloured by score.
@@ -72,13 +73,68 @@ const FLAT_FILL_OPACITY = 0.22;
  * hvilke av dem som er minst dårlige. Det er en rangering, ikke en spådom, og
  * det er den eneste romlige påstanden valideringen bærer (AUC ~0,52).
  */
+/**
+ * ═══════════════════════════════════════════════════════════════════════════
+ * TREDJE FORSØK: ABSOLUTT GULV, RELATIV KONTRAST OPPÅ
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * Forsøk 3 (ren normalisering mot utsnittet, bunn 0,12) løste synligheten, men
+ * skapte en ny feil: SAMME RUTE SKIFTET UTSEENDE NÅR BRUKEREN PANORERTE.
+ * Dekkevnen ble regnet mot min og maks blant rutene som tilfeldigvis var på
+ * skjermen, og rutene lastes på nytt ved hver `moveend`.
+ *
+ * Målt på et typisk utsnitt: en rute på 52 tegnes 0,12 når utsnittet spenner
+ * 52-58, og 0,35 så snart brukeren drar kartet så en rute på 45 kommer med —
+ * nesten tre ganger så synlig, uten at noe er beregnet på nytt. Samme skog,
+ * samme dag, samme score.
+ *
+ * Forsvaret var at «ærligheten ligger i FARGEN, som er absolutt». Men målingen
+ * rett over sier at 68 % av utsnittene er ENSFARGEDE ved standard zoom og 85 %
+ * ved mobil-zoom. I nettopp de tilfellene bærer fargen null informasjon, og det
+ * eneste brukeren ser er den relative dekkevnen. Da er forsvaret tomt.
+ *
+ * Løsningen er ikke å velge én av dem, men å dele oppgaven:
+ *
+ *   gulv per bøtte  →  hvor bra ruta er I SEG SELV (kan ikke endres av panorering)
+ *   relativt påslag →  hvilke ruter i utsnittet som er best (maks 0,16)
+ *
+ * En «good»-rute kan dermed aldri tegnes svakere enn 0,32 uansett hva annet som
+ * er på skjermen, og panorering kan flytte den med høyst 0,16. Gulvene ligger
+ * høyt nok til at ingenting forsvinner — det var feilen i forsøk 2, der «poor»
+ * fikk 0,05 og hele laget ble borte i de 64 % av utsnittene der alt var poor.
+ *
+ * Er spennet under støyterskelen appen selv bruker (DISTINCT_SCORE_DELTA = 8),
+ * gis INGEN relativ gradering. Da sa kartet før at én av tolv «lovende områder»
+ * var fire ganger mer lovende enn en annen — mens popupen på den svakeste sa
+ * «Området skiller seg lite fra nabolaget». Tegningen påsto en rangering teksten
+ * i samme popup nektet for.
+ */
+/**
+ * Gulvene er valgt så to eksisterende krav fortsatt holder:
+ * ingen rute under 0,12 (under det forsvinner den over et detaljert topokart),
+ * og ingen over 0,55 (over det blir bakgrunnskartet uleselig).
+ * 0,40 + 0,15 = 0,55 er derfor taket.
+ */
+const BUCKET_FLOOR: Record<ConditionKey, number> = {
+  poor: 0.12,
+  moderate: 0.22,
+  good: 0.32,
+  excellent: 0.4
+};
+/** Hvor mye den relative plasseringen i utsnittet får flytte en rute. */
+const RELATIVE_SPAN = 0.15;
+
 export function fillOpacitiesForScores(scores: number[]): number[] {
   if (scores.length === 0) return [];
   const min = Math.min(...scores);
   const max = Math.max(...scores);
-  if (max === min) return scores.map(() => FLAT_FILL_OPACITY);
-  const span = MAX_FILL_OPACITY - MIN_FILL_OPACITY;
-  return scores.map((s) => MIN_FILL_OPACITY + ((s - min) / (max - min)) * span);
+  const spread = max - min;
+  const floor = (s: number) => BUCKET_FLOOR[scoreToCondition(s)];
+
+  // Under støyterskelen finnes det ingen rangering å tegne. Bare gulvet.
+  if (spread < DISTINCT_SCORE_DELTA) return scores.map(floor);
+
+  return scores.map((s) => floor(s) + ((s - min) / spread) * RELATIVE_SPAN);
 }
 
 /**

@@ -52,7 +52,11 @@ describe('fillOpacitiesForScores — relativ til utsnittet', () => {
     const innlandet = [40, 42, 43, 45, 46, 47, 49];
     const o = fillOpacitiesForScores(innlandet);
     expect(new Set(o).size, 'hver score må få sin egen dekkevne').toBe(innlandet.length);
-    expect(Math.max(...o) - Math.min(...o)).toBeGreaterThan(0.3);
+    // Var > 0,3 da dekkevnen var rent relativ. Nå er inntil 0,15 satt av til
+    // rangeringen og resten til å si hvor bra ruta er i seg selv — se
+    // BUCKET_FLOOR. Kontrasten er mindre, men den betyr nå det samme uansett
+    // hva annet som er på skjermen.
+    expect(Math.max(...o) - Math.min(...o)).toBeGreaterThan(0.14);
   });
 
   it('lar ingen rute bli usynlig', () => {
@@ -83,11 +87,30 @@ describe('fillOpacitiesForScores — relativ til utsnittet', () => {
     expect(fillOpacitiesForScores([])).toEqual([]);
   });
 
-  it('gir den beste ruta i utsnittet full styrke, uansett absolutt nivå', () => {
-    // Poenget: et helgrått utsnitt skal fortsatt PEKE. Fargen sier at det er
-    // svakt; dekkevnen sier hvilken av dem som er minst svak.
+  /**
+   * Denne testen krevde tidligere det MOTSATTE: at et svakt utsnitt fikk
+   * nøyaktig samme maksimale dekkevne som et sterkt. Begrunnelsen var at et
+   * helgrått utsnitt skal «peke» — men følgen var at et middelmådig område
+   * kunne se like lovende ut som et virkelig godt, så lenge man ikke hadde
+   * begge på skjermen samtidig. Og de kommer aldri på skjermen samtidig.
+   */
+  it('lar et svakt utsnitt se svakere ut enn et sterkt', () => {
     const svakt = fillOpacitiesForScores([40, 44, 49]);
     const sterkt = fillOpacitiesForScores([70, 78, 85]);
-    expect(Math.max(...svakt)).toBeCloseTo(Math.max(...sterkt), 5);
+    expect(Math.max(...svakt)).toBeLessThan(Math.max(...sterkt));
+    // Men det svake utsnittet PEKER fortsatt: den minst svake er tydeligst.
+    expect(Math.max(...svakt)).toBeGreaterThan(Math.min(...svakt));
+  });
+
+  it('endrer ikke en rutes utseende bare fordi brukeren panorerer', () => {
+    // Kjernen i feilen: rutene lastes på nytt ved hver moveend, og dekkevnen ble
+    // regnet mot min og maks blant dem som tilfeldigvis var på skjermen. Samme
+    // rute, samme score, ulikt utseende.
+    const utsnittA = [58, 57, 56, 55, 54, 52];
+    const utsnittB = [58, 57, 56, 55, 54, 52, 45]; // brukeren drar litt sørover
+    const a = fillOpacitiesForScores(utsnittA)[5]; // ruta på 52
+    const b = fillOpacitiesForScores(utsnittB)[5]; // samme rute
+    // Før: 0,12 mot 0,35 — nesten tre ganger så synlig etter en panorering.
+    expect(Math.abs(a - b), 'panorering skal flytte en rute lite').toBeLessThanOrEqual(0.15);
   });
 });
