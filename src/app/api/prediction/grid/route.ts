@@ -1,3 +1,4 @@
+import { CONDITION_THRESHOLDS } from '@/lib/utils/prediction';
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { fetchRpcPaged } from '@/lib/supabase/paged-rpc';
@@ -10,7 +11,7 @@ import { weightedOccurrenceDensity, countWithinKm, OCCURRENCE_FETCH_LIMIT } from
 import { buildAreaReport, summariseNeighbourhood } from '@/lib/prediction/area-report';
 import { getElevation } from '@/lib/terrain';
 import { computeHabitatScore } from '@/lib/forest';
-import { buildSpotSummary } from '@/lib/utils/prediction-explanation';
+import { buildSpotSummary, scoreVerdict } from '@/lib/utils/prediction-explanation';
 import type { SpeciesContext } from '@/lib/utils/species-scoring';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { getClientKey, rateLimitResponse } from '@/lib/rate-limit/route';
@@ -418,7 +419,20 @@ export async function GET(request: NextRequest) {
     // (for "5 lovende steder nær meg"); the default returns lean cells for the heatmap.
     let cells: Record<string, unknown>[];
     if (effectiveTop) {
-      const topCells = [...allCells].sort((a, b) => b.score - a.score).slice(0, effectiveTop);
+      // ⚠️ ABSOLUTT BUNNGRENSE FØR NOE KALLES «LOVENDE».
+      //
+      // Uten den var «Lovende områder» bare topp-N i det utsnittet brukeren
+      // tilfeldigvis søkte i — uansett hvor lave scorene var. Regnet med appens
+      // egne formler for en granskog i januar (250 m³/ha, bonitet 14, −2 °C,
+      // 88 % RF, 4 mm/3 d) blir scoren 28 av 100. Mars gir 34, en tørr juni 21.
+      // Alle godt under CONDITION_THRESHOLDS.moderate, altså «Lite sopp i
+      // skogen nå» — og brukeren fikk likevel tolv «lovende områder».
+      //
+      // Ordet «lovende» er en påstand. Har vi ingenting å love, skal vi si det.
+      const kandidater = [...allCells]
+        .filter((c) => c.score >= CONDITION_THRESHOLDS.moderate)
+        .sort((a, b) => b.score - a.score);
+      const topCells = kandidater.slice(0, effectiveTop);
       // Nabolaget rapporten sammenligner med: alle rutene i det samme søket som
       // faktisk fikk skogdata. Det er det eneste «rundt her» vi har målt — og
       // når ruta ikke skiller seg fra det, skal rapporten si nettopp det.
@@ -434,7 +448,23 @@ export async function GET(request: NextRequest) {
         // Free tier: coordinates and score only — the persuasive "why" and the
         // per-spot species list are the premium half of the feature.
         if (!paid) {
-          return { lat: c.lat, lng: c.lng, score: c.score, forestType: c.forestType, productivity: c.productivity };
+          // `verdict` sendes nå OGSÅ til gratisbrukere.
+          //
+          // Den er én streng fra scoreVerdict(score, locale) og koster
+          // ingenting — men den var det ENESTE stedet den absolutte sannheten
+          // sto. Uten den fikk en gratisbruker «Lovende område · 62/100» uten
+          // noe som fortalte hva 62 betyr. Det er ikke en premium-funksjon å
+          // få vite hva tallet man ser på betyr; det er en forutsetning for at
+          // tallet ikke lyver. Den overbevisende «hvorfor»-teksten og artslista
+          // er fortsatt betalt.
+          return {
+            lat: c.lat,
+            lng: c.lng,
+            score: c.score,
+            forestType: c.forestType,
+            productivity: c.productivity,
+            verdict: scoreVerdict(c.score, locale)
+          };
         }
         const habitat = speciesHabitat ? computeHabitatScore(c.forest, speciesHabitat, locale) : null;
         const summary = buildSpotSummary({

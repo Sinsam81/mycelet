@@ -128,7 +128,14 @@ const MEASURED_AT_POINT_KM = 0.05;
  * 3–15 km unna) fant ingen signifikant forskjell innenfor skog, så terskelen
  * er satt bevisst høyt: små utslag skal leses som støy, ikke som en påstand.
  */
-const DISTINCT_SCORE_DELTA = 8;
+/**
+ * Under dette regner appen en forskjell som STØY, ikke som en påstand.
+ *
+ * Eksportert fordi kartlaget må bruke NØYAKTIG samme tall: det gikk ikke an at
+ * områderapporten skrev «Området skiller seg lite fra nabolaget» samtidig som
+ * sirkelen over den var malt fire ganger kraftigere enn nabosirkelen.
+ */
+export const DISTINCT_SCORE_DELTA = 8;
 
 interface AreaReportCopy {
   headings: Record<AreaReportSectionId, string>;
