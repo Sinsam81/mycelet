@@ -55,9 +55,32 @@ interface PurchasesPluginLike {
 
 let configuredForUser: string | null = null;
 
-async function loadPlugin(): Promise<PurchasesPluginLike> {
-  const mod = await import('@revenuecat/purchases-capacitor');
-  return mod.Purchases as unknown as PurchasesPluginLike;
+/**
+ * ⚠️ PLUGIN-OBJEKTET MÅ PAKKES INN. IKKE returner det bart fra en async-funksjon.
+ *
+ * Dette var grunnen til at kjøpsknappen aldri dukket opp i iOS-appen — ikke
+ * RevenueCat-oppsettet, ikke manglende binær, ikke produktstatusen hos Apple.
+ * Feilen lå her, og den har vært her siden filen ble skrevet.
+ *
+ * Capacitor gir deg ikke plugin-objektet selv, men en PROXY som gjør ethvert
+ * feltoppslag om til et kall mot den native siden. Når en async-funksjon
+ * returnerer en verdi, sjekker JavaScript om verdien er «thenable» — den leser
+ * `.then` på den. Proxyen svarer med en funksjon på ALT, så JavaScript tror den
+ * har fått et løfte og KALLER `.then()`. Capacitor sender det videre til iOS som
+ * et native metodekall som ikke finnes, og kaster:
+ *
+ *     "Purchases.then()" is not implemented on ios
+ *
+ * Feilen ble fanget av `catch {}` i /pricing og forsvant sporløst. Den dukket
+ * først opp da Sentry og navngitt diagnostikk kom på plass (PR #157).
+ *
+ * Innpakningen i et vanlig objekt bryter kjeden: JavaScript leser `.then` på
+ * `{ purchases }`, som er undefined, og lar proxyen være i fred.
+ */
+function loadPlugin(): Promise<{ purchases: PurchasesPluginLike }> {
+  return import('@revenuecat/purchases-capacitor').then((mod) => ({
+    purchases: mod.Purchases as unknown as PurchasesPluginLike
+  }));
 }
 
 /** True when running in the native shell AND the RevenueCat key is configured. */
@@ -74,7 +97,7 @@ export async function configurePurchases(userId: string): Promise<boolean> {
   if (configuredForUser === userId) return true;
 
   const apiKey = process.env.NEXT_PUBLIC_REVENUECAT_APPLE_KEY as string;
-  const purchases = await loadPlugin();
+  const { purchases } = await loadPlugin();
   const { isConfigured } = await purchases.isConfigured();
   if (isConfigured) {
     await purchases.logIn({ appUserID: userId });
@@ -124,7 +147,7 @@ export async function getIapOffers(): Promise<IapOffer[]> {
     return [];
   }
 
-  const purchases = await loadPlugin();
+  const { purchases } = await loadPlugin();
   const offerings = await purchases.getOfferings();
   if (!offerings.current) {
     // Ingen «current offering» i RevenueCat — enten er ingen offering satt som
@@ -179,7 +202,7 @@ export async function getIapOffers(): Promise<IapOffer[]> {
 export async function purchaseIapOffer(offer: IapOffer, planView: PlanViewState): Promise<IapPurchaseOutcome> {
   if (getBlockingPaidPlan(planView)) return 'blocked-active-plan';
 
-  const purchases = await loadPlugin();
+  const { purchases } = await loadPlugin();
   try {
     await purchases.purchasePackage({ aPackage: offer.rcPackage });
     return 'success';
@@ -194,7 +217,7 @@ export async function purchaseIapOffer(offer: IapOffer, planView: PlanViewState)
  * came back (the webhook then refreshes billing_subscriptions server-side).
  */
 export async function restoreIapPurchases(): Promise<boolean> {
-  const purchases = await loadPlugin();
+  const { purchases } = await loadPlugin();
   const { customerInfo } = await purchases.restorePurchases();
   return Object.keys(customerInfo.entitlements.active ?? {}).length > 0;
 }
