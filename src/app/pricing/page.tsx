@@ -1,5 +1,7 @@
 'use client';
 
+import { useQueryClient } from '@tanstack/react-query';
+import { BILLING_STATUS_KEY } from '@/lib/hooks/useBilling';
 import * as Sentry from '@sentry/nextjs';
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
@@ -56,6 +58,7 @@ const SEASON_PER_MONTH = Math.round(SEASON_YEARLY / 12);
 // export at the bottom wraps PricingInner.
 function PricingInner() {
   const t = useTranslations('Pricing');
+  const queryClient = useQueryClient();
   const locale = useLocale();
   const searchParams = useSearchParams();
 
@@ -207,7 +210,24 @@ function PricingInner() {
       await new Promise((resolve) => setTimeout(resolve, attempt === 0 ? 2000 : 5000));
       if (unmountedRef.current) return;
       const data = await loadStatus();
-      if (data?.capabilities.paid) return;
+      if (data?.capabilities.paid) {
+        // Abonnementet er aktivt. To ting MÅ skje her, og ingen av dem gjorde det:
+        //
+        // 1. «Takk for kjøpet! Aktiverer abonnementet ditt …» må bort. Løkka
+        //    returnerte bare, så meldingen ble stående for alltid — kunden så
+        //    «aktiverer» over et kort som allerede sa «Sesongpass · Aktiv».
+        // 2. Den DELTE betalingsstatusen må friskes opp. Headerens plan-merke
+        //    leser den via TanStack Query med fem minutters levetid, mens
+        //    loadStatus() bare oppdaterer denne sidens egen tilstand. Uten
+        //    dette sto det «Gratis» øverst på hvert skjermbilde i appen i opptil
+        //    fem minutter etter at kunden hadde betalt.
+        //
+        // Begge deler er verst nettopp her: i sekundene etter at noen har gitt
+        // deg penger.
+        setIapNotice(null);
+        void queryClient.invalidateQueries({ queryKey: BILLING_STATUS_KEY });
+        return;
+      }
     }
     if (!unmountedRef.current) setIapNotice(t('iapActivationDelayed'));
   };
