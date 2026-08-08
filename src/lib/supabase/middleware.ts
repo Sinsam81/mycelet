@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { logger } from '@/lib/log';
 import { getOrCreateRequestId } from '@/lib/log/request';
 import { LOCALE_COOKIE, isLocale, type Locale } from '@/i18n/config';
+import { classifyTrafficSource } from '@/lib/analytics/traffic-source';
 
 /**
  * Fasit for hvilke ruter en utlogget besøkende sendes til innlogging fra.
@@ -133,6 +134,26 @@ export async function updateSession(request: NextRequest) {
   // src/app/page.tsx instead — verify this path with `next start` or against
   // prod.
   if (request.nextUrl.pathname === '/' && !user) {
+    // Hvor kom de fra? Landingssiden har null JavaScript, så Google Analytics
+    // kjører ikke her — se den lange forklaringen i @/lib/analytics/traffic-source.
+    // Dette er det ENESTE stedet vi kan se det, og det koster ingenting:
+    // henvisningen står allerede i forespørselen.
+    //
+    // Ingen IP, ingen informasjonskapsler, ingen full adresse — bare hvilken
+    // tjeneste de kom fra. Teller trafikk, sporer ikke personer.
+    const kilde = classifyTrafficSource(
+      request.headers.get('referer'),
+      request.nextUrl.host,
+      request.nextUrl.searchParams.get('utm_source')
+    );
+    log.info('landing.besok', {
+      kilde: kilde.kind,
+      vert: kilde.host,
+      kampanje: kilde.campaign,
+      utm_medium: request.nextUrl.searchParams.get('utm_medium'),
+      utm_campaign: request.nextUrl.searchParams.get('utm_campaign')
+    });
+
     const landingLocale = resolveLandingLocale(request);
     const landingFile = landingLocale === 'sv' ? '/landing/index.sv.html' : '/landing/index.html';
     const landingResponse = NextResponse.rewrite(new URL(landingFile, request.url), {
