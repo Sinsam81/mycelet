@@ -25,6 +25,8 @@ export default function sitemap(): MetadataRoute.Sitemap {
 
   const sider: Array<{ sti: string; prioritet: number; frekvens: 'daily' | 'weekly' | 'monthly' | 'yearly' }> = [
     { sti: '', prioritet: 1.0, frekvens: 'daily' },
+    // Den delbare siden — oppdateres daglig og er hele poenget med å bli funnet.
+    { sti: '/soppforhold', prioritet: 0.95, frekvens: 'daily' },
     // Soppforholdene endrer seg hver dag — det er hele produktet.
     { sti: '/calendar', prioritet: 0.8, frekvens: 'daily' },
     { sti: '/species', prioritet: 0.8, frekvens: 'weekly' },
