@@ -30,6 +30,21 @@ import { BILLING_PLANS, FREE_DAILY_AI_LIMIT } from '@/lib/billing/plans';
 const PREMIUM_MONTHLY = BILLING_PLANS.premium.monthlyNok ?? 79;
 const SEASON_YEARLY = BILLING_PLANS.season_pass.yearlyNok ?? 249;
 
+/** Én rad i FAQ-en. Egen komponent fordi én av dem skjules i iOS-skallet. */
+function FaqRow({ q, a }: { q: string; a: string }) {
+  return (
+    <details className="group py-2.5">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-2 text-sm font-medium text-gray-900">
+        {q}
+        <span aria-hidden="true" className="text-gray-400 transition-transform group-open:rotate-45">
+          +
+        </span>
+      </summary>
+      <p className="mt-1.5 text-sm leading-relaxed text-gray-700">{a}</p>
+    </details>
+  );
+}
+
 /** Mini soppforhold-gauge for the phone mockup (static, matches a real July day). */
 function MockGauge() {
   const radius = 26;
@@ -151,8 +166,14 @@ export async function LandingPage() {
     { q: t('faqFreeQ'), a: t('faqFreeA', { limit: FREE_DAILY_AI_LIMIT }) },
     { q: t('faqSwedenQ'), a: t('faqSwedenA') },
     { q: t('faqAiQ'), a: t('faqAiA') },
-    { q: t('faqOfflineQ'), a: t('faqOfflineA') },
-    { q: t('faqIosQ'), a: t('faqIosA') }
+    { q: t('faqOfflineQ'), a: t('faqOfflineA') }
+    // «Når kommer iOS-appen?» er FLYTTET ned i en NonNativeOnly-blokk. Den lå
+    // her, og siden dette er den første skjermen i iOS-skallet (capacitor
+    // server.url peker på www.mycelet.com, og /-ruten viser LandingPage til
+    // alle som ikke er logget inn), fortalte appen sin egen anmelder hos Apple
+    // at den «er til vurdering hos Apple» og ba dem åpne mycelet.com i
+    // nettleseren i mellomtiden. Det er en oppfordring ut av appen, til et sted
+    // der de samme abonnementene selges via Stripe — retningslinje 3.1.1.
   ];
 
   return (
@@ -245,7 +266,18 @@ export async function LandingPage() {
         </div>
       </section>
 
-      {/* ── Priser ──────────────────────────────────────────────────── */}
+      {/* ── Priser ──────────────────────────────────────────────────────
+          Skjult i iOS-skallet. Beløpene her er hardkodede norske kroner fra
+          BILLING_PLANS (Stripe-prisen), mens App Store krever at prisen en
+          bruker ser, er den App Store faktisk vil trekke — i kontoens egen
+          valuta. En svensk eller amerikansk konto fikk «79 kr» servert på
+          appens første skjerm. Prissiden (/pricing) gjør dette riktig: den
+          leser priceString fra RevenueCat. Her finnes ikke den muligheten,
+          fordi seksjonen vises til utloggede brukere før RevenueCat er satt
+          opp — så da vises den ikke i appen i det hele tatt. To «Kom i gang
+          gratis»-knapper står igjen (hero og bunn), så ingen vei bort blir
+          borte. ── Apple 3.1.2. */}
+      <NonNativeOnly>
       <section className="space-y-4">
         <h2 className="text-center font-serif text-3xl font-bold text-forest-900 lg:text-4xl">{t('pricingHeading')}</h2>
         <div className="mx-auto grid max-w-5xl gap-3 sm:grid-cols-3">
@@ -304,6 +336,7 @@ export async function LandingPage() {
           <span className="text-gray-500"> · {t('pricingNote')}</span>
         </p>
       </section>
+      </NonNativeOnly>
 
       {/* ── Sikkerhet ───────────────────────────────────────────────── */}
       <section className="mx-auto max-w-4xl rounded-2xl border border-amber-300 bg-amber-50 p-5">
@@ -319,16 +352,13 @@ export async function LandingPage() {
         <h2 className="text-center font-serif text-3xl font-bold text-forest-900 lg:text-4xl">{t('faqHeading')}</h2>
         <div className="mx-auto max-w-3xl divide-y divide-gray-100 rounded-2xl bg-white p-4 shadow-card">
           {faqs.map((faq) => (
-            <details key={faq.q} className="group py-2.5">
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-2 text-sm font-medium text-gray-900">
-                {faq.q}
-                <span aria-hidden="true" className="text-gray-400 transition-transform group-open:rotate-45">
-                  +
-                </span>
-              </summary>
-              <p className="mt-1.5 text-sm leading-relaxed text-gray-700">{faq.a}</p>
-            </details>
+            <FaqRow key={faq.q} q={faq.q} a={faq.a} />
           ))}
+          {/* Spørsmålet gir bare mening for en som IKKE allerede sitter i
+              iOS-appen. Se kommentaren ved `faqs` over. */}
+          <NonNativeOnly>
+            <FaqRow q={t('faqIosQ')} a={t('faqIosA')} />
+          </NonNativeOnly>
         </div>
       </section>
 

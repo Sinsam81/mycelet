@@ -7,7 +7,7 @@ import { useRouter } from 'next/navigation';
 import { useLocale, useTranslations } from 'next-intl';
 import { PageWrapper } from '@/components/layout/PageWrapper';
 import { Button } from '@/components/ui/Button';
-import { useGeolocation } from '@/lib/hooks/useGeolocation';
+import { getCurrentPositionOnce } from '@/lib/hooks/useGeolocation';
 import { IdentifyError, useIdentify } from '@/lib/hooks/useIdentify';
 import { optimizeImageForIdentification } from '@/lib/utils/image';
 import { isNativePlatform } from '@/lib/native/platform';
@@ -19,7 +19,6 @@ export default function IdentifyPage() {
   const locale = useLocale();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const router = useRouter();
-  const { latitude, longitude } = useGeolocation();
   const identify = useIdentify();
 
   const [error, setError] = useState<string | null>(null);
@@ -53,11 +52,24 @@ export default function IdentifyPage() {
       // photo — the raw file (with GPS metadata) never leaves the device.
       const optimizedBase64 = await optimizeImageForIdentification(file);
 
+      // Posisjonen hentes FØRST her, ikke ved mount.
+      //
+      // Siden kalte useGeolocation() i toppen av komponenten, så iOS spurte om
+      // stedstilgang i samme sekund som brukeren åpnet «Identifiser» — før de
+      // hadde tatt et eneste bilde. Apple ber uttrykkelig om at slike dialoger
+      // kommer når handlingen krever det (5.1.1), og en dialog uten kontekst er
+      // også den sikreste måten å få et «Ikke tillat» på.
+      //
+      // Posisjonen er en hjelp, ikke et krav: den brukes til å vekte hvilke
+      // arter som er sannsynlige. Feiler den, eller sier brukeren nei, går
+      // identifiseringen videre uten koordinater.
+      const coords = await getCurrentPositionOnce().catch(() => null);
+
       const result = await identify.mutateAsync({
         imageBase64: optimizedBase64,
         originalImageDataUrl: `data:image/jpeg;base64,${optimizedBase64}`,
-        latitude: latitude ?? undefined,
-        longitude: longitude ?? undefined
+        latitude: coords?.latitude,
+        longitude: coords?.longitude
       });
 
       sessionStorage.setItem('identifyResult', JSON.stringify(result));

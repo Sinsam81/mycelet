@@ -3,6 +3,7 @@ import { getTranslations } from 'next-intl/server';
 import { PageWrapper } from '@/components/layout/PageWrapper';
 import { getLocale } from 'next-intl/server';
 import { entityFormSuffix, entityMessageValues } from '@/lib/legal/entity';
+import { PurchaseChannelBody } from '@/components/legal/PurchaseChannelBody';
 
 const SECTIONS = [
   'seller', 'productsAndPrices', 'payment', 'angrerett', 'cancellation',
@@ -41,7 +42,16 @@ export default async function KjopsvilkarPage() {
         {SECTIONS.map((key) => (
           <article key={key} className="space-y-1.5">
             <h2 className="font-semibold text-forest-900">{t(`${key}Title`)}</h2>
-            <p className="whitespace-pre-line text-sm leading-relaxed text-gray-800">{t(`${key}Body`, entity)}</p>
+            {key === 'productsAndPrices' ? (
+              // Se PurchaseChannelBody: samme punkt, to utgaver. I appen skal
+              // ikke vilkårene omtale kortkjøp på nettsiden (Apple 3.1.1).
+              <PurchaseChannelBody
+                web={t('productsAndPricesBody', entity)}
+                native={t('productsAndPricesBodyNative', entity)}
+              />
+            ) : (
+              <p className="whitespace-pre-line text-sm leading-relaxed text-gray-800">{t(`${key}Body`, entity)}</p>
+            )}
             {key === 'seller' ? (
               // The "what a sole proprietorship means" paragraph has to change
               // wording entirely for an AS, so it is its own keyed variant.

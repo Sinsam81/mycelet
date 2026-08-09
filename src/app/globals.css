@@ -65,3 +65,12 @@ body {
 .cluster-large {
   background: #1a3409;
 }
+
+/* Skjul web-bare elementer i iOS-skallet FØR første maling.
+   Flagget settes av skriptet øverst i <body> (src/app/layout.tsx); beholderen
+   kommer fra <NonNativeOnly>. React fjerner elementene etter mount uansett —
+   dette er bare for å unngå at de vises i mellomtiden. Se kommentarene begge
+   steder; kort fortalt handler det om Apple 4.8 og 3.1.1. */
+html[data-native='true'] [data-web-only] {
+  display: none !important;
+}

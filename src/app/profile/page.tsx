@@ -229,6 +229,19 @@ export default async function ProfilePage() {
               {t('adminLink')}
             </Link>
           ) : null}
+          {/* Forumet er bevisst holdt ute av bunnmenyen (FLAGS.forumInNav) —
+              et tomt forum får appen til å se død ut. Men i iOS-skallet finnes
+              det ingen adressefelt, så uten en lenke et sted var forumet ikke
+              mulig å nå i det hele tatt. Vi har samtidig fortalt Apple at
+              appen har brukerinnhold, med rapportering og blokkering (1.2).
+              En anmelder som ikke finner det de har fått beskjed om at finnes,
+              avviser under 2.1. Her ligger den, uten å rope. */}
+          <Link
+            href="/forum"
+            className="block rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-800 hover:bg-gray-50"
+          >
+            {t('forumLink')}
+          </Link>
           <Link
             href="/forum/reports"
             className="block rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-800 hover:bg-gray-50"

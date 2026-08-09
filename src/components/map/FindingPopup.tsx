@@ -54,8 +54,12 @@ export function FindingPopup({ finding, displayName }: FindingPopupProps) {
 
       {finding.notes ? <p className="text-sm text-gray-700">{finding.notes}</p> : null}
 
+      {/* Sto som «Se mer», men lenka åpner skrivebildet i forumet — den viser
+          ingenting mer om funnet. Verre: koblingsfeltet der inne lister bare
+          DINE egne funn, så trykker du på en annen brukers nål, får du et tomt
+          skjema. Kartet er den første skjermen en anmelder trykker på. */}
       <Link href={`/forum/new?findingId=${finding.id}`} className="inline-flex text-sm font-medium text-forest-800 hover:underline">
-        {t('seeMore')}
+        {t('shareInForum')}
       </Link>
     </div>
   );
