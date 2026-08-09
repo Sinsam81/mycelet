@@ -51,7 +51,7 @@ Temperaturen har to jobber. Den setter hvor fort vannet forsvinner igjen — ved
 Fra en sveitsisk skogflekk overvåket ukentlig i over 20 år kom to observasjoner som har blitt stående:
 
 - Forfatterne gjettet — og de kalte det selv en gjetning — at høsttoppen kunne være en respons på at temperaturen faller under rundt 14 grader et par uker tidligere. Terskelen er avledet av månedstemperaturer på et lavlandsplatå på 46 grader nord, så tallet skal ikke flyttes rått til norsk høyde og breddegrad.
-- Én grad varmere sommer sammenfalt med omtrent **én ukes forsinket** fruktifisering. Med ett viktig unntak: kantarell og fagerriske (*Lactarius volemus*) gikk motsatt vei. Der ga høy sommertemperatur ikke forsinkelse, men full stopp.
+- Én grad varmere sommer sammenfalt med omtrent **én ukes forsinket** fruktifisering. Med ett viktig unntak: kantarell og mandelriske (*Lactifluus volemus*, tidligere *Lactarius volemus*) gikk motsatt vei. Der ga høy sommertemperatur ikke forsinkelse, men full stopp.
 
 En kanadisk studie peker samme vei fra en annen kant: spennvidden i jordtemperatur — forskjellen mellom maks og min — forklarte best når fruktifiseringen startet, for seks av sju arter. Jo større svingning, jo tidligere sopp. Det er feltstøtte for «kuldesjokk»-hypotesen, som er godt etablert i laboratoriet for dyrkede arter, men fortsatt bare en hypotese for skogen.
 
@@ -118,7 +118,8 @@ Mycelet forsøker å gjøre én ting godt: å anslå når forholdene i ditt omr�
 - Brejon Lamartiniere & Hoffman (2025): steinsopp i sentraleuropeisk bøkeskog, tiårig overvåking. bioRxiv — **preprint, ikke fagfellevurdert**.
 - Straatsma, Ayer & Egli (2001), *Mycological Research* 105: 515–523: 21 år med ukentlig registrering i sveitsisk skogflekk (La Chanéaz).
 - Karavani m.fl. (2018), *Agricultural and Forest Meteorology*: nedbør, jordfuktighet og soppavling i middelhavsfuruskog (Poblet, Catalonia).
-- Pinna m.fl. (2010), *Forest Ecology and Management* 260: 294–301: startdato og varighet for fruktifisering, Øst-Canada.
+- Pinna m.fl. (2010), *Forest Ecology and Management* 260: 294–301: startdato og varighet for fruktifisering, blandet boreal skog i Gaspésie, Øst-Canada.
+- Rochon m.fl. (2011), *Botany* 89: 663–675, [doi:10.1139/b11-058](https://cdnsciencepub.com/doi/10.1139/b11-058): kantarell (*C. cibarius* var. *roseocanus*) i banksfuruskog — nedbør én uke før og lufttemperatur to uker før.
 - Krah m.fl. (2023), *Ecology Letters*: 6,1 millioner funnposter, sesongtopper og romlig synkronisering.
 - Kauserud m.fl. (2008), *PNAS*: norske herbariebelegg 1940–2006, forsinket fruktifisering og effekt av fjorårets vær.
 - *Tree Physiology* (2025): karbontransport fra bartrenåler til ektomykorrhiza-fruktlegemer.
