@@ -51,11 +51,11 @@ Temperaturen har to jobber. Den setter hvor fort vannet forsvinner igjen — ved
 Fra en sveitsisk skogflekk overvåket ukentlig i over 20 år kom to observasjoner som har blitt stående:
 
 - Forfatterne gjettet — og de kalte det selv en gjetning — at høsttoppen kunne være en respons på at temperaturen faller under rundt 14 grader et par uker tidligere. Terskelen er avledet av månedstemperaturer på et lavlandsplatå på 46 grader nord, så tallet skal ikke flyttes rått til norsk høyde og breddegrad.
-- Én grad varmere sommer sammenfalt med omtrent **én ukes forsinket** fruktifisering. Med ett viktig unntak: kantarell og mandelriske (*Lactifluus volemus*, tidligere *Lactarius volemus*) gikk motsatt vei. Der ga høy sommertemperatur ikke forsinkelse, men full stopp.
+- Én grad varmere sommer sammenfalt med omtrent **én ukes forsinket** fruktifisering. Tallet er gjengitt etter Pinna m.fl. (2010); vi har ikke fått lest originalen, som ligger bak betalingsmur, og gjengir det derfor som annenhånds.
 
 En kanadisk studie peker samme vei fra en annen kant: spennvidden i jordtemperatur — forskjellen mellom maks og min — forklarte best når fruktifiseringen startet, for seks av sju arter. Jo større svingning, jo tidligere sopp. Det er feltstøtte for «kuldesjokk»-hypotesen, som er godt etablert i laboratoriet for dyrkede arter, men fortsatt bare en hypotese for skogen.
 
-En nyanse om frost: for mange arter setter den strek. Traktkantarellen (*Craterellus tubaeformis*) tåler derimot å bli gjennomfrosset og sprer sporene når den tiner. I mildt vær med lite snø kan den stå langt ut i november, og i milde kyststrøk unntaksvis inn i desember.
+En nyanse om frost: for mange arter setter den strek. Traktkantarellen (*Craterellus tubaeformis*) tåler derimot å bli gjennomfrosset. I mildt vær med lite snø kan den stå langt ut i november, og i milde kyststrøk unntaksvis inn i desember.
 
 At soppen *overlever* frost, betyr ikke at fruktlegemet er godt å spise. Sopp som har frosset og tint flere ganger, brytes ned og får bakterievekst. Plukk faste, friske eksemplarer — er den bløt, mørk eller lukter surt, la den stå.
 
