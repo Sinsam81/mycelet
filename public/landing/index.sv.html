@@ -183,6 +183,8 @@ a,a:hover{color:#8a5f06}
 .h25:hover{color:#fbbf24 !important}
 .h26:hover{color:#fbbf24 !important}
 </style>
+<style>html[data-native="true"] [data-web-only]{display:none!important}</style>
+<script>try{var c=window.Capacitor;if(c&&(typeof c.isNativePlatform==='function'?c.isNativePlatform():c.platform&&c.platform!=='web')){document.documentElement.setAttribute('data-native','true')}}catch(e){}</script>
 </head>
 <body>
 <div style="background:#f5f1e8;color:#1f2a22;font-family:Figtree,system-ui,sans-serif;font-size:17px;line-height:1.6;text-wrap:pretty;overflow-x:clip">
@@ -206,12 +208,12 @@ a,a:hover{color:#8a5f06}
 
 <section class="mycelet-split" style="display:grid;grid-template-columns:1.05fr 0.95fr;gap:clamp(32px,5vw,72px);align-items:center;max-width:1180px;margin:0 auto;padding:clamp(24px,4vw,56px) clamp(20px,5vw,56px) clamp(56px,7vw,104px)">
 <div>
-<p style="display:inline-flex;align-items:center;gap:8px;margin:0 0 22px;padding:7px 15px 7px 11px;border-radius:999px;background:#e7e1cf;color:#3d4c41;font-size:14px;font-weight:600"><span style="width:8px;height:8px;border-radius:999px;background:#fbbf24"></span>Sverige och Norge · webbappen är live</p>
+<p style="display:inline-flex;align-items:center;gap:8px;margin:0 0 22px;padding:7px 15px 7px 11px;border-radius:999px;background:#e7e1cf;color:#3d4c41;font-size:14px;font-weight:600"><span style="width:8px;height:8px;border-radius:999px;background:#fbbf24"></span>Sverige och Norge · uppdateras varje dag</p>
 <h1 style="font-family:Newsreader,Georgia,serif;font-weight:500;font-size:clamp(44px,6.4vw,82px);line-height:1.02;letter-spacing:-0.025em;color:#1a3a24;margin:0 0 24px">Så vet du när<br>svampen kommer.</h1>
 <p style="font-size:clamp(18px,2vw,22px);line-height:1.5;color:#3d4c41;max-width:34ch;margin:0 0 32px">Svampprognos byggd på riktiga väder- och skogsdata — med AI-identifiering som varnar dig för farliga förväxlingar.</p>
 <div style="display:flex;flex-wrap:wrap;align-items:center;gap:14px;margin-bottom:22px">
 <a href="/auth/register" style="display:inline-flex;align-items:center;gap:9px;background:#1a3a24;color:#f5f1e8;text-decoration:none;padding:16px 28px;border-radius:999px;font-size:18px;font-weight:600" class="h7">Prova gratis<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="arrow-right" style="width:18px;height:18px" class="lucide lucide-arrow-right"><path d="M5 12h14"></path><path d="m12 5 7 7-7 7"></path></svg></a>
-<a href="#faq" style="display:inline-flex;align-items:center;gap:11px;border:1.5px solid #cfc7b2;color:#1a3a24;text-decoration:none;padding:14px 24px;border-radius:999px;font-weight:600" class="h8">
+<a data-web-only href="#faq" style="display:inline-flex;align-items:center;gap:11px;border:1.5px solid #cfc7b2;color:#1a3a24;text-decoration:none;padding:14px 24px;border-radius:999px;font-weight:600" class="h8">
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="apple" style="width:20px;height:20px" class="lucide lucide-apple"><path d="M12 20.94c1.5 0 2.75 1.06 4 1.06 3 0 6-8 6-12.22A4.91 4.91 0 0 0 17 5c-2.22 0-4 1.44-5 2-1-.56-2.78-2-5-2a4.9 4.9 0 0 0-5 4.78C2 14 5 22 8 22c1.25 0 2.5-1.06 4-1.06Z"></path><path d="M10 2c1 .5 2 2 2 5"></path></svg>
 <span style="display:block;text-align:left;line-height:1.15"><span style="display:block;font-size:11px;letter-spacing:0.06em;text-transform:uppercase;color:#6b7566;font-weight:600">Kommer snart till</span><span style="display:block;font-size:16px">App Store</span></span>
 </a>
@@ -386,7 +388,7 @@ a,a:hover{color:#8a5f06}
 </div>
 </section>
 
-<section id="priser" style="max-width:1180px;margin:0 auto;padding:clamp(64px,8vw,112px) clamp(20px,5vw,56px)">
+<section data-web-only id="priser" style="max-width:1180px;margin:0 auto;padding:clamp(64px,8vw,112px) clamp(20px,5vw,56px)">
 <h2 style="font-family:Newsreader,Georgia,serif;font-weight:500;font-size:clamp(32px,4.2vw,52px);line-height:1.08;letter-spacing:-0.02em;color:#1a3a24;margin:0 0 14px">Börja gratis</h2>
 <p style="font-size:19px;color:#3d4c41;max-width:48ch;margin:0 0 clamp(36px,5vw,56px)">Säsongspasset kostar mindre än en korg kantareller. Avsluta när du vill.</p>
 <div class="mycelet-3" style="display:grid;grid-template-columns:repeat(3,1fr);gap:clamp(18px,2vw,26px);align-items:start">
@@ -499,7 +501,7 @@ a,a:hover{color:#8a5f06}
 <summary style="display:flex;align-items:center;gap:16px;font-family:Newsreader,Georgia,serif;font-size:21px;font-weight:600;color:#1a3a24">Fungerar den utan täckning?<span class="mycelet-plus" style="margin-left:auto;color:#8a5f06;transition:transform 0.2s;flex:none"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="plus" style="width:20px;height:20px" class="lucide lucide-plus"><path d="M5 12h14"></path><path d="M12 5v14"></path></svg></span></summary>
 <p style="color:#3d4c41;margin:14px 0 0">Med Premium laddar du ner kartområdena du ska vandra i på förhand, och har dem tillgängliga utan nät. AI-identifieringen kräver uppkoppling.</p>
 </details>
-<details style="background:#ffffff;border-radius:22px;padding:22px 26px">
+<details data-web-only style="background:#ffffff;border-radius:22px;padding:22px 26px">
 <summary style="display:flex;align-items:center;gap:16px;font-family:Newsreader,Georgia,serif;font-size:21px;font-weight:600;color:#1a3a24">När kommer iOS-appen?<span class="mycelet-plus" style="margin-left:auto;color:#8a5f06;transition:transform 0.2s;flex:none"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="plus" style="width:20px;height:20px" class="lucide lucide-plus"><path d="M5 12h14"></path><path d="M12 5v14"></path></svg></span></summary>
 <p style="color:#3d4c41;margin:14px 0 0">Snart — appen granskas just nu av Apple. Under tiden använder du Mycelet i webbläsaren på mycelet.com, även i mobilen.</p>
 </details>
