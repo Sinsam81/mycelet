@@ -87,6 +87,23 @@ function PricingInner() {
   const [iapNeedsLogin, setIapNeedsLogin] = useState(false);
   const [iapBusy, setIapBusy] = useState<'purchase' | 'restore' | null>(null);
   const [iapNotice, setIapNotice] = useState<string | null>(null);
+  // ⚠️ Apple avviste 1.0 under 3.1.2. Disse to flaggene fantes ikke, og fraværet
+  // ga to feil en reviewer ville sett med én gang:
+  //
+  //  · iapChecked — uten den kunne ikke siden skille «henter tilbudet fra App
+  //    Store» fra «det finnes ikke noe tilbud». Alt som ikke var klart ENNÅ ble
+  //    meldt som utilgjengelig, så «abonnement kommer snart» blinket forbi ved
+  //    HVERT besøk på prissiden — og ble stående for godt hvis kallet feilet.
+  //    En reviewer som ser «kommer snart» på en betalingsside, avviser appen.
+  //
+  //  · iapConfigured — «Gjenopprett kjøp» lå bak `iapReady` (= tilbud lastet).
+  //    Feilet tilbudshentingen, forsvant nettopp den knappen Apple krever, for
+  //    nettopp den kunden som trengte den: en som allerede har betalt. Restore
+  //    trenger bare at SDK-en er satt opp, ikke at tilbudene er hentet.
+  const [iapChecked, setIapChecked] = useState(false);
+  const [iapConfigured, setIapConfigured] = useState(false);
+  /** Bumpes av «Prøv igjen» og kjører oppsettet på nytt. */
+  const [iapAttempt, setIapAttempt] = useState(0);
   // Unmount guard shared by the IAP effect and the post-purchase poll, so no
   // fetch/setState survives navigation away from the page.
   const unmountedRef = useRef(false);
@@ -128,12 +145,10 @@ function PricingInner() {
       price: `${PREMIUM_MONTHLY} kr`,
       period: t('perMonth'),
       lead: t('premiumLead'),
-      features: [
-        t('premiumFeature1'),
-        t('premiumFeature2'),
-        t('premiumFeature3'),
-        t('premiumFeature4')
-      ],
+      // «Prioritert eksperthjelp (kommer)» sto her, med hake, som fjerde gode
+      // ved Premium. Å selge et abonnement på en funksjon som ikke finnes er
+      // 3.1.2 rett i fleisen. Den kommer tilbake den dagen den finnes.
+      features: [t('premiumFeature1'), t('premiumFeature2'), t('premiumFeature3')],
       highlight: false
     },
     {
@@ -174,6 +189,7 @@ function PricingInner() {
   useEffect(() => {
     if (!native || !isIapAvailable()) return;
     (async () => {
+      setIapChecked(false);
       try {
         const supabase = createClient();
         const {
@@ -186,8 +202,15 @@ function PricingInner() {
           setIapNeedsLogin(true);
           return;
         }
+        setIapNeedsLogin(false);
         const ok = await configurePurchases(user.id);
-        if (!ok || unmountedRef.current) return;
+        if (unmountedRef.current) return;
+        if (!ok) return;
+        // Fra dette punktet er RevenueCat satt opp for denne brukeren, og
+        // restorePurchases() kan kalles trygt — uavhengig av om tilbudene under
+        // lar seg hente. Det er hele grunnen til at flagget settes HER og ikke
+        // sammen med tilbudene.
+        setIapConfigured(true);
         const offers = await getIapOffers();
         if (unmountedRef.current) return;
         setIapOffers(offers);
@@ -197,9 +220,13 @@ function PricingInner() {
         // ufarlig (gammelt skall uten plugin), men den kan også være hele
         // grunnen til at ingen kan kjøpe. Nå vet vi forskjellen.
         Sentry.captureException(error, { tags: { område: 'iap', grunn: 'oppsett-kastet' } });
+      } finally {
+        // Uansett utfall er forsøket over. Først nå har siden lov til å si noe
+        // om at kjøp ikke er tilgjengelig.
+        if (!unmountedRef.current) setIapChecked(true);
       }
     })();
-  }, [native]);
+  }, [native, iapAttempt]);
 
   // The webhook needs a few seconds to land after Apple confirms the purchase;
   // poll billing status so the page flips to "aktiv plan" without a manual
@@ -427,10 +454,19 @@ function PricingInner() {
             </Link>
           </p>
         ) : null}
-        {native && !iapReady && !iapNeedsLogin ? (
-          <p className="rounded-lg bg-forest-50 px-3 py-2 text-sm text-forest-900">
-            {t('nativePurchaseUnavailable')}
-          </p>
+        {/* Bare når forsøket faktisk er ferdig (iapChecked) — ellers meldte
+            siden «ikke tilgjengelig» mens den fortsatt hentet tilbudet. */}
+        {native && iapChecked && !iapReady && !iapNeedsLogin ? (
+          <div className="rounded-lg bg-forest-50 px-3 py-2 text-sm text-forest-900">
+            <p>{t('nativePurchaseUnavailable')}</p>
+            <button
+              type="button"
+              onClick={() => setIapAttempt((n) => n + 1)}
+              className="mt-1 font-semibold underline"
+            >
+              {t('iapRetry')}
+            </button>
+          </div>
         ) : null}
         {iapNotice ? <p className="rounded-lg bg-forest-50 px-3 py-2 text-sm text-forest-900">{iapNotice}</p> : null}
 
@@ -577,9 +613,13 @@ function PricingInner() {
           })}
         </div>
 
-        {native && iapReady ? (
+        {/* Apple-krav (3.1.2): «Gjenopprett kjøp» skal være tilgjengelig i
+            appen. Sto tidligere bak `iapReady` — altså bak at TILBUDENE var
+            hentet. En kunde som allerede har betalt trenger ikke noe tilbud;
+            hen trenger restore, og trenger den nettopp når noe har gått galt.
+            Nå henger den bare på at RevenueCat er satt opp for brukeren. */}
+        {native && iapConfigured ? (
           <div className="flex flex-col items-center gap-2">
-            {/* Apple-krav: «Gjenopprett kjøp» må være tilgjengelig i appen. */}
             <button
               type="button"
               onClick={() => void startIapRestore()}

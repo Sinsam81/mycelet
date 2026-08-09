@@ -32,6 +32,28 @@ Status: fase 1 (avtaler/bank/skatt) påbegynt — se nederst for Sindres sjekkli
 > **Skrur du på et flagg igjen, må teksten oppdateres samtidig.** Det finnes en test
 > som vokter dette: `src/lib/__tests__/app-store-metadata.test.ts`.
 
+> 🔴 **2026-08-09: Apple avviste 1.0 på nettopp denne teksten.**
+>
+> *Guideline 3.1.2 — Business: Payments – Subscriptions:* «The submission offers
+> auto-renewable subscriptions but does not include a functional link to the
+> Terms of Use (EULA) in the app's metadata.»
+>
+> (NB: sitatet står bevisst uten kodegjerder, og denne fila tåler ingen andre
+> heller mellom overskriften og beskrivelsen. `beskrivelsen()` i
+> `app-store-metadata.test.ts` plukker den FØRSTE gjerdede blokken etter
+> overskriften — en ekstra her kaprer testen, slik den gjorde da dette ble
+> skrevet.)
+>
+> Det var en **automatisk** forhåndssjekk — ingen anmelder hadde sett appen.
+> `ABONNEMENT`-blokken nederst er svaret. **Rør den ikke uten å lese dette:**
+> Apple krever fire ting i beskrivelsen når en app selger abonnement — navnet på
+> abonnementet, lengden, prisen, og en fungerende lenke til bruksvilkårene (EULA).
+> Vi har ingen egen EULA lastet opp i App Store Connect, så det er Apples
+> standardvilkår som gjelder — derfor lenkes de direkte.
+>
+> Prisene her må stemme med `src/lib/billing/plans.ts` og med pristrinnene på
+> `no.mycelet.premium.monthly` / `no.mycelet.seasonpass.yearly`.
+
 ```
 Mycelet er sopplukkerens beste turvenn — laget for norske og svenske skoger.
 
@@ -53,10 +75,25 @@ MED DEG UT I SKOGEN
 • Mine steder: finn tilbake til plassene som leverte i fjor
 • Du bestemmer hvor synlig hvert funn er — offentlig, omtrentlig eller privat
 
-PREMIUM (valgfritt abonnement)
-• Ubegrenset AI-identifikasjon (gratis: 5 per døgn)
-• Full prediksjon — lovende steder nær deg
-• Offline-kart for områder uten dekning
+ABONNEMENT
+Mycelet er gratis å bruke. Vil du ha alt, kan du kjøpe et abonnement i appen:
+
+• Premium månedlig — 79 kr per måned. Fornyes hver måned.
+• Sesongpass årlig — 249 kr per år, tilsvarer ca. 21 kr per måned.
+  Fornyes hvert år.
+
+Abonnementet gir ubegrenset AI-identifikasjon (gratis: 5 per døgn), full
+prediksjon med lovende steder nær deg, og offline-kart for områder uten dekning.
+
+Betalingen belastes Apple-ID-en din når du bekrefter kjøpet. Abonnementet
+fornyes automatisk hvis du ikke slår av automatisk fornyelse minst 24 timer før
+perioden er over. Kontoen belastes for fornyelsen innen 24 timer før perioden
+utløper. Du kan se, endre og si opp abonnementet under Innstillinger →
+Apple-ID → Abonnementer.
+
+Bruksvilkår (EULA): https://www.apple.com/legal/internet-services/itunes/dev/stdeula/
+Mycelets vilkår: https://www.mycelet.com/vilkar
+Personvern: https://www.mycelet.com/personvern
 
 Personvern først: bildene dine renses for GPS-data før opplasting, og du
 bestemmer selv hvor synlige funnene dine er. Data lagres i EU.
@@ -213,7 +250,29 @@ The demo account has an active premium entitlement so all features are testable.
 Safety note: the app never tells users a mushroom is safe to eat — every
 identification result shows a warning and refers to official inspection
 services (Soppkontrollen) and the national Poison Information hotline.
+
+WHERE TO FIND THINGS
+  Subscriptions .... bottom nav "Hjem" → "Oppgrader", or Profile → Premium
+  Restore purchase . the same subscription screen, below the plan cards
+  Account deletion . Profile → "Slett kontoen min" (Norwegian: "Profil")
+  Data export ...... Profile → "Last ned mine data"
+  Community forum .. Profile → "Forumet"
+  Report / block ... open any forum post → the ⋯ menu on the post or comment
+
+The forum is intentionally not in the bottom navigation for the 1.0 launch —
+an empty forum makes a new app look abandoned — but it is fully functional and
+reachable from the profile screen, as listed above. It is the user-generated
+content declared in the age rating, and all four Guideline 1.2 mechanisms
+(pre-publication filtering, reporting, blocking, published developer contact)
+are implemented there.
 ```
+
+> ⚠️ **«WHERE TO FIND THINGS» må stemme.** Den ble lagt til etter avvisningen
+> 2026-08-09, fordi forumet ikke hadde noen inngang i appen i det hele tatt —
+> `FLAGS.forumInNav` er `false`, og iOS-skallet har ikke noe adressefelt. Vi
+> hadde altså fortalt Apple om brukerinnhold en anmelder ikke kunne finne
+> (2.1). Lenken ligger nå på profilsiden. Flytter du en av disse, oppdater
+> listen samtidig.
 
 ## Sindres fase-1-sjekkliste (Agreements, Tax & Banking)
 

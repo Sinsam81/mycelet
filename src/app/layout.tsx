@@ -76,6 +76,21 @@ export default async function RootLayout({
   return (
     <html lang={locale} className={`${fraunces.variable} ${inter.variable}`}>
       <body>
+        {/* Må stå FØRST i <body> og kjøre synkront: da rekker den å sette
+            flagget før noe males. Capacitor sprøyter inn window.Capacitor med
+            en WKUserScript ved document start, så broen finnes allerede her.
+
+            Hensikten er å slippe å tegne web-innhold i iOS-skallet i det hele
+            tatt. <NonNativeOnly> kan ikke gjøre det alene — den må returnere
+            innholdet på første render for at hydreringen skal stemme med
+            serverens HTML, og fjerner det først etter mount. Uten dette
+            skriptet blinket «Fortsett med Google» forbi i appen (Apple 4.8). */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html:
+              "try{var c=window.Capacitor;if(c&&(typeof c.isNativePlatform==='function'?c.isNativePlatform():c.platform&&c.platform!=='web')){document.documentElement.setAttribute('data-native','true')}}catch(e){}"
+          }}
+        />
         {/* timeZone må sendes eksplisitt: klientprovideren arver den ikke fra
             getRequestConfig, og uten den formaterer serveren i UTC mens
             nettleseren formaterer i brukerens sone. */}
