@@ -94,8 +94,14 @@ create policy "Egne varselabonnement kan slettes av eieren"
   on alert_subscriptions for delete
   using (auth.uid() = user_id);
 
--- ⚠️ Ingen grants til anon. Tabellen skal aldri være lesbar uten innlogging;
--- se begrunnelsen i filhodet.
+-- ⚠️ Å UTELATE anon HER ER IKKE NOK — se migrasjon 052.
+--
+-- Denne linja sto opprinnelig med kommentaren «ingen grants til anon», og den
+-- var usann: prosjektet har ALTER DEFAULT PRIVILEGES ... GRANT ALL ON TABLES TO
+-- anon (CLAUDE.md), så nye tabeller får anon-rettigheter automatisk. Verifisert
+-- mot produksjon rett etter at denne migrasjonen kjørte. 052 gjør den
+-- eksplisitte REVOKE-en. Radene var aldri åpne — RLS holdt — men beskyttelsen
+-- hvilte på ett lag der den skal hvile på to.
 grant select, insert, update, delete on alert_subscriptions to authenticated;
 grant all on alert_subscriptions to service_role;
 
