@@ -8,6 +8,10 @@
     {
       "path": "/api/cron/generate-tiles?country=SE",
       "schedule": "45 1 * * *"
+    },
+    {
+      "path": "/api/cron/soppvarsel",
+      "schedule": "0 5 * * *"
     }
   ]
 }
