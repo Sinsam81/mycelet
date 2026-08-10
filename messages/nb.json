@@ -1571,5 +1571,32 @@
     "community": "Fellesskapsverifisert",
     "moderator": "Moderator",
     "trusted": "Verifisert plukker"
+  },
+  "SoppvarselCard": {
+    "heading": "Soppvarsel",
+    "intro": "Få en e-post når soppforholdene snur i området ditt — ikke oftere enn én gang i uka, og bare når det faktisk har endret seg.",
+    "areaLabel": "Område",
+    "chooseArea": "Velg område …",
+    "norway": "Norge",
+    "sweden": "Sverige",
+    "turnOn": "Slå på varsel",
+    "isOn": "Varselet er på",
+    "turnOff": "Slå av",
+    "toastOn": "Varsel på for {region}",
+    "toastOff": "Varselet er slått av",
+    "toastError": "Kunne ikke lagre. Prøv igjen.",
+    "disclaimer": "Varselet gjelder vær og sesong for et større område, ikke skogen der du står. Vi lover ikke at du finner sopp — bare at forholdene ligger til rette."
+  },
+  "SoppvarselAv": {
+    "title": "Soppvarsel avslått",
+    "successHeading": "Du får ikke flere soppvarsler",
+    "successBody": "Vi har slått av varselet. Området du hadde valgt er tatt vare på, så du kan slå det på igjen når som helst fra profilen din — uten å velge på nytt.",
+    "mapBefore": "Soppforholdene ligger fortsatt åpent for alle på",
+    "mapAfter": ", uten innlogging.",
+    "errorHeading": "Lenken virket ikke",
+    "errorBody": "Den kan være ufullstendig — noen e-postklienter deler lange lenker over to linjer. Prøv å kopiere hele adressen fra e-posten, eller slå av varselet fra profilen din.",
+    "contactBefore": "Får du det fortsatt ikke til, send en e-post til",
+    "contactAfter": ", så gjør vi det for deg.",
+    "toFrontpage": "Til forsiden"
   }
 }

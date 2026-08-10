@@ -1,7 +1,10 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { getTranslations } from 'next-intl/server';
 import { CheckCircle2, AlertTriangle } from 'lucide-react';
 import { PageWrapper } from '@/components/layout/PageWrapper';
+import { getUserLocale } from '@/i18n/locale';
+import type { Locale } from '@/i18n/config';
 
 /**
  * Kvitteringen etter en avmelding.
@@ -12,21 +15,48 @@ import { PageWrapper } from '@/components/layout/PageWrapper';
  * lenkeforhåndsvisning i e-postklienter, og da ville folk blitt meldt av uten å
  * ha trykket på noe.
  *
+ * Språk: mottakeren er som regel IKKE innlogget, så cookien finnes ofte ikke.
+ * API-ruta sender derfor med abonnementets lagrede språk (?sprak=sv) — samme
+ * kilde som e-posten selv. Uten parameteren faller vi tilbake på getUserLocale
+ * (cookie, deretter Accept-Language), som treffer riktig for svenske
+ * telefoner. En svensk mottaker som fulgte «Avregistrera dig här» skal ikke
+ * lande på en norsk kvittering.
+ *
  * Ingen innlogging. Se begrunnelsen i API-ruta.
  */
 
-export const metadata: Metadata = {
-  title: 'Soppvarsel avslått',
-  robots: { index: false, follow: false }
-};
+interface SideParams {
+  ok?: string;
+  sprak?: string;
+}
+
+async function sideLocale(sprak: string | undefined): Promise<Locale> {
+  if (sprak === 'sv' || sprak === 'nb') return sprak;
+  return getUserLocale();
+}
+
+export async function generateMetadata({
+  searchParams
+}: {
+  searchParams: Promise<SideParams>;
+}): Promise<Metadata> {
+  const { sprak } = await searchParams;
+  const t = await getTranslations({ locale: await sideLocale(sprak), namespace: 'SoppvarselAv' });
+  return { title: t('title'), robots: { index: false, follow: false } };
+}
 
 export default async function AvmeldtPage({
   searchParams
 }: {
-  searchParams: Promise<{ ok?: string }>;
+  searchParams: Promise<SideParams>;
 }) {
-  const { ok } = await searchParams;
-  const lyktes = ok !== '0';
+  const { ok, sprak } = await searchParams;
+  const t = await getTranslations({ locale: await sideLocale(sprak), namespace: 'SoppvarselAv' });
+
+  // Bare en eksplisitt ?ok=1 fra API-ruta er en bekreftelse. Å lande her uten
+  // parameter (avkortet lenke, direkte besøk) skal IKKE se ut som suksess —
+  // det var nettopp den falske tryggheten som gjorde avmeldingen verdiløs.
+  const lyktes = ok === '1';
 
   return (
     <PageWrapper>
@@ -34,40 +64,34 @@ export default async function AvmeldtPage({
         {lyktes ? (
           <>
             <CheckCircle2 className="mx-auto h-10 w-10 text-forest-700" aria-hidden="true" />
-            <h1 className="font-serif text-2xl font-bold text-forest-900">Du får ikke flere soppvarsler</h1>
-            <p className="text-sm leading-relaxed text-gray-700">
-              Vi har slått av varselet. Området du hadde valgt er tatt vare på, så du kan slå det på
-              igjen når som helst fra profilen din — uten å velge på nytt.
-            </p>
+            <h1 className="font-serif text-2xl font-bold text-forest-900">{t('successHeading')}</h1>
+            <p className="text-sm leading-relaxed text-gray-700">{t('successBody')}</p>
             <p className="text-sm text-gray-700">
-              Soppforholdene ligger fortsatt åpent for alle på{' '}
+              {t('mapBefore')}{' '}
               <Link href="/soppforhold" className="font-medium text-forest-800 underline">
                 mycelet.com/soppforhold
               </Link>
-              , uten innlogging.
+              {t('mapAfter')}
             </p>
           </>
         ) : (
           <>
             <AlertTriangle className="mx-auto h-10 w-10 text-amber-600" aria-hidden="true" />
-            <h1 className="font-serif text-2xl font-bold text-forest-900">Lenken virket ikke</h1>
-            <p className="text-sm leading-relaxed text-gray-700">
-              Den kan være ufullstendig — noen e-postklienter deler lange lenker over to linjer.
-              Prøv å kopiere hele adressen fra e-posten, eller slå av varselet fra profilen din.
-            </p>
+            <h1 className="font-serif text-2xl font-bold text-forest-900">{t('errorHeading')}</h1>
+            <p className="text-sm leading-relaxed text-gray-700">{t('errorBody')}</p>
             <p className="text-sm text-gray-700">
-              Får du det fortsatt ikke til, send en e-post til{' '}
+              {t('contactBefore')}{' '}
               <a href="mailto:post@mycelet.com" className="font-medium text-forest-800 underline">
                 post@mycelet.com
               </a>
-              , så gjør vi det for deg.
+              {t('contactAfter')}
             </p>
           </>
         )}
 
         <p className="pt-2">
           <Link href="/" className="text-sm font-medium text-forest-800 underline">
-            Til forsiden
+            {t('toFrontpage')}
           </Link>
         </p>
       </section>

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import toast from 'react-hot-toast';
 import { Bell, BellOff, Loader2 } from 'lucide-react';
 
@@ -12,7 +13,8 @@ import { Bell, BellOff, Loader2 } from 'lucide-react';
  * sendes — ikke her.
  *
  * Teksten lover det samme som e-posten og /soppforhold gjør: at vi sier fra når
- * FORHOLDENE snur i et område. Ikke at det står sopp der. Ikke skriv det om.
+ * FORHOLDENE snur i et område. Ikke at det står sopp der. Ikke skriv det om —
+ * og hold nb og sv i messages/-katalogene i takt når den justeres.
  */
 
 interface Region {
@@ -27,6 +29,7 @@ interface Abonnement {
 }
 
 export function SoppvarselCard() {
+  const t = useTranslations('SoppvarselCard');
   const [regioner, setRegioner] = useState<Region[]>([]);
   const [valgt, setValgt] = useState<string>('');
   const [abonnement, setAbonnement] = useState<Abonnement | null>(null);
@@ -63,9 +66,9 @@ export function SoppvarselCard() {
       });
       if (!res.ok) throw new Error();
       setAbonnement({ region: valgt, active, last_notified_at: abonnement?.last_notified_at ?? null });
-      toast.success(active ? `Varsel på for ${valgt}` : 'Varselet er slått av');
+      toast.success(active ? t('toastOn', { region: valgt }) : t('toastOff'));
     } catch {
-      toast.error('Kunne ikke lagre. Prøv igjen.');
+      toast.error(t('toastError'));
     } finally {
       setLagrer(false);
     }
@@ -80,29 +83,26 @@ export function SoppvarselCard() {
       <div>
         <h2 className="flex items-center gap-2 font-semibold text-forest-900">
           <Bell className="h-4 w-4 text-forest-700" aria-hidden="true" />
-          Soppvarsel
+          {t('heading')}
         </h2>
-        <p className="mt-1 text-sm text-gray-700">
-          Få en e-post når soppforholdene snur i området ditt — ikke oftere enn én gang i uka, og
-          bare når det faktisk har endret seg.
-        </p>
+        <p className="mt-1 text-sm text-gray-700">{t('intro')}</p>
       </div>
 
       <label className="block text-sm">
-        <span className="font-medium text-gray-800">Område</span>
+        <span className="font-medium text-gray-800">{t('areaLabel')}</span>
         <select
           value={valgt}
           onChange={(e) => setValgt(e.target.value)}
           disabled={lagrer}
           className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-forest-700 focus:outline-none"
         >
-          <option value="">Velg område …</option>
-          <optgroup label="Norge">
+          <option value="">{t('chooseArea')}</option>
+          <optgroup label={t('norway')}>
             {regioner.filter((r) => r.land === 'NO').map((r) => (
               <option key={r.navn} value={r.navn}>{r.navn}</option>
             ))}
           </optgroup>
-          <optgroup label="Sverige">
+          <optgroup label={t('sweden')}>
             {regioner.filter((r) => r.land === 'SE').map((r) => (
               <option key={r.navn} value={r.navn}>{r.navn}</option>
             ))}
@@ -118,7 +118,7 @@ export function SoppvarselCard() {
           className="inline-flex items-center gap-2 rounded-lg bg-forest-800 px-3 py-2 text-sm font-semibold text-white hover:bg-forest-700 disabled:opacity-60"
         >
           {lagrer ? <Loader2 className="h-4 w-4 animate-spin" /> : <Bell className="h-4 w-4" />}
-          {paa && abonnement?.region === valgt ? 'Varselet er på' : 'Slå på varsel'}
+          {paa && abonnement?.region === valgt ? t('isOn') : t('turnOn')}
         </button>
 
         {paa ? (
@@ -129,17 +129,14 @@ export function SoppvarselCard() {
             className="inline-flex items-center gap-2 rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60"
           >
             <BellOff className="h-4 w-4" />
-            Slå av
+            {t('turnOff')}
           </button>
         ) : null}
       </div>
 
       {/* Samme forbehold som e-posten og /soppforhold. Uten det lover kortet mer
           enn modellen kan holde. */}
-      <p className="text-xs leading-relaxed text-gray-500">
-        Varselet gjelder vær og sesong for et større område, ikke skogen der du står. Vi lover ikke
-        at du finner sopp — bare at forholdene ligger til rette.
-      </p>
+      <p className="text-xs leading-relaxed text-gray-500">{t('disclaimer')}</p>
     </article>
   );
 }

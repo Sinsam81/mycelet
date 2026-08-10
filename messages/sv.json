@@ -1571,5 +1571,32 @@
     "community": "Gemenskapsverifierad",
     "moderator": "Moderator",
     "trusted": "Verifierad plockare"
+  },
+  "SoppvarselCard": {
+    "heading": "Svampvarning",
+    "intro": "Få ett mejl när svampförhållandena vänder i ditt område. Aldrig oftare än en gång i veckan, och bara när något faktiskt har ändrats.",
+    "areaLabel": "Område",
+    "chooseArea": "Välj område …",
+    "norway": "Norge",
+    "sweden": "Sverige",
+    "turnOn": "Slå på varning",
+    "isOn": "Varningen är på",
+    "turnOff": "Slå av",
+    "toastOn": "Varning på för {region}",
+    "toastOff": "Varningen är avstängd",
+    "toastError": "Kunde inte spara. Försök igen.",
+    "disclaimer": "Varningen gäller väder och säsong för ett större område, inte skogen där du står. Vi lovar inte att du hittar svamp, bara att förhållandena ligger rätt."
+  },
+  "SoppvarselAv": {
+    "title": "Svampvarning avstängd",
+    "successHeading": "Du får inga fler svampvarningar",
+    "successBody": "Vi har stängt av varningen. Området du hade valt finns kvar, så du kan slå på den igen när som helst från din profil, utan att välja på nytt.",
+    "mapBefore": "Svampförhållandena ligger fortfarande öppet för alla på",
+    "mapAfter": ", utan inloggning.",
+    "errorHeading": "Länken fungerade inte",
+    "errorBody": "Den kan vara ofullständig. Vissa e-postklienter delar långa länkar över två rader. Prova att kopiera hela adressen från mejlet, eller stäng av varningen från din profil.",
+    "contactBefore": "Får du det ändå inte att fungera, skicka ett mejl till",
+    "contactAfter": ", så gör vi det åt dig.",
+    "toFrontpage": "Till startsidan"
   }
 }

@@ -107,6 +107,60 @@ describe('skalVarsle — økningen måles mot uka', () => {
   });
 });
 
+describe('skalVarsle — feilet utsending hentes inn igjen', () => {
+  // Scenariet: forholdene snudde i går, men Resend var nede da e-posten skulle
+  // ut. Raden ble ikke oppdatert. Uten omslagsdatoen ville regel 3 sagt
+  // «var-allerede-bra» i dag, og abonnenten mistet hele den gode perioden.
+
+  it('varsler dagen etter når abonnenten aldri fikk e-post for omslaget', () => {
+    const b = skalVarsle(
+      tilstand({ scoreIGar: 88, scoreIDag: 90, sisteOmslagIso: '2026-08-19', sistVarsletIso: null })
+    );
+    expect(b).toEqual({ send: true, fra: 55, til: 90 });
+  });
+
+  it('tier når varselet for denne syklusen allerede er sendt', () => {
+    // Sist varslet i går kl. 05 — ETTER omslaget ved midnatt. Ingenting å ta igjen.
+    const b = skalVarsle(
+      tilstand({ scoreIGar: 88, scoreIDag: 90, sisteOmslagIso: '2026-08-19', sistVarsletIso: dagerSiden(1) })
+    );
+    expect(b).toEqual({ send: false, grunn: 'var-allerede-bra' });
+  });
+
+  it('tier når det ikke finnes noe omslag i vinduet', () => {
+    // Har det vært bra lenger enn historikken rekker, er det ikke en nyhet som
+    // kan «tas igjen» — da gjelder den vanlige regelen.
+    expect(skalVarsle(tilstand({ scoreIGar: 88, scoreIDag: 92 }))).toEqual({
+      send: false,
+      grunn: 'var-allerede-bra'
+    });
+  });
+
+  it('gjeninnhentingen respekterer fortsatt økningskravet', () => {
+    // En flat, god uke med et omslag helt i kanten skal ikke plutselig slippe
+    // gjennom bare fordi utsendingen aldri har skjedd.
+    const b = skalVarsle(
+      tilstand({
+        scoreIGar: 88,
+        scoreIDag: 90,
+        lavesteSisteUke: 85,
+        sisteOmslagIso: '2026-08-19',
+        sistVarsletIso: null
+      })
+    );
+    expect(b).toEqual({ send: false, grunn: 'for-liten-okning' });
+  });
+
+  it('gjeninnhentingen respekterer fortsatt karantenen', () => {
+    // Forrige sykluses varsel gikk for tre dager siden; omslaget i går feilet.
+    // Maks én e-post i uka gjelder også her.
+    const b = skalVarsle(
+      tilstand({ scoreIGar: 88, scoreIDag: 90, sisteOmslagIso: '2026-08-19', sistVarsletIso: dagerSiden(3) })
+    );
+    expect(b).toEqual({ send: false, grunn: 'i-karantene' });
+  });
+});
+
 describe('skalVarsle — karantenen', () => {
   it('sender ikke to ganger i samme uke', () => {
     expect(skalVarsle(tilstand({ sistVarsletIso: dagerSiden(3) }))).toEqual({

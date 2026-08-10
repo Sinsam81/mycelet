@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createRequestLogger } from '@/lib/log/request';
+import { checkRateLimit } from '@/lib/rate-limit';
+import { getClientKey, rateLimitResponse } from '@/lib/rate-limit/route';
 
 /**
  * Avmelding fra soppvarsel — uten innlogging.
@@ -43,7 +45,7 @@ async function meldAv(token: string | null, log: ReturnType<typeof createRequest
     .from('alert_subscriptions')
     .update({ active: false })
     .eq('unsubscribe_token', token)
-    .select('id');
+    .select('id,locale');
 
   if (error) {
     log.error('soppvarsel.avmelding_feilet', { message: error.message });
@@ -51,22 +53,40 @@ async function meldAv(token: string | null, log: ReturnType<typeof createRequest
   }
 
   // Ukjent token gir samme svar som et gyldig. Et varierende svar ville gjort
-  // ruta til et orakel for å gjette gyldige tokens.
+  // ruta til et orakel for å gjette gyldige tokens. (Språket brukes bare til å
+  // vise kvitteringssiden riktig og røper ingenting om tokenet var ekte.)
   log.info('soppvarsel.avmeldt', { traff: (data ?? []).length });
-  return { ok: true as const, status: 200 };
+  const locale = data?.[0]?.locale === 'sv' ? ('sv' as const) : null;
+  return { ok: true as const, status: 200, locale };
+}
+
+/**
+ * Romslig grense per IP: one-click-POST-ene kommer fra Gmail/Outlook sin
+ * infrastruktur, ofte bak delte IP-er, og en for stram grense ville avvist
+ * ekte avmeldinger. 60/min stopper hamring uten å røre normal trafikk.
+ */
+function forMangeKall(request: NextRequest) {
+  const rl = checkRateLimit(`soppvarsel-av:${getClientKey(request, null)}`, 60, 60);
+  return rl.allowed ? null : rateLimitResponse(rl);
 }
 
 /** RFC 8058 one-click. Skal svare 200 og ikke omdirigere. */
 export async function POST(request: NextRequest) {
+  const stopp = forMangeKall(request);
+  if (stopp) return stopp;
   const log = createRequestLogger(request);
   const res = await meldAv(request.nextUrl.searchParams.get('t'), log);
   return new NextResponse(null, { status: res.ok ? 200 : res.status });
 }
 
-/** Mennesket som trykker på lenka. */
+/** Mennesket som trykker på lenka. Kvitteringen vises på abonnementets språk. */
 export async function GET(request: NextRequest) {
+  const stopp = forMangeKall(request);
+  if (stopp) return stopp;
   const log = createRequestLogger(request);
   const res = await meldAv(request.nextUrl.searchParams.get('t'), log);
-  const mål = res.ok ? '/soppvarsel/av?ok=1' : '/soppvarsel/av?ok=0';
+  const mål = res.ok
+    ? `/soppvarsel/av?ok=1${res.locale === 'sv' ? '&sprak=sv' : ''}`
+    : '/soppvarsel/av?ok=0';
   return NextResponse.redirect(new URL(mål, request.nextUrl.origin));
 }

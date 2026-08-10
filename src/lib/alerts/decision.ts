@@ -83,6 +83,13 @@ export interface VarselTilstand {
   sistVarsletIso: string | null;
   /** «Nå» — sendes inn så funksjonen er ren og testbar. */
   naa: Date;
+  /**
+   * Datoen (ÅÅÅÅ-MM-DD) for regionens siste omslag under→over terskelen i
+   * historikkvinduet, eller null/utelatt når ingen finnes. Gjør at et varsel
+   * som feilet på selve omslagsdagen (Resend nede, nettverksglipp) kan hentes
+   * inn igjen dagen etter — se regel 3.
+   */
+  sisteOmslagIso?: string | null;
 }
 
 export type VarselAvslag =
@@ -105,8 +112,19 @@ export function skalVarsle(t: VarselTilstand): VarselBeslutning {
   //    «vi vet ikke hva det var i går» er et varsel vi ikke kan stå inne for.
   if (t.scoreIGar === null) return { send: false, grunn: 'ingen-gaardag' };
 
-  // 3. Var det bra allerede i går, er ingenting nytt.
-  if (t.scoreIGar >= VARSEL_MIN_SCORE) return { send: false, grunn: 'var-allerede-bra' };
+  // 3. Var det bra allerede i går, er ingenting nytt — med ETT unntak: fikk
+  //    abonnenten aldri varselet for denne syklusen (utsendingen feilet på
+  //    omslagsdagen), får hen ta det igjen så lenge forholdene holder seg.
+  //    Økningskravet (4) og karantenen (5) gjelder fortsatt, så dette kan
+  //    aldri bli en ny e-postkilde — bare en forsinket levering av den ene.
+  if (t.scoreIGar >= VARSEL_MIN_SCORE) {
+    const omslag = t.sisteOmslagIso ?? null;
+    const alleredeVarsletForSyklusen =
+      omslag === null ||
+      (t.sistVarsletIso !== null &&
+        new Date(t.sistVarsletIso).getTime() >= new Date(`${omslag}T00:00:00Z`).getTime());
+    if (alleredeVarsletForSyklusen) return { send: false, grunn: 'var-allerede-bra' };
+  }
 
   // 4. Bedringen må være reell. Mot ukas bunn, ikke mot i går — se
   //    VARSEL_MIN_OKNING for hvorfor den forskjellen er hele poenget.

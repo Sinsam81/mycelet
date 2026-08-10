@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createRequestLogger } from '@/lib/log/request';
 import { bearerSecretMatches } from '@/lib/security/secret-compare';
-import { skalVarsle, VARSEL_KARANTENE_DAGER } from '@/lib/alerts/decision';
+import { skalVarsle, VARSEL_KARANTENE_DAGER, VARSEL_MIN_SCORE } from '@/lib/alerts/decision';
 import { byggVarselEpost } from '@/lib/alerts/email';
 import { sendEpost } from '@/lib/email/send';
 import type { Locale } from '@/i18n/config';
@@ -28,7 +28,12 @@ import type { Locale } from '@/i18n/config';
 
 export const maxDuration = 300;
 
-/** Så mange dager historikk decision.ts trenger for ukas bunn. */
+/**
+ * Vinduet for ukas bunn: så mange DATOER, i dag medregnet. Samme definisjon
+ * som decision.ts («de siste sju dagene (i dag medregnet)») og sesongtesten
+ * (`scorer.slice(d - 6, d + 1)`). Trekk derfor fra HISTORIKK_DAGER − 1 når
+ * startdatoen regnes ut — å trekke fra 7 gir et vindu på åtte datoer.
+ */
 const HISTORIKK_DAGER = 7;
 
 interface TileRow {
@@ -76,6 +81,18 @@ export async function GET(request: NextRequest) {
   }
   const tileDate = datoRad?.tile_date as string | undefined;
   if (!tileDate) return NextResponse.json({ ok: true, grunn: 'ingen fliser ennå' });
+
+  // Fersk-sjekk. Fryser flisgenereringen, står max(tile_date) stille mens
+  // klokka går — og uten denne ville det samme «det snudde nå»-varselet blitt
+  // sendt på nytt hver gang karantenen løp ut, bygget på uke-gammelt vær. Én
+  // dags slakk for kjøringer rett etter midnatt og tidssoneskjevhet.
+  const iDagIso = new Date().toISOString().slice(0, 10);
+  const rasterAlderDager =
+    (Date.parse(`${iDagIso}T00:00:00Z`) - Date.parse(`${tileDate}T00:00:00Z`)) / 86_400_000;
+  if (rasterAlderDager > 1) {
+    log.warn('soppvarsel.fliser_utdatert', { tileDate, rasterAlderDager });
+    return NextResponse.json({ ok: true, grunn: 'fliser-utdatert', tileDate });
+  }
 
   // PostgREST kapper på 1000 rader uansett limit — må pagineres. Samme felle som
   // i regionsruta, der en delvis lest side så ut som at halve landet manglet.
@@ -130,7 +147,7 @@ export async function GET(request: NextRequest) {
 
   // ── 3. Historikk ──────────────────────────────────────────────────────────
   const fraDato = new Date(`${tileDate}T00:00:00Z`);
-  fraDato.setUTCDate(fraDato.getUTCDate() - HISTORIKK_DAGER);
+  fraDato.setUTCDate(fraDato.getUTCDate() - (HISTORIKK_DAGER - 1));
   const igaar = new Date(`${tileDate}T00:00:00Z`);
   igaar.setUTCDate(igaar.getUTCDate() - 1);
   const igaarIso = igaar.toISOString().slice(0, 10);
@@ -147,20 +164,53 @@ export async function GET(request: NextRequest) {
 
   const scoreIGar = new Map<string, number>();
   const lavesteUke = new Map<string, number>();
+  const scorePerDato = new Map<string, Map<string, number>>();
   for (const rad of (historikk ?? []) as Array<{ region: string; tile_date: string; score: number }>) {
     if (rad.tile_date === igaarIso) scoreIGar.set(rad.region, rad.score);
     const naa = lavesteUke.get(rad.region);
     if (naa === undefined || rad.score < naa) lavesteUke.set(rad.region, rad.score);
+    const datoer = scorePerDato.get(rad.region) ?? new Map<string, number>();
+    datoer.set(rad.tile_date, rad.score);
+    scorePerDato.set(rad.region, datoer);
+  }
+
+  // Siste omslag under→over terskelen per region. decision.ts bruker datoen til
+  // å hente inn igjen varsler som feilet på selve omslagsdagen. Bare nabodager
+  // teller — et hull i historikken er manglende data, ikke et omslag.
+  const sisteOmslag = new Map<string, string>();
+  for (const [region, datoer] of scorePerDato) {
+    const sortert = [...datoer.keys()].sort();
+    for (let i = 1; i < sortert.length; i += 1) {
+      const erNabodager =
+        Date.parse(`${sortert[i]}T00:00:00Z`) - Date.parse(`${sortert[i - 1]}T00:00:00Z`) === 86_400_000;
+      if (!erNabodager) continue;
+      const forrige = datoer.get(sortert[i - 1]);
+      const denne = datoer.get(sortert[i]);
+      if (forrige !== undefined && denne !== undefined && forrige < VARSEL_MIN_SCORE && denne >= VARSEL_MIN_SCORE) {
+        sisteOmslag.set(region, sortert[i]);
+      }
+    }
   }
 
   // ── 4. Abonnementene ──────────────────────────────────────────────────────
-  const { data: abonnenter, error: abErr } = await db
-    .from('alert_subscriptions')
-    .select('id,user_id,region,locale,last_notified_at,unsubscribe_token')
-    .eq('active', true);
-  if (abErr) {
-    log.error('soppvarsel.abonnement_feilet', { message: abErr.message });
-    return NextResponse.json({ error: 'Kunne ikke hente abonnementer' }, { status: 500 });
+  // Samme PostgREST-felle som flisene over: svaret kappes på 1000 rader uansett,
+  // og uten paginering ville abonnent nummer 1001 stille og rolig aldri fått
+  // varsel. Sortert på id så sidene er stabile mellom spørringene.
+  const abonnenter: Abonnement[] = [];
+  for (let side = 0; side < 20; side += 1) {
+    const fra = side * 1000;
+    const { data, error: abErr } = await db
+      .from('alert_subscriptions')
+      .select('id,user_id,region,locale,last_notified_at,unsubscribe_token')
+      .eq('active', true)
+      .order('id', { ascending: true })
+      .range(fra, fra + 999);
+    if (abErr) {
+      log.error('soppvarsel.abonnement_feilet', { message: abErr.message });
+      return NextResponse.json({ error: 'Kunne ikke hente abonnementer' }, { status: 500 });
+    }
+    abonnenter.push(...((data ?? []) as Abonnement[]));
+    if ((data ?? []).length < 1000) break;
   }
 
   const naa = new Date();
@@ -168,7 +218,7 @@ export async function GET(request: NextRequest) {
   let feilet = 0;
   const avslag: Record<string, number> = {};
 
-  for (const ab of (abonnenter ?? []) as Abonnement[]) {
+  for (const ab of abonnenter) {
     const iDag = scoreIDag.get(ab.region);
     if (iDag === undefined) {
       avslag['ingen-region'] = (avslag['ingen-region'] ?? 0) + 1;
@@ -180,7 +230,8 @@ export async function GET(request: NextRequest) {
       scoreIGar: scoreIGar.get(ab.region) ?? null,
       lavesteSisteUke: lavesteUke.get(ab.region) ?? iDag,
       sistVarsletIso: ab.last_notified_at,
-      naa
+      naa,
+      sisteOmslagIso: sisteOmslag.get(ab.region) ?? null
     });
 
     if (!beslutning.send) {
@@ -198,7 +249,10 @@ export async function GET(request: NextRequest) {
       continue;
     }
 
-    const avmeldingsUrl = `${appUrl}/soppvarsel/av?t=${ab.unsubscribe_token}`;
+    // ⚠️ API-ruta, ikke kvitteringssiden. /soppvarsel/av (uten /api) er bare en
+    // passiv bekreftelse — en lenke dit ville vist «du er avmeldt» uten å melde
+    // av noen. API-ruta gjør jobben og sender mennesket videre til siden selv.
+    const avmeldingsUrl = `${appUrl}/api/soppvarsel/av?t=${ab.unsubscribe_token}`;
     const { emne, html, tekst } = byggVarselEpost({
       region: ab.region,
       fra: beslutning.fra,
@@ -209,9 +263,18 @@ export async function GET(request: NextRequest) {
     });
 
     const res = await sendEpost({ til: epost, emne, html, tekst, avmeldingsUrl });
+
+    // Resend tillater 2 kall/s. getUserById-rundturen gir litt naturlig avstand,
+    // men denne gjør takten eksplisitt i stedet for tilfeldig. Med maxDuration
+    // 300 gir det rom for noen hundre utsendinger per kjøring — mer enn nok
+    // lenge, og pagineringen over sørger for at alle i det minste VURDERES.
+    await new Promise((r) => setTimeout(r, 600));
+
     if (!res.ok) {
       // Raden oppdateres IKKE ved feil. Da prøver vi igjen i morgen hvis
-      // forholdene fortsatt er gode — bedre enn å markere som sendt og tie.
+      // forholdene fortsatt er gode: decision.ts slipper abonnenten gjennom
+      // «var-allerede-bra» så lenge hen ikke har fått varsel siden siste
+      // omslag — se sisteOmslagIso der.
       feilet += 1;
       continue;
     }
@@ -231,7 +294,7 @@ export async function GET(request: NextRequest) {
   log.info('soppvarsel.ferdig', {
     tileDate,
     regioner: scoreIDag.size,
-    abonnenter: abonnenter?.length ?? 0,
+    abonnenter: abonnenter.length,
     sendt,
     feilet,
     avslag
@@ -241,7 +304,7 @@ export async function GET(request: NextRequest) {
     ok: true,
     tileDate,
     regioner: scoreIDag.size,
-    abonnenter: abonnenter?.length ?? 0,
+    abonnenter: abonnenter.length,
     sendt,
     feilet,
     avslag,
