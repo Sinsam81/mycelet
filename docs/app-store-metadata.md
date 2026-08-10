@@ -104,8 +104,41 @@ God soppjakt!
 ## Nøkkelord (maks 100 tegn)
 
 ```
-sopp,sopptur,soppkart,kantarell,steinsopp,soppkontroll,soppbok,skog,friluftsliv,svamp,svampkarta
+sopp,soppapp,kantarell,steinsopp,soppjakt,sopptur,matsopp,soppguide,soppsesong,giftsopp,sopplukking
 ```
+
+99/100 tegn. Byttet 2026-08-10, sammen med innsendingen etter 3.1.2-avvisningen.
+
+**Bare tre felt påvirker søk på iOS:** appnavn, undertittel og dette feltet.
+Beskrivelsen er *ikke* indeksert — den overtaler folk som allerede har funnet
+deg. All ASO skjer altså i de 100 tegnene her.
+
+Derfor ryker `soppkart`: det står allerede i undertittelen («Soppkart, AI og
+sesongvarsler»), som Apple indekserer. Ni tegn betalt to ganger. Samme logikk om
+undertittelen skrives om — flytt ordet ut av det ene feltet når det kommer inn i
+det andre.
+
+Ute også: `friluftsliv` og `skog` (brede, ingen kjøpsintensjon), `soppbok` (vi er
+ikke en bok), `soppkontroll` (12 tegn; den som søker det, leter etter et
+kontrollsted).
+
+`kantarell` er den ene svenske broen som er gratis — samme ord i begge språk.
+
+### ⚠️ Svenske ord er bevisst ute — og det er midlertidig
+
+Appen har foreløpig **bare norsk lokalisering**. Uten en svensk butikkside bruker
+Apple den norske også i svensk App Store, inkludert nøkkelordene. `svamp`,
+`svampkarta` og `matsvamp` sto derfor her og stjal 34 tegn fra de norske.
+
+De er tatt ut fordi neste jobb er å legge til **sv som egen lokalisering**: det
+gir 100 helt nye tegn, svensk undertittel og svensk beskrivelse — halve markedet
+med sitt eget felt i stedet for en tredjedel av vårt.
+
+Fram til den er på plass er Mycelet i praksis usynlig i svensk søk (bortsett fra
+`kantarell`). **Det er gjelden vi tok opp her.** Krever egne svenske
+skjermbilder, men ikke nytt bygg. Svenske høyverdiord til den runden: `svamp`,
+`svampguide`, `svampplockning`, `svampkarta`, `matsvamp`, `karl`+`johan`
+(= «karl johan», Sveriges steinsopp) og `kantarell`.
 
 ## Reklametekst / Promotional text (maks 170 tegn, kan endres uten ny review)
 
