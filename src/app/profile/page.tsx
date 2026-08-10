@@ -5,6 +5,7 @@ import { Crown, Leaf, MapPin, ShieldCheck } from 'lucide-react';
 import { PageWrapper } from '@/components/layout/PageWrapper';
 import { EdibilityBadge } from '@/components/ui/EdibilityBadge';
 import { AccountDataActions } from '@/components/profile/AccountDataActions';
+import { SoppvarselCard } from '@/components/profile/SoppvarselCard';
 import { LogoutButton } from '@/components/profile/LogoutButton';
 import { BlockedUsersList } from '@/components/profile/BlockedUsersList';
 import { LegalLinks } from '@/components/profile/LegalLinks';
@@ -249,6 +250,8 @@ export default async function ProfilePage() {
             {t('myReports')}
           </Link>
         </article>
+
+        <SoppvarselCard />
 
         <BlockedUsersList />
 
