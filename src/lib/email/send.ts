@@ -16,17 +16,29 @@ import { logger } from '@/lib/log';
  * mønster som RevenueCat-koden: alt skal kunne deployes og testes før
  * kontoen er satt opp.
  *
- * OPPSETT (Sindre, ~10 min):
- *   1. Lag konto på https://resend.com — gratis, 3000 e-poster i måneden
- *   2. Verifiser domenet mycelet.com med DNS-oppføringene Resend gir deg
- *      (SPF + DKIM). DNS ligger hos Domeneshop.
- *   3. Lag en API-nøkkel
- *   4. Vercel → Settings → Environment Variables, Production:
- *        RESEND_API_KEY   = re_...
- *        RESEND_FROM      = varsel@mycelet.com
+ * OPPSETT — GJORT 2026-08-10:
+ *   Resend-konto på post@mycelet.com, region Irland (eu-west-1).
+ *   Verifisert domene: send.mycelet.com. Nøkkel med «Sending access» alene.
+ *   Vercel (Production): RESEND_API_KEY + RESEND_FROM=varsel@send.mycelet.com
  *
- *   NB: notatet i Deno-utgaven sier mycelet.no. Det er utdatert — nettstedet er
- *   mycelet.com, og avsenderadressen må ligge på et domene Resend har verifisert.
+ * ⚠️ HVORFOR ET UNDERDOMENE OG IKKE mycelet.com
+ *
+ * mycelet.com hadde allerede SPF: «v=spf1 include:_spf.domeneshop.no ~all»,
+ * fordi post@mycelet.com ligger hos Domeneshop. Standarden tillater ÉN
+ * SPF-oppføring per navn — en til, og SPF slutter å virke for hele domenet.
+ * Da ville support-adressen, og adressen Apple har, begynt å havne i
+ * søppelposten.
+ *
+ * Med send.mycelet.com havner Resends SPF på send.send.mycelet.com, og roten
+ * røres ikke. Verifisert etter oppsettet: mycelet.com har fortsatt nøyaktig én
+ * SPF-oppføring. Det gir også reputasjonsskille — en spam-markering på et
+ * soppvarsel smitter ikke over på e-post fra mennesker.
+ *
+ * Avsenderadressen MÅ ligge på det verifiserte domenet. varsel@mycelet.com
+ * ville blitt avvist av Resend.
+ *
+ * (Deno-utgaven i supabase/functions/_shared/email.ts har fortsatt et utdatert
+ * notat om mycelet.no. Den sender slettevarsler og er ikke satt opp ennå.)
  */
 
 export interface EpostArgs {
