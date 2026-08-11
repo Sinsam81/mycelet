@@ -121,7 +121,11 @@ export async function updateSession(request: NextRequest) {
   if (isProtectedPath(request.nextUrl.pathname) && !user) {
     log.info('middleware.auth_redirect', { from: request.nextUrl.pathname });
     const redirectUrl = new URL('/auth/login', request.url);
-    redirectUrl.searchParams.set('redirect', request.nextUrl.pathname);
+    // Sti OG søkestreng: en lenke som /profile?vis=soppvarsel skal lande på
+    // riktig sted ETTER innlogging, ikke på toppen av profilen. (Fragmenter
+    // (#...) når aldri serveren og kan ikke bevares her.) Verdien valideres av
+    // readSafeNext på login-siden før den brukes.
+    redirectUrl.searchParams.set('redirect', request.nextUrl.pathname + request.nextUrl.search);
     return NextResponse.redirect(redirectUrl, {
       headers: { 'x-request-id': reqId }
     });

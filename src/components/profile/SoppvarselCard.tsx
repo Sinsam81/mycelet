@@ -74,12 +74,35 @@ export function SoppvarselCard() {
     }
   }
 
-  if (laster) return null;
+  // Lenker fra /soppforhold («Slå på soppvarsel») peker hit. Rull kortet inn i
+  // syne når parameteren er satt — det ligger under bretten på profilsiden, og
+  // en knapp som lander på toppen av en annen side leverer ikke det den lovte.
+  // Leses fra window (ikke useSearchParams) så kortet ikke trenger Suspense.
+  useEffect(() => {
+    if (laster) return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('vis') === 'soppvarsel' || window.location.hash === '#soppvarsel') {
+      document.getElementById('soppvarsel')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, [laster]);
+
+  // Skjelett i stedet for null mens vi laster: ankeret #soppvarsel må finnes i
+  // DOM-en fra første rendring for at innrulling (og vanlige #-lenker) skal
+  // treffe, og siden hopper mindre når kortet ikke dukker opp av intet.
+  if (laster) {
+    return (
+      <article id="soppvarsel" className="scroll-mt-20 rounded-xl border border-gray-200 bg-white p-4">
+        <div className="h-5 w-32 animate-pulse rounded bg-gray-100" />
+        <div className="mt-3 h-4 w-full animate-pulse rounded bg-gray-100" />
+      </article>
+    );
+  }
 
   const paa = abonnement?.active === true;
 
   return (
-    <article className="space-y-3 rounded-xl border border-gray-200 bg-white p-4">
+    // id-en er lenkemål fra /soppforhold («Slå på soppvarsel» → /profile#soppvarsel).
+    <article id="soppvarsel" className="space-y-3 scroll-mt-20 rounded-xl border border-gray-200 bg-white p-4">
       <div>
         <h2 className="flex items-center gap-2 font-semibold text-forest-900">
           <Bell className="h-4 w-4 text-forest-700" aria-hidden="true" />

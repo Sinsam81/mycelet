@@ -1,4 +1,5 @@
 import type { MetadataRoute } from 'next';
+import { alleRegionSlugs } from '@/lib/prediction/region-slug';
 
 /**
  * sitemap.xml — fantes ikke. `GET /sitemap.xml` ga 404 fram til 2026-08-08.
@@ -53,6 +54,16 @@ export default function sitemap(): MetadataRoute.Sitemap {
       lastModified: nå,
       changeFrequency: 'monthly' as const,
       priority: 0.9
+    })),
+    // Områdesidene: «soppforhold Oslo» er søket folk faktisk gjør. Slugene
+    // kommer fra kodens regionliste (ingen databaseoppslag — se filhodet).
+    // Kun Norge foreløpig — de svenske sidene publiseres med den svenske
+    // språkrunden (se src/app/soppforhold/[omrade]/page.tsx).
+    ...alleRegionSlugs('NO').map((slug) => ({
+      url: `${BASE}/soppforhold/${slug}`,
+      lastModified: nå,
+      changeFrequency: 'daily' as const,
+      priority: 0.85
     }))
   ];
 }
