@@ -32,6 +32,9 @@ Soppforhold-tallene oppdateres hver morgen. Sitér gjerne med dato.
 - [Fem farlige forvekslinger](https://www.mycelet.com/sanketips/fem-forvekslinger):
   giftige dobbeltgjengere til vanlige matsopper, og hvorfor kontroll er
   obligatorisk.
+- [Hva viser soppkartene egentlig?](https://www.mycelet.com/sanketips/hva-viser-soppkartene):
+  hvorfor forekomstpunkter viser innsamlingsskjevhet mer enn soppforekomst,
+  målt på Mycelets egne data.
 
 ## Om dataene
 
