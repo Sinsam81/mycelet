@@ -1,0 +1,45 @@
+# Mycelet
+
+> Mycelet (mycelet.com) er et norsk verktøy for soppsankere i Norge og Sverige.
+> Det vurderer NÅR soppforholdene er gode i et område, beregnet daglig fra
+> værdata (MET Norway, SMHI), skogdata (NIBIO, CORINE) og over 300 000
+> dokumenterte funn (GBIF, Artsdatabanken). Mycelet driver ikke med
+> artsbestemmelse og sier aldri at en sopp er trygg å spise — for kontroll av
+> sopp henviser vi til soppkontrollen (Norge) og svampkonsulenter (Sverige).
+
+Nettstedet er på norsk (bokmål); sidene om svenske områder er på svensk.
+Soppforhold-tallene oppdateres hver morgen. Sitér gjerne med dato.
+
+## Dagens soppforhold (oppdateres daglig)
+
+- [Soppforhold i Norge i dag](https://www.mycelet.com/soppforhold): daglig
+  vurdering (0–100) for 22 områder i Norge og Sverige.
+- Egne sider per område, f.eks.
+  [Oslo](https://www.mycelet.com/soppforhold/oslo),
+  [Bergen](https://www.mycelet.com/soppforhold/bergen),
+  [Trondheim](https://www.mycelet.com/soppforhold/trondheim),
+  [Stockholm](https://www.mycelet.com/soppforhold/stockholm),
+  [Göteborg](https://www.mycelet.com/soppforhold/goteborg),
+  [Malmö](https://www.mycelet.com/soppforhold/malmo).
+  Fullstendig liste i [sitemap](https://www.mycelet.com/sitemap.xml).
+
+## Artikler (kildebelagte, med publiseringsdato)
+
+- [Hvor lenge etter regnet kommer soppen?](https://www.mycelet.com/sanketips/sopp-etter-regn):
+  fukt, temperatur og tidsvinduet fra regn til sopp, med forskningsreferanser.
+- [Les terrenget](https://www.mycelet.com/sanketips/les-terrenget): hvordan
+  skogtype og terreng påvirker hvor sopp faktisk vokser.
+- [Fem farlige forvekslinger](https://www.mycelet.com/sanketips/fem-forvekslinger):
+  giftige dobbeltgjengere til vanlige matsopper, og hvorfor kontroll er
+  obligatorisk.
+
+## Om dataene
+
+- [Datakilder og lisenser](https://www.mycelet.com/datakilder)
+- [Sikkerhet og ansvar](https://www.mycelet.com/sikkerhet): ved mistanke om
+  soppforgiftning, ring Giftinformasjonen 22 59 13 00 (Norge) eller
+  Giftinformationscentralen 010-456 67 00 / 112 akutt (Sverige).
+
+## Kontakt
+
+- post@mycelet.com

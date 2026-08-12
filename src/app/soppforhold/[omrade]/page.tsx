@@ -152,8 +152,22 @@ export default async function OmradePage({ params }: SideProps) {
   const { tileDate, regions } = await hentRegioner(land === 'SE' ? 'sv' : 'nb');
   const region = regions.find((r) => r.name === regionDef.name) ?? null;
 
+  // Strukturerte data: dateModified = rasterdatoen gjør ferskheten maskin-
+  // lesbar for søkemotorer og AI-crawlere — «i dag»-påstanden får en dato.
+  const jsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'WebPage',
+    name: t.h1(regionDef.name),
+    description: t.metaBeskrivelse(regionDef.name),
+    inLanguage: land === 'SE' ? 'sv' : 'nb',
+    ...(tileDate ? { dateModified: tileDate } : {}),
+    isPartOf: { '@type': 'WebSite', name: 'Mycelet', url: 'https://www.mycelet.com' },
+    publisher: { '@type': 'Organization', name: 'Mycelet', url: 'https://www.mycelet.com' }
+  };
+
   return (
     <PageWrapper>
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
       <article className="space-y-8 py-6">
         <header className="space-y-3">
           <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-forest-700">

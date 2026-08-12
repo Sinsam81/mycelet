@@ -1,4 +1,6 @@
 ---
+published: 2026-07-29
+updated: 2026-08-09
 slug: sopp-etter-regn
 kicker: Vær og timing · 5 min
 summary: Om fukt, temperatur og de få dagene som skiller «for tidlig» fra «for seint» — grunnlaget for varselet i appen.

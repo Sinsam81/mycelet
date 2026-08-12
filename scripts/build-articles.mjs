@@ -171,6 +171,18 @@ function page({ meta, body }, others) {
 <meta property="og:title" content="${escapeHtml(meta.title)}">
 <meta property="og:description" content="${escapeHtml(meta.summary ?? '')}">
 <meta property="og:url" content="https://www.mycelet.com/sanketips/${meta.slug}">
+<script type="application/ld+json">${JSON.stringify({
+  '@context': 'https://schema.org',
+  '@type': 'Article',
+  headline: meta.title,
+  description: meta.summary ?? '',
+  inLanguage: 'nb',
+  ...(meta.published ? { datePublished: meta.published } : {}),
+  ...(meta.updated ? { dateModified: meta.updated } : {}),
+  mainEntityOfPage: `https://www.mycelet.com/sanketips/${meta.slug}`,
+  author: { '@type': 'Organization', name: 'Mycelet', url: 'https://www.mycelet.com' },
+  publisher: { '@type': 'Organization', name: 'Mycelet', url: 'https://www.mycelet.com' }
+})}</script>
 <style>${landingStyles()}</style>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }

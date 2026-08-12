@@ -1,4 +1,6 @@
 ---
+published: 2026-07-29
+updated: 2026-08-02
 slug: les-terrenget
 kicker: Sanketips · 6 min
 summary: Alder på skogen, mose, skyggesider og gamle skogsveier — tegnene som skiller en tom tur fra en full kurv.

@@ -1,4 +1,6 @@
 ---
+published: 2026-07-29
+updated: 2026-08-02
 slug: fem-forvekslinger
 kicker: Trygg sanking · 8 min
 summary: Hva du må se på under hatten, og hvilke arter du bør lære å kjenne igjen før du plukker dem du vil spise.

@@ -71,8 +71,21 @@ export default async function SoppforholdPage() {
   const svenske = regions.filter((r) => r.country === 'SE');
   const beste = norske[0] ?? null;
 
+  const jsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'WebPage',
+    name: 'Soppforhold i Norge i dag',
+    description:
+      'Daglig oversikt over soppforholdene i 22 norske og svenske områder, regnet ut fra nedbør, jordfuktighet, temperatur og sesong.',
+    inLanguage: 'nb',
+    ...(tileDate ? { dateModified: tileDate } : {}),
+    isPartOf: { '@type': 'WebSite', name: 'Mycelet', url: 'https://www.mycelet.com' },
+    publisher: { '@type': 'Organization', name: 'Mycelet', url: 'https://www.mycelet.com' }
+  };
+
   return (
     <PageWrapper>
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
       <article className="space-y-8 py-6">
         <header className="space-y-3">
           <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-forest-700">
