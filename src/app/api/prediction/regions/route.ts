@@ -8,7 +8,7 @@ import { checkRateLimit } from '@/lib/rate-limit';
 import { getClientKey, rateLimitResponse } from '@/lib/rate-limit/route';
 import { createRequestLogger } from '@/lib/log/request';
 import { getUserLocale } from '@/i18n/locale';
-import { DEFAULT_LOCALE, type Locale } from '@/i18n/config';
+import { DEFAULT_LOCALE, isLocale, type Locale } from '@/i18n/config';
 
 /**
  * «Hvor i landet er det best akkurat nå?»
@@ -59,7 +59,13 @@ export async function GET(request: NextRequest) {
   const rl = checkRateLimit(`prediction-regions:${getClientKey(request, null)}`, 30, 60);
   if (!rl.allowed) return rateLimitResponse(rl);
 
-  const locale: Locale = (await getUserLocale()) ?? DEFAULT_LOCALE;
+  // Et eksplisitt ?locale= vinner over cookie/Accept-Language. De svenske
+  // områdesidene under /soppforhold trenger det: deres språk følger REGIONEN,
+  // ikke den besøkende, og server-side fetch har uansett ingen cookie å by på.
+  // Parameteren gjør samtidig locale til en del av cache-NØKKELEN (URL-en) hos
+  // kallere som cacher svaret — se i18n-regelen i CLAUDE.md.
+  const bedt = request.nextUrl.searchParams.get('locale') ?? undefined;
+  const locale: Locale = isLocale(bedt) ? bedt : ((await getUserLocale()) ?? DEFAULT_LOCALE);
   const supabase = createClient();
 
   // Flisene leses med tjenestenøkkelen, ikke kallerens sesjon.

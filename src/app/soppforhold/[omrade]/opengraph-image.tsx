@@ -1,6 +1,6 @@
 import { ImageResponse } from 'next/og';
 import { regionFromSlug } from '@/lib/prediction/region-slug';
-import { fargeHex, hentRegioner, norskDato } from '../hent-regioner';
+import { datoTekst, fargeHex, hentRegioner } from '../hent-regioner';
 
 /**
  * Delingsbildet for områdesidene: det som vises når lenka limes inn i en
@@ -28,13 +28,19 @@ export const alt = 'Dagens soppforhold for området, som tall fra 0 til 100';
 export default async function OgBilde({ params }: { params: Promise<{ omrade: string }> }) {
   const { omrade } = await params;
   const regionDef = regionFromSlug(omrade);
-  // Samme regel som siden: bare norske områder foreløpig (se page.tsx).
-  if (!regionDef || regionDef.country !== 'NO') {
+  if (!regionDef) {
     return new Response('Ikke funnet', { status: 404 });
   }
-  const { tileDate, regions } = await hentRegioner();
+  const land = regionDef.country;
+  const { tileDate, regions } = await hentRegioner(land === 'SE' ? 'sv' : 'nb');
   const region = regions.find((r) => r.name === regionDef.name) ?? null;
 
+  // Språket følger landet, som på siden selv (se page.tsx).
+  const etikett = land === 'SE' ? 'Svampläget idag' : 'Soppforhold i dag';
+  const bunnlinje =
+    land === 'SE'
+      ? 'Väder och säsong för området, inte skogen där du står'
+      : 'Vær og sesong for området, ikke skogen der du står';
   const navn = regionDef.name;
   const scoreTekst = region ? String(region.score) : '–';
   const bandFarge = region ? fargeHex(region.score) : '#9ca3af';
@@ -65,7 +71,7 @@ export default async function OgBilde({ params }: { params: Promise<{ omrade: st
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           <div style={{ display: 'flex', fontSize: 34, color: '#cfe0c2' }}>
-            Soppforhold i dag{tileDate ? ` · ${norskDato(tileDate)}` : ''}
+            {etikett}{tileDate ? ` · ${datoTekst(tileDate, land)}` : ''}
           </div>
           <div style={{ display: 'flex', fontSize: 84, lineHeight: 1.1 }}>{navn}</div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 16, marginTop: 8 }}>
@@ -86,7 +92,7 @@ export default async function OgBilde({ params }: { params: Promise<{ omrade: st
         </div>
 
         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 28, color: '#cfe0c2' }}>
-          <div style={{ display: 'flex' }}>Vær og sesong for området, ikke skogen der du står</div>
+          <div style={{ display: 'flex' }}>{bunnlinje}</div>
           <div style={{ display: 'flex' }}>mycelet.com/soppforhold</div>
         </div>
       </div>

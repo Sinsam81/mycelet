@@ -55,11 +55,10 @@ export default function sitemap(): MetadataRoute.Sitemap {
       changeFrequency: 'monthly' as const,
       priority: 0.9
     })),
-    // Områdesidene: «soppforhold Oslo» er søket folk faktisk gjør. Slugene
-    // kommer fra kodens regionliste (ingen databaseoppslag — se filhodet).
-    // Kun Norge foreløpig — de svenske sidene publiseres med den svenske
-    // språkrunden (se src/app/soppforhold/[omrade]/page.tsx).
-    ...alleRegionSlugs('NO').map((slug) => ({
+    // Områdesidene: «soppforhold Oslo» og «svampläget Göteborg» er søkene folk
+    // faktisk gjør. Slugene kommer fra kodens regionliste (ingen database-
+    // oppslag — se filhodet). Alle 22: de svenske sidene er på svensk.
+    ...alleRegionSlugs().map((slug) => ({
       url: `${BASE}/soppforhold/${slug}`,
       lastModified: nå,
       changeFrequency: 'daily' as const,
