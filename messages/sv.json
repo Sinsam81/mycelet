@@ -960,7 +960,7 @@
     "dangerBody": "Denna svamp kan vara giftig eller dödlig. AI ger endast sannolik art. Ät aldrig utan bekräftelse från kvalificerad expert.",
     "poisonControl": "Giftinformationscentralen: 112 (akut) eller 010-456 67 00",
     "getAssessment": "Få en bedömning hos en svampkonsulent",
-    "digitalCheck": "",
+    "digitalCheck": "Skicka bild till Digital soppkontroll (norsk tjänst, soppkontroll.no)",
     "cautionHeading": "AI-resultatet är inte en ätlighetsgaranti",
     "cautionBody": "Resultatet är bara en sannolik art — inte en bekräftelse på att svampen är säker. Ät aldrig svamp du inte är 100 % säker på, och få den bedömd av en svampkonsulent eller expert först.",
     "checkWithControl": "Kontrollera med en svampkonsulent"
@@ -1362,7 +1362,7 @@
     "poisonDisplay": "Giftinformationscentralen: 112 (akut) eller 010-456 67 00",
     "emergencyTel": "112",
     "controlUrl": "https://www.svampar.se/",
-    "digitalControlUrl": "",
+    "digitalControlUrl": "https://soppkontroll.no",
     "controlName": "Svampkontrollen"
   },
   "Vilkar": {

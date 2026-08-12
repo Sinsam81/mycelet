@@ -4,39 +4,33 @@ import nb from '../../../../messages/nb.json';
 import sv from '../../../../messages/sv.json';
 
 /**
- * SafetyWarning viser en «Digital soppkontroll»-lenke KUN når katalogen har
- * både URL og etikett (norsk har det; Sverige har ingen nasjonal digital
- * kontroll, så der er nøklene tomme med vilje — vi finner ikke på tjenester).
+ * SafetyWarning viser en «Digital soppkontroll»-lenke KUN for norsk locale —
+ * tjenesten er norsk (appen Digital soppkontroll, soppkontroll.no), og Sverige
+ * har ingen nasjonal motsvarighet vi kan vise til. Gaten ligger i komponenten
+ * (useLocale() === 'nb'), IKKE i katalogene: paritets- og tomhetsvaktene i
+ * messages.test.ts krever at nøklene finnes med ekte verdier på begge språk.
  *
  * Testene låser kontrakten komponenten hviler på:
- *  1. nøklene finnes i begge kataloger (next-intl kaster på manglende nøkler)
- *  2. tomme strenger kommer gjennom som tomme strenger, ikke som feil —
- *     det er dét som slår lenken av for svensk
- *  3. norsk har et konsistent par (begge satt), svensk et konsistent tomt par
+ *  1. nøklene finnes i begge kataloger med innhold (next-intl kaster på
+ *     manglende nøkler, og en tom streng ville rendret som blank etikett)
+ *  2. den norske etiketten peker faktisk på Digital soppkontroll
  */
 
 describe('SafetyWarning-katalogen: digital kontroll', () => {
-  it('nøklene finnes i begge kataloger', () => {
+  it('nøklene finnes i begge kataloger med innhold', () => {
     for (const katalog of [nb, sv]) {
-      expect(katalog.Safety).toHaveProperty('digitalControlUrl');
-      expect(katalog.SafetyWarning).toHaveProperty('digitalCheck');
+      expect(katalog.Safety.digitalControlUrl).toBe('https://soppkontroll.no');
+      expect(katalog.SafetyWarning.digitalCheck.length).toBeGreaterThan(0);
     }
   });
 
-  it('norsk har både URL og etikett; svensk har begge tomme', () => {
-    expect(nb.Safety.digitalControlUrl).toBe('https://soppkontroll.no');
-    expect(nb.SafetyWarning.digitalCheck.length).toBeGreaterThan(0);
-    expect(sv.Safety.digitalControlUrl).toBe('');
-    expect(sv.SafetyWarning.digitalCheck).toBe('');
-  });
-
-  it('next-intl håndterer den tomme svenske etiketten uten å kaste', () => {
-    const t = createTranslator({ locale: 'sv', messages: sv as never, namespace: 'SafetyWarning' });
-    expect(t('digitalCheck')).toBe('');
-  });
-
-  it('den norske etiketten kommer ordrett gjennom next-intl', () => {
-    const t = createTranslator({ locale: 'nb', messages: nb as never, namespace: 'SafetyWarning' });
-    expect(t('digitalCheck')).toContain('Digital soppkontroll');
+  it('etikettene kommer ordrett gjennom next-intl og nevner tjenesten', () => {
+    for (const [locale, katalog] of [
+      ['nb', nb],
+      ['sv', sv]
+    ] as const) {
+      const t = createTranslator({ locale, messages: katalog as never, namespace: 'SafetyWarning' });
+      expect(t('digitalCheck')).toContain('Digital soppkontroll');
+    }
   });
 });

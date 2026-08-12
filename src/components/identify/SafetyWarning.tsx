@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { AlertTriangle, Info, Phone } from 'lucide-react';
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 
 interface SafetyWarningProps {
   level: 'info' | 'caution' | 'danger';
@@ -15,13 +15,15 @@ export function SafetyWarning({ level, edibility }: SafetyWarningProps) {
 
   // Digital kontroll er det handlingsrettede rådet i identify-øyeblikket: brukeren
   // står med soppen i hånda NÅ, og et bilde kan vurderes av soppsakkyndige samme
-  // dag — en fysisk kontroll kan være dager unna. Norge har appen Digital
-  // soppkontroll (soppkontroll.no); Sverige har ingen nasjonal motsvarighet, så
-  // der er nøklene tomme og bare den vanlige kontroll-lenken vises. (Presisert
-  // etter innspill fra BSNF 2026-08-12 — ikke slå digital og fysisk sammen.)
+  // dag — en fysisk kontroll kan være dager unna. Appen Digital soppkontroll
+  // (soppkontroll.no) er en NORSK tjeneste, så lenken vises bare for nb; svenske
+  // brukere får som før bare svampkonsulent-lenken. Katalognøklene finnes på
+  // begge språk (paritets- og tomhetsvaktene i messages.test.ts krever det),
+  // men gaten er locale her. (Presisert etter innspill fra BSNF 2026-08-12 —
+  // ikke slå digital og fysisk kontroll sammen.)
+  const visDigital = useLocale() === 'nb';
   const digitalUrl = s('digitalControlUrl');
   const digitalLabel = t('digitalCheck');
-  const visDigital = digitalUrl.length > 0 && digitalLabel.length > 0;
   // 'unknown' = unproven/unmapped edibility → treat as dangerous (show the red
   // warning + Giftinformasjonen), never the soft caution banner.
   if (level === 'danger' || edibility === 'deadly' || edibility === 'toxic' || edibility === 'unknown') {
