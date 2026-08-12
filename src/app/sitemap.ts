@@ -19,7 +19,7 @@ import { alleRegionSlugs } from '@/lib/prediction/region-slug';
 const BASE = 'https://www.mycelet.com';
 
 /** Artiklene i content/sanketips/, servert som rene URL-er via next.config.js. */
-const SANKETIPS = ['les-terrenget', 'fem-forvekslinger', 'sopp-etter-regn'];
+const SANKETIPS = ['les-terrenget', 'fem-forvekslinger', 'sopp-etter-regn', 'hva-viser-soppkartene'];
 
 export default function sitemap(): MetadataRoute.Sitemap {
   const nå = new Date();

@@ -82,3 +82,26 @@ som er billigst å stryke.
 Vurdér før runde 3: er alle tre artiklene verdt kostnaden, eller skal én
 prioriteres og de to andre legges bort? Én publisert artikkel som holder, er
 mer verdt enn tre som nesten gjør det.
+
+
+---
+
+## Runde 3 — 2026-08-12 natt
+
+Kjørt kun på **hva-viser-soppkartene** (etter dokumentets eget råd: én god
+foran tre nesten-gode). Fire ferske blikk (eksterne kilder, interne tall mot
+koden, sikkerhet, språk) + to skeptikere per funn.
+
+**Funn: 8 bekreftet (4 major), 3 avkreftet — alle rettet samme natt.** De
+viktigste: foreldede forekomsttall presentert i presens, oversalg av hva
+valideringen faktisk dekker, retningspåstand i et støynivå-resultat, og en
+motsigelse mot publiserte les-terrenget.md (den publiserte tok feil — rettet).
+
+**Sluttkontroll med ferske øyne: utkastet KLARERT.** Eneste funn var i den
+allerede publiserte sopp-etter-regn.md (samme retningspåstand som runde 3
+fjernet fra utkastet) — rettet i samme slipp.
+
+Artikkelen er flyttet til content/sanketips/ og publisert via PR (2026-08-12/13).
+Gjenstår i denne mappa: **hvorfor-finner-du-ikke-sopp** (13+9 funn i runde 1,
+fjorten nye i runde 2) og **derfor-aldri-spiselig** (4 kritiske sikkerhetsfunn
+— skal IKKE gjøres uten menneske i loopen).

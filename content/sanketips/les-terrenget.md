@@ -96,4 +96,4 @@ God terrenglesing forteller deg hvor du bør lete. Den forteller deg **ingenting
 - **Stikanten er lettvint å gå, ikke rikere på sopp.** Trolig ser du bare bedre der.
 - **Været virker over uker og måneder**, ikke på ti dager.
 
-Det er dette Mycelet forsøker å hjelpe med: å si noe om **når** forholdene er gode der du bor, ut fra sesong og faktisk vær, og **hvilken type skog** du bør sikte deg inn på. Kartet viser forhold og sannsynlighet for gode forhold — ikke registrerte soppforekomster. Hvor soppen står, må du fortsatt finne ut selv. Det er tross alt hele poenget med å gå.
+Det er dette Mycelet forsøker å hjelpe med: å si noe om **når** forholdene er gode der du bor, ut fra sesong og faktisk vær, og **hvilken type skog** du bør sikte deg inn på. Prediksjonslaget på kartet viser forhold og sannsynlighet for gode forhold. Registrerte funn kan slås på som et eget lag — de vises som kontekst, ikke som en del av vurderingen. Hvor soppen står, må du fortsatt finne ut selv. Det er tross alt hele poenget med å gå.

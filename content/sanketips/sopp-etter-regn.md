@@ -85,7 +85,7 @@ Blant plukkere hører man ofte at mycelet «brukte opp reservene» på første b
 
 ## Hva Mycelet faktisk regner ut — og hva vi ikke vet
 
-Appen anslår **når** forholdene ligger til rette, og **hvilken type skog** arten kan stå i. Ikke hvor soppen står. Det er ikke beskjedenhet, det er måleresultat: modellens evne til å rangere *tidspunkt* er klart bedre enn tilfeldig (AUC 0,88 for den empiriske fenologien, opp fra 0,83 for en enkel månedsheuristikk, trent på data før 2021 og testet på 2021 og senere). Evnen til å rangere *sted* ligger på 0,52 — så vidt over myntkast. Ren forekomsttetthet gjorde det faktisk verre enn tilfeldig, og er derfor ikke lenger med som poengbonus.
+Appen anslår **når** forholdene ligger til rette, og **hvilken type skog** arten kan stå i. Ikke hvor soppen står. Det er ikke beskjedenhet, det er måleresultat: modellens evne til å rangere *tidspunkt* er klart bedre enn tilfeldig (AUC 0,88 for den empiriske fenologien, opp fra 0,83 for en enkel månedsheuristikk, trent på data før 2021 og testet på 2021 og senere). Evnen til å rangere *sted* ligger på 0,52 — så vidt over myntkast. Ren forekomsttetthet lå på rent tilfeldighetsnivå, og er derfor ikke lenger med som poengbonus.
 
 Det du ser i appen, er et nivå for soppforholdene der du er, og hvilken vei det peker de nærmeste dagene for arten du velger. Under det ligger dette:
 

@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="nb">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hva viser soppkartene egentlig? — Mycelet</title>
+<meta name="description" content="Prikkene på et soppkart viser hvor folk har registrert funn — ikke hvor sopp vokser. Her er forskjellen, målt på våre egne data.">
+<link rel="canonical" href="https://www.mycelet.com/sanketips/hva-viser-soppkartene">
+<link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
+<meta property="og:type" content="article">
+<meta property="og:locale" content="nb_NO">
+<meta property="og:site_name" content="Mycelet">
+<meta property="og:title" content="Hva viser soppkartene egentlig?">
+<meta property="og:description" content="Prikkene på et soppkart viser hvor folk har registrert funn — ikke hvor sopp vokser. Her er forskjellen, målt på våre egne data.">
+<meta property="og:url" content="https://www.mycelet.com/sanketips/hva-viser-soppkartene">
+<style>/* latin-ext */
+@font-face {
+  font-family: 'Figtree';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/landing/f1.woff2") format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Figtree';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/landing/f2.woff2") format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'Figtree';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("/landing/f1.woff2") format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Figtree';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("/landing/f2.woff2") format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'Figtree';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("/landing/f1.woff2") format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Figtree';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("/landing/f2.woff2") format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'Figtree';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("/landing/f1.woff2") format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Figtree';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("/landing/f2.woff2") format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* vietnamese */
+@font-face {
+  font-family: 'Newsreader';
+  font-style: italic;
+  font-weight: 300 500;
+  font-display: swap;
+  src: url("/landing/f3.woff2") format('woff2');
+  unicode-range: U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'Newsreader';
+  font-style: italic;
+  font-weight: 300 500;
+  font-display: swap;
+  src: url("/landing/f4.woff2") format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Newsreader';
+  font-style: italic;
+  font-weight: 300 500;
+  font-display: swap;
+  src: url("/landing/f5.woff2") format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* vietnamese */
+@font-face {
+  font-family: 'Newsreader';
+  font-style: normal;
+  font-weight: 300 700;
+  font-display: swap;
+  src: url("/landing/f6.woff2") format('woff2');
+  unicode-range: U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'Newsreader';
+  font-style: normal;
+  font-weight: 300 700;
+  font-display: swap;
+  src: url("/landing/f7.woff2") format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Newsreader';
+  font-style: normal;
+  font-weight: 300 700;
+  font-display: swap;
+  src: url("/landing/f8.woff2") format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+
+body{margin:0;background:#f5f1e8}
+summary{list-style:none;cursor:pointer}
+summary::-webkit-details-marker{display:none}
+details[open] .mycelet-plus{transform:rotate(45deg)}
+@media (max-width:900px){.mycelet-split{grid-template-columns:1fr !important}.mycelet-3{grid-template-columns:1fr !important}.mycelet-feat{grid-template-columns:1fr 1fr !important}}
+@media (max-width:620px){.mycelet-feat{grid-template-columns:1fr !important}}
+/* Smal skjerm (iPhone SE, iPad-kompatibilitetsvindu): menyen legger seg i
+   rader under logoen i stedet for a kappes av hoyrekanten. Uten dette var
+   Priser, Sanketips, Sporsmal og Logg inn unaelige under ~700px. */
+@media (max-width:700px){
+.mycelet-header{flex-wrap:wrap !important;gap:8px 18px !important}
+.mycelet-header nav{flex-wrap:wrap !important;width:100%;gap:10px 16px !important;font-size:14px !important}
+/* Priskortene: flex-li med ren tekst gir kortet en minimumsbredde som
+   presser det ut av kolonnen ved ~320px (målt på svensk side: kort 319px
+   i 280px kolonne). min-width:0 lar kortet krympe og teksten brytes. */
+.mycelet-3 > div{min-width:0}
+.mycelet-3 li{min-width:0}
+}
+
+
+html{scroll-behavior:smooth}
+a,a:hover{color:#8a5f06}
+.h1:hover{color:#1a3a24 !important}
+.h2:hover{color:#1a3a24 !important}
+.h3:hover{color:#1a3a24 !important}
+.h4:hover{color:#1a3a24 !important}
+.h5:hover{color:#1a3a24 !important}
+.hlogin:hover{color:#1a3a24 !important}
+.h6:hover{background:#2d5238 !important}
+.h7:hover{background:#2d5238 !important}
+.h8:hover{background:#ece5d6 !important}
+.h9:hover{color:#f5d372 !important}
+.h10:hover{background:#f5f1e8 !important}
+.h11:hover{background:#2d5238 !important}
+.h12:hover{background:#f5d372 !important}
+.h13:hover{background:#fffdf7 !important}
+.h14:hover{background:#fffdf7 !important}
+.h15:hover{background:#fffdf7 !important}
+.h27:hover{background:#fffdf7 !important}
+.h16:hover{background:#2d5238 !important}
+.h17:focus{border-color:#1a3a24;outline:none !important}
+.h18:hover{background:#f5d372 !important}
+.h19:hover{color:#fbbf24 !important}
+.h20:hover{color:#fbbf24 !important}
+.h21:hover{color:#fbbf24 !important}
+.h22:hover{color:#fbbf24 !important}
+.h23:hover{color:#fbbf24 !important}
+.h24:hover{color:#fbbf24 !important}
+.h25:hover{color:#fbbf24 !important}
+.h26:hover{color:#fbbf24 !important}
+
+html[data-native="true"] [data-web-only]{display:none!important}</style>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:#faf7ef; color:#3d4c41; font-family:Figtree,-apple-system,BlinkMacSystemFont,sans-serif; font-size:18px; line-height:1.7; -webkit-font-smoothing:antialiased; }
+  a { color:inherit; }
+  .wrap { max-width:720px; margin:0 auto; padding:0 clamp(20px,5vw,56px); }
+  @media (max-width:760px) { .mycelet-split { grid-template-columns:1fr !important; } }
+</style>
+</head>
+<body>
+<header class="mycelet-header" style="display:flex;align-items:center;gap:28px;max-width:1180px;margin:0 auto;padding:22px clamp(20px,5vw,56px)">
+<a href="/" style="display:flex;align-items:center;gap:10px;text-decoration:none;color:#1a3a24;margin-right:auto">
+<span style="width:34px;height:34px;border-radius:999px;background:#1a3a24;display:grid;place-items:center;color:#fbbf24"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="sprout" style="width:19px;height:19px" class="lucide lucide-sprout"><path d="M7 20h10"></path><path d="M10 20c5.5-2.5.8-6.4 3-10"></path><path d="M9.5 9.4c1.1.8 1.8 2.2 2.3 3.7-2 .4-3.5.4-4.8-.3-1.2-.6-2.3-1.9-3-4.2 2.8-.5 4.4 0 5.5.8z"></path><path d="M14.1 6a7 7 0 0 0-1.1 4c1.9-.1 3.3-.6 4.3-1.4 1-1 1.6-2.3 1.7-4.6-2.7.1-4 1-4.9 2z"></path></svg></span>
+<span style="font-family:Newsreader,Georgia,serif;font-size:25px;font-weight:600;letter-spacing:-0.01em">Mycelet</span>
+</a>
+<nav style="display:flex;align-items:center;gap:26px;font-size:15px;font-weight:500">
+<a href="/#slik" style="color:#3d4c41;text-decoration:none" class="h1">Slik virker det</a>
+<a href="/#funksjoner" style="color:#3d4c41;text-decoration:none" class="h2">Funksjoner</a>
+<a href="/#priser" style="color:#3d4c41;text-decoration:none" class="h3">Priser</a>
+<a href="/#laer" style="color:#3d4c41;text-decoration:none" class="h4">Sanketips</a>
+<a href="/#faq" style="color:#3d4c41;text-decoration:none" class="h5">Spørsmål</a>
+<a href="/auth/login" style="color:#3d4c41;text-decoration:none" class="hlogin">Logg inn</a>
+<a href="/auth/register" style="background:#1a3a24;color:#f5f1e8;text-decoration:none;padding:10px 20px;border-radius:999px;font-weight:600" class="h6">Prøv gratis</a>
+</nav>
+</header>
+<main>
+  <article class="wrap" style="padding-top:clamp(24px,4vw,48px);padding-bottom:clamp(48px,6vw,80px)">
+    <a href="/#laer" style="display:inline-block;font-size:14px;color:#5b6659;text-decoration:none;margin-bottom:22px">← Alle sanketips</a>
+    <p style="font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:#8a5f06;margin:0 0 12px">Data og kart · 9 min</p>
+    <h1 style="font-family:Newsreader,Georgia,serif;font-size:clamp(34px,5vw,48px);font-weight:600;color:#1a3a24;line-height:1.12;letter-spacing:-.01em;margin:0 0 18px">Hva viser soppkartene egentlig?</h1>
+    <p style="font-size:21px;line-height:1.55;color:#5b6659;margin:0 0 8px">Prikkene på et soppkart viser hvor folk har registrert funn — ikke hvor sopp vokser. Her er forskjellen, målt på våre egne data.</p>
+    <hr style="border:0;border-top:1px solid #e3ddcd;margin:32px 0">
+    <p style="margin:0 0 20px">Et soppkart viser hvor noen har registrert et funn. Det er ikke det samme som hvor sopp vokser, og avstanden mellom de to tingene er større enn de fleste kart lar deg ane. Vi har målt vårt eget kart, og resultatet er den ubehagelige delen av dette svaret: vi kan si ganske godt <em>når</em>, og dårlig <em>hvor</em>.</p>
+<p style="margin:0 0 20px"><em>Denne artikkelen handler om hva punktdata kan og ikke kan si. Den handler ikke om artsbestemmelse eller om hva som er spiselig. Den er heller ikke en kritikk av Artsdatabanken eller GBIF — de dataene er gode til det de er laget for. Problemet oppstår først når de leses som noe annet.</em></p>
+<h2 style="font-family:Newsreader,Georgia,serif;font-size:30px;font-weight:600;color:#1a3a24;line-height:1.25;margin:44px 0 14px">Prikken betyr «her sto det et menneske»</h2>
+<p style="margin:0 0 20px">En registrert soppobservasjon blir til når fire ting skjer samtidig:</p>
+<ol style="margin:0 0 20px;padding-left:24px;display:grid;gap:8px">
+<li>soppen fruktifiserte,</li>
+<li>et menneske var på stedet,</li>
+<li>mennesket kjente igjen arten,</li>
+<li>mennesket gadd å registrere den.</li>
+</ol>
+<p style="margin:0 0 20px">Kartet viser produktet av alle fire. Bare det første punktet handler egentlig om sopp. De tre andre handler om mennesker — hvor de går, hva de kan, og hva de bryr seg om.</p>
+<p style="margin:0 0 20px">Det er ikke en spissformulering fra vår side. Det står i Miljødirektoratets egen veileder for konsekvensutredninger, i en setning som burde vært trykt på hvert eneste soppkart som selges:</p>
+<blockquote style="margin:0 0 20px;padding:16px 20px;background:#fdf6e3;border-left:3px solid #fbbf24;border-radius:0 12px 12px 0">«Vær klar over at kartlagte naturtyper og antall artsobservasjoner som regel er overrepresentert i områder som er lett tilgjengelige for mennesker, som langs veier eller omkring større byer.»</blockquote>
+<p style="margin:0 0 20px">Samme veileder er like tydelig på hva et tomt område betyr:</p>
+<blockquote style="margin:0 0 20px;padding:16px 20px;background:#fdf6e3;border-left:3px solid #fbbf24;border-radius:0 12px 12px 0">«At det ikke er dokumentert funn av en art på et område behøver derfor ikke bety at arten ikke finnes der. Manglende funn kan skyldes at området ikke er undersøkt eller at artsfunnene ikke er digitalisert og gjort tilgjengelig.»</blockquote>
+<p style="margin:0 0 20px">Der har du hele artikkelen i to sitater. Resten er tallene.</p>
+<h2 style="font-family:Newsreader,Georgia,serif;font-size:30px;font-weight:600;color:#1a3a24;line-height:1.25;margin:44px 0 14px">Hvor tallene kommer fra</h2>
+<p style="margin:0 0 20px">Norske soppfunn samles i hovedsak inn gjennom <a href="https://artsdatabanken.no/rapporter-funn" style="color:#2d5238;text-decoration:underline">Artsobservasjoner</a>, Artsdatabankens rapporteringstjeneste, der hvem som helst med artskunnskap kan melde inn det de ser. Derfra flyter dataene videre til Artskart og til GBIF, den globale databasen Mycelet henter fra.</p>
+<p style="margin:0 0 20px">Det er en formidabel dugnad. Da vi slo opp i GBIF 9. august 2026, lå det <strong>2 358 630 registrerte soppfunn fra Norge</strong>. Av dem er 61 prosent merket «human observation» — noen så en sopp og skrev det ned — og 30 prosent er herbariebelegg. Artsobservasjoner alene står for 46 prosent av hele bunken.</p>
+<p style="margin:0 0 20px">Men riket Fungi rommer langt mer enn matsopp. Vi delte de norske postene på klasse: 48 prosent hører til <em>Agaricomycetes</em>, der nesten alt folk plukker finnes — hatt-, rør- og kantarellsopper. Rundt 35 prosent er lavdannende sopp. Sju prosent kommer fra ett eneste datasett med DNA fra jordprøver. Over en tredjedel av «soppfunnene» i Norge er altså lav.</p>
+<p style="margin:0 0 20px">Vi tar med den oppdelingen fordi den illustrerer artikkelens eget poeng på vår egen bekostning: et tall er sjelden det leseren tror, heller ikke når det er vi som oppgir det.</p>
+<p style="margin:0 0 20px">Mycelets sesongkurver er bygget på et øyeblikksbilde fra 2. august 2026: 327 298 forekomstpunkter for artene i artskatalogen vår, fra <strong>både Norge og Sverige</strong>, hvorav 316 542 hadde en brukbar dato — det ga kurver for 70 arter. To dager senere utvidet vi basen med flere funn for de samme artene, til drøyt 428 000 punkter i appen i dag; kurvene er foreløpig bygget på det eldre øyeblikksbildet.</p>
+<p style="margin:0 0 20px">Merk hva som <em>ikke</em> finnes i noen av disse tallene: nullpunktene. Ingen registrerer «jeg gikk i denne lia i tre timer og fant ingenting». Dataene er det fagfolk kaller <em>presence-only</em> — bare tilstedeværelse. GBIF har riktignok et eget felt for ekte fraværsobservasjoner, men det står nesten tomt: for sopp i Norge er <strong>348 poster</strong> registrert som fravær, mot 2 358 282 som tilstedeværelse. Det er 0,015 prosent. Nullpunktene finnes formelt, men ikke i praksis.</p>
+<p style="margin:0 0 20px">Konsekvensen er hard. Uten nullpunkter kan du ikke skille «her er det ingen sopp» fra «her har ingen lett». Og et kart som fargelegger tomme områder som dårlige, gjør nettopp den forvekslingen.</p>
+<h2 style="font-family:Newsreader,Georgia,serif;font-size:30px;font-weight:600;color:#1a3a24;line-height:1.25;margin:44px 0 14px">Fire skjevheter, hvorav én vi målte selv</h2>
+<p style="margin:0 0 20px"><strong>Veien.</strong> Tilgjengelighet er den best dokumenterte skjevheten i biologiske forekomstdata. Det finnes egne metoder for å tallfeste den — <a href="https://doi.org/10.1111/ecog.05102" style="color:#2d5238;text-decoration:underline">sampbias</a> (Zizka, Antonelli &amp; Silvestro, <em>Ecography</em> 2021) estimerer hvor mye innsamlingsraten stiger nær veier, byer, elver og flyplasser. At effekten finnes, er ikke omstridt.</p>
+<p style="margin:0 0 20px"><strong>Helgen.</strong> Denne ville vi måle selv, på norske soppdata. Vi prøvde først å trekke et utvalg, og bommet to ganger — det står under «Fellen vi selv gikk i» lenger nede. Til slutt talte vi opp hver eneste dag: alle 4 018 dagene fra 1. januar 2015 til 31. desember 2025, med samme filter hele veien (Norge, sopp, «human observation», med koordinat). Det ble <strong>907 069 registrerte funn</strong>, ingen dag utelatt.</p>
+<p style="margin:0 0 20px">Samlet ble <strong>31,8 prosent av funnene gjort i helgen</strong>, mot 28,6 ved jevn fordeling. Lørdag er den travleste dagen (16,6 prosent av alle funn), mandag den roligste (11,6 prosent). Regnet per dag er det 1,17 ganger så mange registreringer i helgen som på en hverdag.</p>
+<p style="margin:0 0 20px">Men snittet skjuler det som faktisk er interessant. Helgeandelen har falt nesten hvert eneste år:</p>
+<ul style="margin:0 0 20px;padding-left:24px;display:grid;gap:8px">
+<li>2015: 36,6 % — 2016: 36,5 % — 2017: 36,2 %</li>
+<li>2018: 35,0 % — 2019: 33,2 % — 2020: 32,6 %</li>
+<li>2021: 32,6 % — 2022: 31,3 % — 2023: 29,6 %</li>
+<li>2024: 28,5 % — 2025: 28,0 %</li>
+</ul>
+<p style="margin:0 0 20px">Fra 36,6 til 28,0 prosent på elleve år. De to siste årene ligger <em>under</em> jevn fordeling. Helgeskjevheten i norske soppregistreringer var reell for ti år siden; i dagens data er den i praksis borte.</p>
+<p style="margin:0 0 20px">Hvorfor, vet vi ikke. Det kan være at registreringen har flyttet fra skrivebordet om kvelden til telefonen i skogen, eller at mer hjemmekontor har jevnet ut hvilke dager folk er ute. Vi har ikke data som skiller de forklaringene, og vi skal ikke late som noe annet. Én ting kan vi derimot utelukke: at profesjonelle kartleggere har fortynnet frivilligdataene. Den frivillige tjenesten Artsobservasjoner sto for 78 prosent av postene i 2015 og 88 prosent i 2025 — en større andel, ikke mindre. Fallet skjer altså <em>innenfor</em> dugnaden.</p>
+<p style="margin:0 0 20px">Til sammenligning fant <a href="https://pubmed.ncbi.nlm.nih.gov/23104424/" style="color:#2d5238;text-decoration:underline">Courter og medarbeidere (2013)</a> en helgeandel på 32 prosent for førsteankomster av trekkfugl i Nord-Amerika, ned fra 33,7 prosent i eldre data. Samme retning som de norske tallene, bare mye svakere. Og <a href="https://doi.org/10.1002/pan3.70017" style="color:#2d5238;text-decoration:underline">Rosário og medarbeidere (2025)</a> fant ukedag blant de sterkeste prediktorene for når folk registrerer i det hele tatt — riktignok for seks trearter på Den iberiske halvøy, på iNaturalist-data, ikke for sopp i Norden. Skjevheten er altså ikke avskaffet som fenomen. Den er svekket her, i disse dataene, i denne perioden.</p>
+<p style="margin:0 0 20px"><strong>Sesongen.</strong> Soppfunn hoper seg opp om høsten. Det er åpenbart riktig — det er da soppen fruktifiserer. Men det er også da folk går ut for å lete. De to årsakene er vevd sammen i dataene, og med presence-only-data kan de ikke skilles helt fra hverandre. Enhver sesongkurve bygget på funndata inneholder begge deler.</p>
+<p style="margin:0 0 20px"><strong>Arten.</strong> Folk registrerer ikke alt de ser. Sjeldne og rødlistede arter meldes ivrigere enn vanlige, og attraktive matsopper oftere enn små brune. Hughes og medarbeidere fant i en <a href="https://doi.org/10.1111/ecog.05926" style="color:#2d5238;text-decoration:underline">gjennomgang av 742 millioner forekomstposter</a> (<em>Ecography</em> 2021) at over halvparten av postene i de fleste grupper gjelder under to prosent av artene — og at bare 6,74 prosent av kloden i det hele tatt er prøvetatt. Den analysen dekker dyr, ikke sopp, så tallene skal ikke flyttes rått hit. Men mønsteret er det samme.</p>
+<h2 style="font-family:Newsreader,Georgia,serif;font-size:30px;font-weight:600;color:#1a3a24;line-height:1.25;margin:44px 0 14px">Vi målte vårt eget kart, og det besto ikke</h2>
+<p style="margin:0 0 20px">Her er tallene vi helst skulle sluppet å publisere.</p>
+<p style="margin:0 0 20px">Først et ord om målestokken. AUC er et mål på rangeringsevne, ikke på treffprosent. Tenk deg at du tar ett tilfelle der det faktisk ble funnet sopp, og ett tilfeldig annet — for tidsmodellen to uker, for stedsmodellen to steder — og spør modellen hvilket av de to som er best. Gjetter den rent tilfeldig, treffer den halvparten av gangene — AUC 0,50. Treffer den alltid, er AUC 1,00.</p>
+<p style="margin:0 0 20px">Mycelets <strong>tidsmodell</strong> — den empiriske fenologien, altså når på året hver art dukker opp — har AUC <strong>0,88</strong>, trent på data før 2021 og testet på 2021 og senere. Det er klart bedre enn tilfeldig, og klart bedre enn den håndskrevne månedsheuristikken vi startet med (0,83).</p>
+<p style="margin:0 0 20px">Mycelets <strong>romlige modell</strong> — den som skulle si <em>hvor</em> — måler slik, i en validering bygget for å motstå lekkasje mellom trening og test:</p>
+<ul style="margin:0 0 20px;padding-left:24px;display:grid;gap:8px">
+<li>hele den romlige modellen: <strong>0,504</strong></li>
+<li>bare habitat (skogtype, bonitet, volum): <strong>0,536</strong></li>
+<li>bare tetthet av historiske funn: <strong>0,472</strong></li>
+<li>jordas dreneringsgrad, målt på svenske data: <strong>rundt 0,47</strong> — den ble aldri koblet inn i modellen, nettopp fordi den ikke skilte</li>
+</ul>
+<p style="margin:0 0 20px">Ulike kjøringer av fullmodellen har landet på 0,504 og 0,521, avhengig av hvordan bakgrunnspunktene velges. Uansett hvilken vi bruker: nær myntkast. Og ren forekomsttetthet — å sende folk dit det er registrert mest sopp fra før — ligger på samme tilfeldighetsnivå, mellom 0,47 og 0,52 avhengig av kjøring. Registrerte funn peker ikke ut morgendagens funnsteder i våre målinger.</p>
+<p style="margin:0 0 20px">Derfor er den delen slått av. I koden står den nå som en enkelt linje der forekomstfaktoren er satt til 1 — altså ingen effekt — med målingen skrevet inn som begrunnelse rett ved siden av.</p>
+<h2 style="font-family:Newsreader,Georgia,serif;font-size:30px;font-weight:600;color:#1a3a24;line-height:1.25;margin:44px 0 14px">Fellen vi selv gikk i</h2>
+<p style="margin:0 0 20px">Vi hadde en fasit på 26 steder som erfarne plukkere hadde anbefalt, og vi testet om tetthet av historiske funn kunne forutsi dem. Tallene så lovende ut:</p>
+<ul style="margin:0 0 20px;padding-left:24px;display:grid;gap:8px">
+<li>antall funn innen 3 km: AUC 0,671</li>
+<li>antall ulike år med funn: 0,685</li>
+<li>antall ulike arter: 0,683</li>
+</ul>
+<p style="margin:0 0 20px">Bedre enn modellens egen score. I noen timer så det ut som forekomstdataene virket likevel.</p>
+<p style="margin:0 0 20px">Så leste vi fasiten på nytt. <strong>23 av de 26 anbefalte stedene nevnte parkering, kollektivtransport eller merket sti i adkomstbeskrivelsen.</strong> Testen målte ikke om det vokser sopp der. Den målte om folk kan komme seg dit — på begge sider av sammenligningen samtidig. Den strengere målingen på 0,472 var den riktige.</p>
+<p style="margin:0 0 20px">Vi gikk i den samme fellen mens vi skrev denne artikkelen. Første forsøk på å måle helgeskjevheten hentet de første 3 000 postene per år fra GBIF, uten å tenke over at API-et leverer dem i datorekkefølge. Utvalget besto nesten utelukkende av januar og februar, og ga en helgeandel på 44,8 prosent. Vintersopping <em>er</em> en utpreget helgeaktivitet — opptellingen vår viser 42,9 prosent for januar og februar, mot 25,9 prosent i juli — så tallet var omtrent riktig for det utvalget, og fullstendig feil som svar på spørsmålet vi stilte. Andre forsøk trakk et lagdelt utvalg, men trakk det i sammenhengende blokker, og blokker klumper seg etter hvem som har meldt inn; det ga 32,6 prosent, tre kvart prosentpoeng for høyt. Til slutt gjorde vi det eneste som ikke kan trekke skjevt: talte opp alle dagene.</p>
+<p style="margin:0 0 20px">Lærdommen er den samme hver gang: <strong>et tall som ser lovende ut, fra en test som ikke kontrollerer for den ene tingen du vet er en konfunderende faktor, er verdiløst.</strong> Det gjelder også når tallet er ditt eget og du gjerne vil at det skal stemme.</p>
+<h2 style="font-family:Newsreader,Georgia,serif;font-size:30px;font-weight:600;color:#1a3a24;line-height:1.25;margin:44px 0 14px">Hvorfor «når» overlever det «hvor» ikke gjør</h2>
+<p style="margin:0 0 20px">Hvis dataene er så skjeve, hvorfor virker tidsmodellen?</p>
+<p style="margin:0 0 20px">Fordi skjevheten i stor grad er den samme for alle arter. Går folk mest i skogen i september, løftes alle september-arter like mye. Men <em>forskjellen</em> mellom en art som topper i juni og en som topper i oktober overlever den felles skjevheten. Sesongkurvene sammenligner arter mot hverandre innenfor den samme skjeve innsamlingen, og da forsvinner mye av problemet.</p>
+<p style="margin:0 0 20px">Romlig går det motsatt vei. Der er skjevheten selve variasjonen du prøver å måle. Tettheten av funn i en rute <em>er</em> i praksis et mål på hvor lett den ruta er å komme til.</p>
+<p style="margin:0 0 20px">Vi skal ikke overdrive renheten her heller: helgeskjevheten er en tidsskjevhet, og i eldre data traff den tidsmodellen vår også. Courter og medarbeidere målte at helgeeffekten forskjøv beregnede ankomstdatoer for fugl med rundt en halv dag. Det er lite sammenlignet med usikkerheten ellers i et soppvarsel, men det er ikke null — og det er en av grunnene til at kurvene bør bygges på nyere data når de finnes.</p>
+<h2 style="font-family:Newsreader,Georgia,serif;font-size:30px;font-weight:600;color:#1a3a24;line-height:1.25;margin:44px 0 14px">Hva kartet faktisk er godt til</h2>
+<p style="margin:0 0 20px">Alt dette betyr ikke at soppkart er verdiløse. Det betyr at de svarer på et annet spørsmål enn folk tror.</p>
+<p style="margin:0 0 20px">Den avgjørende asymmetrien: <strong>et punkt er informasjon. Et tomt område er ingen informasjon.</strong> Er kantarell (<em>Cantharellus cibarius</em>) registrert i en li, har et menneske ment å se kantarell der — en observasjon, ikke en garanti, og bestemmelsen kan være feil. At nabolia er blank, forteller deg derimot ingenting i det hele tatt, bortsett fra at ingen har meldt derfra.</p>
+<p style="margin:0 0 20px">Med den asymmetrien i bakhodet er kartet nyttig til:</p>
+<ul style="margin:0 0 20px;padding-left:24px;display:grid;gap:8px">
+<li><strong>Hvilke arter som er meldt i din landsdel.</strong> Artslisten for et fylke er langt mer pålitelig enn plasseringen av hvert enkelt punkt.</li>
+<li><strong>Når på året de ble meldt.</strong> Datoene er den sterkeste delen av datasettet. Det er derfor sesongkurvene virker.</li>
+<li><strong>Å vite hva du bør lære å kjenne igjen — også det farlige.</strong> Hvit fluesopp (<em>Amanita virosa</em>) og spiss giftslørsopp (<em>Cortinarius rubellus</em>) er dødelige, og dem må du kunne uansett hva kartet viser for ditt område. Et tomt område betyr «ingen har meldt fra», ikke «her finnes den ikke» — og det er trolig mest villedende akkurat her: en sopp ingen vil ha i kurven, blir sjeldnere lagt merke til og meldt inn enn en matsopp. Hvor stor den forskjellen er for norske giftsopper, har vi ikke målt. Spiss giftslørsopp vokser ofte side om side med traktkantarell i samme fuktige, mosekledde barskog, og symptomene på nyreskade kan komme flere døgn etter måltidet, lenge etter at man har glemt hva man spiste. Hvit fluesopp er lumsk på en annen måte: magesymptomene kommer 6–24 timer etter måltidet, så følger en tilsynelatende bedring før lever- og nyreskaden slår inn. Den bedringen skal aldri roe deg ned.</li>
+<li><strong>Et utgangspunkt for egne turer.</strong> Ikke en fasit — en hypotese om <em>hvor du skal gå</em>, ikke om hva du kommer til å finne.</li>
+<li><strong>Å finne skogtypen, ikke stedet.</strong> Ser du at en art er meldt fra gammel granskog med høy bonitet, er det den <em>typen</em> skog du skal lete i. Det generaliserer. Selve punktet gjør det ikke. Men skogtypen sier bare hvor du skal lete — den sier ingenting om det du står med i hånda. Ved tvil, la den stå.</li>
+</ul>
+<p style="margin:0 0 20px">Og det beste kartet over ditt eget terreng lager du selv. Noen sesonger med egne, daterte notater slår enhver generell modell på akkurat de liene du faktisk går i. Men et eget kart har samme begrensning som alle andre: det forteller deg hvor du skal se, ikke hva du fant i dag. Arten avgjøres i hånda, hver gang, også på et sted du har plukket på i ti år.</p>
+<h2 style="font-family:Newsreader,Georgia,serif;font-size:30px;font-weight:600;color:#1a3a24;line-height:1.25;margin:44px 0 14px">Slik leser du et soppkart uten å bli lurt</h2>
+<ul style="margin:0 0 20px;padding-left:24px;display:grid;gap:8px">
+<li><strong>Spør alltid: hvor går veien?</strong> Ligger prikkene langs stier, veier og hytteområder, ser du på et kart over mennesker.</li>
+<li><strong>Les tomme områder som «ukjent», aldri som «tomt».</strong></li>
+<li><strong>Vær skeptisk til fargelagte flater.</strong> Punkter er observasjoner. En sammenhengende farge er en modell — spør hva den er validert mot, og mot hva slags fasit.</li>
+<li><strong>Sjekk om tjenesten oppgir hvor godt den treffer.</strong> Gjør den ikke det, er det som regel fordi den ikke har målt det.</li>
+<li><strong>Bruk datoene mer enn koordinatene.</strong> Det er der signalet er sterkest.</li>
+<li><strong>Husk at artsnavnet på en prikk er noens bestemmelse.</strong> Den kan være feil, og den sier uansett ingenting om soppen du står med i hånda.</li>
+</ul>
+<p style="margin:0 0 20px">Mycelet viser derfor forekomstpunkter som kontekst på kartet, men lar dem ikke påvirke poengsummen. Den daglige vurderingen av soppforholdene for 22 områder ligger åpent på <a href="/soppforhold" style="color:#2d5238;text-decoration:underline">/soppforhold</a> — det er «når»-delen. Sesongdelen av den er målt (AUC-tallet over); vær- og fuktleddene er foreløpig kalibrert mot feltkunnskap og forskning, ikke mot en fasit av funn. Også de skal måles på samme måte.</p>
+<h2 style="font-family:Newsreader,Georgia,serif;font-size:30px;font-weight:600;color:#1a3a24;line-height:1.25;margin:44px 0 14px">Til slutt: sikkerhet</h2>
+<p style="margin:0 0 20px">Ingenting på et kart kan fortelle deg om en sopp er trygg å spise. En prikk sier at noen mente de så en art der, en gang. Den sier ingenting om eksemplaret du har i kurven.</p>
+<p style="margin:0 0 20px">Artsbestemmelse er en egen ferdighet, og det er den eneste av ferdighetene i denne artikkelen der en feil kan drepe deg. En felttest kan avsløre at et funn <em>ikke</em> er den arten du håpet — den kan aldri frikjenne det.</p>
+<p style="margin:0 0 20px">Er du det minste i tvil: la den stå. Bruk soppkontroll. Norges sopp- og nyttevekstforbund har fysiske kontroller rundt om i landet fra august og utover i sesongen — finn nærmeste på <a href="https://soppkontroll.no" style="color:#2d5238;text-decoration:underline">soppkontroll.no</a>. Der ligger også <em>Digital soppkontroll</em>, som åpner 1. juli og bemannes av faktiske soppkontrollører, som app og på nett.</p>
+<p style="margin:0 0 20px">Verken kartet, prediksjonen eller bildeidentifiseringen i Mycelet er en spiselighetsdom, og ingen av dem skal være siste ord. Vi har brukt denne artikkelen på å vise fram svakhetene i «hvor»-delen vår — det gjør ikke resten av appen til en fasit.</p>
+<p style="margin:0 0 20px">Mistenker du at noen har spist en giftig sopp, ring <strong>Giftinformasjonen på 22 59 13 00</strong> — døgnåpent. Ring med en gang, selv om ingen har symptomer ennå, og selv om noen først ble dårlige og så virker friskere. I Sverige: <strong>112</strong> ved akutt fare, ellers Giftinformationscentralen på <strong>010-456 67 00</strong>.</p>
+<h2 style="font-family:Newsreader,Georgia,serif;font-size:30px;font-weight:600;color:#1a3a24;line-height:1.25;margin:44px 0 14px">Kilder</h2>
+<ul style="margin:0 0 20px;padding-left:24px;display:grid;gap:8px">
+<li>Miljødirektoratet, veileder for konsekvensutredninger, <a href="https://www.miljodirektoratet.no/ansvarsomrader/overvaking-arealplanlegging/arealplanlegging/konsekvensutredninger/metode-for-utredning/naturmangfold/1.2.-kunnskapsgrunnlaget" style="color:#2d5238;text-decoration:underline">1.2 Kunnskapsgrunnlaget</a> — overrepresentasjon nær vei og by; manglende funn er ikke fravær; om lag 81 % av Norges kjente arter er dokumentert i Artskart.</li>
+<li>Artsdatabanken, <a href="https://artsdatabanken.no/rapporter-funn" style="color:#2d5238;text-decoration:underline">Rapporter funn / Artsobservasjoner</a> — frivillig innrapportering.</li>
+<li>Hughes m.fl. (2021), <em>Ecography</em> 44: 1259–1269, <a href="https://doi.org/10.1111/ecog.05926" style="color:#2d5238;text-decoration:underline">Sampling biases shape our view of the natural world</a> — 742 millioner poster; 6,74 % av kloden prøvetatt; over 50 % av postene gjelder under 2 % av artene. <strong>Dekker dyr, ikke sopp.</strong></li>
+<li>Zizka, Antonelli &amp; Silvestro (2021), <em>Ecography</em> 44: 25–32, <a href="https://doi.org/10.1111/ecog.05102" style="color:#2d5238;text-decoration:underline">sampbias</a> — metode for å tallfeste tilgjengelighetsskjevhet (vei, by, elv, flyplass).</li>
+<li>Courter m.fl. (2013), <em>International Journal of Biometeorology</em> 57: 715–720, <a href="https://pubmed.ncbi.nlm.nih.gov/23104424/" style="color:#2d5238;text-decoration:underline">Weekend bias in Citizen Science data reporting</a> — helgeandelen for førsteankomster falt fra 33,7 % i historiske data (1880–1969) til 32 % i nyere (1997–2010); forskyver beregnede datoer med rundt en halv dag. <strong>Fem fuglearter i Nord-Amerika.</strong></li>
+<li>Rosário, Tiago, Chozas &amp; Capinha (2025), <em>People and Nature</em> 7: 860–870, <a href="https://doi.org/10.1002/pan3.70017" style="color:#2d5238;text-decoration:underline">When do citizen scientists record biodiversity?</a> — ukedag, måned og temperatur er de sterkeste prediktorene for registreringsaktivitet; aktiviteten er høyere i helgene. <strong>Seks trearter på Den iberiske halvøy, på iNaturalist-data — ikke sopp, ikke Norden.</strong></li>
+<li>Norges sopp- og nyttevekstforbund, <a href="https://soppkontroll.no" style="color:#2d5238;text-decoration:underline">soppkontroll.no</a> og <a href="https://soppognyttevekster.no/soppsesongen-2026/" style="color:#2d5238;text-decoration:underline">Soppsesongen 2026</a> — Digital soppkontroll åpner 1. juli; de fysiske kontrollene «starter opp i løpet av august og holder det gående i løpet av sesongen».</li>
+<li>Egne uttrekk fra GBIFs åpne API, 9. august 2026: 2 358 630 soppfunn fra Norge; 61 % «human observation», 30 % herbariebelegg; 48 % <em>Agaricomycetes</em>, 35 % lavdannende sopp, 7 % fra ett eDNA-datasett fra jordprøver; 348 fraværsposter mot 2 358 282 tilstedeværelsesposter.</li>
+<li>Egen fullstendig dagsopptelling mot samme API, 9. august 2026: alle 4 018 dager fra 2015 til 2025, filtrert på Norge, sopp, «human observation» og koordinat — 907 069 funn, ingen dag utelatt. Helgeandel 31,84 % samlet; 36,64 % i 2015, fallende til 27,96 % i 2025. Lørdag 16,59 %, mandag 11,64 %. Januar–februar 42,91 %, juli 25,88 %. (Samme filter med årsintervall i stedet for dag-for-dag gir 907 363 — de vel 290 postenes forskjell er datoer som ikke lar seg feste til én enkelt dag.)</li>
+<li>Mycelets egne valideringskjøringer: fenologi AUC 0,88 (mot 0,83 for den gamle månedsheuristikken); romlig fullmodell 0,504 og 0,521 i to kjøringer, habitat 0,536, forekomsttetthet 0,47–0,52 på tvers av kjøringer (tilfeldighetsnivå).</li>
+</ul>
+    <aside style="margin-top:44px;padding:22px 26px;background:#fdf6e3;border-radius:18px;border:1px solid #f0e2bd">
+      <p style="margin:0;font-size:16px;line-height:1.6"><strong>Er du i tvil, la soppen stå.</strong> Ingen artikkel — og ingen app — erstatter det å kjenne arten selv. Ta med funnet til soppkontroll hos <a href="https://soppognyttevekster.no" style="color:#2d5238">Norges sopp- og nyttevekstforbund</a> hvis du er usikker.</p>
+    </aside>
+  </article>
+
+  <section class="wrap" style="max-width:1180px;padding-bottom:clamp(48px,6vw,80px)">
+    <h2 style="font-family:Newsreader,Georgia,serif;font-size:28px;font-weight:600;color:#1a3a24;margin:0 0 20px">Les mer</h2>
+    <div class="mycelet-split" style="display:grid;grid-template-columns:1fr 1fr;gap:18px">
+<a href="/sanketips/fem-forvekslinger" style="display:block;background:#ffffff;border-radius:20px;padding:24px 26px;text-decoration:none;color:inherit">
+  <p style="font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:#8a5f06;margin:0 0 10px">Trygg sanking · 8 min</p>
+  <h3 style="font-family:Newsreader,Georgia,serif;font-size:21px;font-weight:600;color:#1a3a24;margin:0 0 8px;line-height:1.3">De fem forvekslingene nybegynnere gjør</h3>
+  <p style="font-size:15px;color:#5b6659;margin:0;line-height:1.5">Hva du må se på under hatten, og hvilke arter du bør lære å kjenne igjen før du plukker dem du vil spise.</p>
+</a>
+<a href="/sanketips/les-terrenget" style="display:block;background:#ffffff;border-radius:20px;padding:24px 26px;text-decoration:none;color:inherit">
+  <p style="font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:#8a5f06;margin:0 0 10px">Sanketips · 6 min</p>
+  <h3 style="font-family:Newsreader,Georgia,serif;font-size:21px;font-weight:600;color:#1a3a24;margin:0 0 8px;line-height:1.3">Slik leser du terrenget før du går</h3>
+  <p style="font-size:15px;color:#5b6659;margin:0;line-height:1.5">Alder på skogen, mose, skyggesider og gamle skogsveier — tegnene som skiller en tom tur fra en full kurv.</p>
+</a>
+<a href="/sanketips/sopp-etter-regn" style="display:block;background:#ffffff;border-radius:20px;padding:24px 26px;text-decoration:none;color:inherit">
+  <p style="font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:#8a5f06;margin:0 0 10px">Vær og timing · 5 min</p>
+  <h3 style="font-family:Newsreader,Georgia,serif;font-size:21px;font-weight:600;color:#1a3a24;margin:0 0 8px;line-height:1.3">Hvor lenge etter regnet kommer soppen?</h3>
+  <p style="font-size:15px;color:#5b6659;margin:0;line-height:1.5">Om fukt, temperatur og de få dagene som skiller «for tidlig» fra «for seint» — grunnlaget for varselet i appen.</p>
+</a>
+    </div>
+  </section>
+</main>
+<footer style="background:#12251a;color:#c2cbb7">
+<div class="mycelet-split" style="display:grid;grid-template-columns:1.2fr 0.8fr;gap:clamp(28px,4vw,56px);max-width:1180px;margin:0 auto;padding:clamp(44px,5vw,72px) clamp(20px,5vw,56px)">
+<div>
+<p style="display:flex;align-items:center;gap:10px;margin:0 0 14px"><span style="width:32px;height:32px;border-radius:999px;background:#fbbf24;display:grid;place-items:center;color:#1a3a24"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="sprout" style="width:18px;height:18px" class="lucide lucide-sprout"><path d="M7 20h10"></path><path d="M10 20c5.5-2.5.8-6.4 3-10"></path><path d="M9.5 9.4c1.1.8 1.8 2.2 2.3 3.7-2 .4-3.5.4-4.8-.3-1.2-.6-2.3-1.9-3-4.2 2.8-.5 4.4 0 5.5.8z"></path><path d="M14.1 6a7 7 0 0 0-1.1 4c1.9-.1 3.3-.6 4.3-1.4 1-1 1.6-2.3 1.7-4.6-2.7.1-4 1-4.9 2z"></path></svg></span><span style="font-family:Newsreader,Georgia,serif;font-size:23px;font-weight:600;color:#f5f1e8">Mycelet</span></p>
+<p style="font-size:15px;max-width:46ch;margin:0 0 14px">Soppjakt bygget på åpne data. <strong style="color:#f0ece0;font-weight:600">Datakilder:</strong> MET · NIBIO · Kartverket · SMHI · Artsdatabanken/GBIF — 333 000+ soppfunn.</p>
+<p style="font-size:15px;margin:0;color:#8b9684">mycelet.com · Norge og Sverige</p>
+</div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:26px 32px;align-content:start;font-size:16px">
+<div style="display:grid;gap:10px;align-content:start">
+<p style="font-size:12px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:#8b9684;margin:0 0 2px">Produkt</p>
+<a href="/auth/register" style="color:#dfe4d5;text-decoration:none" class="h19">Åpne web-appen</a>
+<a href="/#priser" style="color:#dfe4d5;text-decoration:none" class="h20">Priser</a>
+<a href="/#funksjoner" style="color:#dfe4d5;text-decoration:none" class="h21">Funksjoner</a>
+<a href="/datakilder" style="color:#dfe4d5;text-decoration:none" class="h22">Datakilder</a>
+</div>
+<div style="display:grid;gap:10px;align-content:start">
+<p style="font-size:12px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:#8b9684;margin:0 0 2px">Hjelp og vilkår</p>
+<a href="/#faq" style="color:#dfe4d5;text-decoration:none" class="h23">Spørsmål og svar</a>
+<a href="mailto:post@mycelet.com" style="color:#dfe4d5;text-decoration:none" class="h24">post@mycelet.com</a>
+<a href="/personvern" style="color:#dfe4d5;text-decoration:none" class="h25">Personvern</a>
+<a href="/kjopsvilkar" style="color:#dfe4d5;text-decoration:none" class="h26">Kjøpsvilkår</a>
+</div>
+</div>
+</div>
+<div style="max-width:1180px;margin:0 auto;padding:0 clamp(20px,5vw,56px) clamp(32px,4vw,48px);display:flex;flex-wrap:wrap;align-items:center;gap:10px 18px;border-top:1px solid rgba(223,228,213,0.14);padding-top:22px;font-size:15px">
+<span style="color:#f0ece0;font-weight:600">Norsk</span>
+<a href="/?lang=sv" style="color:#8b9684;text-decoration:none">Svenska</a>
+<span style="color:#8b9684;margin-left:auto">© 2026 Mycelet</span>
+</div>
+</footer>
+</body>
+</html>
