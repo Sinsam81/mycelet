@@ -78,12 +78,25 @@ export function SoppforholdForbehold({ land = 'NO' }: { land?: 'NO' | 'SE' }) {
             </p>
           ) : (
             <p>
-              Ingen app, og ingen nettside, kan si at en sopp er trygg å spise. Er du i tvil, la den stå — eller
-              få den kontrollert av en soppsakkyndig.{' '}
+              {/* Presisert 2026-08-12 etter innspill fra BSNF: soppkontroll.no er
+                  den DIGITALE kontrollen (bemannet av soppsakkyndige, et utvalg
+                  arter) — de fysiske kontrollene står i NSNFs og lokal-
+                  foreningenes kalendere. Ikke slå de to sammen igjen. */}
+              Ingen app, og ingen nettside, kan si at en sopp er trygg å spise. Er du i tvil, la den stå, eller
+              få den kontrollert av en soppsakkyndig: digitalt via appen{' '}
               <a href="https://soppkontroll.no" className="underline" rel="noopener noreferrer" target="_blank">
-                soppkontroll.no
+                Digital soppkontroll
               </a>{' '}
-              viser kontroller nær deg. Ved mistanke om forgiftning: ring Giftinformasjonen{' '}
+              (et utvalg arter, bemannet av soppsakkyndige), eller på en fysisk soppkontroll. Kalenderen hos{' '}
+              <a
+                href="https://soppognyttevekster.no/soppkontroll/"
+                className="underline"
+                rel="noopener noreferrer"
+                target="_blank"
+              >
+                Norges sopp- og nyttevekstforbund
+              </a>{' '}
+              og lokalforeningene viser når og hvor. Ved mistanke om forgiftning: ring Giftinformasjonen{' '}
               <a href="tel:22591300" className="font-semibold underline">22 59 13 00</a>.
             </p>
           )}
