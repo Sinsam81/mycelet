@@ -959,10 +959,11 @@
     "dangerHeading": "ADVARSEL: Mulig giftig sopp",
     "dangerBody": "Denne soppen kan være giftig eller dødelig. AI gir kun sannsynlig art. Spis aldri uten bekreftelse fra kvalifisert ekspert.",
     "poisonControl": "Giftinformasjonen: 22 59 13 00",
-    "getAssessment": "Få vurdering hos Soppkontrollen",
+    "getAssessment": "Finn en fysisk soppkontroll (kalenderen hos NSNF)",
+    "digitalCheck": "Send bilde til Digital soppkontroll nå (soppkontroll.no)",
     "cautionHeading": "AI-resultatet er ikke en spiselighetsgaranti",
     "cautionBody": "Resultatet er kun en sannsynlig art — ikke en bekreftelse på at soppen er trygg. Spis aldri sopp du ikke er 100 % sikker på, og få den vurdert av soppkontroll eller ekspert først.",
-    "checkWithControl": "Sjekk med Soppkontrollen"
+    "checkWithControl": "Finn en fysisk soppkontroll"
   },
   "CookieNotice": {
     "title": "Vil du tillate valgfri bruksanalyse?",
@@ -1361,6 +1362,7 @@
     "poisonDisplay": "Giftinformasjonen 22 59 13 00",
     "emergencyTel": "113",
     "controlUrl": "https://soppognyttevekster.no/soppkontroll/",
+    "digitalControlUrl": "https://soppkontroll.no",
     "controlName": "Soppkontrollen"
   },
   "Vilkar": {
