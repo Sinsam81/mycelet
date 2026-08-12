@@ -8,36 +8,96 @@ import { VarselCta } from '@/components/soppforhold/VarselCta';
 import { alleRegionSlugs, regionFromSlug } from '@/lib/prediction/region-slug';
 import {
   SOPPFORHOLD_BASE,
+  datoTekst,
   farge,
   hentRegioner,
-  norskDato,
   type SoppforholdRegion
 } from '../hent-regioner';
 
 /**
- * «Soppforhold i {område} i dag» — én delbar side per region.
+ * «Soppforhold i {område} i dag» / «Svampläget i {område} idag» — én delbar
+ * side per region.
  *
  * Samlesiden (/soppforhold) svarer på «hvor i landet er det best?». Disse
  * svarer på det folk faktisk googler og deler i lokale grupper: «soppforhold
- * Oslo». En lokal lenke er delbar i en lokal tråd på en måte en rikstabell
- * aldri blir — og foreningsmailen kan lenke rett til mottakerens eget område.
+ * Oslo», «svampläget Göteborg». En lokal lenke er delbar i en lokal tråd på en
+ * måte en rikstabell aldri blir — og foreningsmailene kan lenke rett til
+ * mottakerens eget område.
  *
- * Samme regler som samlesiden: offentlig, serverrendret, og ærlig om hva
- * tallet ikke er (delt komponent — se Forbehold.tsx).
+ * SPRÅKET FØLGER LANDET, ikke den besøkende: en side om Göteborg er svensk,
+ * med svenske dommer, svenske artsnavn (?locale=sv mot regions-API-et, egen
+ * cache-oppføring) og svensk giftnummer i Forbehold. Det var funnet som holdt
+ * de svenske sidene tilbake i første runde.
+ *
+ * Samme regler som samlesiden ellers: offentlig, serverrendret, og ærlig om
+ * hva tallet ikke er (delt komponent — se Forbehold.tsx).
  */
 
 export const revalidate = 3600;
 
-/**
- * ⚠️ KUN NORSKE OMRÅDER FORELØPIG. De svenske sidene kan ikke publiseres som
- * norske sider med norsk giftnummer — Giftinformasjonen 22 59 13 00 er feil
- * land for en leser i Göteborg (samme feilklasse som H13 i lanserings-
- * revisjonen). De kommer i den svenske runden, med svensk tekst, svensk
- * Giftinformationscentralen og svenske vurderingslinjer. Ukjente og svenske
- * slugs gir 404 til da.
- */
+const COPY = {
+  NO: {
+    metaTittel: (navn: string) => `Soppforhold i ${navn} i dag — oppdatert daglig`,
+    metaBeskrivelse: (navn: string) =>
+      `Er det sopp i skogen rundt ${navn} nå? Daglig oppdatert vurdering regnet ut fra nedbør, jordfuktighet, temperatur og sesong.`,
+    ogTittel: (navn: string) => `Soppforhold i ${navn} i dag`,
+    oppdatert: (dato: string) => `Oppdatert ${dato}`,
+    oppdateresDaglig: 'Oppdateres daglig',
+    h1: (navn: string) => `Soppforhold i ${navn} i dag`,
+    land: 'Norge',
+    avHundre: 'av 100',
+    artslinje: (art: string) => (
+      <>
+        Av artene i basen er det særlig <strong>{art}</strong> som er i sesong her nå.
+      </>
+    ),
+    plassering: (nr: number, av: number) => `Nummer ${nr} av ${av} områder i Norge i dag.`,
+    heleOversikten: 'Se hele oversikten',
+    oversiktenLenke: 'hele oversikten',
+    ikkeKlar: 'Beregningen for i dag er ikke klar ennå. Prøv igjen om en liten stund — eller se',
+    kartHeading: 'Vil du se det på kart?',
+    kartBrodtekst:
+      'Tallet over gjelder hele området. I appen regner vi det samme for stedet du faktisk står, viser 428 000 registrerte funn på kart, og forteller hvilke arter som er i sesong akkurat nå.',
+    provGratis: 'Prøv gratis',
+    alleOmradene: 'Alle områdene',
+    kilder:
+      'Datagrunnlag: MET Norway og SMHI (vær), NIBIO og CORINE (skog), GBIF og Artsdatabanken (funn). Se',
+    kilderLenke: 'datakilder',
+    kilderHale: 'for lisenser og detaljer.'
+  },
+  SE: {
+    metaTittel: (navn: string) => `Svampläget i ${navn} idag — uppdateras varje dag`,
+    metaBeskrivelse: (navn: string) =>
+      `Är det svamp i skogen kring ${navn} nu? Daglig bedömning beräknad från nederbörd, markfuktighet, temperatur och säsong.`,
+    ogTittel: (navn: string) => `Svampläget i ${navn} idag`,
+    oppdatert: (dato: string) => `Uppdaterad ${dato}`,
+    oppdateresDaglig: 'Uppdateras varje dag',
+    h1: (navn: string) => `Svampläget i ${navn} idag`,
+    land: 'Sverige',
+    avHundre: 'av 100',
+    artslinje: (art: string) => (
+      <>
+        Av arterna i basen är det särskilt <strong>{art}</strong> som är i säsong här nu.
+      </>
+    ),
+    plassering: (nr: number, av: number) => `Nummer ${nr} av ${av} områden i Sverige idag.`,
+    heleOversikten: 'Se hela översikten',
+    oversiktenLenke: 'hela översikten',
+    ikkeKlar: 'Dagens beräkning är inte klar ännu. Försök igen om en liten stund, eller se',
+    kartHeading: 'Vill du se det på karta?',
+    kartBrodtekst:
+      'Talet ovan gäller hela området. I appen beräknar vi samma sak för platsen där du faktiskt står, visar 428 000 registrerade fynd på karta, och berättar vilka arter som är i säsong just nu.',
+    provGratis: 'Prova gratis',
+    alleOmradene: 'Alla områden',
+    kilder:
+      'Dataunderlag: MET Norway och SMHI (väder), NIBIO och CORINE (skog), GBIF och Artdatabanken (fynd). Se',
+    kilderLenke: 'datakällor',
+    kilderHale: 'för licenser och detaljer.'
+  }
+} as const;
+
 export function generateStaticParams() {
-  return alleRegionSlugs('NO').map((omrade) => ({ omrade }));
+  return alleRegionSlugs().map((omrade) => ({ omrade }));
 }
 
 interface SideProps {
@@ -47,26 +107,26 @@ interface SideProps {
 export async function generateMetadata({ params }: SideProps): Promise<Metadata> {
   const { omrade } = await params;
   const region = regionFromSlug(omrade);
-  if (!region || region.country !== 'NO') return {};
+  if (!region) return {};
 
-  const beskrivelse = `Er det sopp i skogen rundt ${region.name} nå? Daglig oppdatert vurdering regnet ut fra nedbør, jordfuktighet, temperatur og sesong.`;
+  const t = COPY[region.country];
   const url = `${SOPPFORHOLD_BASE}/soppforhold/${omrade}`;
 
   // Delingsbildet versjoneres med rasterdatoen. Siden og bildet er to
   // uavhengige cache-oppføringer, så uten dette kunne en deling vist gårsdagens
   // (eller eldre) tall ved siden av dagens side. Ny dato → ny bilde-URL → både
   // vår cache og Facebooks/Slacks skraper henter ferskt bilde for dagens side.
-  const { tileDate } = await hentRegioner();
+  const { tileDate } = await hentRegioner(region.country === 'SE' ? 'sv' : 'nb');
   const ogBilde = `${url}/opengraph-image${tileDate ? `?d=${tileDate}` : ''}`;
 
   return {
     // NB: rot-layouten har template '%s — Mycelet'. Ikke skriv merkenavnet her.
-    title: `Soppforhold i ${region.name} i dag — oppdatert daglig`,
-    description: beskrivelse,
+    title: t.metaTittel(region.name),
+    description: t.metaBeskrivelse(region.name),
     alternates: { canonical: url },
     openGraph: {
-      title: `Soppforhold i ${region.name} i dag`,
-      description: beskrivelse,
+      title: t.ogTittel(region.name),
+      description: t.metaBeskrivelse(region.name),
       url,
       type: 'website',
       images: [{ url: ogBilde, width: 1200, height: 630 }]
@@ -85,11 +145,12 @@ function plassering(region: SoppforholdRegion, alle: SoppforholdRegion[]): { nr:
 export default async function OmradePage({ params }: SideProps) {
   const { omrade } = await params;
   const regionDef = regionFromSlug(omrade);
-  if (!regionDef || regionDef.country !== 'NO') notFound();
+  if (!regionDef) notFound();
 
-  const { tileDate, regions } = await hentRegioner();
+  const land = regionDef.country;
+  const t = COPY[land];
+  const { tileDate, regions } = await hentRegioner(land === 'SE' ? 'sv' : 'nb');
   const region = regions.find((r) => r.name === regionDef.name) ?? null;
-  const land = regionDef.country === 'NO' ? 'Norge' : 'Sverige';
 
   return (
     <PageWrapper>
@@ -97,10 +158,10 @@ export default async function OmradePage({ params }: SideProps) {
         <header className="space-y-3">
           <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-forest-700">
             <CalendarDays className="h-4 w-4" aria-hidden="true" />
-            {tileDate ? `Oppdatert ${norskDato(tileDate)}` : 'Oppdateres daglig'}
+            {tileDate ? t.oppdatert(datoTekst(tileDate, land)) : t.oppdateresDaglig}
           </p>
           <h1 className="font-serif text-3xl font-bold tracking-tight text-forest-900 sm:text-4xl">
-            Soppforhold i {regionDef.name} i dag
+            {t.h1(regionDef.name)}
           </h1>
         </header>
 
@@ -109,10 +170,10 @@ export default async function OmradePage({ params }: SideProps) {
             <div className="flex items-baseline justify-between gap-3">
               <span className="flex items-center gap-1.5 font-medium text-forest-900">
                 <MapPin className="h-4 w-4 shrink-0 text-forest-700" aria-hidden="true" />
-                {region.name}, {land}
+                {region.name}, {t.land}
               </span>
               <span className="text-sm tabular-nums text-gray-600">
-                <strong className="text-3xl text-forest-900">{region.score}</strong> av 100
+                <strong className="text-3xl text-forest-900">{region.score}</strong> {t.avHundre}
               </span>
             </div>
             <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-gray-100">
@@ -120,18 +181,15 @@ export default async function OmradePage({ params }: SideProps) {
             </div>
             {region.verdict ? <p className="mt-3 text-gray-700">{region.verdict}</p> : null}
             {region.leadingSpecies ? (
-              <p className="mt-1 text-sm text-gray-700">
-                Av artene i basen er det særlig <strong>{region.leadingSpecies.toLowerCase()}</strong> som er i
-                sesong her nå.
-              </p>
+              <p className="mt-1 text-sm text-gray-700">{t.artslinje(region.leadingSpecies.toLowerCase())}</p>
             ) : null}
             {(() => {
               const { nr, av } = plassering(region, regions);
               return (
                 <p className="mt-3 text-sm text-gray-500">
-                  Nummer {nr} av {av} områder i {land} i dag.{' '}
+                  {t.plassering(nr, av)}{' '}
                   <Link href="/soppforhold" className="underline">
-                    Se hele oversikten
+                    {t.heleOversikten}
                   </Link>
                   .
                 </p>
@@ -140,47 +198,44 @@ export default async function OmradePage({ params }: SideProps) {
           </section>
         ) : (
           <p className="text-lg text-gray-700">
-            Beregningen for i dag er ikke klar ennå. Prøv igjen om en liten stund — eller se{' '}
+            {t.ikkeKlar}{' '}
             <Link href="/soppforhold" className="underline">
-              hele oversikten
+              {t.oversiktenLenke}
             </Link>
             .
           </p>
         )}
 
-        <VarselCta regionNavn={regionDef.name} />
+        <VarselCta regionNavn={regionDef.name} land={land} />
 
-        <SoppforholdForbehold />
+        <SoppforholdForbehold land={land} />
 
         <section className="rounded-xl border border-forest-700 bg-white p-4">
-          <h2 className="font-serif text-lg font-semibold text-forest-900">Vil du se det på kart?</h2>
-          <p className="mt-1 text-sm text-gray-700">
-            Tallet over gjelder hele området. I appen regner vi det samme for stedet du faktisk står, viser
-            428 000 registrerte funn på kart, og forteller hvilke arter som er i sesong akkurat nå.
-          </p>
+          <h2 className="font-serif text-lg font-semibold text-forest-900">{t.kartHeading}</h2>
+          <p className="mt-1 text-sm text-gray-700">{t.kartBrodtekst}</p>
           <div className="mt-3 flex flex-wrap gap-2">
             <Link
               href="/auth/register"
               className="rounded-xl bg-forest-800 px-4 py-2 text-sm font-semibold text-white hover:bg-forest-700"
             >
-              Prøv gratis
+              {t.provGratis}
             </Link>
             <Link
               href="/soppforhold"
               className="inline-flex items-center gap-1.5 rounded-xl border border-forest-700 px-4 py-2 text-sm font-semibold text-forest-800 hover:bg-forest-50"
             >
               <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-              Alle områdene
+              {t.alleOmradene}
             </Link>
           </div>
         </section>
 
         <p className="text-xs text-gray-500">
-          Datagrunnlag: MET Norway og SMHI (vær), NIBIO og CORINE (skog), GBIF og Artsdatabanken (funn). Se{' '}
+          {t.kilder}{' '}
           <Link href="/datakilder" className="underline">
-            datakilder
+            {t.kilderLenke}
           </Link>{' '}
-          for lisenser og detaljer.
+          {t.kilderHale}
         </p>
       </article>
     </PageWrapper>

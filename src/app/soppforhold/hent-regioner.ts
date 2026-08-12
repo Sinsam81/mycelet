@@ -22,11 +22,15 @@ export interface SoppforholdRegion {
   verdict: string | null;
 }
 
-export async function hentRegioner(): Promise<{ tileDate: string | null; regions: SoppforholdRegion[] }> {
+export async function hentRegioner(
+  locale: 'nb' | 'sv' = 'nb'
+): Promise<{ tileDate: string | null; regions: SoppforholdRegion[] }> {
   try {
-    const res = await fetch(`${SOPPFORHOLD_BASE}/api/prediction/regions`, {
-      next: { revalidate: SOPPFORHOLD_REVALIDATE }
-    });
+    // ?locale=sv gir svenske dommer og svenske artsnavn fra API-et, og gjør
+    // samtidig locale til en del av cache-nøkkelen (egen URL → egen oppføring),
+    // så svensk og norsk aldri kan servere hverandres tekst.
+    const url = `${SOPPFORHOLD_BASE}/api/prediction/regions${locale === 'sv' ? '?locale=sv' : ''}`;
+    const res = await fetch(url, { next: { revalidate: SOPPFORHOLD_REVALIDATE } });
     if (!res.ok) return { tileDate: null, regions: [] };
     const data = (await res.json()) as { tileDate?: string; regions?: SoppforholdRegion[] };
     return { tileDate: data.tileDate ?? null, regions: data.regions ?? [] };
@@ -57,4 +61,15 @@ export function norskDato(iso: string | null): string {
   if (!iso) return '';
   const d = new Date(iso);
   return d.toLocaleDateString('nb-NO', { day: 'numeric', month: 'long', year: 'numeric' });
+}
+
+/** Datoen på sidens eget språk: «12. august 2026» (NO) / «12 augusti 2026» (SE). */
+export function datoTekst(iso: string | null, land: 'NO' | 'SE'): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  return d.toLocaleDateString(land === 'SE' ? 'sv-SE' : 'nb-NO', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric'
+  });
 }

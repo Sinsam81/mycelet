@@ -131,25 +131,29 @@ export default async function SoppforholdPage() {
           <section className="space-y-3">
             <h2 className="font-serif text-xl font-semibold text-forest-900">Sverige</h2>
             <ul className="space-y-2">
-              {/* Ikke lenket ennå — de svenske områdesidene publiseres først når
-                  de kan gjøres på svensk, med svensk giftnummer (se
-                  [omrade]/page.tsx). En norsk side med norsk nødnummer for
-                  Göteborg er verre enn ingen side. */}
+              {/* De svenske områdesidene er PÅ SVENSK (språket følger landet,
+                  med Giftinformationscentralen — se [omrade]/page.tsx). */}
               {svenske.map((r) => (
-                <li key={r.name} className="rounded-xl border border-gray-200 bg-white p-3">
-                  <div className="flex items-baseline justify-between gap-3">
-                    <span className="flex items-center gap-1.5 font-medium text-forest-900">
-                      <MapPin className="h-4 w-4 shrink-0 text-forest-700" aria-hidden="true" />
-                      {r.name}
-                    </span>
-                    <span className="text-sm tabular-nums text-gray-600">
-                      <strong className="text-base text-forest-900">{r.score}</strong> av 100
-                    </span>
-                  </div>
-                  <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-gray-100">
-                    <div className={`h-full rounded-full ${farge(r.score)}`} style={{ width: `${r.score}%` }} />
-                  </div>
-                  {r.verdict ? <p className="mt-2 text-sm text-gray-700">{r.verdict}</p> : null}
+                <li key={r.name}>
+                  <Link
+                    href={`/soppforhold/${regionSlug(r.name)}`}
+                    className="block rounded-xl border border-gray-200 bg-white p-3 transition-colors hover:border-forest-700"
+                  >
+                    <div className="flex items-baseline justify-between gap-3">
+                      <span className="flex items-center gap-1.5 font-medium text-forest-900">
+                        <MapPin className="h-4 w-4 shrink-0 text-forest-700" aria-hidden="true" />
+                        {r.name}
+                      </span>
+                      <span className="flex items-center gap-1 text-sm tabular-nums text-gray-600">
+                        <strong className="text-base text-forest-900">{r.score}</strong> av 100
+                        <ChevronRight className="h-4 w-4 text-gray-400" aria-hidden="true" />
+                      </span>
+                    </div>
+                    <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-gray-100">
+                      <div className={`h-full rounded-full ${farge(r.score)}`} style={{ width: `${r.score}%` }} />
+                    </div>
+                    {r.verdict ? <p className="mt-2 text-sm text-gray-700">{r.verdict}</p> : null}
+                  </Link>
                 </li>
               ))}
             </ul>
