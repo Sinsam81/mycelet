@@ -1,5 +1,7 @@
 ---
 slug: hva-viser-soppkartene
+published: 2026-08-13
+updated: 2026-08-13
 kicker: Data og kart · 9 min
 summary: Prikkene på et soppkart viser hvor folk har registrert funn — ikke hvor sopp vokser. Her er forskjellen, målt på våre egne data.
 ---
@@ -41,7 +43,7 @@ Men riket Fungi rommer langt mer enn matsopp. Vi delte de norske postene på kla
 
 Vi tar med den oppdelingen fordi den illustrerer artikkelens eget poeng på vår egen bekostning: et tall er sjelden det leseren tror, heller ikke når det er vi som oppgir det.
 
-Mycelet bruker et smalere uttrekk enn dette: 327 298 forekomstpunkter for de artene som står i artskatalogen vår, hentet fra **både Norge og Sverige**, hvorav 316 542 har en brukbar dato. Sesongkurvene i appen er bygget på de sistnevnte, for 70 arter. Appen har drøyt 428 000 registrerte funn i basen totalt.
+Mycelets sesongkurver er bygget på et øyeblikksbilde fra 2. august 2026: 327 298 forekomstpunkter for artene i artskatalogen vår, fra **både Norge og Sverige**, hvorav 316 542 hadde en brukbar dato — det ga kurver for 70 arter. To dager senere utvidet vi basen med flere funn for de samme artene, til drøyt 428 000 punkter i appen i dag; kurvene er foreløpig bygget på det eldre øyeblikksbildet.
 
 Merk hva som *ikke* finnes i noen av disse tallene: nullpunktene. Ingen registrerer «jeg gikk i denne lia i tre timer og fant ingenting». Dataene er det fagfolk kaller *presence-only* — bare tilstedeværelse. GBIF har riktignok et eget felt for ekte fraværsobservasjoner, men det står nesten tomt: for sopp i Norge er **348 poster** registrert som fravær, mot 2 358 282 som tilstedeværelse. Det er 0,015 prosent. Nullpunktene finnes formelt, men ikke i praksis.
 
@@ -76,7 +78,7 @@ Til sammenligning fant [Courter og medarbeidere (2013)](https://pubmed.ncbi.nlm.
 
 Her er tallene vi helst skulle sluppet å publisere.
 
-Først et ord om målestokken. AUC er et mål på rangeringsevne, ikke på treffprosent. Tenk deg at du tar et sted der det faktisk ble funnet sopp, og et tilfeldig annet sted, og spør modellen hvilket av de to som er best. Gjetter den rent tilfeldig, treffer den halvparten av gangene — AUC 0,50. Treffer den alltid, er AUC 1,00.
+Først et ord om målestokken. AUC er et mål på rangeringsevne, ikke på treffprosent. Tenk deg at du tar ett tilfelle der det faktisk ble funnet sopp, og ett tilfeldig annet — for tidsmodellen to uker, for stedsmodellen to steder — og spør modellen hvilket av de to som er best. Gjetter den rent tilfeldig, treffer den halvparten av gangene — AUC 0,50. Treffer den alltid, er AUC 1,00.
 
 Mycelets **tidsmodell** — den empiriske fenologien, altså når på året hver art dukker opp — har AUC **0,88**, trent på data før 2021 og testet på 2021 og senere. Det er klart bedre enn tilfeldig, og klart bedre enn den håndskrevne månedsheuristikken vi startet med (0,83).
 
@@ -87,7 +89,7 @@ Mycelets **romlige modell** — den som skulle si *hvor* — måler slik, i en v
 - bare tetthet av historiske funn: **0,472**
 - jordas dreneringsgrad, målt på svenske data: **rundt 0,47** — den ble aldri koblet inn i modellen, nettopp fordi den ikke skilte
 
-Ulike kjøringer av fullmodellen har landet på 0,504 og 0,521, avhengig av hvordan bakgrunnspunktene velges. Uansett hvilken vi bruker: nær myntkast. Legg spesielt merke til den tredje linjen: ren forekomsttetthet gjorde det *verre* enn tilfeldig. Å sende folk dit det er registrert mest sopp fra før var, i vår måling, marginalt dårligere enn å velge et sted i blinde.
+Ulike kjøringer av fullmodellen har landet på 0,504 og 0,521, avhengig av hvordan bakgrunnspunktene velges. Uansett hvilken vi bruker: nær myntkast. Og ren forekomsttetthet — å sende folk dit det er registrert mest sopp fra før — ligger på samme tilfeldighetsnivå, mellom 0,47 og 0,52 avhengig av kjøring. Registrerte funn peker ikke ut morgendagens funnsteder i våre målinger.
 
 Derfor er den delen slått av. I koden står den nå som en enkelt linje der forekomstfaktoren er satt til 1 — altså ingen effekt — med målingen skrevet inn som begrunnelse rett ved siden av.
 
@@ -103,7 +105,7 @@ Bedre enn modellens egen score. I noen timer så det ut som forekomstdataene vir
 
 Så leste vi fasiten på nytt. **23 av de 26 anbefalte stedene nevnte parkering, kollektivtransport eller merket sti i adkomstbeskrivelsen.** Testen målte ikke om det vokser sopp der. Den målte om folk kan komme seg dit — på begge sider av sammenligningen samtidig. Den strengere målingen på 0,472 var den riktige.
 
-Vi gikk i den samme fellen mens vi skrev denne artikkelen. Første forsøk på å måle helgeskjevheten hentet de første 3 000 postene per år fra GBIF, uten å tenke over at API-et leverer dem i datorekkefølge. Utvalget besto nesten utelukkende av januar og februar, og ga en helgeandel på 44,8 prosent. Vintersopping *er* en utpreget helgeaktivitet — opptellingen vår viser 42,9 prosent for januar og februar, mot 25,9 prosent i juli — så tallet var omtrent riktig for det utvalget, og fullstendig feil som svar på spørsmålet vi stilte. Andre forsøk trakk et lagdelt utvalg, men trakk det i sammenhengende blokker, og blokker klumper seg etter hvem som har meldt inn; det ga 32,6 prosent, drøyt ett prosentpoeng for høyt. Til slutt gjorde vi det eneste som ikke kan trekke skjevt: talte opp alle dagene.
+Vi gikk i den samme fellen mens vi skrev denne artikkelen. Første forsøk på å måle helgeskjevheten hentet de første 3 000 postene per år fra GBIF, uten å tenke over at API-et leverer dem i datorekkefølge. Utvalget besto nesten utelukkende av januar og februar, og ga en helgeandel på 44,8 prosent. Vintersopping *er* en utpreget helgeaktivitet — opptellingen vår viser 42,9 prosent for januar og februar, mot 25,9 prosent i juli — så tallet var omtrent riktig for det utvalget, og fullstendig feil som svar på spørsmålet vi stilte. Andre forsøk trakk et lagdelt utvalg, men trakk det i sammenhengende blokker, og blokker klumper seg etter hvem som har meldt inn; det ga 32,6 prosent, tre kvart prosentpoeng for høyt. Til slutt gjorde vi det eneste som ikke kan trekke skjevt: talte opp alle dagene.
 
 Lærdommen er den samme hver gang: **et tall som ser lovende ut, fra en test som ikke kontrollerer for den ene tingen du vet er en konfunderende faktor, er verdiløst.** Det gjelder også når tallet er ditt eget og du gjerne vil at det skal stemme.
 
@@ -129,9 +131,9 @@ Med den asymmetrien i bakhodet er kartet nyttig til:
 - **Når på året de ble meldt.** Datoene er den sterkeste delen av datasettet. Det er derfor sesongkurvene virker.
 - **Å vite hva du bør lære å kjenne igjen — også det farlige.** Hvit fluesopp (*Amanita virosa*) og spiss giftslørsopp (*Cortinarius rubellus*) er dødelige, og dem må du kunne uansett hva kartet viser for ditt område. Et tomt område betyr «ingen har meldt fra», ikke «her finnes den ikke» — og det er trolig mest villedende akkurat her: en sopp ingen vil ha i kurven, blir sjeldnere lagt merke til og meldt inn enn en matsopp. Hvor stor den forskjellen er for norske giftsopper, har vi ikke målt. Spiss giftslørsopp vokser ofte side om side med traktkantarell i samme fuktige, mosekledde barskog, og symptomene på nyreskade kan komme flere døgn etter måltidet, lenge etter at man har glemt hva man spiste. Hvit fluesopp er lumsk på en annen måte: magesymptomene kommer 6–24 timer etter måltidet, så følger en tilsynelatende bedring før lever- og nyreskaden slår inn. Den bedringen skal aldri roe deg ned.
 - **Et utgangspunkt for egne turer.** Ikke en fasit — en hypotese om *hvor du skal gå*, ikke om hva du kommer til å finne.
-- **Å finne skogtypen, ikke stedet.** Ser du at en art er meldt fra gammel granskog med høy bonitet, er det den *typen* skog du skal lete i. Det generaliserer. Selve punktet gjør det ikke. Men skogtypen sier bare hvor du skal lete — den sier ingenting om det du står med i hånden. Ved tvil, la den stå.
+- **Å finne skogtypen, ikke stedet.** Ser du at en art er meldt fra gammel granskog med høy bonitet, er det den *typen* skog du skal lete i. Det generaliserer. Selve punktet gjør det ikke. Men skogtypen sier bare hvor du skal lete — den sier ingenting om det du står med i hånda. Ved tvil, la den stå.
 
-Og det beste kartet over ditt eget terreng lager du selv. Noen sesonger med egne, daterte notater slår enhver generell modell på akkurat de liene du faktisk går i. Men et eget kart har samme begrensning som alle andre: det forteller deg hvor du skal se, ikke hva du fant i dag. Arten avgjøres i hånda, hver gang, også på en plass du har plukket på i ti år.
+Og det beste kartet over ditt eget terreng lager du selv. Noen sesonger med egne, daterte notater slår enhver generell modell på akkurat de liene du faktisk går i. Men et eget kart har samme begrensning som alle andre: det forteller deg hvor du skal se, ikke hva du fant i dag. Arten avgjøres i hånda, hver gang, også på et sted du har plukket på i ti år.
 
 ## Slik leser du et soppkart uten å bli lurt
 
@@ -140,9 +142,9 @@ Og det beste kartet over ditt eget terreng lager du selv. Noen sesonger med egne
 - **Vær skeptisk til fargelagte flater.** Punkter er observasjoner. En sammenhengende farge er en modell — spør hva den er validert mot, og mot hva slags fasit.
 - **Sjekk om tjenesten oppgir hvor godt den treffer.** Gjør den ikke det, er det som regel fordi den ikke har målt det.
 - **Bruk datoene mer enn koordinatene.** Det er der signalet er sterkest.
-- **Husk at artsnavnet på en prikk er noens bestemmelse.** Den kan være feil, og den sier uansett ingenting om soppen du står med i hånden.
+- **Husk at artsnavnet på en prikk er noens bestemmelse.** Den kan være feil, og den sier uansett ingenting om soppen du står med i hånda.
 
-Mycelet viser derfor forekomstpunkter som kontekst på kartet, men lar dem ikke påvirke poengsummen. Den daglige vurderingen av soppforholdene for 22 områder ligger åpent på [/soppforhold](/soppforhold) — det er «når»-delen, den vi faktisk har målt at virker.
+Mycelet viser derfor forekomstpunkter som kontekst på kartet, men lar dem ikke påvirke poengsummen. Den daglige vurderingen av soppforholdene for 22 områder ligger åpent på [/soppforhold](/soppforhold) — det er «når»-delen. Sesongdelen av den er målt (AUC-tallet over); vær- og fuktleddene er foreløpig kalibrert mot feltkunnskap og forskning, ikke mot en fasit av funn. Også de skal måles på samme måte.
 
 ## Til slutt: sikkerhet
 
@@ -167,4 +169,4 @@ Mistenker du at noen har spist en giftig sopp, ring **Giftinformasjonen på 22 5
 - Norges sopp- og nyttevekstforbund, [soppkontroll.no](https://soppkontroll.no) og [Soppsesongen 2026](https://soppognyttevekster.no/soppsesongen-2026/) — Digital soppkontroll åpner 1. juli; de fysiske kontrollene «starter opp i løpet av august og holder det gående i løpet av sesongen».
 - Egne uttrekk fra GBIFs åpne API, 9. august 2026: 2 358 630 soppfunn fra Norge; 61 % «human observation», 30 % herbariebelegg; 48 % *Agaricomycetes*, 35 % lavdannende sopp, 7 % fra ett eDNA-datasett fra jordprøver; 348 fraværsposter mot 2 358 282 tilstedeværelsesposter.
 - Egen fullstendig dagsopptelling mot samme API, 9. august 2026: alle 4 018 dager fra 2015 til 2025, filtrert på Norge, sopp, «human observation» og koordinat — 907 069 funn, ingen dag utelatt. Helgeandel 31,84 % samlet; 36,64 % i 2015, fallende til 27,96 % i 2025. Lørdag 16,59 %, mandag 11,64 %. Januar–februar 42,91 %, juli 25,88 %. (Samme filter med årsintervall i stedet for dag-for-dag gir 907 363 — de vel 290 postenes forskjell er datoer som ikke lar seg feste til én enkelt dag.)
-- Mycelets egne valideringskjøringer: fenologi AUC 0,88 (mot 0,83 for den gamle månedsheuristikken); romlig fullmodell 0,504 og 0,521 i to kjøringer, habitat 0,536, forekomsttetthet 0,472.
+- Mycelets egne valideringskjøringer: fenologi AUC 0,88 (mot 0,83 for den gamle månedsheuristikken); romlig fullmodell 0,504 og 0,521 i to kjøringer, habitat 0,536, forekomsttetthet 0,47–0,52 på tvers av kjøringer (tilfeldighetsnivå).
