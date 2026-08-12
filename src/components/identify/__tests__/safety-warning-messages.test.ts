@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createTranslator } from 'next-intl';
+import { createTranslator, type AbstractIntlMessages } from 'next-intl';
 import nb from '../../../../messages/nb.json';
 import sv from '../../../../messages/sv.json';
 
@@ -29,7 +29,11 @@ describe('SafetyWarning-katalogen: digital kontroll', () => {
       ['nb', nb],
       ['sv', sv]
     ] as const) {
-      const t = createTranslator({ locale, messages: katalog as never, namespace: 'SafetyWarning' });
+      const t = createTranslator({
+        locale,
+        messages: katalog as unknown as AbstractIntlMessages,
+        namespace: 'SafetyWarning'
+      });
       expect(t('digitalCheck')).toContain('Digital soppkontroll');
     }
   });
