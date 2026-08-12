@@ -13,6 +13,7 @@
 <meta property="og:title" content="De fem forvekslingene nybegynnere gjør">
 <meta property="og:description" content="Hva du må se på under hatten, og hvilke arter du bør lære å kjenne igjen før du plukker dem du vil spise.">
 <meta property="og:url" content="https://www.mycelet.com/sanketips/fem-forvekslinger">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"Article","headline":"De fem forvekslingene nybegynnere gjør","description":"Hva du må se på under hatten, og hvilke arter du bør lære å kjenne igjen før du plukker dem du vil spise.","inLanguage":"nb","datePublished":"2026-07-29","dateModified":"2026-08-02","mainEntityOfPage":"https://www.mycelet.com/sanketips/fem-forvekslinger","author":{"@type":"Organization","name":"Mycelet","url":"https://www.mycelet.com"},"publisher":{"@type":"Organization","name":"Mycelet","url":"https://www.mycelet.com"}}</script>
 <style>/* latin-ext */
 @font-face {
   font-family: 'Figtree';
@@ -147,6 +148,18 @@ summary::-webkit-details-marker{display:none}
 details[open] .mycelet-plus{transform:rotate(45deg)}
 @media (max-width:900px){.mycelet-split{grid-template-columns:1fr !important}.mycelet-3{grid-template-columns:1fr !important}.mycelet-feat{grid-template-columns:1fr 1fr !important}}
 @media (max-width:620px){.mycelet-feat{grid-template-columns:1fr !important}}
+/* Smal skjerm (iPhone SE, iPad-kompatibilitetsvindu): menyen legger seg i
+   rader under logoen i stedet for a kappes av hoyrekanten. Uten dette var
+   Priser, Sanketips, Sporsmal og Logg inn unaelige under ~700px. */
+@media (max-width:700px){
+.mycelet-header{flex-wrap:wrap !important;gap:8px 18px !important}
+.mycelet-header nav{flex-wrap:wrap !important;width:100%;gap:10px 16px !important;font-size:14px !important}
+/* Priskortene: flex-li med ren tekst gir kortet en minimumsbredde som
+   presser det ut av kolonnen ved ~320px (målt på svensk side: kort 319px
+   i 280px kolonne). min-width:0 lar kortet krympe og teksten brytes. */
+.mycelet-3 > div{min-width:0}
+.mycelet-3 li{min-width:0}
+}
 
 
 html{scroll-behavior:smooth}
@@ -178,7 +191,8 @@ a,a:hover{color:#8a5f06}
 .h24:hover{color:#fbbf24 !important}
 .h25:hover{color:#fbbf24 !important}
 .h26:hover{color:#fbbf24 !important}
-</style>
+
+html[data-native="true"] [data-web-only]{display:none!important}</style>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
   body { background:#faf7ef; color:#3d4c41; font-family:Figtree,-apple-system,BlinkMacSystemFont,sans-serif; font-size:18px; line-height:1.7; -webkit-font-smoothing:antialiased; }
@@ -188,7 +202,7 @@ a,a:hover{color:#8a5f06}
 </style>
 </head>
 <body>
-<header style="display:flex;align-items:center;gap:28px;max-width:1180px;margin:0 auto;padding:22px clamp(20px,5vw,56px)">
+<header class="mycelet-header" style="display:flex;align-items:center;gap:28px;max-width:1180px;margin:0 auto;padding:22px clamp(20px,5vw,56px)">
 <a href="/" style="display:flex;align-items:center;gap:10px;text-decoration:none;color:#1a3a24;margin-right:auto">
 <span style="width:34px;height:34px;border-radius:999px;background:#1a3a24;display:grid;place-items:center;color:#fbbf24"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="sprout" style="width:19px;height:19px" class="lucide lucide-sprout"><path d="M7 20h10"></path><path d="M10 20c5.5-2.5.8-6.4 3-10"></path><path d="M9.5 9.4c1.1.8 1.8 2.2 2.3 3.7-2 .4-3.5.4-4.8-.3-1.2-.6-2.3-1.9-3-4.2 2.8-.5 4.4 0 5.5.8z"></path><path d="M14.1 6a7 7 0 0 0-1.1 4c1.9-.1 3.3-.6 4.3-1.4 1-1 1.6-2.3 1.7-4.6-2.7.1-4 1-4.9 2z"></path></svg></span>
 <span style="font-family:Newsreader,Georgia,serif;font-size:25px;font-weight:600;letter-spacing:-0.01em">Mycelet</span>
