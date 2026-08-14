@@ -16,14 +16,20 @@ import { alleRegionSlugs } from '@/lib/prediction/region-slug';
  * døgnet) og faller GRASIØST tilbake til grunnlista hvis Supabase ikke svarer
  * — et sitemap uten artssider er bedre enn et sitemap som feiler.
  *
- * De tre sanketips-artiklene er de viktigste oppføringene: de er skrevet for å
+ * Sanketips-artiklene er de viktigste oppføringene: de er skrevet for å
  * bli funnet i søk, de er lange og kildebelagte, og de er den eneste kanalen
  * som gir trafikk uten at noen betaler for den.
  */
 const BASE = 'https://www.mycelet.com';
 
 /** Artiklene i content/sanketips/, servert som rene URL-er via next.config.js. */
-const SANKETIPS = ['les-terrenget', 'fem-forvekslinger', 'sopp-etter-regn', 'hva-viser-soppkartene'];
+const SANKETIPS = [
+  'les-terrenget',
+  'fem-forvekslinger',
+  'sopp-etter-regn',
+  'hva-viser-soppkartene',
+  'hvorfor-finner-du-ikke-sopp'
+];
 
 async function artsIder(): Promise<number[]> {
   const base = process.env.NEXT_PUBLIC_SUPABASE_URL;

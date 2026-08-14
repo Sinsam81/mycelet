@@ -35,6 +35,9 @@ Soppforhold-tallene oppdateres hver morgen. Sitér gjerne med dato.
 - [Hva viser soppkartene egentlig?](https://www.mycelet.com/sanketips/hva-viser-soppkartene):
   hvorfor forekomstpunkter viser innsamlingsskjevhet mer enn soppforekomst,
   målt på Mycelets egne data.
+- [Hvorfor finner du ikke sopp?](https://www.mycelet.com/sanketips/hvorfor-finner-du-ikke-sopp):
+  seks værbaserte grunner til tom kurv — tørke, regntiming, temperatur,
+  artssesong, skogtype og tråkk — med forskningsreferanser.
 
 ## Om dataene
 
