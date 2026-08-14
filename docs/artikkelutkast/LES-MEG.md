@@ -6,11 +6,11 @@ bygger alt som ligger der, og disse har kjente feil.
 Skrevet 2026-08-09, og deretter gjennom to uavhengige kontroller hver —
 en mykologi-faktasjekk og en sikkerhetsgjennomgang. Kontrollene fant:
 
-| utkast | faktafunn | sikkerhetsfunn |
-|---|---|---|
-| hvorfor-finner-du-ikke-sopp | 13 (2 alvorlige) | 9 (3 alvorlige) |
-| hva-viser-soppkartene | 3 (1 alvorlig) | 1 alvorlig |
-| derfor-aldri-spiselig | 0 | **4 kritiske** |
+| utkast | faktafunn | sikkerhetsfunn | status |
+|---|---|---|---|
+| hvorfor-finner-du-ikke-sopp | 13 (2 alvorlige) | 9 (3 alvorlige) | publisert 2026-08-14 etter runde 3 |
+| hva-viser-soppkartene | 3 (1 alvorlig) | 1 alvorlig | publisert 2026-08-13 etter runde 3 |
+| derfor-aldri-spiselig | 0 | **4 kritiske** | ligger her — KUN med menneske i loopen |
 
 At sikkerhetsartikkelen har flest kritiske sikkerhetsfunn er ikke ironi — det
 er forventet. Den handler om det farligste temaet, så terskelen er lavest der.
@@ -102,6 +102,30 @@ allerede publiserte sopp-etter-regn.md (samme retningspåstand som runde 3
 fjernet fra utkastet) — rettet i samme slipp.
 
 Artikkelen er flyttet til content/sanketips/ og publisert via PR (2026-08-12/13).
-Gjenstår i denne mappa: **hvorfor-finner-du-ikke-sopp** (13+9 funn i runde 1,
-fjorten nye i runde 2) og **derfor-aldri-spiselig** (4 kritiske sikkerhetsfunn
+
+---
+
+## Runde 3 for hvorfor-finner-du-ikke-sopp — 2026-08-14
+
+Samme oppsett som kartartikkelens runde 3: ferske blikk + to skeptikere per
+funn. **13 bekreftet (5 major), 2 avkreftet — alle rettet samme kveld.**
+
+Det viktigste funnet var at den tyske steinsopp-preprinten kom i **versjon 2**
+8. juni 2026, og at v2 forkaster femdagersvinduet artikkelen (og publiserte
+sopp-etter-regn.md) bygde på: v2 finner temperaturoptimum ≈13 °C målt over
+20 døgn og nedbørseffekt akkumulert over 26 døgn. v2 ble lest i fulltekst før
+rettelsen; begge tekstene forteller nå samme historie. Lærdom: **preprints får
+nye versjoner — sjekk versjonsnummeret hver gang kilden gjenbrukes.**
+Appens femdagersregel var aldri kalibrert på preprinten (feltregler,
+dokumentert i flush.ts), så ingen kodeendring.
+
+Sluttkontroll med ferske øyne på den rettede teksten: **8 nye funn, alle
+bekreftet av begge skeptikere, alle rettet** — 2 i utkastet (oversalg av hva
+/soppforhold-siden viser: fuktkomponent og «sjekk punktene» — siden viser bare
+samletallet) og 6 i den allerede publiserte sopp-etter-regn.md (feil
+orellanin-latens «to–tre døgn» mot kildens 36 t–6 døgn, feltregler som ikke
+stemte med flush.ts, foreldet funn-tall 315 000, og en annenhånds-detalj uten
+forbehold). Deretter en siste klareringsrunde før PR.
+
+Gjenstår i denne mappa: **derfor-aldri-spiselig** (4 kritiske sikkerhetsfunn
 — skal IKKE gjøres uten menneske i loopen).

@@ -1,6 +1,6 @@
 ---
 published: 2026-07-29
-updated: 2026-08-09
+updated: 2026-08-14
 slug: sopp-etter-regn
 kicker: Vær og timing · 5 min
 summary: Om fukt, temperatur og de få dagene som skiller «for tidlig» fra «for seint» — grunnlaget for varselet i appen.
@@ -30,7 +30,7 @@ Isotopmålinger av karbon fra bartrenåler til fruktlegemer viser at karbonet br
 
 Det finnes overraskende få studier som faktisk måler *dager* fra én regnhendelse til plukkbar sopp. De som finnes, er ikke enige:
 
-- En tiårig overvåking av steinsopp i tysk bøkeskog brukte et **femdagers** vindu som «typisk tidsskala» for utvikling av fruktlegemer — og fant så ingen tydelig sammenheng mellom korttidsnedbør og fruktifisering i det hele tatt. Det de fant, var et temperaturoptimum rundt 13 grader, og at ingen sopp dukket opp når det var varmere enn 17,5 grader og nesten tørt. (Preprint, ikke fagfellevurdert; bøkeskog ved Bielefeld, ikke norsk granskog.)
+- En tiårig overvåking av steinsopp i tysk bøkeskog testet vinduer fra 2 til 35 døgn og fant at korttidsnedbøren alene sa lite: fruktifiseringen økte med nedbøren akkumulert over de siste **26 døgnene**, noe forfatterne knytter til tiden det tar å bygge opp og holde på jordfuktigheten. I tillegg fant de et temperaturoptimum rundt 13 grader, målt som snitt over de 20 foregående døgnene. (Preprint, ikke fagfellevurdert — utvidet versjon juni 2026; bøkeskog ved Bielefeld, ikke norsk granskog.)
 - En kanadisk studie av en kantarellvarietet (*C. cibarius* var. *roseocanus*) i banksfuruskog i Øst-Canada fant sterkest sammenheng med nedbør **én uke** før og lufttemperatur **to uker** før fruktifisering.
 - I middelhavsfuruskog i Spania slo nedbøren først ut i soppavlingen omtrent **én måned** senere — men modellen regnet i hele måneder, så «én måned» er oppløsningen, ikke et målt presist tall.
 
@@ -52,7 +52,7 @@ Temperaturen har to jobber. Den setter hvor fort vannet forsvinner igjen — ved
 
 Fra en sveitsisk skogflekk overvåket ukentlig i over 20 år kom to observasjoner som har blitt stående:
 
-- Forfatterne gjettet — og de kalte det selv en gjetning — at høsttoppen kunne være en respons på at temperaturen faller under rundt 14 grader et par uker tidligere. Terskelen er avledet av månedstemperaturer på et lavlandsplatå på 46 grader nord, så tallet skal ikke flyttes rått til norsk høyde og breddegrad.
+- Forfatterne skal ha antydet at høsttoppen kunne være en respons på at temperaturen faller under rundt 14 grader et par uker tidligere. Som punktet under er dette gjengitt annenhånds — originalen ligger bak betalingsmur — og det var en hypotese, ikke et påvist funn. Terskelen er avledet av månedstemperaturer på et lavlandsplatå på 46 grader nord, så tallet skal ikke flyttes rått til norsk høyde og breddegrad.
 - Én grad varmere sommer sammenfalt med omtrent **én ukes forsinket** fruktifisering. Tallet er gjengitt etter Pinna m.fl. (2010); vi har ikke fått lest originalen, som ligger bak betalingsmur, og gjengir det derfor som annenhånds.
 
 En kanadisk studie peker samme vei fra en annen kant: spennvidden i jordtemperatur — forskjellen mellom maks og min — forklarte best når fruktifiseringen startet, for seks av sju arter. Jo større svingning, jo tidligere sopp. Det er feltstøtte for «kuldesjokk»-hypotesen, som er godt etablert i laboratoriet for dyrkede arter, men fortsatt bare en hypotese for skogen.
@@ -61,7 +61,7 @@ En nyanse om frost: for mange arter setter den strek. Traktkantarellen (*Cratere
 
 At soppen *overlever* frost, betyr ikke at fruktlegemet er godt å spise. Sopp som har frosset og tint flere ganger, brytes ned og får bakterievekst. Plukk faste, friske eksemplarer — er den bløt, mørk eller lukter surt, la den stå.
 
-Én advarsel hører hjemme akkurat her: traktkantarell og spiss giftslørsopp (*Cortinarius rubellus*) vokser ofte side om side i samme fuktige, mosekledde barskog. Giftslørsopp inneholder orellanin og gir nyresvikt, og symptomene kommer først etter to–tre døgn — altså lenge etter måltidet. Vurder hver enkelt sopp mens du plukker, hold artene i hver sin pose, og gå gjennom hele fangsten hjemme. Er du fersk: bruk soppkontroll.
+Én advarsel hører hjemme akkurat her: traktkantarell og spiss giftslørsopp (*Cortinarius rubellus*) vokser ofte side om side i samme fuktige, mosekledde barskog. Giftslørsopp inneholder orellanin og gir nyresvikt, og symptomene kommer vanligvis først 36 timer til 6 døgn etter måltidet, i snitt rundt fire døgn — altså lenge etter at du har sluttet å tenke på soppturen. Vurder hver enkelt sopp mens du plukker, hold artene i hver sin pose, og gå gjennom hele fangsten hjemme. Er du fersk: bruk soppkontroll.
 
 ## Når hele sesongen bare forsvinner
 
@@ -91,7 +91,7 @@ Det du ser i appen, er et nivå for soppforholdene der du er, og hvilken vei det
 
 - **Vannbalansen** er en enkel bøttemodell for rotsonen: 50 millimeter kapasitet, fylles av nedbør, tømmes av fordamping beregnet fra døgntemperaturen. Det er ikke målt jordfuktighet. Ingen jordart, ingen helning, ingen infiltrasjon. Men den løser problemet med at en rå 14-dagers regnsum ser like høy ut to uker etter én gammel styrtregnsdag, tvers gjennom en tørkeperiode.
 - **Habitatet** kommer fra NIBIO-data om bonitet og skogvolum, pluss en vertstre-sperre som presser scoren mot null der skogen ikke kan huse arten. Dekningen er norsk — svenske brukere får en grovere habitatvurdering.
-- **Sesongkurvene** er bygd empirisk fra rundt 315 000 daterte nordiske funn for 70 arter: 52 ukesverdier per art, glattet, delt i tre breddegradsbånd. Men det er funnposter, ikke systematiske tellinger, og de bærer med seg innsamlingsbias: helger, veier, folketetthet. Datagrunnlaget er dessuten svensk-tungt — for kjerneartene har vi rundt 200 svenske værprofiler mot 25 norske per art. Det er hovedgrunnen til at det romlige signalet kollapser.
+- **Sesongkurvene** er bygd empirisk fra 316 542 daterte nordiske funn for 70 arter (øyeblikksbilde fra 2. august 2026): 52 ukesverdier per art, glattet, delt i tre breddegradsbånd. Men det er funnposter, ikke systematiske tellinger, og de bærer med seg innsamlingsbias: helger, veier, folketetthet. Datagrunnlaget er dessuten svensk-tungt — for kjerneartene har vi rundt 200 svenske værprofiler mot 25 norske per art. Det er hovedgrunnen til at det romlige signalet kollapser.
 - **Lag-tidene** varierer per slekt: rundt fem dager for steinsopp og skrubb, rundt to uker for kantarell og traktkantarell, lengst for piggsopp (*Hydnum*). Alle andre slekter får en standard på åtte dager. Koden sier det rett ut om seg selv: dette er feltregler, ikke laboratoriekonstanter, og de skal kalibreres mot faktiske tilbakemeldinger fra brukere. Kantarellens to uker er strengt tatt i strid med den ene relevante studien, som fant én uke. Piggsopp-tallet har vi ikke funnet kildegrunnlag for overhodet.
 - **Steinsoppen er fortsatt uløst.** I vår egen strenge holdout-test scoret temperaturprofilen for steinsopp verre enn tilfeldig. Enten er utvalget for lite og skjevt — eller så ligger nøkkelen i en *sekvens* (varm sommer, så kulde, så regn), slik erfarne plukkere beskriver den, og ingen enkel temperaturterskel kan fange det.
 - **Fjorårets vær** modellerer vi ikke i det hele tatt, selv om norske herbariedata viser at forrige års temperatur og nedbør har målbar effekt. Mycelet er flerårig; hukommelsen vår er det ikke.
@@ -101,7 +101,7 @@ En presisering som er lett å bomme på: AUC 0,88 betyr ikke «riktig 88 prosent
 ## Slik bruker du dette i skogen
 
 - Tell fra jordfuktigheten, ikke fra siste byge. Har det vært tørt lenge, avskriv det første regnet.
-- Regn fem til åtte dager for skrubb og steinsopp, tolv til fjorten for kantarell, og enda litt lenger for traktkantarell — men dette er appens egne feltregler, ikke målte tall. Gå og se, og kalibrer mot ditt eget område.
+- Regn rundt fem dager for skrubb og steinsopp, rundt to uker for kantarell og traktkantarell, og enda litt lenger for piggsopp — men dette er appens egne feltregler, ikke målte tall. Gå og se, og kalibrer mot ditt eget område.
 - Følg med når høsttemperaturen faller mot rundt 14 grader. Tallet kommer fra én sveitsisk skogflekk, så bruk det som pekepinn, ikke terskel.
 - Notér datoen når du finner noe. Dine egne steder over noen sesonger slår enhver generell modell på akkurat *ditt* terreng.
 - Kommer det ingenting? Sjekk om det var tørt i juli. Sesonger kan svikte helt, og det er ikke din feil.
@@ -113,11 +113,11 @@ Ingenting i denne artikkelen handler om hva som er spiselig. Timing og artsbeste
 
 Er du det minste i tvil om en sopp: la den stå. Bruk soppkontroll. Norges sopp- og nyttevekstforbund driver kontroller mange steder i landet, mest i august og september — sjekk oversikten og åpningstidene på soppognyttevekster.no før du drar. Ingen app, denne inkludert, er en erstatning for det.
 
-Mycelet forsøker å gjøre én ting godt: å anslå når forholdene i ditt område peker mot sopp, basert på vær, vannbalanse, skogtype og hva 315 000 nordiske funn sier om årsrytmen til arten. Hvor soppen står, må du fortsatt finne ut selv — og det er den beste delen av turen.
+Mycelet forsøker å gjøre én ting godt: å anslå når forholdene i ditt område peker mot sopp, basert på vær, vannbalanse, skogtype og hva over 316 000 nordiske funn sier om årsrytmen til arten. Hvor soppen står, må du fortsatt finne ut selv — og det er den beste delen av turen.
 
 ## Kilder
 
-- Brejon Lamartiniere & Hoffman (2025): steinsopp i sentraleuropeisk bøkeskog, tiårig overvåking. bioRxiv — **preprint, ikke fagfellevurdert**.
+- Brejon Lamartiniere & Hoffman (2025): [steinsopp i sentraleuropeisk bøkeskog, tiårig overvåking](https://www.biorxiv.org/content/10.64898/2025.12.12.693895v2). bioRxiv — **preprint, ikke fagfellevurdert**; versjon 2 (juni 2026) med utvidet vindusanalyse.
 - Straatsma, Ayer & Egli (2001), *Mycological Research* 105: 515–523: 21 år med ukentlig registrering i sveitsisk skogflekk (La Chanéaz).
 - Karavani m.fl. (2018), *Agricultural and Forest Meteorology*: nedbør, jordfuktighet og soppavling i middelhavsfuruskog (Poblet, Catalonia).
 - Pinna m.fl. (2010), *Forest Ecology and Management* 260: 294–301: startdato og varighet for fruktifisering, blandet boreal skog i Gaspésie, Øst-Canada.
