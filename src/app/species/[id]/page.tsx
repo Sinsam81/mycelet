@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
@@ -14,6 +15,50 @@ import { baseSeasonMask, seasonMonthRanges } from '@/lib/utils/season-region';
 
 interface SpeciesDetailPageProps {
   params: Promise<{ id: string }>;
+}
+
+/**
+ * Per-art metadata — uten den delte alle 80 artssidene rot-layoutens generiske
+ * tittel, og Google kunne aldri rangere siden om pantermusserong på
+ * «pantermusserong». Artsnavnene er søkeordene med faktisk volum i nisjen.
+ * Lett, eget oppslag (id + navn + beskrivelse); sidens eget '*'-oppslag står
+ * urørt.
+ */
+export async function generateMetadata({ params }: SpeciesDetailPageProps): Promise<Metadata> {
+  const { id: idParam } = await params;
+  const id = Number(idParam);
+  if (Number.isNaN(id)) return {};
+
+  const supabase = createClient();
+  const { data: art } = await supabase
+    .from('mushroom_species')
+    .select('norwegian_name,swedish_name,latin_name,description,primary_image_url')
+    .eq('id', id)
+    .single();
+  if (!art) return {};
+
+  const locale = await getLocale();
+  const navn = getSpeciesDisplayName(art, locale);
+  const tittel =
+    locale === 'sv'
+      ? `${navn} (${art.latin_name}) — säsong, kännetecken och ätlighet`
+      : `${navn} (${art.latin_name}) — sesong, kjennetegn og spiselighet`;
+  const beskrivelse = (art.description ?? '').replace(/\s+/g, ' ').trim().slice(0, 155);
+  const url = `https://www.mycelet.com/species/${id}`;
+
+  return {
+    // NB: rot-layouten har template '%s — Mycelet'. Ikke skriv merkenavnet her.
+    title: tittel,
+    description: beskrivelse,
+    alternates: { canonical: url },
+    openGraph: {
+      title: tittel,
+      description: beskrivelse,
+      url,
+      type: 'article',
+      ...(art.primary_image_url ? { images: [{ url: art.primary_image_url }] } : {})
+    }
+  };
 }
 
 /**
@@ -119,8 +164,20 @@ export default async function SpeciesDetailPage({ params }: SpeciesDetailPagePro
   const toxinInfo = stripPoisonHotline(species.toxin_info);
   const symptoms = stripPoisonHotline(species.symptoms);
 
+  // Strukturerte data: forteller søkemotorer og AI-crawlere at siden handler om
+  // én bestemt art — navn på sidens språk + det latinske navnet som alle kilder
+  // deler. schema.org/Taxon er typen for akkurat dette.
+  const jsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'Taxon',
+    name: displayName,
+    alternateName: species.latin_name,
+    taxonRank: 'species'
+  };
+
   return (
     <PageWrapper wide>
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
       <section className="space-y-6">
         <Link
           href="/species"

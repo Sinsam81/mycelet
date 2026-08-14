@@ -8,9 +8,13 @@ import { alleRegionSlugs } from '@/lib/prediction/region-slug';
  * søkeresultat. To grupper er bevisst utelatt:
  *
  *  · alt bak innlogging (PROTECTED_PATHS) — ville bare gitt omdirigeringer
- *  · /species/[id] og /forum/[id] — de kommer fra databasen, og et sitemap som
- *    må slå opp i Supabase ved hver forespørsel er en driftsrisiko for en
- *    gevinst vi ikke har målt. Legges til når vi vet at artssidene rangerer.
+ *  · /forum/[id] — brukergenerert, uklar søkeverdi
+ *
+ * /species/[id] ER med (2026-08-15): 80 arter med per-art metadata — artsnavn
+ * er søkeordene med størst volum i nisjen. Driftsrisikoen fra det gamle
+ * forbeholdet er løst: oppslaget går via cachet fetch (revalidate én gang i
+ * døgnet) og faller GRASIØST tilbake til grunnlista hvis Supabase ikke svarer
+ * — et sitemap uten artssider er bedre enn et sitemap som feiler.
  *
  * De tre sanketips-artiklene er de viktigste oppføringene: de er skrevet for å
  * bli funnet i søk, de er lange og kildebelagte, og de er den eneste kanalen
@@ -21,7 +25,24 @@ const BASE = 'https://www.mycelet.com';
 /** Artiklene i content/sanketips/, servert som rene URL-er via next.config.js. */
 const SANKETIPS = ['les-terrenget', 'fem-forvekslinger', 'sopp-etter-regn', 'hva-viser-soppkartene'];
 
-export default function sitemap(): MetadataRoute.Sitemap {
+async function artsIder(): Promise<number[]> {
+  const base = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const nokkel = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!base || !nokkel) return [];
+  try {
+    const res = await fetch(`${base}/rest/v1/mushroom_species?select=id&order=id.asc`, {
+      headers: { apikey: nokkel, Authorization: `Bearer ${nokkel}` },
+      next: { revalidate: 86400 }
+    });
+    if (!res.ok) return [];
+    const rader = (await res.json()) as Array<{ id: number }>;
+    return rader.map((r) => r.id);
+  } catch {
+    return [];
+  }
+}
+
+export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const nå = new Date();
 
   const sider: Array<{ sti: string; prioritet: number; frekvens: 'daily' | 'weekly' | 'monthly' | 'yearly' }> = [
@@ -54,6 +75,13 @@ export default function sitemap(): MetadataRoute.Sitemap {
       lastModified: nå,
       changeFrequency: 'monthly' as const,
       priority: 0.9
+    })),
+    // Artssidene: 80 arter med per-art metadata — se filhodet om fallbacken.
+    ...(await artsIder()).map((id) => ({
+      url: `${BASE}/species/${id}`,
+      lastModified: nå,
+      changeFrequency: 'monthly' as const,
+      priority: 0.7
     })),
     // Områdesidene: «soppforhold Oslo» og «svampläget Göteborg» er søkene folk
     // faktisk gjør. Slugene kommer fra kodens regionliste (ingen database-
