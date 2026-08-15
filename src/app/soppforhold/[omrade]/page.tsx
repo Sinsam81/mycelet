@@ -4,8 +4,12 @@ import { notFound } from 'next/navigation';
 import { ArrowLeft, CalendarDays, MapPin } from 'lucide-react';
 import { PageWrapper } from '@/components/layout/PageWrapper';
 import { SoppforholdForbehold } from '@/components/soppforhold/Forbehold';
+import { UkeStripe } from '@/components/soppforhold/UkeStripe';
 import { VarselCta } from '@/components/soppforhold/VarselCta';
 import { alleRegionSlugs, regionFromSlug } from '@/lib/prediction/region-slug';
+import { computeRegionWeek, type RegionWeek } from '@/lib/prediction/region-week';
+import { fetchWeatherSummary } from '@/lib/weather';
+import { fetchDailyForecast } from '@/lib/weather/forecast';
 import {
   SOPPFORHOLD_BASE,
   datoTekst,
@@ -134,6 +138,30 @@ export async function generateMetadata({ params }: SideProps): Promise<Metadata>
   };
 }
 
+/**
+ * Taket for hvor lenge en offentlig områdeside får vente på ukestripen.
+ * Værhentingen har egne timeouts per leverandør (Frost 8 s, SR16 8 s, MET 5 s),
+ * og de kan legge seg etter hverandre; dette er grensen for summen.
+ */
+const UKE_BUDSJETT_MS = 2500;
+
+/** Løftet får en frist: går den ut, faller vi tilbake til null (ingen stripe). */
+async function medTidsbudsjett<T>(oppgave: Promise<T>, ms: number): Promise<T | null> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      // En avvist henting skal aldri velte siden — stripen er valgfri.
+      oppgave.catch(() => null),
+      new Promise<null>((resolve) => {
+        timer = setTimeout(() => resolve(null), ms);
+      })
+    ]);
+  } finally {
+    // Uten dette holder timeren serverless-funksjonen i live til den fyrer.
+    if (timer) clearTimeout(timer);
+  }
+}
+
 /** Plassering blant landets regioner — «best i Norge i dag» er delbart i seg selv. */
 function plassering(region: SoppforholdRegion, alle: SoppforholdRegion[]): { nr: number; av: number } {
   const iSammeLand = alle
@@ -149,7 +177,39 @@ export default async function OmradePage({ params }: SideProps) {
 
   const land = regionDef.country;
   const t = COPY[land];
-  const { tileDate, regions } = await hentRegioner(land === 'SE' ? 'sv' : 'nb');
+
+  // «Uka framover»-stripen regnes i regionens sentrum — samme punkt som den
+  // nattlige rastergenereringen bruker for værhentingen sin.
+  //
+  // ⚠️ SIDEN RENDRES DYNAMISK. Språkcookien i rot-layouten gjør hele treet
+  // dynamisk, så `export const revalidate` over binder ikke disse kallene:
+  // uten cache ville hvert sidevisning truffet leverandørene på nytt. Cachen
+  // ligger derfor i datalaget (fetch-nivå, 900 s i både væradapterne og
+  // forecast.ts) — ikke her.
+  //
+  // Stripen er dessuten VALGFRI: feiler eller somler noe, rendres siden uten
+  // den. Derfor budsjettet under. En kald instans som må laste SMHIs
+  // stasjonslister (flere MB, bevisst utenfor datacachen — se weather/index.ts)
+  // skal ikke kunne gjøre en offentlig SEO-side treg; da dropper vi heller
+  // stripen på det første besøket og har den klar til det neste.
+  const sentrum = {
+    lat: (regionDef.minLat + regionDef.maxLat) / 2,
+    lon: (regionDef.minLng + regionDef.maxLng) / 2
+  };
+  const [{ tileDate, regions }, uke] = await Promise.all([
+    hentRegioner(land === 'SE' ? 'sv' : 'nb'),
+    medTidsbudsjett(
+      (async (): Promise<RegionWeek | null> => {
+        const [observed, forecast] = await Promise.all([
+          fetchWeatherSummary(sentrum),
+          fetchDailyForecast(sentrum)
+        ]);
+        if (!observed) return null;
+        return computeRegionWeek(observed, forecast, { land, now: new Date() });
+      })(),
+      UKE_BUDSJETT_MS
+    )
+  ]);
   const region = regions.find((r) => r.name === regionDef.name) ?? null;
 
   // Strukturerte data: dateModified = rasterdatoen gjør ferskheten maskin-
@@ -219,6 +279,8 @@ export default async function OmradePage({ params }: SideProps) {
             .
           </p>
         )}
+
+        <UkeStripe uke={uke} />
 
         <VarselCta regionNavn={regionDef.name} land={land} />
 

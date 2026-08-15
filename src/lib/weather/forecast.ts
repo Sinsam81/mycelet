@@ -57,11 +57,25 @@ export function aggregateDailyForecast(timeseries: ForecastTimeStep[]): DailyFor
     }));
 }
 
+/**
+ * Prognosen caches i Next sitt datalag i 15 minutter — samme takt som
+ * væradapterne (fetchWeatherSummary bruker revalidate 900).
+ *
+ * ⚠️ Ikke fjern `next.revalidate`. Områdesidene under /soppforhold rendres
+ * DYNAMISK (språkcookien i rot-layouten gjør hele treet dynamisk), så
+ * `export const revalidate` på siden binder ingenting: uten cache her ville
+ * hvert eneste sidevisning — og hver Googlebot-gjennomgang av alle 22
+ * indekserte sider — fyrt et live kall mot api.met.no. MET krever i sine
+ * vilkår at klienter cacher, og User-Agent-en peker rett på oss.
+ */
+const FORECAST_TTL_SECONDS = 900;
+
 export async function fetchDailyForecast(query: { lat: number; lon: number }): Promise<DailyForecast[] | null> {
   try {
     const res = await fetch(`${FORECAST_URL}?lat=${query.lat.toFixed(4)}&lon=${query.lon.toFixed(4)}`, {
       headers: { 'User-Agent': 'mycelet.com/1.0 support@mycelet.com' },
-      signal: AbortSignal.timeout(5000)
+      signal: AbortSignal.timeout(5000),
+      next: { revalidate: FORECAST_TTL_SECONDS }
     });
     if (!res.ok) return null;
     const json = await res.json();
