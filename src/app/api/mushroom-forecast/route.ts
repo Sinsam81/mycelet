@@ -1,15 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { fetchWeatherSummary } from '@/lib/weather';
 import { fetchDailyForecast } from '@/lib/weather/forecast';
-import { assessMushroomDay } from '@/lib/prediction/mushroom-day';
 import { assessFlush } from '@/lib/prediction/flush';
 import { reconcileFlushWithWeek } from '@/lib/prediction/flush-vs-week';
+import { buildWeek, filterUpcomingDays } from '@/lib/prediction/week-scores';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { getClientKey, rateLimitResponse } from '@/lib/rate-limit/route';
 import { createRequestLogger } from '@/lib/log/request';
 import { getUserLocale } from '@/i18n/locale';
-import { observedRainWindows, rainWindowsFromSeries, sumLastN } from '@/lib/weather/windows';
-import { advanceSoilMoistureIndex } from '@/lib/weather/soil-moisture';
 import { DEFAULT_LOCALE, type Locale } from '@/i18n/config';
 
 /**
@@ -18,10 +16,13 @@ import { DEFAULT_LOCALE, type Locale } from '@/i18n/config';
  * Every day in the strip — today included — is scored on the SAME trailing rain
  * windows, taken from one continuous daily series: the observed past followed by
  * the forecast future. That is what makes the bars comparable to each other.
+ * The walk itself lives in the shared module `@/lib/prediction/week-scores`
+ * (also used by the /soppforhold area pages); the tests locking its behaviour
+ * stay in __tests__/route.test.ts here.
  *
  * The previous version scored today on the adapter's own 14-day sum and days 1-6
  * on a sliding 7-day sum, which stepped the strip down between today and
- * tomorrow under unchanged weather. See the comment in GET for the detail.
+ * tomorrow under unchanged weather. See week-scores.ts for the detail.
  */
 
 export const runtime = 'nodejs';
@@ -36,16 +37,6 @@ function num(value: string | null): number {
 
 const cache = new Map<string, { at: number; payload: Record<string, unknown> }>();
 const CACHE_TTL_MS = 30 * 60 * 1000;
-
-// Short weekday labels for the 7-day strip, per language. Written out rather
-// than derived from Intl so the Norwegian labels stay exactly as they were
-// (Intl's nb-NO short weekdays carry a trailing period) and the Swedish ones
-// are the ones a Swedish reader expects (lör/sön/tis, not lør/søn/tir).
-const WEEKDAYS: Record<Locale, string[]> = {
-  nb: ['søn', 'man', 'tir', 'ons', 'tor', 'fre', 'lør'],
-  sv: ['sön', 'mån', 'tis', 'ons', 'tors', 'fre', 'lör']
-};
-const TODAY_LABEL: Record<Locale, string> = { nb: 'I dag', sv: 'I dag' };
 
 // Feilstrengene vises rått i grensesnittet, som resten av kroppen.
 const COPY: Record<Locale, { badCoordinates: string; noWeather: string; failed: string }> = {
@@ -100,120 +91,16 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: copy.noWeather }, { status: 502 });
     }
 
-    const future = (forecast ?? []).filter((d) => d.date > todayKey).slice(0, 6);
+    const future = filterUpcomingDays(forecast, todayKey);
 
-    // ONE yardstick for all seven days. `series` is the observed daily rainfall
-    // followed by the forecast daily rainfall, so day 0 and day 6 are measured
-    // the same way: the trailing N days ending on that day.
-    //
-    // This is the bug the founder reported. Day 0 used to be scored on the
-    // adapter's 14-day sum while days 1-6 fell back to a 7-day sum (the route
-    // passed rain14dMm: null for them), and cumulativeRain() in mushroom-day.ts
-    // silently picks the longest window available. Same threshold table, two
-    // different windows — so the strip stepped down ~10-20 points between today
-    // and tomorrow under completely unchanged weather.
-    //
-    // Day 0 must come from the series too. Mixing the adapter's own rain14dMm
-    // into day 0 while days 1-6 use the series would reintroduce a smaller
-    // version of the same discontinuity.
-    const observedSeries = observed.precipDailyMm?.slice(-14) ?? null;
-    const series = observedSeries ? [...observedSeries, ...future.map((d) => d.precipMm)] : null;
-    const obsLen = observedSeries?.length ?? 0;
-
-    const today = assessMushroomDay(
-      {
-        temperatureC: observed.temperatureC,
-        humidityPct: observed.humidityPct,
-        // Shared helper, so /api/mushroom-day reports the same number for the
-        // same day and place.
-        ...observedRainWindows(observed),
-        minTemp7dC: observed.minTemp7dC,
-        maxTemp7dC: observed.maxTemp7dC,
-        // The bucket model dries out as the ground does, so it can veto a
-        // celebration the raw rain sum would still allow. See mushroom-day.ts.
-        soilMoistureIndex: observed.soilMoistureIndex
-      },
+    // Hele 7-dagersvandringen — énvindusregelen, det glidende sesongleddet og
+    // fuktbøtta som flyttes døgn for døgn — ligger i week-scores.ts, delt med
+    // områdesidene under /soppforhold. Historikken bak hver detalj står der.
+    const { today, days } = buildWeek(observed, future, {
+      todayKey,
       month,
-      locale,
-      // Dagen i måneden gjør sesongleddet glatt over månedsskiftet, så stripen
-      // ikke faller et hakk ved midnatt med uendret vær. Se mushroom-day.ts.
-      now.getDate()
-    );
-
-    const weekdays = WEEKDAYS[locale] ?? WEEKDAYS[DEFAULT_LOCALE];
-    const days: { date: string; label: string; isToday: boolean; score: number; optimal: boolean }[] = [
-      {
-        date: todayKey,
-        label: TODAY_LABEL[locale] ?? TODAY_LABEL[DEFAULT_LOCALE],
-        isToday: true,
-        score: today.score,
-        optimal: today.optimal
-      }
-    ];
-
-    const observedRain7d = observed.rain7dMm ?? observed.rain3dMm * 2;
-    let forecastAccum = 0;
-    const recent3: number[] = [];
-
-    // Fukta må gli fremover sammen med regnvinduene, ellers dømmes de sju dagene
-    // på hver sin målestokk.
-    //
-    // Dag 0 fikk soilMoistureIndex; dag 1-6 fikk den ikke i det hele tatt. I
-    // assessMushroomDay er fuktvetoet («tørr bakke avlyser feiringen») inert når
-    // tallet mangler, så det var STRUKTURELT dødt for hele prognosen: hver
-    // prognosedag med score >= 65 ble grønn uansett hvor tørr bakken var. På
-    // Nesodden ga det 83/100 tegnet gult ved siden av 75/100 tegnet grønt — med
-    // tallene skrevet rett over søylene. Brukeren planlegger turen til den
-    // DÅRLIGERE dagen fordi den er den eneste grønne.
-    //
-    // Vi flytter bøtta ett døgn av gangen fremover fra observert fukt, med
-    // prognosens egen nedbør og temperatur. Dag 1 er da per definisjon dag 0
-    // flyttet ett steg — samme modell, samme terskel — og dag 0-tallet vårt
-    // holder seg identisk med det /api/mushroom-day og flush-banneret under
-    // melder for samme dag.
-    let soilMoistureIndex = observed.soilMoistureIndex;
-
-    future.forEach((d, idx) => {
-      const i = idx + 1; // 1..6 days ahead
-      forecastAccum += d.precipMm;
-      recent3.push(d.precipMm);
-      if (recent3.length > 3) recent3.shift();
-      const w = series ? series.slice(0, obsLen + i) : null;
-      // Same trailing windows as day 0 when we have the daily series. The
-      // fallback below is for providers with no daily history (OpenWeather):
-      // it still slides ONE window every day, so the strip stays internally
-      // consistent — just coarser.
-      const windows = w
-        ? rainWindowsFromSeries(w)
-        : {
-            rain3dMm: recent3.reduce((a, b) => a + b, 0),
-            rain7dMm: (observedRain7d * Math.max(0, 7 - i)) / 7 + forecastAccum,
-            rain14dMm: null
-          };
-      const dayDate = new Date(`${d.date}T12:00:00Z`);
-      soilMoistureIndex = advanceSoilMoistureIndex(soilMoistureIndex, d.precipMm, d.tempC);
-      const a = assessMushroomDay(
-        {
-          temperatureC: d.tempC,
-          humidityPct: d.humidityPct,
-          ...windows,
-          minTemp7dC: null,
-          maxTemp7dC: null,
-          // Null her (leverandør uten døgnnedbør) lar vetoet være inert — men da
-          // er det inert for dag 0 også, så stripen er fortsatt konsistent.
-          soilMoistureIndex
-        },
-        dayDate.getUTCMonth() + 1,
-        locale,
-        dayDate.getUTCDate()
-      );
-      days.push({
-        date: d.date,
-        label: weekdays[dayDate.getUTCDay()],
-        isToday: false,
-        score: a.score,
-        optimal: a.optimal
-      });
+      dayOfMonth: now.getDate(),
+      locale
     });
 
     // Flush timing — "should I go now, or wait?" — from the moisture base now

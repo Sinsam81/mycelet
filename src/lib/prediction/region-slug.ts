@@ -49,9 +49,10 @@ export function regionFromSlug(slug: string): PredictionTileRegion | null {
 }
 
 /**
- * Uten filter: alle regioner. Med landfilter: bare det landets slugs — brukt
- * fordi områdesidene foreløpig KUN finnes for Norge (de svenske krever svensk
- * tekst og svensk giftnummer før de kan publiseres — se [omrade]/page.tsx).
+ * Uten filter: alle regioner. Med landfilter: bare det landets slugs.
+ * (Landfilteret fantes fra da bare de norske sidene var publisert; siden
+ * 2026-08-13 er alle 22 områdesidene ute, med språk etter land — se
+ * [omrade]/page.tsx — og kallene bruker den filterløse formen.)
  */
 export function alleRegionSlugs(country?: PredictionTileRegion['country']): string[] {
   return [...REGION_PER_SLUG.entries()]
