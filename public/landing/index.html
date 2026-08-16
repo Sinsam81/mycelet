@@ -197,7 +197,19 @@ a,a:hover{color:#8a5f06}
 .h26:hover{color:#fbbf24 !important}
 </style>
 <style>html[data-native="true"] [data-web-only]{display:none!important}</style>
-<script>try{var c=window.Capacitor;if(c&&(typeof c.isNativePlatform==='function'?c.isNativePlatform():c.platform&&c.platform!=='web')){document.documentElement.setAttribute('data-native','true')}}catch(e){}</script>
+<!-- I appskallet skal markedsføringssiden ALDRI vises.
+     App Review åpner appen utlogget, og rota serverer da denne siden — så
+     anmelderen så en nettside som selger appen, inne i appen. Det er
+     skjermbildet Apple la ved avvisningen 13.08.2026 (4.0.0 Design), og det er
+     dessuten det de kaller «repackaged website» (4.2). Å skjule enkeltdeler med
+     data-web-only var ikke nok: det som ble igjen var fortsatt en salgsside.
+     Appen sendes derfor rett til /soppforhold — ekte, offentlig appinnhold som
+     ikke krever innlogging, med appens egen navigasjon.
+     data-native settes FØRST, så siden ser riktig ut i det halve sekundet før
+     omdirigeringen tar tak (og hvis den mot formodning ikke gjør det).
+     replace() og ikke assign(): «tilbake» skal ikke føre hit igjen.
+     Kjører ikke på nett — window.Capacitor finnes bare i appen. -->
+<script>try{var c=window.Capacitor;if(c&&(typeof c.isNativePlatform==='function'?c.isNativePlatform():c.platform&&c.platform!=='web')){document.documentElement.setAttribute('data-native','true');location.replace('/soppforhold')}}catch(e){}</script>
 </head>
 <body>
 <div style="background:#f5f1e8;color:#1f2a22;font-family:Figtree,system-ui,sans-serif;font-size:17px;line-height:1.6;text-wrap:pretty;overflow-x:clip">
