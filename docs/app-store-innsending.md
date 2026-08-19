@@ -362,3 +362,86 @@ Det som fortsatt kan sprekke:
 - **Produktansvarsforsikring.** Blokkerer ikke innsending, og jeg kan ikke tegne
   den. Men du driver som ENK — et erstatningskrav treffer privatøkonomien din
   direkte. Sikkerhetsrammen i appen er god, men den er ikke en forsikring.
+
+---
+
+## 🐞 Feil 90035 «Invalid Signature» — dekomponert «å» i sertifikatnavnet
+
+**Datert 2026-08-18. Kostet en kveld. Les dette før du feilsøker signering.**
+
+Etter flyttingen til Mac mini-en fantes ingen sertifikater lokalt. Xcode
+utstedte et nytt Apple Distribution-sertifikat via **skysignering**, og da ble
+*hver eneste* opplasting avvist med:
+
+```
+ERROR ITMS-90035: Invalid Signature. The file at path "App.app/App"
+is not properly signed.
+```
+
+Feilen listet både hovedbinæren og alle tre rammeverkene (Capacitor, Cordova,
+IONCameraLib). Den vanlige mistanken — feil sertifikattype, simulatorbygg,
+skitten byggemappe — var **alle feil spor**.
+
+### Årsaken
+
+Sertifikatets Common Name inneholdt kontonavnet med «å» som **dekomponert**
+Unicode:
+
+| | «å» | Tegn i navnet |
+|---|---|---|
+| Skysignert sertifikat (ødelagt) | `U+0061` + `U+030A` (a + ring) | 47 |
+| Sertifikat fra gammel maskin (virker) | `U+00E5` (ett tegn) | 46 |
+
+Apples valideringstjeneste sammenligner byte for byte, så det som ser identisk
+ut på skjermen matcher ikke. Alt signert med det sertifikatet avvises.
+
+### Slik sjekker du det på ett minutt
+
+```bash
+codesign -d -r- <sti/til/App.app> 2>&1 | grep -o 'leaf\[subject.CN\] = 0x[0-9a-f]*'
+```
+
+Kopier heksverdien og dekod den:
+
+```python
+import unicodedata
+navn = bytes.fromhex("<heks>").decode()
+print(navn, len(navn), unicodedata.is_normalized('NFC', navn))
+```
+
+`False` betyr at du har denne feilen.
+
+### Løsningen
+
+Importer et **riktig kodet** Apple Distribution-sertifikat (her: eksportert som
+.p12 fra den gamle maskinen, der «å» var prekomponert). Når et lokalt
+sertifikat finnes, bruker `xcodebuild -exportArchive` det i stedet for
+skysignering, og valideringen går gjennom.
+
+⚠️ Det ødelagte sertifikatet ligger fortsatt registrert på utviklerkontoen.
+Det bør tilbakekalles i developer.apple.com — men tilbakekalling kan ugyldig-
+gjøre provisioning-profiler, så gjør det bevisst, ikke som opprydding.
+
+### Andre lærdommer fra samme kveld
+
+- **Avbryt aldri en signeringsdialog som har hengt seg opp** ved å avlive
+  `codesign`. Det gir et arkiv der rammeverkene mangler signatur, og feilen
+  ligner den ekte til forveksling. Bygg heller på nytt.
+- Organizer som ikke vil åpne: **avslutt Xcode helt og start på nytt.**
+- Hele veien arkiv → eksport → validering → opplasting kan kjøres fra
+  terminalen, uten Organizer:
+
+```bash
+xcodebuild -project ios/App/App.xcodeproj -scheme App -configuration Release \
+  -destination 'generic/platform=iOS' -archivePath /tmp/Mycelet.xcarchive \
+  -allowProvisioningUpdates archive
+xcodebuild -exportArchive -archivePath /tmp/Mycelet.xcarchive \
+  -exportPath /tmp/ut -exportOptionsPlist ExportOptions.plist -allowProvisioningUpdates
+xcrun altool --upload-app -f /tmp/ut/App.ipa -t ios \
+  --apiKey <KEY_ID> --apiIssuer <ISSUER_ID>
+```
+
+API-nøkkelen ligger i `~/.appstoreconnect/private_keys/`. Issuer-ID-en står i
+App Store Connect → Users and Access → Integrations. NB: nøkkelen manglet
+rettighet til å *lage* sertifikater («Cloud signing permission error») — den
+duger til validering og opplasting, ikke til utstedelse.
