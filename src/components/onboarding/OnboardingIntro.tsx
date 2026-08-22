@@ -28,6 +28,25 @@ function markDone() {
   window.dispatchEvent(new Event(ONBOARDING_DONE_EVENT));
 }
 
+/**
+ * Er visningsflaten forstyrret av tastaturet akkurat nå?
+ *
+ * Denne sjekken er grunnen til at App Review avviste bygg 3 (2.1a, 21.08.2026):
+ * anmelderen logget inn (innloggingen LYKTES — serverloggen viser det), og
+ * introen monterte seg i samme øyeblikk — mens tastaturet fortsatt holdt
+ * WKWebViews visuelle viewport sammenpresset. Det bunnforankrede kortet havnet
+ * da under skjermkanten, med knappene utenfor rekkevidde, mens sløret
+ * (fixed inset-0 z-[100]) lå igjen over alt og spiste hvert eneste trykk.
+ * For anmelderen så det ut som at «Logg inn»-knappen var død. Reprodusert
+ * deterministisk i iPhone 17 Pro Max-simulatoren: monter med tastatur oppe →
+ * murt app; monter uten → alt vel.
+ */
+function tastaturForstyrrer(): boolean {
+  const vv = window.visualViewport;
+  if (!vv) return false;
+  return vv.height < window.innerHeight - 80;
+}
+
 export function OnboardingIntro() {
   const t = useTranslations('OnboardingIntro');
   const { user, loading } = useAuth();
@@ -36,19 +55,46 @@ export function OnboardingIntro() {
 
   useEffect(() => {
     if (loading) return;
+    let skalVises = false;
     try {
       // The app-intro is for USERS: logged-out visitors land on the marketing
       // page, where a "welcome to the app" modal on top of the hero is noise.
       // New registrants see it on their first logged-in visit instead.
-      if (user && window.localStorage.getItem(STORAGE_KEY) !== '1') {
-        setVisible(true);
-      } else {
-        // Anon or already onboarded — let listeners (cookie notice) proceed.
-        window.dispatchEvent(new Event(ONBOARDING_DONE_EVENT));
-      }
+      skalVises = Boolean(user) && window.localStorage.getItem(STORAGE_KEY) !== '1';
     } catch {
-      window.dispatchEvent(new Event(ONBOARDING_DONE_EVENT));
+      skalVises = false;
     }
+    if (!skalVises) {
+      // Anon or already onboarded — let listeners (cookie notice) proceed.
+      window.dispatchEvent(new Event(ONBOARDING_DONE_EVENT));
+      return;
+    }
+
+    // ALDRI monter sløret mens tastaturet forstyrrer viewporten — se
+    // tastaturForstyrrer(). Typisk øyeblikk: brukeren trykket nettopp
+    // «Logg inn» og tastaturet er på vei ned. Vent til flaten er stabil.
+    if (!tastaturForstyrrer()) {
+      setVisible(true);
+      return;
+    }
+    const vv = window.visualViewport;
+    const provIgjen = () => {
+      if (!tastaturForstyrrer()) {
+        setVisible(true);
+        vv?.removeEventListener('resize', provIgjen);
+      }
+    };
+    vv?.addEventListener('resize', provIgjen);
+    // Sikkerhetsnett: skulle resize-hendelsen utebli (WebKit har overrasket
+    // før), vis introen når flaten uansett har fått roet seg.
+    const frist = window.setTimeout(() => {
+      vv?.removeEventListener('resize', provIgjen);
+      setVisible(true);
+    }, 2500);
+    return () => {
+      vv?.removeEventListener('resize', provIgjen);
+      window.clearTimeout(frist);
+    };
   }, [user, loading]);
 
   if (!visible) return null;
@@ -62,8 +108,17 @@ export function OnboardingIntro() {
   }
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-end justify-center bg-forest-950/70 px-4 pb-[max(2rem,env(safe-area-inset-bottom))] pt-12 backdrop-blur-sm sm:items-center sm:pb-12">
-      <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-card">
+    // Sentrert (ikke bunnforankret) med rullbar overflate og lukking ved trykk
+    // på sløret: tre uavhengige garantier for at introen aldri kan sperre
+    // appen selv om viewporten skulle stå forskjøvet — se tastaturForstyrrer().
+    // Sløret er skippbart av design, så et trykk utenfor kortet betyr «gå videre».
+    <div
+      className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto bg-forest-950/70 px-4 py-8 backdrop-blur-sm"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) finish();
+      }}
+    >
+      <div className="max-h-[calc(100dvh-4rem)] w-full max-w-md overflow-y-auto rounded-2xl bg-white p-6 shadow-card">
         <div className="text-5xl" aria-hidden="true">
           {current.emoji}
         </div>

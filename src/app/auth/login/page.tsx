@@ -37,6 +37,11 @@ function LoginForm() {
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    // Send tastaturet ned FØR innloggingen fullfører. I WKWebView etterlater
+    // et åpent tastatur viewporten forskjøvet i sekundene etterpå, og alt som
+    // monteres bunnforankret i det vinduet (onboarding-introen) kan havne
+    // utenfor skjermen — det var App Review-avvisningen 21.08.2026 (2.1a).
+    (document.activeElement as HTMLElement | null)?.blur?.();
     setError(null);
     setLoading(true);
 
