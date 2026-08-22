@@ -1,8 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation';
-import { FormEvent, Suspense, useMemo, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { FormEvent, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Button } from '@/components/ui/Button';
 import { useAuth } from '@/lib/hooks/useAuth';
@@ -15,10 +15,9 @@ import { readSafeNext } from '@/lib/auth/safe-redirect';
 
 function LoginForm() {
   const t = useTranslations('AuthLogin');
-  const router = useRouter();
   const searchParams = useSearchParams();
   // Validert mot åpen redirect — se src/lib/auth/safe-redirect.ts. Verdien
-  // brukes både til router.push() og til å bygge OAuth-callbackens next-param.
+  // brukes både til navigasjonen etter innlogging og til OAuth-callbackens next-param.
   const redirectPath = useMemo(() => readSafeNext(searchParams), [searchParams]);
 
   // Hvorfor havnet du her? Settes av registreringssiden.
@@ -28,12 +27,31 @@ function LoginForm() {
     return null;
   }, [searchParams]);
 
-  const { signIn, signInWithGoogle } = useAuth();
+  const { signIn, signInWithGoogle, user, loading: authLoading } = useAuth();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  // En allerede innlogget besøkende skal ikke se innloggingsskjemaet — send
+  // dem dit de var på vei. Dette er også SELVHELBREDELSEN for appskallet:
+  // i WKWebView henger synkroniseringen av øktinformasjonskapslene etter
+  // (document.cookie → HTTP-lageret), så navigasjonen rett etter innlogging
+  // kan bli avvist av middleware og sendt STILLE tilbake hit — skjermen står
+  // urørt, og knappen ser død ut. Det var halve App Review-avvisningen 21.08
+  // (2.1a): serverloggen viser at anmelderens innlogging LYKTES, elleve
+  // sekunder før skjermbildet av den «døde» knappen. Når den avviste
+  // navigasjonen lander her igjen, ser denne effekten økten og prøver på
+  // nytt — innen da har kapslene rukket fram.
+  const omdirigert = useRef(false);
+  useEffect(() => {
+    if (authLoading || !user || omdirigert.current) return;
+    omdirigert.current = true;
+    // Full sidelast, ikke klientnavigasjon: da går forespørselen med de
+    // synkroniserte kapslene, og middleware ser samme økt som nettleseren.
+    window.location.replace(redirectPath);
+  }, [authLoading, user, redirectPath]);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -48,13 +66,18 @@ function LoginForm() {
     try {
       await signIn(email, password);
       trackEvent('login', { method: 'password' });
-      router.push(redirectPath);
-      router.refresh();
+      // Full sidelast i stedet for router.push: klientnavigasjonen kunne bli
+      // avvist av middleware i appskallet (kapsel-synkroniseringen over) og
+      // lande stille tilbake på skjemaet. En full last konvergerer: skulle
+      // også den bli avvist, fanger allerede-innlogget-effekten over det opp
+      // og prøver igjen.
+      window.location.assign(redirectPath);
     } catch (err) {
       setError(err instanceof Error ? err.message : t('signInFailed'));
-    } finally {
       setLoading(false);
     }
+    // Merk: ved suksess får loading stå — siden er på vei bort, og en aktiv
+    // knapp i det vinduet inviterer til dobbelttrykk.
   };
 
   const handleGoogle = async () => {
