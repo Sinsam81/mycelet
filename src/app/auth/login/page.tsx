@@ -20,10 +20,13 @@ function LoginForm() {
   // brukes både til navigasjonen etter innlogging og til OAuth-callbackens next-param.
   const redirectPath = useMemo(() => readSafeNext(searchParams), [searchParams]);
 
-  // Hvorfor havnet du her? Settes av registreringssiden.
+  // Hvorfor havnet du her? Settes av registreringssiden — og av
+  // /auth/confirm, som lander purremail-lenkene her med tydelig utfall.
   const notice = useMemo(() => {
     if (searchParams.get('recover') === '1') return 'noticeRecover';
     if (searchParams.get('confirm') === '1') return 'noticeConfirm';
+    if (searchParams.get('verified') === '1') return 'noticeVerified';
+    if (searchParams.get('linkExpired') === '1') return 'noticeLinkExpired';
     return null;
   }, [searchParams]);
 

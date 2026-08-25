@@ -184,7 +184,9 @@
     "googleSignInFailed": "Google-innlogging feilet",
     "loading": "Laster...",
     "noticeConfirm": "Kontoen er opprettet. Vi har sendt deg en e-post — bekreft adressen din, og logg inn her etterpå.",
-    "noticeRecover": "Kontoen din ble opprettet, men vi fikk ikke satt opp profilen. Logg inn her, så ordner vi resten automatisk."
+    "noticeRecover": "Kontoen din ble opprettet, men vi fikk ikke satt opp profilen. Logg inn her, så ordner vi resten automatisk.",
+    "noticeVerified": "E-postadressen din er bekreftet! Logg inn under, så er du i gang.",
+    "noticeLinkExpired": "Bekreftelseslenken er brukt eller utløpt. Bruk «Glemt passord?» under — den lenken bekrefter også adressen din."
   },
   "AuthRegister": {
     "errorUsernameTaken": "Brukernavnet er allerede i bruk. Velg et annet.",
