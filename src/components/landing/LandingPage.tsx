@@ -198,10 +198,13 @@ export async function LandingPage() {
             {t('heroCta')} →
           </Link>
           <NonNativeOnly>
-            <span className="inline-flex flex-col items-start rounded-xl border border-gray-300 px-5 py-2 text-left">
+            <a
+              href="https://apps.apple.com/no/app/id6784672944"
+              className="inline-flex flex-col items-start rounded-xl border border-gray-300 px-5 py-2 text-left transition hover:border-forest-700"
+            >
               <span className="text-[10px] font-semibold uppercase tracking-wide text-gray-500">{t('heroAppStoreKicker')}</span>
               <span className="text-sm font-semibold text-gray-800">App Store</span>
-            </span>
+            </a>
           </NonNativeOnly>
         </div>
         <p className="text-xs text-gray-500">{t('heroTrust')}</p>
