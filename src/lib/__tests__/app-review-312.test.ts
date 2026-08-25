@@ -224,7 +224,9 @@ describe('Den statiske forsiden — det Apple faktisk ser', () => {
     });
 
     it(`${fil}: «Kommer snart … App Store» er skjult i appen`, () => {
-      const tekst = fil.includes('.sv.') ? 'Kommer snart till' : 'Kommer snart i';
+      // Etter lanseringen 23.08.2026 heter knappen «Last ned i / Hämta i App
+      // Store» — invariabelen er den samme: skjult i appskallet (data-web-only).
+      const tekst = fil.includes('.sv.') ? 'Hämta i' : 'Last ned i';
       expect(omsluttendeTagg(html, tekst, 'a')).toContain('data-web-only');
     });
 
@@ -233,7 +235,7 @@ describe('Den statiske forsiden — det Apple faktisk ser', () => {
       // Mycelet i nettleseren på mycelet.com i mellomtiden — en oppfordring ut
       // av appen, til stedet der de samme abonnementene selges via Stripe.
       // Retningslinje 3.1.1, på den aller første skjermen.
-      const tekst = fil.includes('.sv.') ? 'När kommer iOS-appen?' : 'Når kommer iOS-appen?';
+      const tekst = fil.includes('.sv.') ? 'Finns Mycelet som app?' : 'Finnes Mycelet som app?';
       expect(omsluttendeTagg(html, tekst, 'details')).toContain('data-web-only');
     });
 
