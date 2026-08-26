@@ -120,11 +120,11 @@ Eller for et fast intervall (f.eks. hver morgen mens du jobber): `/loop 1h <samm
 
 ## Recent-feedback sweep (fast vane)
 
-Hver gang Sindre melder en bug:
+Hver gang eieren melder en bug:
 1. Fiks den meldte buggen.
 2. **Auditér hele appen for søsken** av samme bug-klasse (samme antakelse/mønster andre steder).
 3. Fiks søsknene + verifiser med `npm run build` (rydd iCloud-dupefiler først — se under).
-4. Deploy **først når Sindre sier ok**.
+4. Deploy **først når eieren sier ok**.
 
 Eksempel som beviste verdien (2026-06-20): svensk-kart-bug → søsken var Göteborg-region-ruting-bug. Begge var Norge-sentriske antakelser.
 

@@ -8,7 +8,7 @@
 -- og grunnen var ikke at det manglet dokumenterte forvekslinger — det var at
 -- DOBBELTGJENGERNE IKKE FANTES I KATALOGEN.
 --
--- Verst for gråmusserong, som Sindre satte øverst: alle dens dokumenterte
+-- Verst for gråmusserong, som ble satt øverst: alle dens dokumenterte
 -- forvekslinger er musseronger, og gråmusserong var appens ENESTE Tricholoma.
 -- Den mest etterspurte matmusserongen sto derfor uten en eneste rad, ikke fordi
 -- den er trygg, men fordi det ikke fantes noe å peke på.

@@ -56,4 +56,4 @@ Mycelet er en norsk/svensk soppjakt-app. Hovedløftet: **«Riktig tid, riktig sk
 
 ## Assets som finnes
 
-Ekte skjermbilder i riktig mobiloppløsning finnes (kart, soppforhold-måler, AI-side, kalender, artsbibliotek) — be Sindre lime inn, eller bruk plassholdere med riktige proporsjoner (1320×2868).
+Ekte skjermbilder i riktig mobiloppløsning finnes (kart, soppforhold-måler, AI-side, kalender, artsbibliotek) — be om å få dem limt inn, eller bruk plassholdere med riktige proporsjoner (1320×2868).

@@ -11,7 +11,7 @@ name: ci
 #
 # Hele denne porten koster under to minutter.
 #
-# 👤 GJENSTÅR FOR SINDRE (kan ikke gjøres herfra):
+# 👤 GJENSTÅR MANUELT (kan ikke gjøres herfra):
 #   1. Slå på «Require status checks to pass before merging» på main i GitHub →
 #      Settings → Branches, og huk av «verify». Uten det er dette bare et
 #      rådgivende kryss.

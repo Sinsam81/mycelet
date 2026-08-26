@@ -41,9 +41,9 @@ describe('classifyTrafficSource', () => {
 
   it('lagrer aldri mer enn vertsnavnet', () => {
     // Selve adressen kan bære søkeord eller noe personlig. Bare verten beholdes.
-    const t = classifyTrafficSource('https://www.google.com/search?q=hvem+er+sindre', OSS);
+    const t = classifyTrafficSource('https://www.google.com/search?q=hvem+er+personen', OSS);
     expect(t.host).toBe('google.com');
-    expect(JSON.stringify(t)).not.toMatch(/sindre|search|\?/);
+    expect(JSON.stringify(t)).not.toMatch(/personen|search|\?/);
   });
 
   it('behandler manglende og ugyldig henvisning som direkte', () => {

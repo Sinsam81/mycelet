@@ -17,7 +17,7 @@ Skrevet 2026-08-01, hentet inn i repoet samme dag. Dekker de to punktene som
 
 ---
 
-## 1. Supabase Auth-e-poster (krever at Sindre gjør det — dashboard, ikke repo)
+## 1. Supabase Auth-e-poster (krever manuell handling — dashboard, ikke repo)
 
 Auth-e-postene ligger i Supabase-dashbordet, ikke i koden, så de kan ikke endres
 herfra. De er i dag **kun norske**, og en svensk bruker som ber om nytt passord

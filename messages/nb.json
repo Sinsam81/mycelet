@@ -678,7 +678,7 @@
     "processorRevenuecatNote": "RevenueCat mottar ikke navn, e-post, bilder eller posisjonsdata.",
     "processorAppleDesc": "(App Store) er selger og betalingsmottaker for kjøp gjort i iOS-appen. Apple behandler betalingsopplysningene dine som selvstendig behandlingsansvarlig etter sin egen personvernerklæring, og vi mottar aldri kortopplysninger. Se:",
     "processorAppleNote": "Gjelder bare kjøp gjort i appen. Kjøp på mycelet.com går via Stripe.",
-    "controllerNameEnk": "Sindre Øverås, som driver Mycelet gjennom enkeltpersonforetaket {legalName} (org.nr {orgNr}).",
+    "controllerNameEnk": "Enkeltpersonforetaket {legalName} (org.nr {orgNr}), som driver Mycelet.",
     "controllerNameAs": "{legalName} (org.nr {orgNr}).",
     "cookiesNativeNoAnalytics": "I appen fra App Store er analyseverktøy slått helt av, så det finnes ingenting å velge bort her. Valget over gjelder mycelet.com i nettleser.",
     "processorSentryLabel": "Sentry",

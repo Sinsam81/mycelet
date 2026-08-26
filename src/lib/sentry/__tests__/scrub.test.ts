@@ -108,7 +108,7 @@ describe('scrubBreadcrumb', () => {
 describe('scrubEvent', () => {
   const hendelse = (): ErrorEvent =>
     ({
-      user: { id: 'abc', email: 'sindre@example.com', ip_address: '1.2.3.4' },
+      user: { id: 'abc', email: 'ola@example.com', ip_address: '1.2.3.4' },
       request: {
         url: 'https://mycelet.com/map?lat=59.91342&lng=10.74609',
         query_string: 'lat=59.91342&lng=10.74609',
@@ -141,7 +141,7 @@ describe('scrubEvent', () => {
 
   it('etterlater ingen posisjon, e-post eller token noe sted i hendelsen', () => {
     const json = JSON.stringify(scrubEvent(hendelse()));
-    for (const hemmelighet of ['59.91342', '10.74609', 'sindre@example.com', '1.2.3.4', 'ey…', 'abc123']) {
+    for (const hemmelighet of ['59.91342', '10.74609', 'ola@example.com', '1.2.3.4', 'ey…', 'abc123']) {
       expect(json, `«${hemmelighet}» står fortsatt i hendelsen`).not.toMatch(hemmelighet);
     }
   });

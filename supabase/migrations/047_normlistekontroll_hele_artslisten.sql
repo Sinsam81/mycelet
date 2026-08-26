@@ -4,12 +4,12 @@
 -- HVORFOR
 -- ═══════════════════════════════════════════════════════════════════════════
 --
--- Migrasjon 046 rettet ametystsoppen fordi Sindre videresendte en ekstern
+-- Migrasjon 046 rettet ametystsoppen fordi vi fikk videresendt en ekstern
 -- gjennomgang som fanget den. Den feilen ble funnet ved TILFELDIGHET. Ingen
 -- hadde noen gang kontrollert artslistens spiselighet mot en fasit — alle 72
 -- artene sto med verified = false og data_source = 'mvp_curated'.
 --
--- Sindre stilte da det riktige spørsmålet: kan vi ikke heller sette de vi er
+-- Da kom det riktige spørsmålet: kan vi ikke heller sette de vi er
 -- usikre på som uspiselig, i stedet for å ta sjansen på å si spiselig?
 --
 -- Svaret er ja — men vi var ikke USIKRE, vi var UKONTROLLERTE. Det er to
@@ -52,7 +52,7 @@
 --   VI FØLGER NORMLISTEN når den er strengere enn oss.
 --   VI BEHOLDER VÅRT når vi er strengere enn den.
 --
--- Det er Sindres instinkt, brukt der det faktisk biter — ikke som en blank
+-- Det er det instinktet, brukt der det faktisk biter — ikke som en blank
 -- gardering over hele lista.
 
 -- ═══════════════════════════════════════════════════════════════════════════
@@ -145,7 +145,7 @@ SET
 WHERE latin_name = 'Leccinum aurantiacum';
 
 -- ═══════════════════════════════════════════════════════════════════════════
--- 4. STANKMORKEL — HER GJELDER SINDRES INSTINKT FULLT UT
+-- 4. STANKMORKEL — HER GJELDER DET INSTINKTET FULLT UT
 -- ═══════════════════════════════════════════════════════════════════════════
 --
 -- Sto som `conditionally_edible` med vårt eget notat: «Noen reagerer med
@@ -155,7 +155,7 @@ WHERE latin_name = 'Leccinum aurantiacum';
 -- maskinell parsing av alle 218 oppføringer, gjennomgang av hele sitemapet, og
 -- tekstsøk i NSNFs signerte PDF. Null treff på «Verpa» og «klokkemorkel».
 --
--- Dette er nettopp tilfellet Sindre spurte om, og her er svaret ja: den
+-- Dette er nettopp tilfellet det ble spurt om, og her er svaret ja: den
 -- nasjonale fasiten fører den ikke som mat, og vårt EGET notat sier at folk
 -- reagerer selv når den er kokt. Da skal den ikke bære et matsoppmerke.
 -- Vi hevder ikke at den er giftig — `inedible`, ikke `toxic`.

@@ -1,6 +1,6 @@
 # Kalibrering av dommene på kartet
 
-**Skrevet 2026-08-02.** Bakgrunn: Sindre om kartet — *«Jeg føler ikke at dette gir
+**Skrevet 2026-08-02.** Bakgrunn: en tilbakemelding om kartet — *«Jeg føler ikke at dette gir
 noe verdi. Det sier at alle steder er like gode å lete.»*
 
 Konklusjonen etter måling: han hadde rett i symptomet, men årsaken var ikke at

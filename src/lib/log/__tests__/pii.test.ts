@@ -3,7 +3,7 @@ import { maskEmail, redactPII } from '../pii';
 
 describe('maskEmail', () => {
   it('masks the local part to first char + asterisks', () => {
-    expect(maskEmail('sindre.alstad@gmail.com')).toBe('s***@gmail.com');
+    expect(maskEmail('ola.nordmann@example.com')).toBe('o***@example.com');
   });
 
   it('keeps single-char locals readable but still masked', () => {
@@ -36,11 +36,11 @@ describe('redactPII', () => {
 
   it('masks email addresses anywhere in strings', () => {
     const out = redactPII({
-      msg: 'User sindre.alstad@gmail.com signed in',
+      msg: 'User ola.nordmann@example.com signed in',
       list: ['ab@x.no logged out']
     }) as Record<string, unknown>;
 
-    expect(out.msg).toBe('User s***@gmail.com signed in');
+    expect(out.msg).toBe('User o***@example.com signed in');
     expect((out.list as string[])[0]).toBe('a***@x.no logged out');
   });
 
@@ -68,10 +68,10 @@ describe('redactPII', () => {
   });
 
   it('serializes Errors with name/message/stack and redacts within', () => {
-    const e = new Error('Failed for sindre@x.no');
+    const e = new Error('Failed for ola@x.no');
     const out = redactPII(e) as Record<string, unknown>;
     expect(out.name).toBe('Error');
-    expect(out.message).toBe('Failed for s***@x.no');
+    expect(out.message).toBe('Failed for o***@x.no');
     expect(typeof out.stack === 'string' || out.stack === undefined).toBe(true);
   });
 

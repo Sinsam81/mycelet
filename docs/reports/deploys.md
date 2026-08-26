@@ -67,7 +67,7 @@ Ingen rollback av kode eller database var nødvendig.
 - **Rollback:** none needed.
 
 ## 2026-07-27 — RevenueCat-konfigurasjon aktivert (env, ingen kodeendring)
-- **What:** Sindre fullførte hele oppsettet (walked through): ASC-abonnementer (gruppe «Mycelet Premium»: no.mycelet.premium.monthly 79kr + no.mycelet.seasonpass.yearly 249kr, priser/availability/localization), RevenueCat-prosjekt med App Store-app + .p8 IAP-key («Valid credentials»), produkter + entitlement `premium` + default offering ($rc_monthly/$rc_annual → App Store-produktene), webhook «Mycelet backend». Claude la inn NEXT_PUBLIC_REVENUECAT_APPLE_KEY + REVENUECAT_WEBHOOK_AUTH + REVENUECAT_ALLOW_SANDBOX=1 i Vercel (Production) via CLI og trigget redeploy.
+- **What:** Eieren fullførte hele oppsettet (walked through): ASC-abonnementer (gruppe «Mycelet Premium»: no.mycelet.premium.monthly 79kr + no.mycelet.seasonpass.yearly 249kr, priser/availability/localization), RevenueCat-prosjekt med App Store-app + .p8 IAP-key («Valid credentials»), produkter + entitlement `premium` + default offering ($rc_monthly/$rc_annual → App Store-produktene), webhook «Mycelet backend». Claude la inn NEXT_PUBLIC_REVENUECAT_APPLE_KEY + REVENUECAT_WEBHOOK_AUTH + REVENUECAT_ALLOW_SANDBOX=1 i Vercel (Production) via CLI og trigget redeploy.
 - **Verify post-deploy:** POST /api/revenuecat/webhook med riktig auth + TEST-event → 200 {received, ignored:test_event}; feil auth → 401. Paid Apps Agreement/bank/tax alle Active i ASC.
 - **Next:** sandbox-tester i ASC (Users and Access → Sandbox Testers), dev-bygg på fysisk iPhone, sandbox-kjøp E2E, skjermbilder, arkiv + innsending.
 
@@ -100,14 +100,14 @@ Ingen rollback av kode eller database var nødvendig.
 - **Rollback:** none needed.
 
 ## 2026-07-29 — PR #100: Sted+art-søk på kartet, svensk stedssøk fikset, uke-utsikt for søkt sted
-- **Utløser:** Sindre spurte om «hvor stor sjanse for steinsopp ved Hamar i helgen?» er enkelt. Det var det ikke.
+- **Utløser:** Eieren spurte om «hvor stor sjanse for steinsopp ved Hamar i helgen?» er enkelt. Det var det ikke.
 - **What:** (1) 🐞 Stedssøket var Norge-only (Kartverket) og feilet STILLE for Sverige — «Uppsala»→«Oppsal, Hjartdal», «Sälen»→«Selen, Karmøy». Nytt `src/lib/utils/place-search.ts`: Photon (dekker NO+SE) med Kartverket som NO-fallback, filtrert til NO/SE, tettsteder rangert over gårder. (2) Stedssøk var gjemt i Filtre-arket, og artsvalg ERSTATTET søkeboksen → «art + sted» var umulig. Nå ett søkefelt med grupperte treff; chip og felt lever side om side. (3) 7-dagers utsikt fantes kun for egen GPS-posisjon → ny `PlaceForecastStrip` viser uka for søkt sted. Oppslag proxes via ny `/api/places` (CSP forblir stram, ingen bruker-IP til tredjepart, CDN-cache 1 døgn, 60/min/klient).
 - **Review:** adversariell gjennomgang fant 8 funn, alle fikset før merge — bl.a. to som brøt selve funksjonen (sen GPS-fix rykket deg vekk fra søkt sted; «lovende steder» regnet rundt GPS i stedet for søkt sted) og ett ærlighetsbrudd (generelle værtall merket med valgt art).
 - **Verify:** 344 tests, typecheck, build; nettleser-verifisert begge rekkefølger (art→sted og sted→art); live `/api/places?q=Sälen` → Dalarnas län · Sverige; qa:prod 29/29; health ok.
 - **Rollback:** none needed.
 
 ## 2026-07-30 — PR #101: «Load failed» — native fotoopptak + CSP-blokkerte identifiseringsbilder
-- **Utløser:** Sindre fikk «Load failed» ved soppidentifisering i iOS-appen.
+- **Utløser:** Eieren fikk «Load failed» ved soppidentifisering i iOS-appen.
 - **What:** Rotårsak: skallet laster mycelet.com, men Capacitor-kameraets fil-URI-er ligger på `capacitor://localhost` — `fetch(photo.webPath)` er et kryss-skjema-kall som CORS + håndhevende CSP `connect-src` blokkerer (WebKits melding: «Load failed»). Rammet alle tre fotoflytene (identifiser/forum/kartfunn) via delt hjelper. Fiks: `CameraResultType.Base64` + ny `base64ToBlob` (ingen nettverksflate). Søskenfeil fikset i samme PR: (1) resultatsiden `fetch(data:-URL)` → lokal `dataUrlToBlob`; (2) `/api/identify` droppet `imageUrl` fra svaret → forvekslingskortet falt ALLTID tilbake til Kindwise-CDN; (3) CDN-verten `mushroom-id.ams3.cdn.digitaloceanspaces.com` lagt presist til i `img-src`; (4) rå browsertekst ved nettverksfeil erstattet med nb/sv-tekst.
 - **Review:** CSP-revisjonsworkflow (4 linser + adversariell verifisering, 6 agenter, 506k tokens) over hele appen — fant CDN-funnet, avkreftet alt annet; verifisereren avdekket at `imageUrl`-utelatelsen gjorde fallbacken til hovedvei.
 - **Verify pre-merge:** ende-til-ende i iOS-simulator mot lokal prod-bygg (bildevalg → bro → POST når API-et; gammel kode døde ved bildevalg); 349 vitest (5 nye), typecheck, build.
@@ -115,7 +115,7 @@ Ingen rollback av kode eller database var nødvendig.
 - **Rollback:** none needed.
 
 ## 2026-07-31 — PR #99: svensk lokalisering, vilkår, App Store-krav og prediksjonssammenheng
-- **Utløser:** Sindre fotograferte prod og så norsk tekst tre steder på svensk; senere at forsiden sa 80/100 mens kartet sa 19/100 og et anbefalt sted 56/100, og at prognosen falt urimelig mye.
+- **Utløser:** Eieren fotograferte prod og så norsk tekst tre steder på svensk; senere at forsiden sa 80/100 mens kartet sa 19/100 og et anbefalt sted 56/100, og at prognosen falt urimelig mye.
 - **Merge-SHA:** `88f1713` (squash av 11 commits).
 
 **Innhold i fire deler.**
@@ -157,7 +157,7 @@ Ingen rollback av kode eller database var nødvendig.
 
 ## 2026-08-01 — PR #103: prediksjons-RPC låst mot anon, bildebøtter beholdt offentlige
 
-- **What:** To beslutninger Sindre ba om, tatt mot ærlighetskravet i CLAUDE.md heller enn den opplagte utbedringen.
+- **What:** To beslutninger eieren ba om, tatt mot ærlighetskravet i CLAUDE.md heller enn den opplagte utbedringen.
 
 1. **Prediksjonsfliser — ingen ny betalingsmur.** Sveipet foreslo `REVOKE FROM anon` på `get_prediction_tiles_in_bounds`. Det ville brutt appen: `/api/prediction` er med vilje tilgjengelig utlogget og kalte RPC-en med kallerens sesjon, så anon-rettigheten var bærende. Og `MushroomMap.tsx:214` kaller RPC-en direkte fra nettleseren, utenom rutens `premiumPrediction`-gating — «omgåelsen» er appens egen design. Det ekte problemet var at hvem som helst med den offentlige anon-nøkkelen kunne kalle PostgREST direkte med et land-stort bounding-box og laste ned hele rasteret, altså nøyaktig det migrasjon 015 ville hindre og gjenåpnet gjennom en annen dør. Ruta henter nå flisene med tjenestenøkkelen; migrasjon 033 fjerner anon-rettigheten. `authenticated` beholder den (kartets direktekall er en bevisst latensavveining, ett rundturskall spart per panorering). **Bevisst IKKE en betalingsmur:** den romlige delen har ærlig AUC ~0,52, og å ta betalt for den ville vært å selge det svakeste appen gjør.
 
@@ -256,7 +256,7 @@ Ingen rollback av kode eller database var nødvendig.
 
 ## 2026-08-01 — PR #113: kartet viste den DÅRLIGSTE soppen på hvert sted
 
-- **What:** Sindre sendte to skjermbilder av samme sted på Nesodden: «Soppforhold 2/100» utzoomet, «12/100» innzoomet, og merket sa «19/100 Svake forhold». Tre tall, ett sted. Spurte produksjonsdatabasen om hvilket som var riktig. **Ingen av dem.**
+- **What:** Eieren sendte to skjermbilder av samme sted på Nesodden: «Soppforhold 2/100» utzoomet, «12/100» innzoomet, og merket sa «19/100 Svake forhold». Tre tall, ett sted. Spurte produksjonsdatabasen om hvilket som var riktig. **Ingen av dem.**
 - **Rotårsak:** rasteret lagrer **én flis per art per rute**. Uten artsfilter returnerer RPC-en alle, så én rute kommer tilbake som sju rader på nøyaktig samme koordinat — hele landet, nøyaktig 7,0 artsrader per posisjon.
 - **Feil 1 — kartet tegnet alle sju oppå hverandre.** RPC-en sorterer `score DESC` og Leaflet tegner i mottatt rekkefølge, så den **laveste** ble tegnet sist, lå øverst, og var den pekeren traff. Systematisk den dårligste arten. `2/100` var **vanlig morkel, i august**; `12/100` var traktkantarell. **Kantarell på samme rute lå på 60.** Hvilken sirkel du traff avhang av pikselgeometrien ved det zoomnivået — derfor endret tallet seg da han zoomet inn uten å flytte seg.
 - **Feil 2 — `/api/prediction` midlet over stabelen**, altså på tvers av arter. Kantarell 60 midlet med morkel 2 gir 19. Målt mot produksjon for nøyaktig den boksen ruta bygger: 133 rader inn → snitt **19**. Kollapset til beste art per rute: 19 steder → snitt **55**.

@@ -12,7 +12,7 @@ import { join } from 'node:path';
  * Repoet er OFFENTLIG. Likevel har tre hemmeligheter havnet i docs/ i klartekst:
  *
  *   1. Passordet til `applereview@mycelet.com` — kontoen Apples reviewer bruker
- *   2. Bankkontonummeret (IBAN) til ØVERÅS APPS
+ *   2. Bankkontonummeret (IBAN) til foretaket
  *   3. Passordet til `qa-autotest@mycelet.com` — en EKTE konto på den live appen,
  *      og samtidig til Apple sandbox-testeren
  *

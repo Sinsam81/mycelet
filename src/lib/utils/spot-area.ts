@@ -4,7 +4,7 @@
  * ═══ TRE FORSØK, OG HVORFOR DET TREDJE ER RIKTIG ═══
  *
  * 1. NUMMERERT NÅL. Sa «gå nøyaktig hit, og dette er det beste stedet». Ingen av
- *    de to påstandene bæres av dataene. Sindre gikk til punktene i felten og
+ *    de to påstandene bæres av dataene. Vi gikk til punktene i felten og
  *    fant ingenting.
  *
  * 2. HELE SAMPLINGSCELLEN (1,4–10 km bred). Ment som ærlighet om oppløsningen.

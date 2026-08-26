@@ -1,10 +1,10 @@
 # Datalagrings-policy
 
-> **Status:** Låst 9. mai 2026 av Sindre. Tallene under er normative.
+> **Status:** Låst 9. mai 2026 av eieren. Tallene under er normative.
 > Tilhørende endringer som skal følge etter denne låsingen:
 > 1. ✅ `/personvern` § 5 oppdatert med konkrete tall (samme commit).
 > 2. ⏳ Migrasjon 011 — `account_deletion_warnings`-tabell, FK-endring `findings.user_id` → ON DELETE SET NULL, trigger for å anonymisere forum-innlegg.
-> 3. ⏳ Cron-jobber implementeres når Sindre har valgt plattform (Vercel Cron vs Supabase Edge vs pg_cron).
+> 3. ⏳ Cron-jobber implementeres når plattform er valgt (Vercel Cron vs Supabase Edge vs pg_cron).
 > 4. ⏳ `/personvern` må til norsk advokat for review (A8 user-homework).
 >
 > **Hvorfor dette er B2 og ikke valgfritt:** GDPR Art. 5(1)(e) krever at personopplysninger ikke lagres lenger enn nødvendig. Uten en eksplisitt policy må vi enten slette alt umiddelbart eller forsvare evigvarig lagring til Datatilsynet. En klar policy + auto-sletting = compliance.
@@ -89,9 +89,9 @@ Alle jobber skriver til `admin_audit_log` for revisjonsspor.
 
 ## Tidslinje fremover
 
-1. ✅ **Sindre**: Bekreftet alle tre forslag (9. mai 2026).
+1. ✅ **Eier**: Bekreftet alle tre forslag (9. mai 2026).
 2. ✅ **Claude**: Oppdatert `/personvern` § 5 med konkrete tall.
-3. **Sindre**: Velg cron-plattform før implementasjon: **Vercel Cron** (enklest, gratis t.o.m. 1 cron-job, krever Vercel-deploy først), **Supabase Edge Functions** (Deno-basert, gratis, kan kjøre uavhengig av Vercel), eller **pg_cron** (Postgres-extension, kjører i DB-en, krever Supabase Pro-plan).
+3. **Eier**: Velg cron-plattform før implementasjon: **Vercel Cron** (enklest, gratis t.o.m. 1 cron-job, krever Vercel-deploy først), **Supabase Edge Functions** (Deno-basert, gratis, kan kjøre uavhengig av Vercel), eller **pg_cron** (Postgres-extension, kjører i DB-en, krever Supabase Pro-plan).
 4. **Claude**: Implementér migrasjon 011 + cron-handlers + `/api/me/extend-retention`. (~3-4 timer)
-5. **Sindre**: Send oppdatert `/personvern` til norsk advokat for review (A8).
+5. **Eier**: Send oppdatert `/personvern` til norsk advokat for review (A8).
 6. **Klart for beta-launch.**

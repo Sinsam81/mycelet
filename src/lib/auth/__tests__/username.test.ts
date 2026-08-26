@@ -27,7 +27,7 @@ describe('feilen dette ble skrevet for', () => {
 
 describe('toPublicUsername', () => {
   it('lar et vanlig brukernavn stå urørt', () => {
-    expect(toPublicUsername('Sindre81')).toBe('Sindre81');
+    expect(toPublicUsername('Soppjeger81')).toBe('Soppjeger81');
     expect(toPublicUsername('sopp-jeger')).toBe('sopp-jeger');
     expect(toPublicUsername('Kris')).toBe('Kris');
   });
@@ -63,7 +63,7 @@ describe('looksLikeEmail', () => {
   });
 
   it('lar vanlige navn være i fred', () => {
-    expect(looksLikeEmail('Sindre81')).toBe(false);
+    expect(looksLikeEmail('Soppjeger81')).toBe(false);
     expect(looksLikeEmail('sopp.jeger')).toBe(false); // punktum, men ingen @
     expect(looksLikeEmail('@sopp')).toBe(false); // @ først, ingen domene
     expect(looksLikeEmail('kris@')).toBe(false); // ingenting etter @
@@ -77,7 +77,7 @@ describe('stripEmailDomain', () => {
   });
 
   it('rører ikke en streng uten krøllalfa', () => {
-    expect(stripEmailDomain('Sindre81')).toBe('Sindre81');
+    expect(stripEmailDomain('Soppjeger81')).toBe('Soppjeger81');
   });
 
   it('lar en ledende krøllalfa stå — den er ikke en domeneskiller', () => {

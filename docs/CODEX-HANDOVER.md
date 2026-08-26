@@ -50,7 +50,7 @@ Recreational mushroom foragers in **Norway and Sweden** (the product deliberatel
 - **Distributed rate limiting**: replace in-memory buckets with Upstash Redis / Vercel KV before high traffic.
 - **Sentry** error monitoring (needs account).
 - **Prediction spatial signal**: honest plateau — the only real remaining lever is a bias-corrected SDM (big project). See §9/§15.
-- **Sindre's homework** (non-code): DPAs, lawyer review of `/personvern`, `MET_FROST_CLIENT_ID` registration, Sentry account, breach-notification routine. See §13.
+- **Owner's homework** (non-code): DPAs, lawyer review of `/personvern`, `MET_FROST_CLIENT_ID` registration, Sentry account, breach-notification routine. See §13.
 - **Species "pulje 2"**: final ~28 species to reach 100 (deferred deliberately).
 
 ---
@@ -224,7 +224,7 @@ src/lib/
 - **Native billing** — features gate correctly on `paid`, but the *purchase path* is hidden on iOS (no IAP yet).
 - **Sweden forest data** — CORINE gives coarse forest *type* only (no volume/bonitet/height), so SE prediction is structurally weaker than NO (NIBIO SR16). Not a bug — a data asymmetry.
 - **Forum** — fully built but hidden from nav (`FLAGS.forumInNav = false`).
-- **`MET_FROST_CLIENT_ID`** — code complete, inert until Sindre registers at frost.met.no (NO weather then falls back to OpenWeather or null).
+- **`MET_FROST_CLIENT_ID`** — code complete, inert until the owner registers at frost.met.no (NO weather then falls back to OpenWeather or null).
 
 ### Known bugs / limitations
 - **Rate limiting is in-memory, per serverless instance** → effective limit ≈ N × configured; resets on cold start. Swap for Redis/KV before scale.

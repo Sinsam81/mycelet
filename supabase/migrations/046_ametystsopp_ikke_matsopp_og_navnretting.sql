@@ -16,7 +16,7 @@
 -- Riktig klasse er derfor `inedible`, ikke `toxic` — den hører hjemme sammen med
 -- de andre «ikke spis denne»-artene, uten å påstå akutt forgiftningsfare.
 --
--- Funnet kom fra Sindre, som sendte inn en ekstern gjennomgang av artslista.
+-- Funnet kom inn med en ekstern gjennomgang av artslista.
 -- Verifisert mot NSNF før endringen, ikke tatt på tro.
 --
 -- ⚠️ DETTE AVDEKKER ET STØRRE HULL: artslistas spiselighet er aldri

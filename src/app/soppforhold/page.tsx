@@ -19,11 +19,10 @@ import { farge, hentRegioner, norskDato } from './hent-regioner';
  * 2026-sesongside om tørken UTEN å gi én prognose, og ingen i Norge svarer på
  * spørsmålet folk faktisk stiller i august: «er det vits i å dra ut i helga?»
  *
- * Sindre kan ikke drive markedsføring i eget navn og vil være anonym. Da faller
- * den billigste kanalen bort — å være en hjelpsom person i soppgrupper over
- * tid. Det som er igjen, er å lage noe så nyttig at ANDRE deler det for deg.
- * Denne siden er den ene lenka noen kan lime inn i en gruppetråd uten at det
- * ser ut som reklame.
+ * Distribusjonen skal skje ved at ANDRE deler siden, ikke ved at vi selv
+ * markedsfører den i soppgrupper. Derfor er målet å lage noe så nyttig at
+ * det deles videre: den ene lenka noen kan lime inn i en gruppetråd uten at
+ * det ser ut som reklame.
  *
  * Derfor er den:
  *  · offentlig — ingen innlogging, ingen betalingsmur, ingen registrering

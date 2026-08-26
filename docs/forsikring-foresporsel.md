@@ -43,7 +43,7 @@ Til slutt: hva blir omtrentlig **årspremie**, og hva trenger dere fra meg for �
 På forhånd takk.
 
 Mvh
-Sindre Øverås
+[navn]
 ØVERÅS APPS (org.nr 937 880 871)
 post@mycelet.com
 

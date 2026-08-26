@@ -91,7 +91,7 @@ function redactSecretValues(value: string): string {
  * Mask an email so the local part isn't recoverable but the domain remains
  * useful for "where do our users come from" debugging.
  *
- *   sindre.alstad@gmail.com  →  s***@gmail.com
+ *   ola.nordmann@example.com  →  o***@example.com
  *   a@x.no                   →  a***@x.no  (single-char locals still
  *                                            keep first char — domain alone
  *                                            isn't enough to identify)

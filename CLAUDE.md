@@ -37,7 +37,7 @@ There is no Supabase CLI workflow set up; migrations are applied by pasting `sup
 - Keep authed tests **read-only** — there's one Supabase project (no staging), so writes hit prod. Write flows (post forum, save finding, real AI upload) stay manual (🖐️ in the checklist).
 - **Gotcha:** Next/Turbopack does NOT run middleware in local dev, so middleware-only auth gating (`/profile`, `/admin`, `/forum/new`) can't be tested locally — those assertions skip on `npm run qa` and run on `npm run qa:prod` (prod has real middleware). Page-level `redirect()` gating (`/mine-steder`, `/map`) works in both.
 
-**Recent-feedback sweep (do this every time Sindre reports a bug):** (1) fix the reported bug; (2) audit the WHOLE app for siblings of that bug-class (same wrong assumption/pattern elsewhere); (3) fix the siblings + verify with `npm run build` (delete iCloud `* 2.ts` dupes first — see below); (4) deploy only when Sindre says OK. Proven value: the Swedish-blank-map bug's sibling was the Göteborg region-routing bug — both Norway-centric assumptions.
+**Recent-feedback sweep (do this every time the owner reports a bug):** (1) fix the reported bug; (2) audit the WHOLE app for siblings of that bug-class (same wrong assumption/pattern elsewhere); (3) fix the siblings + verify with `npm run build` (delete iCloud `* 2.ts` dupes first — see below); (4) deploy only when the owner says OK. Proven value: the Swedish-blank-map bug's sibling was the Göteborg region-routing bug — both Norway-centric assumptions.
 
 ## Architecture
 

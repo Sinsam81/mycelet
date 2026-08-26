@@ -7,7 +7,7 @@
 > Sist oppdatert: 2026-07-19 · Strategi valgt: **IAP fra start · iOS først, Android rett etter**
 > Verifisert mot faktisk kode 2026-07-19. Erstatter statusdelen i `app-store-plan.md` (som er fra 23. mai).
 
-Legend: 👤 = Sindres lekse (kan ikke kodes) · 💻 = Claude koder · ⏳ = lang ventetid, start tidlig
+Legend: 👤 = manuell oppgave (kan ikke kodes) · 💻 = Claude koder · ⏳ = lang ventetid, start tidlig
 
 ---
 
@@ -60,7 +60,7 @@ Disse blokkerer alt annet og tar tid å få gjennom. Gjør i denne rekkefølgen:
 - [x] `/api/revenuecat/webhook` — timing-safe auth, dedup på event-id, CANCELLATION≠EXPIRATION-semantikk, refund-revoke, grace-period, sandbox-gate (`REVENUECAT_ALLOW_SANDBOX`), Stripe-vern (Apple-utløp kan aldri overstyre aktivt Stripe-abonnement) → samme `billing_subscriptions`-rad som Stripe
 - [x] 31 enhetstester på event-mappingen + typecheck/build grønt
 - [x] ~~Env i Vercel~~ — ✅ satt 2026-07-27 (alle tre, Production)
-- [ ] Sandbox-test på ekte iPhone (👤 Sindre + Claude)
+- [ ] Sandbox-test på ekte iPhone (👤 manuelt + Claude)
 
 ---
 
@@ -94,7 +94,7 @@ Disse blokkerer alt annet og tar tid å få gjennom. Gjør i denne rekkefølgen:
 
 ## Realistisk tidslinje (valgt strategi)
 
-- **Uke 1–2:** Sindre kjører Spor 1 (trader-status/bank tar tid) · Claude bygger Spor 2 (RevenueCat)
+- **Uke 1–2:** Spor 1 kjøres manuelt (trader-status/bank tar tid) · Claude bygger Spor 2 (RevenueCat)
 - **Uke 2–3:** Sandbox-test IAP · skjermbilder · app-oppføring
 - **Uke 3–4:** Xcode-arkiv → send til review → (evt. én avvisningsrunde) → **LIVE**
 - **Deretter:** Android (Spor 4) + markedsføring i full gang (Spor 5)

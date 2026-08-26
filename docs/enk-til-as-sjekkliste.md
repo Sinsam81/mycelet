@@ -24,7 +24,7 @@ export const LEGAL_ENTITY: LegalEntity = {
 Det er alt. Navnet og organisasjonsnummeret er parameterisert i alle tre juridiske dokumenter på begge språk, og `form: 'as'` bytter automatisk til AS-varianten av de to klausulene som må formuleres annerledes:
 
 - `Kjopsvilkar.sellerFormNoteAs` erstatter ENK-avsnittet om at innehaveren er personlig ansvarlig
-- `Personvern.controllerNameAs` gjør selskapet behandlingsansvarlig istedenfor Sindre personlig
+- `Personvern.controllerNameAs` gjør selskapet behandlingsansvarlig istedenfor innehaveren personlig
 
 Testene i `src/lib/legal/__tests__/entity.test.ts` slår ut hvis noen senere skriver navnet eller org.nummeret rett inn i teksten igjen.
 
@@ -88,11 +88,11 @@ Din regnskapsførers bord, men konsekvenser for koden og tekstene:
 
 ## Fortsatt uløst, uavhengig av selskapsform
 
-Oppdatert 30. juli 2026. Sindre har besluttet å lansere uten juridisk gjennomgang, så der loven er uklar er vilkårene lagt om til den konservative siden — vi gir forbrukeren rettigheten framfor å hevde et unntak som kanskje ikke holder.
+Oppdatert 30. juli 2026. Vi har besluttet å lansere uten juridisk gjennomgang, så der loven er uklar er vilkårene lagt om til den konservative siden — vi gir forbrukeren rettigheten framfor å hevde et unntak som kanskje ikke holder.
 
 **Gjenstår:**
 
-1. **Telefonnummeret som er publisert er Sindres private mobil.** Lagt inn 30. juli 2026 etter et bevisst valg, med kjennskap til at Apple publiserer det på produktsiden i alle 27 EU-land, permanent og uten mulighet til å skjule det. På nettsiden er eksponeringen begrenset — alle sidene som viser det er `noindex`.
+1. **Telefonnummeret som er publisert er en privat mobil.** Lagt inn 30. juli 2026 etter et bevisst valg, med kjennskap til at Apple publiserer det på produktsiden i alle 27 EU-land, permanent og uten mulighet til å skjule det. På nettsiden er eksponeringen begrenset — alle sidene som viser det er `noindex`.
 
    Vil du bytte det senere: én linje i `entity.ts`, pluss oppdatering av trader-informasjonen i App Store Connect. Ingenting annet må endres. Et eget nummer koster typisk 50–200 kr/mnd, og må kunne motta SMS (Apple verifiserer med tofaktor) og ikke være overtakst (820/829).
 
