@@ -7,6 +7,7 @@ import { PageWrapper } from '@/components/layout/PageWrapper';
 import { createClient } from '@/lib/supabase/server';
 import { intlLocale } from '@/lib/utils/intl-locale';
 import { MyPlacesFilter } from '@/components/places/MyPlacesFilter';
+import { GpxEksportKnapp } from '@/components/places/GpxEksportKnapp';
 
 export async function generateMetadata() {
   const t = await getTranslations('MineSteder');
@@ -129,6 +130,15 @@ export default async function MineStederPage() {
           <p className="mt-1 text-sm text-gray-700">
             {t('intro')} {totalFinds > 0 ? t('summary', { finds: totalFinds, places: spots.length }) : ''}
           </p>
+          {/* Egne funn ut som GPX-veipunkter (Garmin, UT.no, Organic Maps),
+              generert av /api/me/gpx. Gratis med vilje: dette er brukerens
+              egne data, og å ta betalt for å få dem UT ville stått i mot både
+              GDPR-eksport-presedensen og ærlighets-merkevaren. */}
+          {totalFinds > 0 ? (
+            <div className="mt-3">
+              <GpxEksportKnapp antall={totalFinds} />
+            </div>
+          ) : null}
         </header>
 
         {/* Tom er ikke det samme som feilet. Ved en forbigående spørrefeil
