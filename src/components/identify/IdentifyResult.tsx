@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { EdibilityBadge } from '@/components/ui/EdibilityBadge';
 import { normalizeEdibility } from '@/lib/utils/edibility';
@@ -17,11 +18,22 @@ interface IdentifyResultProps {
 export function IdentifyResult({ suggestions, selectedIndex, onSelect }: IdentifyResultProps) {
   const t = useTranslations('IdentifyResult');
   const selectable = typeof onSelect === 'function';
+  // Døde bilde-URL-er (CDN nede, offline — kryssdomene-bilder caches ikke av
+  // service workeren) skal falle tilbake til plassholderen, ikke bli et
+  // knekt-bilde-ikon. Samme mønster som ReferencePhotos.
+  const [brokenThumbs, setBrokenThumbs] = useState<ReadonlySet<string>>(new Set());
 
   return (
     <div className="space-y-2">
       {suggestions.map((suggestion, index) => {
         const isSelected = selectable && index === selectedIndex;
+        // Kuratert artsfoto foran Kindwise sitt lignende bilde — samme
+        // rangering som LookAlikeCheck og ReferencePhotos, så kortet og
+        // sammenligningen under viser samme bilde for samme art. Bevisst
+        // avveining: Kindwise-fallbacken er uverifisert og umerket her (for
+        // liten flate for kildeetikett), men de samme bildene står merket
+        // «AI-databasen» i sammenligningsseksjonen rett under.
+        const thumbUrl = suggestion.imageUrl ?? suggestion.similarImages?.[0] ?? null;
         return (
           <article
             key={suggestion.name}
@@ -40,6 +52,23 @@ export function IdentifyResult({ suggestions, selectedIndex, onSelect }: Identif
                     }`}
                   />
                 ) : null}
+                {/* Dekorativ (alt="") — artsnavnet står rett ved siden av. */}
+                {thumbUrl && !brokenThumbs.has(thumbUrl) ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={thumbUrl}
+                    alt=""
+                    onError={() => setBrokenThumbs((prev) => new Set(prev).add(thumbUrl))}
+                    className="h-12 w-12 shrink-0 rounded-lg object-cover"
+                  />
+                ) : (
+                  <div
+                    aria-hidden
+                    className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-gray-100 text-xl"
+                  >
+                    🍄
+                  </div>
+                )}
                 <div>
                   <h3 className="font-serif text-base font-bold text-forest-900">
                     {suggestion.norwegianName ?? suggestion.commonNames?.[0] ?? suggestion.name}

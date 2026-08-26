@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl';
 import { PageWrapper } from '@/components/layout/PageWrapper';
 import { IdentifyResult } from '@/components/identify/IdentifyResult';
 import { LookAlikeCheck } from '@/components/identify/LookAlikeCheck';
+import { ReferencePhotos } from '@/components/identify/ReferencePhotos';
 import { SafetyWarning } from '@/components/identify/SafetyWarning';
 import { Button } from '@/components/ui/Button';
 import toast from 'react-hot-toast';
@@ -179,6 +180,14 @@ export default function IdentifyResultPage() {
           suggestions={payload.suggestions.slice(0, 3)}
           selectedIndex={selectedIndex}
           onSelect={setSelectedIndex}
+        />
+
+        {/* Sammenligningen FØR forvekslingssjekken: brukeren skal alltid møte
+            den farlige tvillingen ETTER å ha latt seg overbevise av likheten —
+            forvekslingssjekken får siste ord. */}
+        <ReferencePhotos
+          suggestion={payload.suggestions[selectedIndex] ?? topSuggestion}
+          userPhotoUrl={payload.originalImageDataUrl}
         />
 
         <LookAlikeCheck suggestion={payload.suggestions[selectedIndex] ?? topSuggestion} />

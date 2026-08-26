@@ -265,6 +265,8 @@
     "sourceOsm": "Gatukartlagret («Karta») som täcker områden utanför Kartverkets täckning.",
     "sourceKindwise": "AI-bildigenkänning i «Identifiera svamp» (kommersiell tjänst, inte öppna data).",
     "sourceKindwiseLicense": "Tjänstevillkor",
+    "sourceWikimedia": "Artfotona i artbiblioteket, AI-resultatet och förväxlingskontrollen.",
+    "sourceWikimediaLicense": "CC BY / CC BY-SA / public domain (varierar per bild)",
     "footnote": "Fynddata från GBIF importeras uteslutande under CC0 1.0 eller CC BY 4.0, och licens + dataset lagras per post. Prediktionerna är Mycelets egna beräkningar baserade på källorna ovan — fel i bedömningarna är våra, inte källornas."
   },
   "ForumModeration": {
@@ -956,6 +958,20 @@
     "howToTell": "Så skiljer du dem åt:",
     "readMore": "Läs allt om {name} →",
     "alsoConfusedWith": "Också lätt att förväxla med: {names}"
+  },
+  "ReferencePhotos": {
+    "sectionLabel": "Bildjämförelse",
+    "heading": "Liknar den {name}?",
+    "yourPhoto": "Din bild",
+    "curatedLabel": "Referensfoto",
+    "similarLabel": "AI-databasen",
+    "photoAlt": "Referensbild av {name}",
+    "noPhotos": "Vi har inga referensbilder för den här arten ännu.",
+    "disclaimer": "Likhet är ingen bekräftelse: farliga förväxlingsarter kan se nästan helt likadana ut. Kontrollera kännetecknen på artsidan innan du plockar.",
+    "disclaimerNoSpeciesPage": "Likhet är ingen bekräftelse: farliga förväxlingsarter kan se nästan helt likadana ut. Den här arten finns inte i vårt artbibliotek — få svampen bedömd av en svampkonsulent innan du plockar.",
+    "sourcesBoth": "Referensbilder: artbiblioteket (Wikimedia Commons) och AI-databasen (Kindwise).",
+    "sourcesCurated": "Referensfoto: artbiblioteket (Wikimedia Commons).",
+    "sourcesSimilar": "Referensbilder: AI-databasen (Kindwise)."
   },
   "SafetyWarning": {
     "dangerHeading": "VARNING: Möjligen giftig svamp",
