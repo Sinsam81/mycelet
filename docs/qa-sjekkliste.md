@@ -36,6 +36,7 @@ Dette er bug-klassen som rammet oss i prod (svensk kart blankt, fast i Oslo, dø
 - [ ] Sikkerhetsadvarsel vises (aldri spis basert på AI alene; lenke til soppkontroll).
 - [ ] Ingen krasj når siden åpnes uten bilde.
 - [ ] 🖐️ Manuell (kvote-/kostnadsavhengig): last opp ett kjent soppbilde → får forslag + forvekslings-sjekk (look-alike). Kjøres sjelden, ikke i hver loop (Kindwise-kreditter).
+- [ ] 🖐️ Manuell lagringsflyt (skriver til prod — kjøres sjelden): bekreftelses-boksen må krysses AKTIVT (aldri forhåndskrysset), delingsnivå-velgeren er synlig og starter på forrige lokalt lagrede valg (nullstilles ved utlogging), ved manglende GPS vises notis + «Hent posisjonen min» som henter posisjon UTEN ny AI-identifisering, og etter lagring lander man på `/map?mine=1` med «Kun mine funn» på (automatisert lese-sjekk av landingen finnes i `e2e/map-geo.e2e.ts`).
 
 ## 3. Prediksjon / «Lovende områder»
 

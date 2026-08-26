@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { LogOut } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
+import { nullstillDelingsnivaStandard } from '@/lib/findings/delingsniva';
 
 export function LogoutButton() {
   const t = useTranslations('LogoutButton');
@@ -15,6 +16,8 @@ export function LogoutButton() {
     setLoading(true);
     const supabase = createClient();
     await supabase.auth.signOut();
+    // Husket delingsnivå er enhetsglobalt — ryddes ved utlogging (delt enhet).
+    nullstillDelingsnivaStandard();
     router.push('/auth/login');
     router.refresh();
   };

@@ -403,7 +403,11 @@
   },
   "IdentifyResult": {
     "errorNotLoggedIn": "Du måste vara inloggad för att spara fynd.",
-    "errorMissingGps": "GPS-position saknas. Ta en ny bild med plats aktiverad.",
+    "errorMissingGps": "GPS-position saknas. Tryck på «Hämta min position» ovan för att använda positionen där du står.",
+    "missingGpsNotice": "Bilden saknar position, så fyndet kan inte sparas ännu. Du kan hämta positionen där du står nu — observera att det inte nödvändigtvis är där bilden togs.",
+    "fetchLocation": "Hämta min position",
+    "locationSet": "Position hämtad 📍",
+    "locationFailed": "Kunde inte hämta positionen. Kontrollera att appen får använda platstjänster och försök igen.",
     "saveSuccess": "Fynd sparat! 🍄",
     "errorSaveFailed": "Kunde inte spara fynd.",
     "loading": "Laddar resultat...",

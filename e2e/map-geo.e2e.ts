@@ -56,6 +56,21 @@ test.describe('Norsk posisjon (Oslo)', () => {
   });
 });
 
+test.describe('/map?mine=1 (landingen etter lagret funn)', () => {
+  test.use({ geolocation: OSLO, permissions: ['geolocation'] });
+
+  test('åpner med «Kun mine funn» på — private funn skal synes etter lagring', async ({ page }) => {
+    // Lagringsflytene navigerer hit: et privat funn er usynlig i standard-
+    // laget, så uten dette leses «Funn lagret!» som at lagringen feilet.
+    // Ren lesing — ingenting skrives.
+    await page.goto('/map?mine=1');
+    await expect(page, '/map?mine=1 redirectet til innlogging').not.toHaveURL(/\/auth\/login/);
+    await expect(page.locator('.leaflet-container')).toBeVisible({ timeout: 20_000 });
+    await page.getByRole('button', { name: 'Filtre' }).click();
+    await expect(page.getByRole('checkbox', { name: 'Kun mine funn' })).toBeChecked();
+  });
+});
+
 test.describe('Svensk posisjon (Göteborg)', () => {
   test.use({ geolocation: GOTHENBURG, permissions: ['geolocation'] });
 

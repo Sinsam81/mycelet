@@ -6,8 +6,16 @@ import { createClient } from '@/lib/supabase/server';
 import { MushroomMap } from '@/components/map/MushroomMapLazy';
 import { logger } from '@/lib/log';
 
-export default async function MapPage() {
+export default async function MapPage({
+  searchParams
+}: {
+  searchParams: Promise<{ mine?: string }>;
+}) {
   const t = await getTranslations('MapPage');
+  // ?mine=1 settes av lagringsflytene: kartet skal åpne med «Kun mine funn»
+  // på, så funnet som nettopp ble lagret faktisk synes (private funn er
+  // usynlige i standardlaget).
+  const { mine } = await searchParams;
   const supabase = createClient();
   const {
     data: { user }
@@ -48,7 +56,7 @@ export default async function MapPage() {
             </Link>
           ) : null}
         </div>
-        <MushroomMap />
+        <MushroomMap startWithOnlyMine={mine === '1'} />
       </div>
     </PageWrapper>
   );
