@@ -73,7 +73,11 @@ export function buildWeek(
       maxTemp7dC: observed.maxTemp7dC,
       // Bøttemodellen tørker ut i takt med bakken og kan nedlegge veto mot en
       // feiring råregnsummen ellers ville tillatt. Se mushroom-day.ts.
-      soilMoistureIndex: observed.soilMoistureIndex
+      soilMoistureIndex: observed.soilMoistureIndex,
+      // Døgnserien gir «Siste regn: 12mm for 4 dager siden»-linja — summene
+      // alene kan ikke datere regnet. Kun dag 0: prognosedager viser ingen
+      // forklaringslinjer.
+      precipDailyMm: observed.precipDailyMm
     },
     month,
     locale,

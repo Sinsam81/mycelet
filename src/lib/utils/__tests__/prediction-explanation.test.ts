@@ -3,6 +3,7 @@ import {
   buildExplanation,
   buildSpotSummary,
   scoreVerdict,
+  sisteRegnvaer,
   type ExplanationWeather,
   type SpeciesExplanationContext
 } from '../prediction-explanation';
@@ -655,5 +656,97 @@ describe('dommene og fargene deler stige', () => {
     const heleSpennet = Array.from({ length: 85 - 43 + 1 }, (_, i) => 43 + i);
     const brukte = new Set(heleSpennet.map(scoreToCondition));
     expect(brukte).toEqual(new Set(['poor', 'moderate', 'good', 'excellent']));
+  });
+});
+
+// 14 tørre døgn der regnet legges inn per «dager siden» (0 = i dag, siste element).
+function dognserie(regn: Record<number, number>): number[] {
+  const serie = Array(14).fill(0);
+  for (const [dagerSiden, mm] of Object.entries(regn)) {
+    serie[serie.length - 1 - Number(dagerSiden)] = mm;
+  }
+  return serie;
+}
+
+describe('sisteRegnvaer — datering av siste regnvær', () => {
+  it('returnerer null uten serie eller uten regn', () => {
+    expect(sisteRegnvaer(null)).toBeNull();
+    expect(sisteRegnvaer(undefined)).toBeNull();
+    expect(sisteRegnvaer([])).toBeNull();
+    expect(sisteRegnvaer(Array(14).fill(0))).toBeNull();
+  });
+
+  it('finner en enkeltdags rotbløyte og daterer den riktig', () => {
+    expect(sisteRegnvaer(dognserie({ 4: 12 }))).toEqual({ mm: 12, dagerSiden: 4 });
+    expect(sisteRegnvaer(dognserie({ 0: 9 }))).toEqual({ mm: 9, dagerSiden: 0 });
+  });
+
+  it('slår sammen sammenhengende våte døgn til ett regnvær', () => {
+    // Regnet i tre døgn (4+6+3mm) som sluttet for to dager siden.
+    expect(sisteRegnvaer(dognserie({ 2: 3, 3: 6, 4: 4 }))).toEqual({ mm: 13, dagerSiden: 2 });
+  });
+
+  it('lar ikke litt yr i går skjule rotbløyta for fem dager siden', () => {
+    expect(sisteRegnvaer(dognserie({ 1: 1, 5: 10 }))).toEqual({ mm: 10, dagerSiden: 5 });
+  });
+
+  it('regner døgn under 0.5mm som opphold, ikke som del av regnværet', () => {
+    // 0.3mm mellom to våte dager bryter regnværet i to — bare den nyeste telles.
+    expect(sisteRegnvaer(dognserie({ 2: 6, 3: 0.3, 4: 7 }))).toEqual({ mm: 6, dagerSiden: 2 });
+  });
+});
+
+describe('buildExplanation — «Siste regn»-linja', () => {
+  const MED_REGN = (regn: Record<number, number>): ExplanationWeather => ({
+    ...PERFECT_KANTARELL_WEATHER,
+    precipDailyMm: dognserie(regn)
+  });
+  const sisteRegnLinje = (lines: ReturnType<typeof buildExplanation>) =>
+    lines.find((l) => l.text.startsWith('Siste regn') || l.text.startsWith('Senaste regnet'));
+
+  it('skrives ikke uten døgnserie', () => {
+    const lines = buildExplanation({ month: 9, weather: PERFECT_KANTARELL_WEATHER });
+    expect(sisteRegnLinje(lines)).toBeUndefined();
+  });
+
+  it('daterer regnet på norsk: i dag, i går, for N dager siden', () => {
+    expect(sisteRegnLinje(buildExplanation({ month: 9, weather: MED_REGN({ 0: 9 }) }))?.text).toBe(
+      'Siste regn: 9mm i dag'
+    );
+    expect(sisteRegnLinje(buildExplanation({ month: 9, weather: MED_REGN({ 1: 9 }) }))?.text).toBe(
+      'Siste regn: 9mm i går'
+    );
+    expect(sisteRegnLinje(buildExplanation({ month: 9, weather: MED_REGN({ 4: 12 }) }))?.text).toBe(
+      'Siste regn: 12mm for 4 dager siden'
+    );
+  });
+
+  it('daterer regnet på svensk', () => {
+    const lines = buildExplanation({ month: 9, locale: 'sv', weather: MED_REGN({ 4: 12 }) });
+    expect(sisteRegnLinje(lines)?.text).toBe('Senaste regnet: 12mm för 4 dagar sedan');
+  });
+
+  it('er positiv for en fersk rotbløyte (≥8mm, ≤7 dager)', () => {
+    const lines = buildExplanation({ month: 9, weather: MED_REGN({ 4: 12 }) });
+    expect(sisteRegnLinje(lines)?.level).toBe('positive');
+  });
+
+  it('er nøytral når regnet er gammelt eller lite', () => {
+    expect(sisteRegnLinje(buildExplanation({ month: 9, weather: MED_REGN({ 12: 15 }) }))?.level).toBe(
+      'neutral'
+    );
+    expect(sisteRegnLinje(buildExplanation({ month: 9, weather: MED_REGN({ 3: 6 }) }))?.level).toBe(
+      'neutral'
+    );
+  });
+
+  it('er nøytral når bøttemodellen sier at bakken alt er tørket ut', () => {
+    // Samme 0.55-grense som flush-vurderingen: grønt «siste regn» ved siden av
+    // grått «Tørt — soppen venter på regn» ville motsagt seg selv.
+    const lines = buildExplanation({
+      month: 9,
+      weather: { ...MED_REGN({ 5: 10 }), soilMoistureIndex: 0.3 }
+    });
+    expect(sisteRegnLinje(lines)?.level).toBe('neutral');
   });
 });

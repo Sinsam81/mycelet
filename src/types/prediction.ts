@@ -74,6 +74,12 @@ export interface PredictionWeatherSnapshot {
   rain14dMm?: number | null;
   minTemp7dC?: number | null;
   maxTemp7dC?: number | null;
+  /**
+   * Døgnnedbør eldst→nyest, siste element = i dag. Gir forklaringens «Siste
+   * regn: 12mm for 4 dager siden»-linje. Valgfri: eldre mellomlagrede svar og
+   * OpenWeather-regioner mangler serien — da utelates linja.
+   */
+  precipDailyMm?: number[] | null;
 }
 
 /**

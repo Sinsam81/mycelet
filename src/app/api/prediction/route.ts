@@ -519,7 +519,10 @@ export async function GET(request: NextRequest) {
               rain7dMm: weather.rain7dMm != null ? Math.round(weather.rain7dMm * 10) / 10 : null,
               rain14dMm: weather.rain14dMm != null ? Math.round(weather.rain14dMm * 10) / 10 : null,
               minTemp7dC: weather.minTemp7dC,
-              maxTemp7dC: weather.maxTemp7dC
+              maxTemp7dC: weather.maxTemp7dC,
+              // Døgnserien lar klientforklaringen datere regnet («Siste regn:
+              // 12mm for 4 dager siden») — summene over kan ikke.
+              precipDailyMm: weather.precipDailyMm?.map((v) => Math.round(v * 10) / 10) ?? null
             }
           : { temperature: 0, humidity: 0, rain3dMm: 0 },
         counts: {
@@ -820,7 +823,9 @@ export async function GET(request: NextRequest) {
         rain7dMm: weather.rain7dMm != null ? Math.round(weather.rain7dMm * 10) / 10 : null,
         rain14dMm: weather.rain14dMm != null ? Math.round(weather.rain14dMm * 10) / 10 : null,
         minTemp7dC: weather.minTemp7dC,
-        maxTemp7dC: weather.maxTemp7dC
+        maxTemp7dC: weather.maxTemp7dC,
+        // Samme grunn som i primærstien: forklaringen trenger NÅR, ikke bare sum.
+        precipDailyMm: weather.precipDailyMm?.map((v) => Math.round(v * 10) / 10) ?? null
       },
       counts: {
         findingsInArea: findings.length,
