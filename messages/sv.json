@@ -1539,7 +1539,8 @@
     "sources": "Datakällor",
     "contactLabel": "Kontakta oss",
     "contactBody": "Frågor, klagomål eller anmälan av innehåll: {generalEmail}. Integritet: {privacyEmail}. Vi svarar normalt inom några arbetsdagar.",
-    "operatorLabel": "Tjänsten drivs av"
+    "operatorLabel": "Tjänsten drivs av",
+    "rate": "Betygsätt Mycelet i App Store"
   },
   "ContentFilter": {
     "controlledSubstanceTrade": "Inlägget verkar handla om köp, försäljning, odling eller växtplatser för narkotiska svampar. Det är inte tillåtet — se villkoren punkt 5. Anser du att detta är fel, kontakta oss på post@mycelet.com.",
