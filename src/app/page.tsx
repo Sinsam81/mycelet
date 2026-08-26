@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { getLocale, getTranslations } from 'next-intl/server';
 import { NonNativeOnly } from '@/components/native/NonNativeOnly';
-import { AlertTriangle, Calendar, Camera, Check, Crown, Database, FileText, Lock, Map, MessageSquare, Shield, ShieldAlert } from 'lucide-react';
+import { AlertTriangle, Calendar, Camera, Check, Crown, Database, FileText, Lock, Map, MessageSquare, Microscope, Shield, ShieldAlert } from 'lucide-react';
 import { PageWrapper } from '@/components/layout/PageWrapper';
 import { LandingPage } from '@/components/landing/LandingPage';
 import { EdibilityBadge } from '@/components/ui/EdibilityBadge';
@@ -488,6 +488,12 @@ export default async function HomePage() {
             className="block rounded-lg border border-gray-200 bg-white p-3 text-sm font-medium text-gray-800 hover:bg-gray-50"
           >
             <span className="inline-flex items-center gap-2"><FileText className="h-4 w-4 text-forest-800" /> {t('navPurchaseTerms')}</span>
+          </Link>
+          <Link
+            href="/apenhet"
+            className="block rounded-lg border border-gray-200 bg-white p-3 text-sm font-medium text-gray-800 hover:bg-gray-50"
+          >
+            <span className="inline-flex items-center gap-2"><Microscope className="h-4 w-4 text-forest-800" /> {t('navTransparency')}</span>
           </Link>
         </div>
 

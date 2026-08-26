@@ -7,8 +7,8 @@
  * (60,795/60,795 — Uralfjellene). Den gamle koordinatsjekken godtok dem fordi
  * den bare så på ±90/±180.
  *
- * Radene teller inn i prediksjonens nærhets-tetthet og i påstanden om
- * «333 000 dokumenterte soppfunn». Boksen er bevisst romslig — den avviser bare
+ * Radene teller inn i prediksjonens nærhets-tetthet og i det publiserte
+ * antallet dokumenterte soppfunn. Boksen er bevisst romslig — den avviser bare
  * det som umulig kan være et nordisk funn.
  *
  * Ligger i en egen fil så den kan testes: selve importskriptet kjører hele
