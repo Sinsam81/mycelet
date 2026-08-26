@@ -11,6 +11,7 @@ en mykologi-faktasjekk og en sikkerhetsgjennomgang. Kontrollene fant:
 | hvorfor-finner-du-ikke-sopp | 13 (2 alvorlige) | 9 (3 alvorlige) | publisert 2026-08-14 etter runde 3 |
 | hva-viser-soppkartene | 3 (1 alvorlig) | 1 alvorlig | publisert 2026-08-13 etter runde 3 |
 | derfor-aldri-spiselig | 0 | **4 kritiske** | ligger her — KUN med menneske i loopen |
+| naar-kommer-traktkantarellen | 20 (1 kritisk: byggefeil ga «1. september» i HTML) | 7 (1 alvorlig: skive-ordlyd harmonert til «tykke, fjerntstående» per fem-forvekslinger/SNL) | runde 1 26.08: 4 linser + skeptiker-verifisering, 27 bekreftede funn rettet; venter på endelig menneskelig klarering før publisering |
 
 At sikkerhetsartikkelen har flest kritiske sikkerhetsfunn er ikke ironi — det
 er forventet. Den handler om det farligste temaet, så terskelen er lavest der.

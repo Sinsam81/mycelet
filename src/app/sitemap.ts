@@ -28,7 +28,8 @@ const SANKETIPS = [
   'fem-forvekslinger',
   'sopp-etter-regn',
   'hva-viser-soppkartene',
-  'hvorfor-finner-du-ikke-sopp'
+  'hvorfor-finner-du-ikke-sopp',
+  'naar-kommer-traktkantarellen'
 ];
 
 async function artsIder(): Promise<number[]> {

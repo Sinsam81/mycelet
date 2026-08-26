@@ -2,7 +2,7 @@
 
 Laget 2026-06-14 via en orkestrert runde (utkast → adversariell gjennomgang av både en anti-reklame-admin-linse og en mykologi-sikkerhetsekspert med web-verifisering → syntese). Alle fakta er kvalitetssikret; sikkerhetsekspert fanget bl.a. at «Svampkontrollen» **ikke finnes i Sverige** (riktig: *svampkonsulent*, svampkonsulent.se), korrigerte svensk grammatikk og giftnumre, og hevet skive/åre-testen til **primært** kjennetegn for den dødelige forvekslingen.
 
-**Prinsipp:** disse går i FB-soppgrupper med forbud mot reklame. De er ren nytteverdi, ingen «last ned», ingen app-lenke, maks en stille «— Sindre». Merket bygges av å være den samme hjelpsomme personen over tid.
+**Prinsipp:** disse går i FB-soppgrupper med forbud mot reklame. De er ren nytteverdi, ingen «last ned», ingen app-lenke, ingen personlig signatur. Merket bygges av å være den samme hjelpsomme stemmen over tid.
 
 **Timing:** Post #1 (soppforhold) og #3 (engasjement) NÅ (tidlig sesong). **Hold #2 (forveksling) til august**, når traktkantarell og giftslørsopp faktisk overlapper.
 
@@ -38,7 +38,7 @@ Laget 2026-06-14 via en orkestrert runde (utkast → adversariell gjennomgang av
 >
 > Så: vänta dig inga fulla korgar än, men det är en fin tid att gå turerna, hålla koll på var det växer och vara redo när det väl lossnar.
 >
-> Kom ändå ihåg: ingen svamp i korgen är säker att äta förrän den är säkert artbestämd. Är du det minsta osäker, ta hjälp av en svampkonsulent (se svampkonsulent.se), och vid misstanke om förgiftning — ring Giftinformationscentralen på 010-456 67 00 (vid akut förgiftning, ring 112 och be om Giftinformation).
+> Kom ändå ihåg: ingen svamp i korgen är säker att äta förrän den är säkert artbestämd. Är du det minsta osäker, ta hjälp av en svampkonsulent (se svampkonsulent.se), och vid misstanke om förgiftning — ring Giftinformationscentralen på 010-456 6700 (vid akut förgiftning, ring 112 och be om Giftinformation).
 >
 > Vad ser ni där ute? Någon som hittat de första rörsopparna i söder redan? Jag lär mig fortfarande själv, så rätta mig gärna om något här är oprecist.
 >
@@ -63,11 +63,11 @@ Laget 2026-06-14 via en orkestrert runde (utkast → adversariell gjennomgang av
 > • Mild, fruktig lukt
 >
 > Spiss giftslørsopp (DØDELIG):
-> • EKTE, tette, rustbrune skiver
+> • EKTE, tykke, fjerntstående, rustbrune skiver
 > • FAST stilk
 > • En tydelig spiss pukkel midt på hatten
 >
-> Det aller sikreste kjennetegnet er undersiden: ekte, tette, rustbrune skiver (giftslørsopp) vs. grunne, gaffeldelte årer/rynker som renner ned stilken (traktkantarell). Hul stilk er et godt støttetegn, men kan være vanskelig å bedømme på små eksemplarer — stol først på skive/åre-forskjellen. Ekte rustbrune skiver + fast stilk + spiss pukkel = la den stå.
+> Det aller sikreste kjennetegnet er undersiden: ekte, tykke, fjerntstående, rustbrune skiver (giftslørsopp) vs. grunne, gaffeldelte årer/rynker som renner ned stilken (traktkantarell). Hul stilk er et godt støttetegn, men kan være vanskelig å bedømme på små eksemplarer — stol først på skive/åre-forskjellen. Ekte rustbrune skiver + fast stilk + spiss pukkel = la den stå.
 >
 > Ingen tekst på nett (heller ikke denne) erstatter et par øyne som kan det. Er du det minste i tvil: ta med HELE soppen — grav opp hele stilken — og få den vurdert hos Soppkontrollen før du spiser noe: https://soppognyttevekster.no/soppkontroll/
 >
@@ -90,15 +90,15 @@ Laget 2026-06-14 via en orkestrert runde (utkast → adversariell gjennomgang av
 > • Mild, fruktig doft
 >
 > Toppig giftspindling (DÖDLIG):
-> • ÄKTA, täta, rostbruna skivor
+> • ÄKTA, tjocka, glesa, rostbruna skivor
 > • FAST fot
 > • En tydlig spetsig puckel mitt på hatten
 >
-> Det allra säkraste kännetecknet är undersidan: äkta, täta, rostbruna skivor (giftspindling) vs. grunda, gafflade ådror/veck som löper ner längs foten (trattkantarell). Ihålig fot är ett bra stödtecken, men kan vara svårt att bedöma på små exemplar — lita i första hand på skillnaden skivor/ådror. Äkta rostbruna skivor + fast fot + spetsig puckel = låt den stå.
+> Det allra säkraste kännetecknet är undersidan: äkta, tjocka, glesa, rostbruna skivor (giftspindling) vs. grunda, gafflade ådror/veck som löper ner längs foten (trattkantarell). Ihålig fot är ett bra stödtecken, men kan vara svårt att bedöma på små exemplar — lita i första hand på skillnaden skivor/ådror. Äkta rostbruna skivor + fast fot + spetsig puckel = låt den stå.
 >
 > Ingen text på nätet (inte heller den här) ersätter ett par ögon som verkligen kan det. Är du minsta osäker: ta med HELA svampen — gräv upp hela foten — och låt den bedömas av en svampkonsulent innan du äter något (se svampkonsulent.se).
 >
-> Vid akut misstanke om förgiftning, ring Giftinformationscentralen: 112 (begär Giftinformation), eller 010-456 67 00 i mindre brådskande fall.
+> Vid akut misstanke om förgiftning, ring Giftinformationscentralen: 112 (begär Giftinformation), eller 010-456 6700 i mindre brådskande fall.
 >
 > Vid tvivel — låt den stå. Den står kvar till nästa år. 🌲
 >
@@ -144,7 +144,7 @@ Laget 2026-06-14 via en orkestrert runde (utkast → adversariell gjennomgang av
 >
 > Rätta mig gärna om jag minns fenologin fel, jag lär mig fortfarande. Kul att se hur långt fram vi är på olika håll 🍄
 >
-> Och som alltid: är du osäker på en svamp — smaka inte. Lämna in den till en svampkonsulent (se svampkonsulent.se), eller ring Giftinformationscentralen på 010-456 67 00 (vid akut förgiftning, ring 112 och be om Giftinformation).
+> Och som alltid: är du osäker på en svamp — smaka inte. Lämna in den till en svampkonsulent (se svampkonsulent.se), eller ring Giftinformationscentralen på 010-456 6700 (vid akut förgiftning, ring 112 och be om Giftinformation).
 >
 > Trevlig svampplockning, och tack för alla svar!
 
