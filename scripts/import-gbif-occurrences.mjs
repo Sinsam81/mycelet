@@ -249,6 +249,11 @@ function normalizeOccurrence(r, skipStats) {
     return null;
   }
   const uncertaintyRaw = r.coordinateUncertaintyInMeters;
+  // Verdien LAGRES nå (migrasjon 054), ikke bare filtreres på: kartet viser
+  // «±X m» per punkt, og NULL betyr ærlig «ukjent» — som gjelder alle rader
+  // importert før dette feltet fantes. En re-kjøring backfiller via upsert —
+  // samme mekanisme som license-backfillen i 016.
+  let coordinateUncertaintyM = null;
   if (uncertaintyRaw == null || uncertaintyRaw === '') {
     if (!ALLOW_UNKNOWN_COORDINATE_UNCERTAINTY) {
       skipStats.unknownCoordinateUncertainty += 1;
@@ -260,6 +265,7 @@ function normalizeOccurrence(r, skipStats) {
       skipStats.highCoordinateUncertainty += 1;
       return null;
     }
+    coordinateUncertaintyM = Math.round(uncertainty);
   }
   return {
     gbif_key: r.key,
@@ -267,7 +273,8 @@ function normalizeOccurrence(r, skipStats) {
     longitude,
     observed_at: observedAt,
     license: r.license ?? null,
-    dataset_key: r.datasetKey ?? null
+    dataset_key: r.datasetKey ?? null,
+    coordinate_uncertainty_m: coordinateUncertaintyM
   };
 }
 
@@ -290,6 +297,14 @@ async function gbifOccurrences(taxonKey, country) {
 const probe = await admin.from('species_occurrences').select('id').limit(1);
 if (probe.error) {
   console.log('TABLE_MISSING — kjør migrasjon 013 først.', probe.error.message);
+  process.exit(1);
+}
+// Guard: upserten inkluderer coordinate_uncertainty_m (migrasjon 054). Uten
+// kolonnen ville HVER chunk feilet — etter at den timelange GBIF-hentingen
+// alt var gjort. Feil her, ikke der.
+const colProbe = await admin.from('species_occurrences').select('coordinate_uncertainty_m').limit(1);
+if (colProbe.error) {
+  console.log('KOLONNE MANGLER — kjør migrasjon 054 i Supabase SQL Editor først.', colProbe.error.message);
   process.exit(1);
 }
 

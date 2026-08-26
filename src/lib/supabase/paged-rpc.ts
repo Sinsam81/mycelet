@@ -51,7 +51,13 @@ export interface PagedRpcResult<T> {
   rows: T[];
   /** true = det finnes trolig flere rader enn disse. Ikke svelg dette. */
   truncated: boolean;
-  error: { message: string } | null;
+  /**
+   * PostgrestError-objektet sendes videre urørt, så `code` er tilgjengelig
+   * når klienten har den (f.eks. 'PGRST202' = ukjent funksjonssignatur —
+   * brukt av kartets migrasjonsfallback). Typen krever bare `message`, siden
+   * testenes falske klienter ikke setter kode.
+   */
+  error: { message: string; code?: string } | null;
 }
 
 /**
