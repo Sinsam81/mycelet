@@ -200,10 +200,21 @@ export function GpxImportKnapp({ eksisterende, maks }: Props) {
       <input
         ref={filRef}
         type="file"
-        // Både filendelse og MIME-typer: iOS' filvelger gråer ut filer den ikke
-        // kjenner igjen fra endelsen alene, og noen apper eksporterer .gpx med
-        // text/xml. Innholdet valideres uansett av lesGpx.
-        accept=".gpx,application/gpx+xml,application/xml,text/xml"
+        /*
+         * INGEN `accept`-filtrering, med vilje.
+         *
+         * macOS og iOS oversetter `accept` til systemets filtyper (UTI-er), og
+         * .gpx er ikke registrert der på en ren maskin. Resultatet er at fila
+         * står GRÅ i filvelgeren og ikke kan velges i det hele tatt — en
+         * blindvei uten feilmelding, der brukeren bare tror appen er ødelagt.
+         * Nøyaktig den fella traff oss i bildevelgeren på «Legg til funn», som
+         * med rette filtrerer på image/*.
+         *
+         * Prisen for å droppe filteret er at velgeren viser alle filer. Den er
+         * lav: velger du noe annet enn en GPX, sier lesGpx «dette ser ikke ut
+         * som en GPX-fil», og størrelsestaket stopper store filer før parsing.
+         * En ærlig feilmelding slår en grå fil.
+         */
         className="hidden"
         onChange={(e) => {
           const fil = e.target.files?.[0];

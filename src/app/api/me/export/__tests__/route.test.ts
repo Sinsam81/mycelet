@@ -8,7 +8,7 @@ import { NextRequest } from 'next/server';
  * brukeren fikk som svar på et innsynskrav etter GDPR art. 15.
  */
 
-type TableResult = { data: unknown; error: { message: string } | null };
+type TableResult = { data: unknown; error: { message: string; code?: string } | null };
 
 /** Hva hver tabell skal svare i den aktuelle testen. */
 let tableResponses: Record<string, TableResult> = {};
