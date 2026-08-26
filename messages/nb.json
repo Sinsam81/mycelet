@@ -265,6 +265,8 @@
     "sourceOsm": "Gatekartlaget («Kart») som dekker områder utenfor Kartverkets dekning.",
     "sourceKindwise": "AI-bildegjenkjenning i «Identifiser sopp» (kommersiell tjeneste, ikke åpne data).",
     "sourceKindwiseLicense": "Tjenestevilkår",
+    "sourceWikimedia": "Artsfotoene i artsbiblioteket, AI-resultatet og forvekslingssjekken.",
+    "sourceWikimediaLicense": "CC BY / CC BY-SA / offentlig eiendom (varierer per bilde)",
     "footnote": "Funndata fra GBIF importeres utelukkende under CC0 1.0 eller CC BY 4.0, og lisens + datasett lagres per post. Prediksjonene er Mycelets egne beregninger basert på kildene over — feil i vurderingene er våre, ikke kildenes."
   },
   "ForumModeration": {
@@ -956,6 +958,20 @@
     "howToTell": "Slik skiller du dem:",
     "readMore": "Les alt om {name} →",
     "alsoConfusedWith": "Også lett å forveksle med: {names}"
+  },
+  "ReferencePhotos": {
+    "sectionLabel": "Bildesammenligning",
+    "heading": "Ligner det på {name}?",
+    "yourPhoto": "Ditt bilde",
+    "curatedLabel": "Referansefoto",
+    "similarLabel": "AI-databasen",
+    "photoAlt": "Referansebilde av {name}",
+    "noPhotos": "Vi har ingen referansebilder for denne arten ennå.",
+    "disclaimer": "Likhet er ikke bekreftelse: farlige forvekslingsarter kan se nesten helt like ut. Sjekk kjennetegnene på artssiden før du plukker.",
+    "disclaimerNoSpeciesPage": "Likhet er ikke bekreftelse: farlige forvekslingsarter kan se nesten helt like ut. Denne arten er ikke i artsbiblioteket vårt — få soppen vurdert av en soppkontroll før du plukker.",
+    "sourcesBoth": "Referansebilder: artsbiblioteket (Wikimedia Commons) og AI-databasen (Kindwise).",
+    "sourcesCurated": "Referansefoto: artsbiblioteket (Wikimedia Commons).",
+    "sourcesSimilar": "Referansebilder: AI-databasen (Kindwise)."
   },
   "SafetyWarning": {
     "dangerHeading": "ADVARSEL: Mulig giftig sopp",

@@ -81,13 +81,22 @@ const SOURCES: SourceEntry[] = [
     whatKey: 'sourceKindwise',
     license: 'sourceKindwiseLicense',
     url: 'https://www.kindwise.com'
+  },
+  // Artsfotoene i artsbiblioteket, AI-resultatet og forvekslingssjekken er
+  // Commons-bilder. Lisensen varierer per bilde, derfor en oversatt nøkkel.
+  {
+    name: 'Wikimedia Commons',
+    whatKey: 'sourceWikimedia',
+    license: 'sourceWikimediaLicense',
+    url: 'https://commons.wikimedia.org'
   }
 ];
 
 const TRANSLATED_LICENSE_KEYS = new Set([
   'sourceCorineLicense',
   'sourceEsriLicense',
-  'sourceKindwiseLicense'
+  'sourceKindwiseLicense',
+  'sourceWikimediaLicense'
 ]);
 
 export default async function DataSourcesPage() {
