@@ -25,7 +25,13 @@ export function ReferencePhotos({
   userPhotoUrl
 }: {
   suggestion: IdentifySuggestion | undefined;
-  userPhotoUrl: string;
+  /**
+   * null når visningen er hydrert fra historikken og bildet mangler (gammel
+   * rad, eller en opplasting som aldri kom fram). Sammenligningen skal fortsatt
+   * vises — referansebildene er halve poenget — men uten å rendre et knekt
+   * bilde der brukerens eget skulle stått.
+   */
+  userPhotoUrl: string | null;
 }) {
   const t = useTranslations('ReferencePhotos');
   // Døde bilde-URL-er (CDN nede, CSP-blokkert, offline — kryssdomene-bilder
@@ -58,8 +64,14 @@ export function ReferencePhotos({
         <>
           <div className="mt-3 grid grid-cols-2 gap-3">
             <figure className="overflow-hidden rounded-xl border border-forest-200 bg-white">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={userPhotoUrl} alt={t('yourPhoto')} className="h-32 w-full object-cover" />
+              {userPhotoUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={userPhotoUrl} alt={t('yourPhoto')} className="h-32 w-full object-cover" />
+              ) : (
+                <div aria-hidden className="flex h-32 w-full items-center justify-center bg-gray-100 text-3xl">
+                  🍄
+                </div>
+              )}
               <figcaption className="p-2.5 text-[11px] font-semibold uppercase tracking-wide text-forest-700">
                 {t('yourPhoto')}
               </figcaption>

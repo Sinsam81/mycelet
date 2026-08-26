@@ -18,6 +18,11 @@ let queriedWithSession: string[] = [];
 let queriedWithAdmin: string[] = [];
 /** Simulerer at SUPABASE_SERVICE_ROLE_KEY mangler. */
 let adminClientAvailable = true;
+/** Svaret fra signeringen av historikkbildene. */
+let signedUrls: { data: { path: string; signedUrl: string }[] | null; error: { message: string } | null } = {
+  data: [],
+  error: null
+};
 
 /**
  * Minimal Supabase-etterligning. Query-byggeren er «thenable», så både
@@ -51,6 +56,11 @@ vi.mock('@/lib/supabase/admin', () => ({
       from: (table: string) => {
         queriedWithAdmin.push(table);
         return makeQuery(tableResponses[table] ?? { data: [], error: null });
+      },
+      storage: {
+        from: () => ({
+          createSignedUrls: async () => signedUrls
+        })
       }
     };
   }
@@ -85,6 +95,7 @@ beforeEach(() => {
   queriedWithSession = [];
   queriedWithAdmin = [];
   adminClientAvailable = true;
+  signedUrls = { data: [], error: null };
 });
 
 describe('GET /api/me/export', () => {
@@ -174,7 +185,8 @@ describe('GET /api/me/export', () => {
       'billing_subscriptions',
       'spot_feedback',
       'account_deletion_warnings',
-      'ai_identifications'
+      'ai_identifications',
+      'identifications'
     ];
 
     it.each(tables)('%s som feiler gir 500, ikke en delvis fil', async (table) => {
@@ -238,5 +250,51 @@ describe('GET /api/me/export', () => {
       moderatorRole: 0
     });
     expect(body._manifest.generatedAt).toBe(body.exportedAt);
+  });
+});
+
+describe('identifiseringshistorikken (art. 15)', () => {
+  it('leses med øktklienten, ikke tjenesterollen', async () => {
+    // I motsetning til ai_identifications (kvotetelleren, uten policyer) har
+    // identifications eier-RLS. Da er øktklienten riktig kilde — samme regel
+    // som for alt annet i denne fila.
+    tableResponses = { identifications: { data: [{ id: 'a', image_path: null }], error: null } };
+    const body = JSON.parse(await (await GET(makeRequest())).text());
+    expect(queriedWithSession).toContain('identifications');
+    expect(queriedWithAdmin).not.toContain('identifications');
+    expect(body._manifest.datasets.identifications).toBe(1);
+  });
+
+  it('legger ved en signert nedlastingslenke per bilde', async () => {
+    // Bøtta er privat. En bar filsti er ikke et svar på et innsynskrav —
+    // funnbildene er bare nåbare i dag fordi finding-images er offentlig.
+    tableResponses = {
+      identifications: { data: [{ id: 'a', image_path: 'bruker-1/a.jpg' }], error: null }
+    };
+    signedUrls = { data: [{ path: 'bruker-1/a.jpg', signedUrl: 'https://x/signed' }], error: null };
+    const body = JSON.parse(await (await GET(makeRequest())).text());
+    expect(body.identifications[0].imageSignedUrl).toBe('https://x/signed');
+    expect(body._manifest.imageLinksComplete).toBe(true);
+  });
+
+  it('sier fra i manifestet når en bildelenke mangler — men leverer fila', async () => {
+    // Bevisst skille fra fail-closed-regelen over: metadataene er komplette,
+    // og et manglende vedlegg er noe annet enn et datasett som ble stille tomt.
+    // Å nekte hele eksporten for én signering ville gitt brukeren ingenting.
+    tableResponses = {
+      identifications: { data: [{ id: 'a', image_path: 'bruker-1/a.jpg' }], error: null }
+    };
+    signedUrls = { data: null, error: { message: 'storage nede' } };
+    const res = await GET(makeRequest());
+    expect(res.status).toBe(200);
+    const body = JSON.parse(await res.text());
+    expect(body._manifest.imageLinksComplete).toBe(false);
+    // Stien står igjen, så brukeren og supporten vet hva som mangler.
+    expect(body.identifications[0].image_path).toBe('bruker-1/a.jpg');
+  });
+
+  it('schemaVersion er bumpet, så en mottaker ser at fila har fått et datasett', async () => {
+    const body = JSON.parse(await (await GET(makeRequest())).text());
+    expect(body.schemaVersion).toBe(4);
   });
 });

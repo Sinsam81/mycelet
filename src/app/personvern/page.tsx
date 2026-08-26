@@ -272,6 +272,10 @@ export default async function PersonvernPage() {
               <span className="font-medium">{t('retentionNegativeLabel')}</span> {t('retentionNegativeDesc')}
             </li>
             <li>
+              <span className="font-medium">{t('retentionIdentificationsLabel')}</span>{' '}
+              {t('retentionIdentificationsDesc')}
+            </li>
+            <li>
               <span className="font-medium">{t('retentionPaymentLabel')}</span> {t('retentionPaymentDesc')}
             </li>
             <li>

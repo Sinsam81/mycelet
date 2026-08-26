@@ -52,8 +52,16 @@ describe('deleteUserStorageObjects', () => {
     expect(removeCalls.flatMap((c) => c.paths)).toEqual(['bruker-1/a.jpg', 'bruker-1/b.jpg', 'bruker-1/c.jpg']);
   });
 
-  it('dekker begge de brukergenererte bøttene', () => {
-    expect([...USER_IMAGE_BUCKETS]).toEqual(['finding-images', 'forum-images']);
+  it('dekker alle bøttene brukeren har lastet opp til', () => {
+    expect([...USER_IMAGE_BUCKETS]).toEqual(['finding-images', 'forum-images', 'identify-history']);
+  });
+
+  it('tar med den PRIVATE historikkbøtta', () => {
+    // identify-history (migrasjon 055) er privat, i motsetning til de to andre.
+    // Det gjør den ikke mindre slettepliktig: tjenesterollen ser bort fra RLS,
+    // og en art. 17-sletting som lar brukerens egne bilder bli liggende er
+    // ingen sletting. Den er lett å glemme nettopp fordi den ikke er offentlig.
+    expect([...USER_IMAGE_BUCKETS]).toContain('identify-history');
   });
 
   it('er idempotent — andre kjøring finner ingenting', async () => {
@@ -102,7 +110,7 @@ describe('deleteUserStorageObjects', () => {
     };
     const result = await deleteUserStorageObjects(storage, 'bruker-1');
     expect(result.removed).toBe(0);
-    expect(result.failures).toHaveLength(2);
+    expect(result.failures).toHaveLength(USER_IMAGE_BUCKETS.length);
     expect(result.failures[0].message).toBe('ingen service role key');
   });
 

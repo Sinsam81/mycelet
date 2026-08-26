@@ -15,8 +15,15 @@
  * fra en flerstegs sletting der brukeren kan komme til å prøve på nytt.
  */
 
-/** Bøttene brukergenererte bilder havner i. */
-export const USER_IMAGE_BUCKETS = ['finding-images', 'forum-images'] as const;
+/**
+ * Bøttene brukergenererte bilder havner i.
+ *
+ * identify-history (migrasjon 055) er PRIVAT, i motsetning til de to andre.
+ * Den må likevel med her: tjenesterollen ser bort fra RLS, og en art.
+ * 17-sletting som lar brukerens egne bilder bli liggende — private eller ikke —
+ * er ikke en sletting.
+ */
+export const USER_IMAGE_BUCKETS = ['finding-images', 'forum-images', 'identify-history'] as const;
 
 /** Supabase paginerer list() på 100 som standard; vi ber om mer per runde. */
 const PAGE_SIZE = 1000;
