@@ -78,6 +78,9 @@ export default async function ProfilePage() {
       .select('id,found_at,location_name,notes,mushroom_species(norwegian_name,swedish_name,latin_name,edibility)')
       .eq('user_id', user.id)
       .eq('is_negative_observation', false)
+      // Slettede funn (migrasjon 055) skal ikke stå i «siste funn». Telleren
+      // over kommer fra get_user_stats, som filtrerer det samme i SQL.
+      .is('deleted_at', null)
       .order('found_at', { ascending: false })
       .limit(5),
     supabase

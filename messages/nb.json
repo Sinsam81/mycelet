@@ -605,7 +605,7 @@
     "processorWikimediaDesc": "artsbildene hentes direkte av nettleseren din fra Wikimedia, som da ser IP-adressen din og hvilket bilde du åpner. Vi sender ingen konto- eller posisjonsdata.",
     "retentionHeading": "5. Hvor lenge vi lagrer data",
     "retentionActiveLabel": "Aktiv konto:",
-    "retentionActiveDesc": "så lenge du har konto, kan du selv slette enkeltfunn, forum-innlegg og kommentarer.",
+    "retentionActiveDesc": "så lenge du har konto, kan du selv slette enkeltfunn, forum-innlegg og kommentarer. Et slettet funn forsvinner umiddelbart fra appen, men ligger hos oss i 30 dager til så du kan angre — deretter fjernes både funnet og bildet permanent.",
     "retentionInactiveLabel": "Inaktive kontoer:",
     "retentionInactiveDesc": "hvis du ikke logger inn på 3 år, sender vi en e-post-advarsel og sletter kontoen automatisk 90 dager senere hvis du ikke svarer.",
     "retentionDeletedLabel": "Etter sletting av konto:",
@@ -1288,7 +1288,12 @@
     "searchPlaceOnly": "Søk sted — f.eks. «Hamar»",
     "forecastToday": "I dag",
     "forecastConditionsThisWeek": "soppforhold denne uka",
-    "hotspotTooltipVerdict": "{verdict} ({score}/100)"
+    "hotspotTooltipVerdict": "{verdict} ({score}/100)",
+    "findingDeleted": "Funnet er slettet",
+    "findingDeleteUndo": "Angre",
+    "findingDeleteFailed": "Kunne ikke slette funnet. Prøv igjen.",
+    "findingRestored": "Funnet er tilbake 🍄",
+    "findingRestoreFailed": "Kunne ikke angre slettingen. Prøv igjen."
   },
   "OnboardingIntro": {
     "step1Title": "Velkommen til Mycelet",
@@ -1392,7 +1397,14 @@
     "zoneFinding": "Sone-funn ({km} km grid)",
     "zoneFindingLabeled": "Sone-funn: {label} ({km} km grid)",
     "shareInForum": "Del i forumet",
-    "unverifiedClaim": "Oppgitt art — ikke verifisert"
+    "unverifiedClaim": "Oppgitt art — ikke verifisert",
+    "delete": "Slett funn",
+    "deleteConfirmQuestion": "Slette dette funnet?",
+    "deleteConfirmHint": "Du kan angre rett etterpå.",
+    "deleteConfirm": "Slett",
+    "deleteCancel": "Avbryt",
+    "deleting": "Sletter …",
+    "deleteFailed": "Kunne ikke slette funnet. Prøv igjen."
   },
   "MushroomMapLazy": {
     "loadingMap": "Laster kart..."

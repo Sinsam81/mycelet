@@ -16,6 +16,10 @@
     {
       "path": "/api/cron/purre-bekreftelse",
       "schedule": "0 7 * * *"
+    },
+    {
+      "path": "/api/cron/purge-deleted-findings",
+      "schedule": "30 3 * * *"
     }
   ]
 }

@@ -221,7 +221,13 @@ export default async function AdminDashboardPage() {
   };
 
   const fetchTopSpecies = async (limit = 5): Promise<Array<[string, number]>> => {
-    const { data } = await admin.from('findings').select('species_id,species_name_override').limit(1000);
+    // .is('deleted_at', null): admin-statistikken skal telle det brukerne
+    // faktisk har, ikke det de har slettet (migrasjon 055).
+    const { data } = await admin
+      .from('findings')
+      .select('species_id,species_name_override')
+      .is('deleted_at', null)
+      .limit(1000);
     const rows = data ?? [];
     if (rows.length === 0) return [];
     const ids = [...new Set(rows.map((r) => r.species_id).filter(Boolean))] as number[];

@@ -605,7 +605,7 @@
     "processorWikimediaDesc": "artbilderna hämtas direkt av din webbläsare från Wikimedia, som då ser din IP-adress och vilken bild du öppnar. Vi skickar inga konto- eller positionsdata.",
     "retentionHeading": "5. Hur länge vi lagrar data",
     "retentionActiveLabel": "Aktivt konto:",
-    "retentionActiveDesc": "så länge du har ett konto kan du själv radera enskilda fynd, foruminlägg och kommentarer.",
+    "retentionActiveDesc": "så länge du har ett konto kan du själv radera enskilda fynd, foruminlägg och kommentarer. Ett raderat fynd försvinner omedelbart från appen, men ligger kvar hos oss i 30 dagar till så att du kan ångra dig — därefter tas både fyndet och bilden bort permanent.",
     "retentionInactiveLabel": "Inaktiva konton:",
     "retentionInactiveDesc": "om du inte loggar in på 3 år skickar vi en e-postvarning och raderar kontot automatiskt 90 dagar senare om du inte svarar.",
     "retentionDeletedLabel": "Efter radering av konto:",
@@ -1288,7 +1288,12 @@
     "searchPlaceOnly": "Sök plats — t.ex. «Sälen»",
     "forecastToday": "I dag",
     "forecastConditionsThisWeek": "svampförhållanden denna vecka",
-    "hotspotTooltipVerdict": "{verdict} ({score}/100)"
+    "hotspotTooltipVerdict": "{verdict} ({score}/100)",
+    "findingDeleted": "Fyndet är raderat",
+    "findingDeleteUndo": "Ångra",
+    "findingDeleteFailed": "Kunde inte radera fyndet. Försök igen.",
+    "findingRestored": "Fyndet är tillbaka 🍄",
+    "findingRestoreFailed": "Kunde inte ångra raderingen. Försök igen."
   },
   "OnboardingIntro": {
     "step1Title": "Välkommen till Mycelet",
@@ -1392,7 +1397,14 @@
     "zoneFinding": "Zonfynd ({km} km rutnät)",
     "zoneFindingLabeled": "Zonfynd: {label} ({km} km rutnät)",
     "shareInForum": "Dela i forumet",
-    "unverifiedClaim": "Uppgiven art — inte verifierad"
+    "unverifiedClaim": "Uppgiven art — inte verifierad",
+    "delete": "Radera fynd",
+    "deleteConfirmQuestion": "Radera det här fyndet?",
+    "deleteConfirmHint": "Du kan ångra direkt efteråt.",
+    "deleteConfirm": "Radera",
+    "deleteCancel": "Avbryt",
+    "deleting": "Raderar …",
+    "deleteFailed": "Kunde inte radera fyndet. Försök igen."
   },
   "MushroomMapLazy": {
     "loadingMap": "Laddar karta..."

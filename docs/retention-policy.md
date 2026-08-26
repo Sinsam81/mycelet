@@ -14,7 +14,8 @@
 | Datatype                                | Foreslått frist                          | Hvorfor det forslaget                                      |
 |-----------------------------------------|------------------------------------------|------------------------------------------------------------|
 | Inaktive kontoer                        | **3 år** uten innlogging → e-post + 90 dg → slett | Lang nok for sesongbrukere; kort nok til å unngå dataopphoping |
-| Funn (positive + negative)              | **Beholdes så lenge konto eksisterer**   | Brukerens egne data, kjerne-funksjon. Bruker kan slette når som helst. |
+| Funn (positive + negative)              | **Beholdes så lenge konto eksisterer**   | Brukerens egne data, kjerne-funksjon. Bruker kan slette enkeltfunn når som helst, fra kartpopupen (migrasjon 055) |
+| Funn brukeren selv har slettet          | **30 dager** — `deleted_at` settes med én gang, `/api/cron/purge-deleted-findings` hard-sletter raden og bildet etterpå | Angrevindu. Sletting skjer med tommelen på en telefon i skogen; uten frist er et feilklikk endelig |
 | Forum-innlegg + kommentarer             | **Beholdes så lenge konto eksisterer**, men anonymiseres ved konto-sletting | Bevarer forum-tråder ved sletting (ellers blir tråder ulesbare) |
 | Reports filed AV bruker (rapporter andre) | **Beholdes så lenge konto eksisterer**   | Trenger logg over modererings-historikk                    |
 | Reports filed OM bruker                 | **Slettes 1 år etter løsning**           | Etter behandlet sak er det ikke lenger nødvendig           |
@@ -25,6 +26,33 @@
 | Server-logger (Vercel)                  | **30 dager** (Vercel-default)            | Standard for incident-debugging                            |
 | `prediction_tiles` (genererte)          | **30 dager** — eldre rader slettes av `/api/cron/generate-tiles` | Ikke persondata. Bare dagens dato leses; vinduet finnes for feilsøking |
 | Geolokasjon ved funn                    | **`display_latitude/longitude`** (jittered til ±500 m) brukes til API-respons | Råkoordinater kun synlig for eier — privacy-by-design |
+
+## Sletting av eget funn — myk, med 30 dagers frist
+
+Lagt til 26. august 2026 (migrasjon 055). Fram til da fantes det ingen vei ut av
+et feilregistrert funn: RLS tillot sletting, men ingen flate brukte den, så
+eneste utvei var å slette hele kontoen.
+
+- **Flate:** kartpopupen, kun på egne funn. To-trinns bekreftelse.
+- **Sletting:** myk — `findings.deleted_at` settes. Raden forsvinner samtidig
+  fra alle lesesteder (`public_findings`-viewet, `get_user_stats`, /mine-steder,
+  profilen, forsiden, kartet, GPX-eksporten, forum-koblingen, admin-statistikken).
+- **Angre:** `POST /api/findings/:id/restore`, tilbudt i varselet rett etter
+  slettingen og gyldig så lenge raden finnes.
+- **Permanent fjerning:** `/api/cron/purge-deleted-findings` (daglig 03:30)
+  hard-sletter rader eldre enn 30 dager og fjerner bildet i `finding-images`.
+  Bildet ryddes FØRST, raden etterpå — feiler bildet, blir raden liggende og
+  neste kjøring prøver på nytt.
+- **Ved kontosletting:** allerede slettede funn hard-slettes i STEP 1a av
+  `/api/me/delete`, før noe vurderes for anonymisert bevaring. Et funn brukeren
+  har slettet skal aldri overleve som treningsdata.
+- **Ett unntak fra filtreringen, med vilje:** AI-kvoten i `/api/identify` teller
+  kall, ikke funn. Den filtrerer ikke bort slettede rader — ellers ville
+  «identifiser → lagre → slett» gitt en ny gratis runde hver gang.
+
+Vinduet på 30 dager står fire steder og må holdes i takt: her, i
+`PURGE_AFTER_DAYS`, i kommentaren på `findings.deleted_at` (migrasjon 055), og i
+personvernerklæringen (`Personvern.retentionActiveDesc`, nb + sv).
 
 ## Tre beslutninger — låst 9. mai 2026
 
