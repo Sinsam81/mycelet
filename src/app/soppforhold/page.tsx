@@ -204,7 +204,11 @@ export default async function SoppforholdPage() {
           <Link href="/datakilder" className="underline">
             datakilder
           </Link>{' '}
-          for lisenser og detaljer.
+          for lisenser, og{' '}
+          <Link href="/apenhet" className="underline">
+            åpenhet
+          </Link>{' '}
+          for hvordan vi måler treffsikkerheten.
         </p>
       </article>
     </PageWrapper>

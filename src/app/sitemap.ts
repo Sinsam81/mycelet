@@ -61,6 +61,9 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { sti: '/pricing', prioritet: 0.7, frekvens: 'monthly' },
     { sti: '/forum', prioritet: 0.6, frekvens: 'daily' },
     { sti: '/sikkerhet', prioritet: 0.6, frekvens: 'monthly' },
+    // Åpenhetssiden dokumenterer valideringstallene bak varselet — den skal
+    // være funnbar, ikke bare pliktoppfyllende.
+    { sti: '/apenhet', prioritet: 0.5, frekvens: 'monthly' },
     { sti: '/datakilder', prioritet: 0.4, frekvens: 'monthly' },
     { sti: '/kontakt', prioritet: 0.4, frekvens: 'yearly' },
     // Juridiske sider: må være funnbare, men skal ikke konkurrere med innholdet.

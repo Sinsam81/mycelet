@@ -388,6 +388,9 @@ export async function LandingPage() {
           <Link href="/datakilder" className="hover:underline">
             {t('footerSources')}
           </Link>
+          <Link href="/apenhet" className="hover:underline">
+            {t('footerTransparency')}
+          </Link>
           <a href="mailto:post@mycelet.com" className="hover:underline">
             post@mycelet.com
           </a>

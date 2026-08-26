@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useLocale, useTranslations } from 'next-intl';
-import { FileText, Mail, ShieldAlert, Star } from 'lucide-react';
+import { FileText, Mail, Microscope, ShieldAlert, Star } from 'lucide-react';
 import { NativeOnly } from '@/components/native/NativeOnly';
 import { VURDERING_URL } from '@/lib/vurdering/vurdering';
 import { LEGAL_ENTITY, entityMessageValues } from '@/lib/legal/entity';
@@ -36,7 +36,8 @@ export function LegalLinks() {
     { href: '/kjopsvilkar', label: t('purchaseTerms'), icon: FileText },
     { href: '/personvern', label: t('privacy'), icon: FileText },
     { href: '/sikkerhet', label: t('safety'), icon: ShieldAlert },
-    { href: '/datakilder', label: t('sources'), icon: FileText }
+    { href: '/datakilder', label: t('sources'), icon: FileText },
+    { href: '/apenhet', label: t('transparency'), icon: Microscope }
   ];
 
   return (
