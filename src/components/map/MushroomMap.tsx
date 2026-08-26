@@ -50,6 +50,7 @@ import { readLocal, readLocalJson, removeLocal, writeLocal } from '@/lib/utils/s
 import { PlaceForecastStrip } from './PlaceForecastStrip';
 import { FLAGS } from '@/lib/flags';
 import toast from 'react-hot-toast';
+import { foreslaaVurdering } from '@/lib/vurdering/foreslaa';
 
 type LeafletType = typeof import('leaflet');
 
@@ -1026,6 +1027,9 @@ export function MushroomMap() {
           ? t('tripDoneWithSpecies', { count, species: unique.join(', ') })
           : t('tripDone', { count })
       );
+      // Gyllent øyeblikk: turen er avsluttet MED funn i kurven. Se
+      // lib/vurdering for reglene (kun appskallet, maks én gang noensinne).
+      foreslaaVurdering();
     } else {
       toast(t('tripDoneNoFinds'));
     }

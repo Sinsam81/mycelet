@@ -9,6 +9,7 @@ import { LookAlikeCheck } from '@/components/identify/LookAlikeCheck';
 import { SafetyWarning } from '@/components/identify/SafetyWarning';
 import { Button } from '@/components/ui/Button';
 import toast from 'react-hot-toast';
+import { foreslaaVurdering } from '@/lib/vurdering/foreslaa';
 import { createClient } from '@/lib/supabase/client';
 import { isDangerousEdibility } from '@/lib/utils/edibility';
 import { buildUserUploadPath } from '@/lib/storage/upload-path';
@@ -125,6 +126,10 @@ export default function IdentifyResultPage() {
         throw new Error(body?.error || t('errorSaveFailed'));
       }
       toast.success(t('saveSuccess'));
+      // Gyllent øyeblikk: brukeren fotograferte, identifiserte og LAGRET et
+      // funn. Spør (maks én gang noensinne, kun i appskallet) om en
+      // App Store-vurdering — reglene bor i lib/vurdering.
+      foreslaaVurdering();
       router.push('/map');
     } catch (err) {
       setError(err instanceof Error ? err.message : t('errorSaveFailed'));

@@ -2,7 +2,9 @@
 
 import Link from 'next/link';
 import { useLocale, useTranslations } from 'next-intl';
-import { FileText, Mail, ShieldAlert } from 'lucide-react';
+import { FileText, Mail, ShieldAlert, Star } from 'lucide-react';
+import { NativeOnly } from '@/components/native/NativeOnly';
+import { VURDERING_URL } from '@/lib/vurdering/vurdering';
 import { LEGAL_ENTITY, entityMessageValues } from '@/lib/legal/entity';
 
 /**
@@ -54,6 +56,22 @@ export function LegalLinks() {
           </li>
         ))}
       </ul>
+
+      {/* Brukerinitiert vurderingslenke — den LOVLIGE formen for write-review-
+          lenken (retningslinje 5.6.1 forbyr egne prompter, men et element
+          brukeren selv oppsøker er greit). Kun i appskallet: en nettleser-
+          bruker kan ikke vurdere i App Store. */}
+      <NativeOnly>
+        <a
+          href={VURDERING_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mt-1 flex items-center gap-2 rounded-lg px-1 py-1.5 text-sm text-gray-800 hover:bg-gray-50 hover:text-forest-900"
+        >
+          <Star className="h-4 w-4 shrink-0 text-amber-500" />
+          {t('rate')}
+        </a>
+      </NativeOnly>
 
       <div className="mt-3 border-t border-gray-100 pt-3 text-xs leading-relaxed text-gray-600">
         <p className="flex items-start gap-2">

@@ -1539,7 +1539,8 @@
     "sources": "Datakilder",
     "contactLabel": "Kontakt oss",
     "contactBody": "Spørsmål, klager eller melding om innhold: {generalEmail}. Personvern: {privacyEmail}. Vi svarer normalt innen noen virkedager.",
-    "operatorLabel": "Tjenesten drives av"
+    "operatorLabel": "Tjenesten drives av",
+    "rate": "Vurder Mycelet i App Store"
   },
   "ContentFilter": {
     "controlledSubstanceTrade": "Innlegget ser ut til å handle om kjøp, salg, dyrking eller voksesteder for narkotiske sopper. Det er ikke tillatt — se vilkårene punkt 5. Mener du at dette er en feil, kontakt oss på post@mycelet.com.",
