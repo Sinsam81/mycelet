@@ -28,6 +28,8 @@ Dette er bug-klassen som rammet oss i prod (svensk kart blankt, fast i Oslo, dø
 - [ ] Artssøk-feltet («Hvilken sopp vil du finne …») finnes.
 - [ ] Funn-lagets filterchips vises (spiselighet, sesong og årsfilteret «Alle år / Siste 5 år / Siste 10 år»); å velge «Siste 5 år» gir ikke JS-feil (virker både med og uten migrasjon 054 via klient-fallback).
 - [ ] Ingen ukjente JS-feil i konsollen ved kartlasting.
+- [ ] Markerte steder: har brukeren steder, ligger de som indigo nåler i kartet, og «Mer»-menyen har en av/på-bryter for dem (krever migrasjon 055).
+- [ ] 🖐️ Manuell GPX-import (skriver til prod — kjøres sjelden): velg en .gpx på `/mine-steder` → forhåndsvisningen viser antall, duplikater, ugyldige punkter og sporlogg-linja FØR noe lagres → «Importer N steder» → «Angre importen» fjerner alle igjen. En fil med bare en `<trk>` skal gi «ingen veipunkter», ikke tusenvis av steder.
 - [ ] 🖐️ Native: «Finn meg» fungerer i iOS-appen (Capacitor Geolocation, ikke `navigator.geolocation`).
 
 ## 2. AI-soppkjenner (`/identify`)

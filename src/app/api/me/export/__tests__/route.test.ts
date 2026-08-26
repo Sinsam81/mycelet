@@ -132,6 +132,53 @@ describe('GET /api/me/export', () => {
       expect(body._manifest.datasets.spotFeedback).toBe(1);
     });
 
+    it('tar med de markerte stedene', async () => {
+      // saved_places ligger utenfor funnenes synlighetsmodell og har like
+      // presise koordinater som spot_feedback. Glemmes de her, er «fullstendig»
+      // i manifestet en usannhet.
+      tableResponses['saved_places'] = {
+        data: [{ id: 's1', name: 'Kantarellskogen', latitude: 59.91234, longitude: 10.75678 }],
+        error: null
+      };
+      const res = await GET(makeRequest());
+      const body = await res.json();
+
+      expect(queriedWithSession).toContain('saved_places');
+      expect(body.savedPlaces).toHaveLength(1);
+      expect(body.savedPlaces[0].name).toBe('Kantarellskogen');
+      expect(body._manifest.datasets.savedPlaces).toBe(1);
+    });
+
+    /**
+     * Migrasjoner kjøres manuelt i dette prosjektet. Deployes koden før
+     * migrasjon 055 er limt inn, finnes ikke saved_places — og uten unntaket i
+     * ruta ville hvert eneste innsynskrav etter GDPR art. 15 svart 500.
+     * Finnes ikke tabellen, finnes det heller ingen steder å utelate.
+     */
+    it('leverer eksporten selv om saved_places ennå ikke er migrert', async () => {
+      tableResponses['saved_places'] = {
+        data: null,
+        error: { message: 'Could not find the table', code: 'PGRST205' }
+      };
+      const res = await GET(makeRequest());
+      const body = await res.json();
+
+      expect(res.status).toBe(200);
+      expect(body.savedPlaces).toEqual([]);
+      expect(body._manifest.complete).toBe(true);
+    });
+
+    it('feiler fortsatt lukket når saved_places feiler av en ANNEN grunn', async () => {
+      tableResponses['saved_places'] = {
+        data: null,
+        error: { message: 'statement timeout', code: '57014' }
+      };
+      const res = await GET(makeRequest());
+
+      expect(res.status).toBe(500);
+      expect((await res.json())._manifest).toBeUndefined();
+    });
+
     it('tar med varselet om automatisk sletting', async () => {
       tableResponses = {
         account_deletion_warnings: { data: { user_id: 'x', scheduled_deletion_at: '2029-01-01' }, error: null }

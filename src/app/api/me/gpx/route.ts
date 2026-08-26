@@ -7,6 +7,7 @@ import { intlLocale } from '@/lib/utils/intl-locale';
 import { timeZoneForLocale } from '@/i18n/config';
 import { getJoinedSpeciesName } from '@/lib/utils/species-name';
 import { lagGpx, type GpxVeipunkt } from '@/lib/gpx/lag-gpx';
+import { MAKS_STEDER_PER_BRUKER } from '@/lib/steder/veipunkt';
 
 /**
  * GET /api/me/gpx — brukerens egne funn som GPX 1.1-veipunkter.
@@ -21,6 +22,11 @@ import { lagGpx, type GpxVeipunkt } from '@/lib/gpx/lag-gpx';
  * user_id) — eksakte koordinater ut av appen er kun lov for eierens egne
  * rader, samme presedens som /api/me/export. Ingen eksportvei skal noensinne
  * bygges på public_findings.
+ *
+ * Fila inneholder BEGGE slag punkter: funnene og de markerte stedene
+ * (saved_places). Rundturen skal være hel — det som kan importeres, skal kunne
+ * eksporteres igjen, ellers er importen en enveisdør. De skilles med hvert sitt
+ * Garmin-symbol, ikke med to filer: én fil er det brukeren faktisk vil ha.
  */
 
 const SIDE = 1000; // PostgREST-taket per svar
@@ -81,6 +87,22 @@ export async function GET(request: NextRequest) {
     year: 'numeric'
   });
 
+  // Stedene hentes uten paginering: taket er 1000 rader (migrasjon 055).
+  const { data: stederData } = await supabase
+    .from('saved_places')
+    .select('name, note, latitude, longitude, waypoint_time')
+    .eq('user_id', user.id)
+    .order('created_at', { ascending: false })
+    .limit(MAKS_STEDER_PER_BRUKER);
+
+  const steder = (stederData ?? []) as {
+    name: string;
+    note: string | null;
+    latitude: number;
+    longitude: number;
+    waypoint_time: string | null;
+  }[];
+
   const veipunkter: GpxVeipunkt[] = rader.map((rad) => ({
     latitude: rad.latitude,
     longitude: rad.longitude,
@@ -89,7 +111,18 @@ export async function GET(request: NextRequest) {
     desc: [rad.location_name, rad.notes].filter(Boolean).join(' — ') || null
   }));
 
-  return new NextResponse(lagGpx(veipunkter), {
+  const stedpunkter: GpxVeipunkt[] = steder.map((sted) => ({
+    latitude: sted.latitude,
+    longitude: sted.longitude,
+    name: sted.name,
+    // Tidspunktet fra den opprinnelige fila, ikke da raden ble laget hos oss.
+    // Skrives tilbake urørt, slik at en runde ut og inn igjen ikke taper data.
+    time: sted.waypoint_time,
+    desc: sted.note,
+    sym: 'Flag, Green'
+  }));
+
+  return new NextResponse(lagGpx([...veipunkter, ...stedpunkter]), {
     headers: {
       'Content-Type': 'application/gpx+xml; charset=utf-8',
       'Content-Disposition': 'attachment; filename="mycelet-mine-steder.gpx"',

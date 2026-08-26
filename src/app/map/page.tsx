@@ -5,17 +5,30 @@ import { PageWrapper } from '@/components/layout/PageWrapper';
 import { createClient } from '@/lib/supabase/server';
 import { MushroomMap } from '@/components/map/MushroomMapLazy';
 import { logger } from '@/lib/log';
+import { gyldigKoordinat } from '@/lib/steder/veipunkt';
+
+/** «lat,lng» fra URL-en, eller null. Alt annet er søppel vi ignorerer. */
+function parseSted(verdi: string | undefined): { lat: number; lng: number } | null {
+  if (!verdi) return null;
+  const [råLat, råLng] = verdi.split(',');
+  const koordinat = gyldigKoordinat(råLat, råLng);
+  return koordinat ? { lat: koordinat.latitude, lng: koordinat.longitude } : null;
+}
 
 export default async function MapPage({
   searchParams
 }: {
-  searchParams: Promise<{ mine?: string }>;
+  searchParams: Promise<{ mine?: string; sted?: string }>;
 }) {
   const t = await getTranslations('MapPage');
   // ?mine=1 settes av lagringsflytene: kartet skal åpne med «Kun mine funn»
   // på, så funnet som nettopp ble lagret faktisk synes (private funn er
   // usynlige i standardlaget).
-  const { mine } = await searchParams;
+  // ?sted=lat,lng settes av «Vis i kartet» på et markert sted (/mine-steder).
+  // Parses her, ikke i kartet: verdier fra URL-en er brukerinput, og kartet
+  // skal få et ferdig validert punkt eller ingenting.
+  const { mine, sted } = await searchParams;
+  const startAt = parseSted(sted);
   const supabase = createClient();
   const {
     data: { user }
@@ -56,7 +69,7 @@ export default async function MapPage({
             </Link>
           ) : null}
         </div>
-        <MushroomMap startWithOnlyMine={mine === '1'} />
+        <MushroomMap startWithOnlyMine={mine === '1'} startAt={startAt} />
       </div>
     </PageWrapper>
   );

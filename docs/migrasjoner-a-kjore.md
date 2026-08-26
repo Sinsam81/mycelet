@@ -44,3 +44,20 @@ Innholdet var riktig; bare nummereringen kolliderte. Rekkefølgen over er satt
 etter avhengighet, og det er kontrollert at ingen av dem rører de samme
 databasefunksjonene — særlig at 043 (som låser `search_path`) ikke skriver over
 funksjoner som 041 eller 042 oppretter.
+
+
+## 055 — `saved_places` (ny, IKKE kjørt)
+
+`055_saved_places.sql` oppretter tabellen bak «Steder du har markert» og
+GPX-importen. Den er idempotent (`create table if not exists`, `drop trigger if
+exists` før hver trigger) og rører ingen eksisterende tabell.
+
+Uten den kjørt: `/mine-steder` viser en gul linje om at stedene ikke kunne
+hentes, importknappen feiler ved lagring, og resten av appen er upåvirket —
+funn, kart og varsel bruker ikke tabellen.
+
+**Merk `revoke all ... from anon` nederst i fila.** Prosjektet har
+`ALTER DEFAULT PRIVILEGES ... GRANT ALL ON TABLES TO anon` stående, så en ny
+tabell får anon-rettigheter automatisk. Samme lærdom som migrasjon 052.
+
+Kontrollspørringen ligger som kommentar nederst i fila.

@@ -114,7 +114,8 @@ export async function POST(request: NextRequest) {
     commentsCount,
     likesCount,
     savedCount,
-    reportsCount
+    reportsCount,
+    savedPlacesCount
   ] = await Promise.all([
     supabase
       .from('findings')
@@ -139,7 +140,10 @@ export async function POST(request: NextRequest) {
     supabase.from('comments').select('id', { count: 'exact', head: true }).eq('user_id', user.id),
     supabase.from('post_likes').select('post_id', { count: 'exact', head: true }).eq('user_id', user.id),
     supabase.from('saved_posts').select('post_id', { count: 'exact', head: true }).eq('user_id', user.id),
-    supabase.from('reports').select('id', { count: 'exact', head: true }).eq('reporter_id', user.id)
+    supabase.from('reports').select('id', { count: 'exact', head: true }).eq('reporter_id', user.id),
+    // Markerte steder. FK-en cascader når auth.users-raden går, men et tall som
+    // ikke står i kvitteringen er et tall brukeren ikke kan se ble slettet.
+    supabase.from('saved_places').select('id', { count: 'exact', head: true }).eq('user_id', user.id)
   ]);
 
   let admin;
@@ -285,6 +289,7 @@ export async function POST(request: NextRequest) {
     postLikes: likesCount.count ?? 0,
     savedPosts: savedCount.count ?? 0,
     reportsFiled: reportsCount.count ?? 0,
+    savedPlaces: savedPlacesCount.count ?? 0,
     // Bildene er nå med i kvitteringen. Uten dette kunne brukeren ikke se at
     // de i det hele tatt ble fjernet — og før denne endringen ble de ikke det.
     uploadedImages: storageResult.removed

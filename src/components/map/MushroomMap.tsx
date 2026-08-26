@@ -52,6 +52,8 @@ import { SEARCH_AREA_RADIUS_M } from '@/lib/utils/spot-area';
 import { createTopSpotArea } from './topSpotArea';
 import { markerHtml, markerShapeFor, type MarkerShape } from './speciesMarkerIcon';
 import { buildTopSpotPopupHtml } from './topSpotPopup';
+import { lagStedPopup, stedIkonHtml, type StedForKart } from './stedMarker';
+import { MAKS_STEDER_PER_BRUKER } from '@/lib/steder/veipunkt';
 import { readLocal, readLocalJson, removeLocal, writeLocal } from '@/lib/utils/safe-storage';
 import { PlaceForecastStrip } from './PlaceForecastStrip';
 import { FLAGS } from '@/lib/flags';
@@ -134,9 +136,16 @@ export function MushroomMap({
    * standardlaget (public_findings ekskluderer private), og «Funn lagret!»
    * etterfulgt av et kart uten funnet leses som at lagringen feilet.
    */
-  startWithOnlyMine = false
+  startWithOnlyMine = false,
+  /**
+   * «Vis i kartet» fra et markert sted (/map?sted=lat,lng). Kartet åpner der,
+   * og GPS-fiksen som lander noen sekunder senere skal IKKE rykke det tilbake
+   * — nøyaktig samme regel som for et stedssøk (searchedPlaceRef under).
+   */
+  startAt = null
 }: {
   startWithOnlyMine?: boolean;
+  startAt?: { lat: number; lng: number } | null;
 } = {}) {
   const t = useTranslations('MushroomMap');
   const locale = useLocale();
@@ -149,6 +158,9 @@ export function MushroomMap({
   const heatLayerRef = useRef<import('leaflet').LayerGroup | null>(null);
   const topLayerRef = useRef<import('leaflet').LayerGroup | null>(null);
   const speciesLayerRef = useRef<import('leaflet').LayerGroup | null>(null);
+  /** Brukerens egne markerte steder (saved_places). Egen gruppe, egen nål. */
+  const stederLayerRef = useRef<import('leaflet').LayerGroup | null>(null);
+  const startAtRef = useRef(startAt);
   const popupRootsRef = useRef<Root[]>([]);
   const loadFindingsRef = useRef<() => Promise<void>>(async () => {});
   const loadPredictionTilesRef = useRef<() => Promise<void>>(async () => {});
@@ -239,6 +251,14 @@ export function MushroomMap({
   // tabellen, som ikke har den join-en public_findings-viewet gjør.
   const [currentUsername, setCurrentUsername] = useState<string | null>(null);
   const [showOccurrences, setShowOccurrences] = useState(true);
+  const [steder, setSteder] = useState<StedForKart[]>([]);
+  const [visSteder, setVisSteder] = useState(true);
+  /**
+   * init() er asynkron (Leaflet lastes dynamisk), så laggruppene finnes ikke
+   * med én gang. Effekten som tegner stedene må vente på dem — ellers går den
+   * tomt akkurat når stedene rekker fram først.
+   */
+  const [kartKlart, setKartKlart] = useState(false);
   const [occCount, setOccCount] = useState(0);
   const [occTruncated, setOccTruncated] = useState(false);
   const [occEdibility, setOccEdibility] = useState<'all' | 'edible' | 'toxic'>('all');
@@ -1591,16 +1611,25 @@ export function MushroomMap({
       map.addLayer(topLayer);
       const speciesLayer = L.layerGroup();
       map.addLayer(speciesLayer);
+      const stederLayer = L.layerGroup();
+      map.addLayer(stederLayer);
       mapRef.current = map;
       clusterRef.current = clusters;
       occClusterRef.current = occCluster;
       heatLayerRef.current = heatLayer;
       topLayerRef.current = topLayer;
       speciesLayerRef.current = speciesLayer;
+      stederLayerRef.current = stederLayer;
+      setKartKlart(true);
 
-      // If geolocation already resolved before this (async) init finished, the
-      // setView effect couldn't run yet (no map). Recenter on the user now.
-      if (posRef.current) {
+      // Kom brukeren hit fra «Vis i kartet» på et markert sted, er DET stedet
+      // hen ba om å se. Da skal verken startposisjonen eller en GPS-fiks som
+      // lander etterpå flytte kartet et annet sted.
+      if (startAtRef.current) {
+        map.setView([startAtRef.current.lat, startAtRef.current.lng], 14);
+      } else if (posRef.current) {
+        // If geolocation already resolved before this (async) init finished, the
+        // setView effect couldn't run yet (no map). Recenter on the user now.
         map.setView([posRef.current.lat, posRef.current.lng], 13);
       }
 
@@ -1648,6 +1677,8 @@ export function MushroomMap({
       heatLayerRef.current = null;
       topLayerRef.current = null;
       speciesLayerRef.current = null;
+      stederLayerRef.current = null;
+      setKartKlart(false);
       occClusterRef.current = null;
       baseLayersRef.current = null;
       // Stop any in-flight GPS watch (so it can't keep the radio hot after the
@@ -1724,7 +1755,7 @@ export function MushroomMap({
   // must NOT yank the map and prediction back — that silently left the panel
   // and the forecast strip describing two different places.
   useEffect(() => {
-    if (searchedPlaceRef.current) return;
+    if (searchedPlaceRef.current || startAtRef.current) return;
     if (latitude != null && longitude != null) {
       posRef.current = { lat: latitude, lng: longitude };
       if (mapRef.current) {
@@ -1734,15 +1765,99 @@ export function MushroomMap({
   }, [latitude, longitude]);
 
   useEffect(() => {
-    if (searchedPlaceRef.current) return;
+    if (searchedPlaceRef.current || startAtRef.current) return;
     if (latitude != null && longitude != null) {
       setPredictionCoords({ lat: latitude, lon: longitude });
     }
   }, [latitude, longitude]);
 
+  // Varselet skal gjelde stedet brukeren ba om å se, ikke der telefonen står.
+  useEffect(() => {
+    if (startAtRef.current) {
+      setPredictionCoords({ lat: startAtRef.current.lat, lon: startAtRef.current.lng });
+    }
+  }, []);
+
   useEffect(() => {
     void loadFindings();
   }, [loadFindings]);
+
+  /**
+   * Brukerens egne markerte steder. Hentes ALLE på én gang, ikke per utsnitt:
+   * taket er 1000 rader (migrasjon 055), altså noen titalls kB, og da er ett
+   * kall billigere enn et nytt oppslag for hvert kartdrag. Owner-RLS er eneste
+   * kilde — et sted er aldri synlig for andre enn eieren.
+   */
+  useEffect(() => {
+    if (!currentUserId) {
+      setSteder([]);
+      return;
+    }
+    let avbrutt = false;
+    void (async () => {
+      const { data } = await supabase
+        .from('saved_places')
+        .select('id, name, note, latitude, longitude')
+        .eq('user_id', currentUserId)
+        .limit(MAKS_STEDER_PER_BRUKER);
+      if (!avbrutt) setSteder((data ?? []) as StedForKart[]);
+    })();
+    return () => {
+      avbrutt = true;
+    };
+  }, [currentUserId, supabase]);
+
+  useEffect(() => {
+    const layer = stederLayerRef.current;
+    if (!kartKlart || !layer) return;
+    layer.clearLayers();
+    if (!visSteder || steder.length === 0) return;
+
+    let avbrutt = false;
+    void (async () => {
+      const leaflet = (await import('leaflet')).default;
+      const gruppe = stederLayerRef.current;
+      if (avbrutt || !gruppe) return;
+
+      for (const sted of steder) {
+        const markør = leaflet.marker([sted.latitude, sted.longitude], {
+          icon: leaflet.divIcon({
+            className: 'sted-marker',
+            html: stedIkonHtml(),
+            iconSize: [28, 28],
+            iconAnchor: [14, 28]
+          }),
+          // Nålene ligger UNDER soppmarkørene. Et markert sted er en referanse,
+          // ikke et funn, og skal aldri dekke over et ekte funn.
+          zIndexOffset: -200
+        });
+
+        // Popupen bygges først når den åpnes, og er DOM — ikke en HTML-streng.
+        // Navnet kommer fra en fil vi ikke kontrollerer; se stedMarker.ts.
+        markør.bindPopup(() =>
+          lagStedPopup(
+            sted,
+            { funnHer: t('foundMushroomHere') },
+            {
+              påFunnHer: () => {
+                // Broen fra markert sted til ekte funn: koordinatet er ferdig
+                // utfylt, resten er den vanlige lagringsflyten med alle gatene.
+                setAddSheetFallback({ lat: sted.latitude, lng: sted.longitude });
+                setShowAddSheet(true);
+                mapRef.current?.closePopup();
+              }
+            }
+          )
+        );
+
+        gruppe.addLayer(markør);
+      }
+    })();
+
+    return () => {
+      avbrutt = true;
+    };
+  }, [kartKlart, steder, visSteder, t]);
 
   useEffect(() => {
     void loadPredictionTiles();
@@ -2048,6 +2163,21 @@ export function MushroomMap({
               >
                 ⬇️ {t('offlineMap')}
               </button>
+              {/* Vises bare når brukeren FAKTISK har markerte steder — en
+                  bryter for et tomt lag er bare støy i en meny som allerede er
+                  full. */}
+              {steder.length > 0 ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setToolsOpen(false);
+                    setVisSteder((vis) => !vis);
+                  }}
+                  className="rounded-lg px-2 py-2 text-left text-xs font-medium text-gray-800 hover:bg-gray-100"
+                >
+                  {visSteder ? t('hideMyPlaces') : t('myPlaces', { count: steder.length })}
+                </button>
+              ) : null}
               {FLAGS.tripMode && !tripActive ? (
                 <button
                   type="button"

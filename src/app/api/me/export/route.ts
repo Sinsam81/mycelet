@@ -41,7 +41,25 @@ import { LEGAL_ENTITY } from '@/lib/legal/entity';
  * the privacy mailbox; that requires manual review.
  */
 /** Den delen av et Supabase-svar denne ruten faktisk bryr seg om. */
-type QueryResult = { data: unknown; error: { message: string } | null };
+type QueryResult = { data: unknown; error: { message: string; code?: string } | null };
+
+/**
+ * ⏳ MIDLERTIDIG — fjern når migrasjon 055 er kjørt i produksjon.
+ *
+ * Ruta feiler lukket: én mislykket spørring gir 500 i stedet for en fil som
+ * later som den er komplett. Det er riktig, og skal ikke mykes opp. Men
+ * `saved_places` er ny, og migrasjoner kjøres manuelt i dette prosjektet — blir
+ * koden deployet før SQL-en limes inn, ville ETHVERT innsynskrav etter GDPR
+ * art. 15 svart 500 for alle brukere.
+ *
+ * Unntaket gjelder KUN dette ene datasettet, og KUN feilen «tabellen finnes
+ * ikke». Finnes ikke tabellen, finnes det heller ingen steder å utelate — da er
+ * en eksport uten dem faktisk komplett. Alle andre feil, også på dette
+ * datasettet, feiler fortsatt lukket.
+ */
+const IKKE_MIGRERT_ENNA: ReadonlySet<string> = new Set(['savedPlaces']);
+/** Postgres: undefined_table. PostgREST: ukjent tabell i skjemacachen. */
+const MANGLENDE_TABELL: ReadonlySet<string> = new Set(['42P01', 'PGRST205']);
 
 export async function GET(request: NextRequest) {
   const log = createRequestLogger(request);
@@ -119,6 +137,10 @@ export async function GET(request: NextRequest) {
     // display_location-triggeren som beskytter funn. At nettopp det manglet i
     // en eksport som erklærte seg fullstendig, var det verste hullet.
     spotFeedback: { shape: 'many', query: supabase.from('spot_feedback').select('*').eq('user_id', user.id) },
+    // Markerte steder (saved_places, migrasjon 055). Like presise koordinater
+    // som spot_feedback over, og helt utenfor funnenes synlighetsmodell — en
+    // eksport som erklærer seg fullstendig må ha dem med.
+    savedPlaces: { shape: 'many', query: supabase.from('saved_places').select('*').eq('user_id', user.id) },
     // Varselet om automatisk sletting etter tre år uten innlogging.
     deletionWarning: {
       shape: 'one',
@@ -141,7 +163,16 @@ export async function GET(request: NextRequest) {
 
   // Fail closed: any failed query means we cannot honestly call this export
   // complete, so we send nothing rather than something misleading.
-  const failed = keys.filter((k) => results[k].error);
+  const failed = keys.filter((k) => {
+    const feil = results[k].error;
+    if (!feil) return false;
+    // Se IKKE_MIGRERT_ENNA over — det eneste unntaket, og det er midlertidig.
+    if (IKKE_MIGRERT_ENNA.has(k) && feil.code && MANGLENDE_TABELL.has(feil.code)) {
+      userLog.warn('account.export.dataset_mangler_migrasjon', { dataset: k, code: feil.code });
+      return false;
+    }
+    return true;
+  });
   if (failed.length > 0) {
     userLog.error('account.export.incomplete', undefined, {
       failedDatasets: failed,

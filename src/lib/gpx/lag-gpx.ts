@@ -25,6 +25,12 @@ export interface GpxVeipunkt {
   time?: string | null;
   /** Stedsnavn/notat. Utelates hvis tomt. */
   desc?: string | null;
+  /**
+   * Garmin-symbolnavnet. Funn er blå flagg; markerte steder (saved_places) er
+   * grønne, slik at de to slagene punkter er til å skille fra hverandre i
+   * Garmin, Organic Maps og UT.no — og ved en senere reimport hit.
+   */
+  sym?: string | null;
 }
 
 /**
@@ -71,7 +77,7 @@ export function lagGpx(veipunkter: GpxVeipunkt[]): string {
         tid ? `    <time>${tid}</time>` : null,
         `    <name>${escapeXml(v.name)}</name>`,
         desc ? `    <desc>${escapeXml(desc)}</desc>` : null,
-        `    <sym>Flag, Blue</sym>`,
+        `    <sym>${escapeXml(v.sym?.trim() || 'Flag, Blue')}</sym>`,
         `  </wpt>`
       ]
         .filter((line): line is string => line != null)

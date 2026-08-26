@@ -8,6 +8,10 @@ import { createClient } from '@/lib/supabase/server';
 import { intlLocale } from '@/lib/utils/intl-locale';
 import { MyPlacesFilter } from '@/components/places/MyPlacesFilter';
 import { GpxEksportKnapp } from '@/components/places/GpxEksportKnapp';
+import { GpxImportKnapp } from '@/components/places/GpxImportKnapp';
+import { MarkerteSteder, type Sted } from '@/components/places/MarkerteSteder';
+import { MAKS_STEDER_PER_BRUKER } from '@/lib/steder/veipunkt';
+import { logger } from '@/lib/log';
 
 export async function generateMetadata() {
   const t = await getTranslations('MineSteder');
@@ -115,6 +119,22 @@ export default async function MineStederPage() {
     .order('found_at', { ascending: false })
     .limit(1000);
 
+  // Markerte steder (saved_places) er en ANNEN ting enn funn: ingen art, ingen
+  // observasjonsdato, ingen synlighetsmodell. De teller derfor ikke i
+  // funnstatistikken under, og blåser ikke opp «X funn, Y arter» på forsida.
+  // Se docs/gpx-import-design.md.
+  const { data: stederData, error: stederError } = await supabase
+    .from('saved_places')
+    .select('id, name, note, latitude, longitude, source_file, import_batch_id')
+    .eq('user_id', user.id)
+    .order('created_at', { ascending: false })
+    .limit(MAKS_STEDER_PER_BRUKER);
+
+  if (stederError) {
+    logger.error('mine_steder.saved_places_failed', { userId: user.id, message: stederError.message });
+  }
+  const steder = (stederData ?? []) as Sted[];
+
   const spots = groupFindings((data ?? []) as unknown as FindingRow[], {
     unknownSpecies: t('unknownSpecies'),
     nearPlace: (lat, lng) => t('nearPlace', { lat, lng })
@@ -134,12 +154,28 @@ export default async function MineStederPage() {
               generert av /api/me/gpx. Gratis med vilje: dette er brukerens
               egne data, og å ta betalt for å få dem UT ville stått i mot både
               GDPR-eksport-presedensen og ærlighets-merkevaren. */}
-          {totalFinds > 0 ? (
-            <div className="mt-3">
-              <GpxEksportKnapp antall={totalFinds} />
-            </div>
-          ) : null}
+          {/* Import står ved siden av eksport, og er synlig UANSETT om
+              brukeren har funn fra før: en som kommer rett fra en annen app har
+              null funn her, og det er nettopp da importen er verdt mest. */}
+          <div className="mt-3 flex flex-wrap gap-2">
+            {/* Fila inneholder BÅDE funn og markerte steder, så tallet må telle
+                begge — og knappen må finnes for en bruker som bare har
+                importert steder. Ellers ville importen vært en enveisdør. */}
+            <GpxEksportKnapp antall={totalFinds + steder.length} />
+            <GpxImportKnapp
+              eksisterende={steder.map((sted) => ({ latitude: sted.latitude, longitude: sted.longitude }))}
+              maks={MAKS_STEDER_PER_BRUKER}
+            />
+          </div>
         </header>
+
+        {stederError ? (
+          <p className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+            {t('placesLoadError')}
+          </p>
+        ) : (
+          <MarkerteSteder steder={steder} />
+        )}
 
         {/* Tom er ikke det samme som feilet. Ved en forbigående spørrefeil
             (RLS-endring, pool-metning, timeout) rendret siden tidligere
@@ -151,7 +187,7 @@ export default async function MineStederPage() {
             <h2 className="font-serif text-lg font-semibold text-amber-900">{t('loadErrorHeading')}</h2>
             <p className="mt-1 text-sm text-amber-900">{t('loadErrorBody')}</p>
           </article>
-        ) : spots.length === 0 ? (
+        ) : spots.length === 0 && steder.length === 0 ? (
           <article className="rounded-2xl bg-white p-6 text-center shadow-card">
             <p className="text-4xl">🍄</p>
             <h2 className="mt-2 font-serif text-xl font-semibold text-forest-900">{t('emptyHeading')}</h2>
