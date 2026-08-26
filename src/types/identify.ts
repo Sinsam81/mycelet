@@ -35,7 +35,14 @@ export interface IdentifySuggestion {
 }
 
 export interface IdentifyResultPayload {
+  /** Første (og viktigste) bilde — hero på resultatsiden og funnfotoet ved lagring. */
   originalImageDataUrl: string;
+  /**
+   * Alle innsendte bilder i rekkefølge (1–3: hatt, underside, stilk).
+   * Valgfri: payloads skrevet før flerbilde (åpne faner, gammel sessionStorage)
+   * mangler feltet — lesere må falle tilbake til [originalImageDataUrl].
+   */
+  originalImageDataUrls?: string[];
   location: {
     latitude: number | null;
     longitude: number | null;

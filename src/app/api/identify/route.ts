@@ -8,6 +8,7 @@ import { getClientKey, rateLimitResponse } from '@/lib/rate-limit/route';
 import { createRequestLogger } from '@/lib/log/request';
 import { seasonFitForSpecies, rankOrder } from '@/lib/utils/identify-ranking';
 import { coarsenLocation } from '@/lib/privacy/coarsen-location';
+import { normalizeIdentifyImages } from '@/lib/utils/identify-images';
 import { getSpeciesDisplayName } from '@/lib/utils/species-name';
 import { getUserLocale } from '@/i18n/locale';
 import { DEFAULT_LOCALE, type Locale } from '@/i18n/config';
@@ -43,6 +44,10 @@ const ERRORS = {
   image_too_large: {
     nb: 'Bildet er for stort',
     sv: 'Bilden är för stor'
+  },
+  too_many_images: {
+    nb: 'Maks tre bilder per identifisering',
+    sv: 'Max tre bilder per identifiering'
   },
   provider_failed: {
     nb: 'Identifikasjon feilet. Prøv igjen.',
@@ -81,7 +86,10 @@ type PlantIdSuggestion = {
 };
 
 type IdentifyRequest = {
-  image: string;
+  /** Gammel enkeltbilde-form — godtas fortsatt (tester + åpne faner under deploy). */
+  image?: string;
+  /** Flerbilde: inntil tre bilder av SAMME sopp (hatt, underside, stilk). */
+  images?: string[];
   latitude?: number;
   longitude?: number;
 };
@@ -191,16 +199,15 @@ export async function POST(request: NextRequest) {
     }
 
     const body = (await request.json()) as IdentifyRequest;
-    if (!body.image) {
-      userLog.warn('identify.missing_image');
-      return errorResponse('missing_image', 400, locale);
+    // Grensene (antall, per bilde, totalt) og bakoverkompatibiliteten med den
+    // gamle `image`-formen bor i normalizeIdentifyImages — avvis absurde
+    // payloads FØR vi betaler for et Kindwise-kall.
+    const normalized = normalizeIdentifyImages(body);
+    if (!normalized.ok) {
+      userLog.warn(`identify.${normalized.error}`);
+      return errorResponse(normalized.error, 400, locale);
     }
-    // The client sends a ~1500px re-encoded JPEG (well under 2 MB of base64).
-    // Reject absurd payloads before paying for a Kindwise call.
-    if (typeof body.image !== 'string' || body.image.length > 8_000_000) {
-      userLog.warn('identify.image_too_large');
-      return errorResponse('image_too_large', 400, locale);
-    }
+    const images = normalized.images;
 
     // Grovkorn posisjonen FØR den forlater oss. Leverandøren bruker den til å
     // vekte artsforslag regionalt, og trenger derfor ikke å vite mer enn
@@ -220,7 +227,9 @@ export async function POST(request: NextRequest) {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        images: [body.image],
+        // Inntil tre bilder av samme sopp = ÉN identifisering og én kreditt
+        // hos Kindwise (deres SDK: «one identification composed of N images»).
+        images,
         similar_images: true,
         language: 'no',
         details: ['common_names', 'taxonomy', 'description', 'edibility'],

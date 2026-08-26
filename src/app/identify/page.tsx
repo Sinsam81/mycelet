@@ -1,6 +1,6 @@
 'use client';
 
-import { Camera, Info, Search, Sparkles } from 'lucide-react';
+import { Camera, Info, Search, Sparkles, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -9,7 +9,8 @@ import { PageWrapper } from '@/components/layout/PageWrapper';
 import { Button } from '@/components/ui/Button';
 import { getCurrentPositionOnce } from '@/lib/hooks/useGeolocation';
 import { IdentifyError, useIdentify } from '@/lib/hooks/useIdentify';
-import { optimizeImageForIdentification } from '@/lib/utils/image';
+import { base64ToBlob, optimizeImageForIdentification } from '@/lib/utils/image';
+import { MAX_TOTAL_BASE64_CHARS } from '@/lib/utils/identify-images';
 import { isNativePlatform } from '@/lib/native/platform';
 import { captureNativePhoto } from '@/lib/native/camera';
 
@@ -42,16 +43,83 @@ export default function IdentifyPage() {
     };
   }, []);
 
+  // Inntil tre bilder av SAMME sopp i tre FASTE felt: oversikt/hatt,
+  // undersiden, stilken. Kindwise tar dem i ÉN identifisering (én kreditt, én
+  // kvoteenhet), og deres egen FAQ sier at tre bilder holder. Undersiden er
+  // uthevet med vilje: skiver mot årer er selve skillet mellom traktkantarell
+  // og dødelig spiss giftslørsopp.
+  //
+  // Staten er FELT-indeksert (null = tomt felt), ikke en kompakt liste: med
+  // en liste ville fjerning av bilde 1 skjøvet undersiden-bildet opp under
+  // «Hatt»-etiketten — etikettene skal aldri kunne lyve om innholdet. Hvert
+  // felt kan fylles og tas om igjen uavhengig, i valgfri rekkefølge.
+  //
+  // Forhåndsvisningen er en blob-URL, ikke en data-URL: en data-URL ville
+  // vært en full kopi av base64-strengen til (opptil megabyte store) bilder,
+  // altså dobbelt minne per bilde på telefoner med lite å gå på.
+  type Foto = { base64: string; previewUrl: string };
+  const [photos, setPhotos] = useState<(Foto | null)[]>([null, null, null]);
+  const [optimizing, setOptimizing] = useState(false);
+  // Hvilket felt neste valgte fil skal inn i.
+  const targetSlotRef = useRef(0);
+  const filled = photos.filter((p): p is Foto => p !== null);
+
+  // Blob-URL-ene må frigis, ellers lekker hvert omtatte bilde til fanen dør.
+  const photosRef = useRef(photos);
+  photosRef.current = photos;
+  useEffect(() => {
+    return () => {
+      for (const p of photosRef.current) if (p) URL.revokeObjectURL(p.previewUrl);
+    };
+  }, []);
+
   const handleFile = async (file: File) => {
     setError(null);
     setAiDisabled(false);
     setQuotaMessage(null);
+    setOptimizing(true);
 
     try {
       // One EXIF-free re-encode serves both the AI call and the saved find
       // photo — the raw file (with GPS metadata) never leaves the device.
       const optimizedBase64 = await optimizeImageForIdentification(file);
 
+      // Samme totaltak som serveren (identify-images.ts). Uten denne vakta
+      // ville en payload over Vercels 4,5 MB-tak dødd som HTML-413 FØR ruta —
+      // brukeren hadde fått rå browser-engelsk i stedet for en forklaring.
+      const sumEtter =
+        photosRef.current.reduce((s, p, idx) => (p && idx !== targetSlotRef.current ? s + p.base64.length : s), 0) +
+        optimizedBase64.length;
+      if (sumEtter > MAX_TOTAL_BASE64_CHARS) {
+        setError(t('photosTooLarge'));
+        return;
+      }
+
+      const slot = targetSlotRef.current;
+      setPhotos((prev) => {
+        const neste = [...prev];
+        const gammel = neste[slot];
+        if (gammel) URL.revokeObjectURL(gammel.previewUrl);
+        neste[slot] = {
+          base64: optimizedBase64,
+          previewUrl: URL.createObjectURL(base64ToBlob(optimizedBase64, 'image/jpeg'))
+        };
+        return neste;
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('couldNotGetImage'));
+    } finally {
+      setOptimizing(false);
+    }
+  };
+
+  const handleIdentify = async () => {
+    if (filled.length === 0) return;
+    setError(null);
+    setAiDisabled(false);
+    setQuotaMessage(null);
+
+    try {
       // Posisjonen hentes FØRST her, ikke ved mount.
       //
       // Siden kalte useGeolocation() i toppen av komponenten, så iOS spurte om
@@ -65,14 +133,25 @@ export default function IdentifyPage() {
       // identifiseringen videre uten koordinater.
       const coords = await getCurrentPositionOnce().catch(() => null);
 
+      // Data-URL-ene bygges først HER: resultat- og lagringsflyten leser dem
+      // fra sessionStorage (blob-URL-er overlever ikke serialisering).
       const result = await identify.mutateAsync({
-        imageBase64: optimizedBase64,
-        originalImageDataUrl: `data:image/jpeg;base64,${optimizedBase64}`,
+        imagesBase64: filled.map((p) => p.base64),
+        originalImageDataUrls: filled.map((p) => `data:image/jpeg;base64,${p.base64}`),
         latitude: coords?.latitude,
         longitude: coords?.longitude
       });
 
-      sessionStorage.setItem('identifyResult', JSON.stringify(result));
+      // Kvotefeil HER ville vært grusomt: Kindwise-kallet er alt betalt og
+      // kvoteenheten brukt. Tre bilder kan presse sessionStorage-kvoten, så
+      // faller full payload, prøver vi igjen med bare første bilde (resultatet
+      // og lagringsflyten overlever; stripen med ekstra bilder ofres).
+      try {
+        sessionStorage.setItem('identifyResult', JSON.stringify(result));
+      } catch {
+        const slank = { ...result, originalImageDataUrls: [result.originalImageDataUrl] };
+        sessionStorage.setItem('identifyResult', JSON.stringify(slank));
+      }
       router.push('/identify/result');
     } catch (err) {
       // fetch rejects with a TypeError whose message is browser-English
@@ -99,7 +178,8 @@ export default function IdentifyPage() {
     }
   };
 
-  const handleCapture = async () => {
+  const handleCapture = async (slot: number) => {
+    targetSlotRef.current = slot;
     if (!isNativePlatform()) {
       fileInputRef.current?.click();
       return;
@@ -192,8 +272,11 @@ export default function IdentifyPage() {
         </div>
 
         <div className="rounded-2xl bg-white p-4 shadow-card">
-          <div className="mb-3 rounded-xl border-2 border-dashed border-gray-300 p-6 text-center">
+          <div className="mb-3 rounded-xl border-2 border-dashed border-gray-300 p-4 text-center">
             <p className="text-sm text-gray-700">{t('centerHint')}</p>
+            {/* «Samme sopp» står eksplisitt: to ULIKE sopper i ett kall kan gi
+                en selvsikker kimære-ID der hver del ser riktig ut hver for seg. */}
+            <p className="mt-1 text-xs font-medium text-amber-800">{t('sameMushroomHint')}</p>
           </div>
 
           <input
@@ -205,13 +288,93 @@ export default function IdentifyPage() {
             onChange={(event) => {
               const file = event.target.files?.[0];
               if (file) void handleFile(file);
+              // Samme fil skal kunne velges på nytt etter fjerning.
+              event.target.value = '';
             }}
           />
 
+          {/* Tre merkede felt i stedet for en anonym filliste: feltnavnene ER
+              veiledningen, og bilder ligger fast i feltet sitt — fjerning kan
+              aldri skyve et undersidebilde inn under «Hatt»-etiketten.
+              Undersiden er uthevet — skiver mot årer er skillet som redder
+              liv i traktkantarell-sesongen. */}
+          <div className="mb-3 grid grid-cols-3 gap-2">
+            {(
+              [
+                [t('slotOverview'), false],
+                [t('slotUnderside'), true],
+                [t('slotStem'), false]
+              ] as const
+            ).map(([label, emphasized], i) => {
+              const photo = photos[i];
+              const venterHer = optimizing && targetSlotRef.current === i;
+              return photo ? (
+                <div key={label} className="relative overflow-hidden rounded-xl border border-gray-200">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={photo.previewUrl} alt={label} className="h-24 w-full object-cover" />
+                  <button
+                    type="button"
+                    aria-label={t('removePhoto', { label })}
+                    onClick={() =>
+                      setPhotos((prev) => {
+                        const neste = [...prev];
+                        const gammel = neste[i];
+                        if (gammel) URL.revokeObjectURL(gammel.previewUrl);
+                        neste[i] = null;
+                        return neste;
+                      })
+                    }
+                    className="absolute right-1 top-1 rounded-full bg-black/60 p-1 text-white"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                  <p className="truncate bg-white px-1.5 py-1 text-[10px] font-medium text-gray-600">{label}</p>
+                </div>
+              ) : (
+                <button
+                  key={label}
+                  type="button"
+                  onClick={() => void handleCapture(i)}
+                  disabled={optimizing}
+                  className={`flex h-[6.5rem] flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed p-1 text-center text-[11px] font-medium disabled:opacity-40 ${
+                    emphasized
+                      ? 'border-amber-400 bg-amber-50 text-amber-900'
+                      : 'border-gray-300 text-gray-600 hover:border-forest-300'
+                  }`}
+                >
+                  {venterHer ? (
+                    <span
+                      aria-hidden
+                      className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent"
+                    />
+                  ) : (
+                    <Camera className="h-4 w-4" aria-hidden />
+                  )}
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            <Button onClick={handleCapture} loading={identify.isPending} icon={<Camera className="h-4 w-4" />}>
-              {t('takeOrChoosePhoto')}
-            </Button>
+            {filled.length === 0 ? (
+              <Button
+                onClick={() => void handleCapture(0)}
+                loading={optimizing}
+                icon={<Camera className="h-4 w-4" />}
+              >
+                {t('takeOrChoosePhoto')}
+              </Button>
+            ) : (
+              <Button
+                onClick={handleIdentify}
+                loading={identify.isPending}
+                disabled={optimizing}
+                icon={<Sparkles className="h-4 w-4" />}
+              >
+                {t('identifyNow', { count: filled.length })}
+              </Button>
+            )}
             <Button variant="outline" icon={<Search className="h-4 w-4" />} onClick={() => router.push('/species')}>
               {t('searchDb')}
             </Button>
