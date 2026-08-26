@@ -4,6 +4,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 're
 import { useLocale, useTranslations } from 'next-intl';
 import { Camera } from 'lucide-react';
 import { buildUserUploadPath } from '@/lib/storage/upload-path';
+import { lagreDelingsnivaStandard, lesDelingsnivaStandard } from '@/lib/findings/delingsniva';
 import { createClient } from '@/lib/supabase/client';
 import { getSpeciesDisplayName } from '@/lib/utils/species-name';
 import { Button } from '@/components/ui/Button';
@@ -42,7 +43,12 @@ interface AddFindingSheetProps {
   fallbackLatitude?: number | null;
   fallbackLongitude?: number | null;
   onClose: () => void;
-  onSaved: (speciesName?: string) => void;
+  /**
+   * sharingMode følger med så kartet kan reagere på synligheten: et privat
+   * funn er usynlig i standardlaget (public_findings ekskluderer private), og
+   * uten dette leses «lagret!» + et kart uten funnet som at lagringen feilet.
+   */
+  onSaved: (speciesName?: string, sharingMode?: SharingMode) => void;
 }
 
 interface SpeciesOption {
@@ -74,7 +80,12 @@ export function AddFindingSheet({
   const [speciesOptions, setSpeciesOptions] = useState<SpeciesOption[]>([]);
   const [speciesId, setSpeciesId] = useState<number | null>(null);
   const [notes, setNotes] = useState('');
-  const [sharingMode, setSharingMode] = useState<SharingMode>('approximate');
+  // Starter på brukerens forrige valg (kun lagret lokalt — se delingsniva.ts);
+  // velgeren er alltid synlig, og samme standard gjelder i AI-resultatflyten
+  // så de to lagringsflatene aldri viser hver sin «standard».
+  const [sharingMode, setSharingMode] = useState<SharingMode>(
+    () => lesDelingsnivaStandard() ?? 'approximate'
+  );
   const [zoneLabel, setZoneLabel] = useState('');
   const [zonePrecisionKm, setZonePrecisionKm] = useState(5);
   const [positionOffsetMeters, setPositionOffsetMeters] = useState(0);
@@ -188,14 +199,18 @@ export function AddFindingSheet({
 
       const adjusted = applyPositionOffset(lagretLat, lagretLng, positionOffsetMeters, offsetBearing);
       const isNegative = findingType === 'negative';
-      // No image for negative observations — there's nothing to photograph.
-      const imageUrl = !isNegative && imageFile ? await uploadImage(imageFile) : null;
       const visibility: Visibility = sharingMode === 'zone' ? 'approximate' : (sharingMode as Visibility);
       const isZoneFinding = sharingMode === 'zone';
 
+      // Valideringen FØR bildeopplastingen: et manglende sonenavn skal ikke
+      // etterlate et foreldreløst bilde i finding-images-bøtta — og med husket
+      // sone-standard åpner arket oftere i sonemodus, så feilen ble vanligere.
       if (isZoneFinding && !zoneLabel.trim()) {
         throw new Error(t('errorZoneLabelRequired'));
       }
+
+      // No image for negative observations — there's nothing to photograph.
+      const imageUrl = !isNegative && imageFile ? await uploadImage(imageFile) : null;
 
       const saveResponse = await fetch('/api/findings', {
         method: 'POST',
@@ -219,7 +234,7 @@ export function AddFindingSheet({
         const body = await saveResponse.json().catch(() => null);
         throw new Error(body?.error || t('errorSaveFinding'));
       }
-      onSaved(speciesQuery || undefined);
+      onSaved(speciesQuery || undefined, sharingMode);
     } catch (err) {
       setError(err instanceof Error ? err.message : t('errorSaveFinding'));
     } finally {
@@ -375,7 +390,11 @@ export function AddFindingSheet({
           {t('sharingLevel')}
           <select
             value={sharingMode}
-            onChange={(event) => setSharingMode(event.target.value as SharingMode)}
+            onChange={(event) => {
+              const valgt = event.target.value as SharingMode;
+              setSharingMode(valgt);
+              lagreDelingsnivaStandard(valgt);
+            }}
             className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2"
           >
             <option value="public">{t('sharingPublic')}</option>

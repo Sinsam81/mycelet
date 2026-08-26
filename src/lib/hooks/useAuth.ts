@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { Session, User } from '@supabase/supabase-js';
 import { createClient } from '@/lib/supabase/client';
+import { nullstillDelingsnivaStandard } from '@/lib/findings/delingsniva';
 import { TERMS_VERSION } from '@/lib/legal';
 import { ensureProfileOnce } from '@/lib/auth/profile-self-heal';
 
@@ -100,6 +101,9 @@ export function useAuth() {
   const signOut = async () => {
     const { error } = await supabase.auth.signOut();
     if (error) throw error;
+    // Husket delingsnivå er enhetsglobalt — skal ikke arves av (eller vises
+    // for) nestemann som logger inn på en delt enhet.
+    nullstillDelingsnivaStandard();
   };
 
   return {

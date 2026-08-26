@@ -403,7 +403,11 @@
   },
   "IdentifyResult": {
     "errorNotLoggedIn": "Du må være logget inn for å lagre funn.",
-    "errorMissingGps": "GPS-posisjon mangler. Ta nytt bilde med lokasjon aktivert.",
+    "errorMissingGps": "GPS-posisjon mangler. Trykk «Hent posisjonen min» over for å bruke posisjonen der du står.",
+    "missingGpsNotice": "Bildet mangler posisjon, så funnet kan ikke lagres ennå. Du kan hente posisjonen der du står nå — merk at det ikke nødvendigvis er der bildet ble tatt.",
+    "fetchLocation": "Hent posisjonen min",
+    "locationSet": "Posisjon hentet 📍",
+    "locationFailed": "Fikk ikke hentet posisjonen. Sjekk at appen har lov til å bruke stedstjenester, og prøv igjen.",
     "saveSuccess": "Funn lagret! 🍄",
     "errorSaveFailed": "Kunne ikke lagre funn.",
     "loading": "Laster resultat...",

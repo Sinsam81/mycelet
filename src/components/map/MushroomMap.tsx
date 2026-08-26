@@ -127,7 +127,17 @@ const initialFilters: MapFilterState = {
   onlyMine: false
 };
 
-export function MushroomMap() {
+export function MushroomMap({
+  /**
+   * true = start med «Kun mine funn» på. Brukes av /map?mine=1, som
+   * lagringsflytene navigerer til: et nylagret privat funn er usynlig i
+   * standardlaget (public_findings ekskluderer private), og «Funn lagret!»
+   * etterfulgt av et kart uten funnet leses som at lagringen feilet.
+   */
+  startWithOnlyMine = false
+}: {
+  startWithOnlyMine?: boolean;
+} = {}) {
   const t = useTranslations('MushroomMap');
   const locale = useLocale();
   // Trengs for popup-rotene under: de er løsrevne React-røtter uten tilgang
@@ -206,7 +216,9 @@ export function MushroomMap() {
   const supabase = useRef(createClient()).current;
   const { latitude, longitude, error: geoError } = useGeolocation();
 
-  const [filters, setFilters] = useState<MapFilterState>(initialFilters);
+  const [filters, setFilters] = useState<MapFilterState>(() =>
+    startWithOnlyMine ? { ...initialFilters, onlyMine: true } : initialFilters
+  );
   const [showAddSheet, setShowAddSheet] = useState(false);
   /**
    * Posisjonen «Legg til funn» skal bruke når GPS ikke er å få tak i.
@@ -2307,9 +2319,17 @@ export function MushroomMap() {
           fallbackLatitude={addSheetFallback?.lat ?? null}
           fallbackLongitude={addSheetFallback?.lng ?? null}
           onClose={() => setShowAddSheet(false)}
-          onSaved={(speciesName) => {
+          onSaved={(speciesName, sharingMode) => {
             setShowAddSheet(false);
-            void loadFindings();
+            if (sharingMode === 'private' && !filters.onlyMine) {
+              // Et privat funn er usynlig i standardlaget (public_findings
+              // ekskluderer private) — slå på «Kun mine funn» så brukeren SER
+              // det de nettopp lagret. Filterendringen trigger loadFindings
+              // via useEffect-en som avhenger av filters.
+              setFilters((f) => ({ ...f, onlyMine: true }));
+            } else {
+              void loadFindings();
+            }
             if (tripActiveRef.current) addTripFind(speciesName);
           }}
         />
