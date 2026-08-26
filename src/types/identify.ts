@@ -35,8 +35,33 @@ export interface IdentifySuggestion {
 }
 
 export interface IdentifyResultPayload {
-  /** Første (og viktigste) bilde — hero på resultatsiden og funnfotoet ved lagring. */
-  originalImageDataUrl: string;
+  /**
+   * Raden i identifiseringshistorikken denne visningen hører til.
+   *
+   * null når historikkraden ikke ble skrevet (databasefeil — identifiseringen
+   * gikk likevel bra). Da skal klienten hverken laste opp et historikkbilde
+   * eller prøve å koble et lagret funn til en rad som ikke finnes.
+   */
+  identificationId?: string | null;
+  /**
+   * Stien historikkbildet skal lastes opp til i den private bøtta. Regnet ut av
+   * serveren ved innsetting (den er determinert av rad-id-en), så klienten
+   * slipper både et ekstra oppslag og en ekstra skriveoperasjon.
+   */
+  historyImagePath?: string | null;
+  /**
+   * Første (og viktigste) bilde — hero på resultatsiden og funnfotoet ved lagring.
+   *
+   * To former, med vilje:
+   *   • `data:image/jpeg;base64,…` når visningen kommer rett fra en
+   *     identifisering (bildet ligger fortsatt i økta)
+   *   • en signert `https://…supabase.co/…`-URL når visningen er hydrert fra
+   *     historikken (bildet ligger i den private bøtta)
+   * Lagringsflyten må håndtere begge — se handleSave på resultatsiden.
+   *
+   * null kun ved hydrering fra historikken uten bevart bilde.
+   */
+  originalImageDataUrl: string | null;
   /**
    * Alle innsendte bilder i rekkefølge (1–3: hatt, underside, stilk).
    * Valgfri: payloads skrevet før flerbilde (åpne faner, gammel sessionStorage)
@@ -55,4 +80,10 @@ export interface IdentifyResultPayload {
    * betyr da IKKE at det er trygt — bare at vi ikke vet.
    */
   safetyDataIncomplete?: boolean;
+  /**
+   * Satt ved hydrering fra historikken når identifiseringen ALLEREDE er lagret
+   * som funn. Da skal resultatsiden vise det i stedet for å invitere til en
+   * duplikat-lagring.
+   */
+  savedFindingId?: string | null;
 }

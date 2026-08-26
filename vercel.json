@@ -18,8 +18,12 @@
       "schedule": "0 7 * * *"
     },
     {
-      "path": "/api/cron/purge-deleted-findings",
+      "path": "/api/cron/purge-identifications",
       "schedule": "30 3 * * *"
+    },
+    {
+      "path": "/api/cron/purge-deleted-findings",
+      "schedule": "0 4 * * *"
     }
   ]
 }

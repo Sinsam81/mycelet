@@ -57,6 +57,10 @@ vi.mock('@/lib/supabase/server', () => {
   const table = (name: string) => {
     const builder: Record<string, unknown> = {
       select: () => builder,
+      // Historikkraden (migrasjon 055) skrives med ØKTKLIENTEN. Uten denne
+      // ville insert kastet, og recordIdentification ville svelget kastet —
+      // skrivestien hadde vært helt utestet.
+      insert: async () => ({ error: null }),
       ilike: () => builder,
       in: () => builder,
       gte: () => builder,

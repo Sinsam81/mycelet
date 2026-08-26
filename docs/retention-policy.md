@@ -19,6 +19,8 @@
 | Forum-innlegg + kommentarer             | **Beholdes så lenge konto eksisterer**, men anonymiseres ved konto-sletting | Bevarer forum-tråder ved sletting (ellers blir tråder ulesbare) |
 | Reports filed AV bruker (rapporter andre) | **Beholdes så lenge konto eksisterer**   | Trenger logg over modererings-historikk                    |
 | Reports filed OM bruker                 | **Slettes 1 år etter løsning**           | Etter behandlet sak er det ikke lenger nødvendig           |
+| AI-identifiseringshistorikk (`identifications` + bildene) | **12 måneder** — rad og bilde slettes av `/api/cron/purge-identifications` | Historikken er et mellomlager, ikke et arkiv: det brukeren vil beholde, lagrer de som funn. Bruker kan slette enkeltrader når som helst. Gir ett sesongtilbakeblikk og et hardt tak på lagringskostnaden (Supabase Free: 1 GB totalt). |
+| AI-kvoteteller (`ai_identifications`)   | **7 dager**                              | Kun de siste 24 timene leses noen gang (migrasjon 020); resten er feilsøkingsmargin |
 | `admin_audit_log`                       | **7 år**                                 | Bokføringsloven (krav om revisjons-spor)                   |
 | `billing_subscriptions`                 | **5 år**                                 | Bokføringsloven (regnskapsdokumenter, jf. lov om bokføring §13) |
 | Stripe webhook-events (`billing_webhook_events`) | **2 år**                          | Debug-historikk; sjelden trengt etter et år               |
@@ -81,6 +83,12 @@ Begrunnelse: Negative observasjoner er prediksjons-modellens viktigste signal-ki
 Tre planlagte oppgaver, foreslås kjørt via Vercel Cron eller Supabase Edge:
 
 ```
+@daily 03:30 — purge_identifications          ✅ IMPLEMENTERT (Vercel Cron)
+  Slett identifications-rader eldre enn 12 mnd — BILDET FØRST, så raden.
+  (Motsatt rekkefølge etterlater bilder ingenting peker på: usynlige for
+  brukeren og for neste kjøring, men fortsatt lagret hos oss.)
+  Rydder samtidig ai_identifications eldre enn 7 dager.
+
 @daily 03:00 — purge_inactive_accounts
   Finn brukere uten innlogging på X år.
   Send varsel-e-post (90 dager før sletting).

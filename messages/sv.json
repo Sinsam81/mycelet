@@ -406,7 +406,8 @@
     "networkError": "Kunde inte nå servern. Kontrollera täckningen och försök igen.",
     "quotaHeading": "Du har använt upp dagens gratis AI-identifieringar",
     "quotaComeBackTomorrow": "Vänta till i morgon — kvoten nollställs efter 24 timmar",
-    "quotaSeePlans": "Se abonnemang"
+    "quotaSeePlans": "Se abonnemang",
+    "historyLink": "Mina identifieringar"
   },
   "IdentifyResult": {
     "errorNotLoggedIn": "Du måste vara inloggad för att spara fynd.",
@@ -442,7 +443,9 @@
     "sharingPublic": "Exakt punkt (offentlig)",
     "sharingApproximate": "Ungefärlig (±500m)",
     "sharingPrivate": "Privat",
-    "sharingHelp": "Så hamnar fyndet på kartan. ”Ungefärlig” visas för alla, men flyttat upp till 500 m från den riktiga platsen. ”Privat” visas bara för dig."
+    "sharingHelp": "Så hamnar fyndet på kartan. ”Ungefärlig” visas för alla, men flyttat upp till 500 m från den riktiga platsen. ”Privat” visas bara för dig.",
+    "historyImageMissing": "Bilden är inte bevarad",
+    "alreadySaved": "Redan sparad som fynd"
   },
   "MineSteder": {
     "metaTitle": "Mina platser",
@@ -477,7 +480,8 @@
     "sortRecent": "Senast besökt",
     "sortMostFinds": "Flest fynd",
     "noSearchHits": "Inga platser matchar ”{query}”.",
-    "searchHits": "{count} av {total} platser"
+    "searchHits": "{count} av {total} platser",
+    "identificationsLink": "Mina identifieringar"
   },
   "Home": {
     "timeAgoToday": "i dag",
@@ -574,7 +578,7 @@
     "collectPaymentTerm": "Betalningsdata",
     "collectPaymentDesc": "Om du köper en prenumeration: Stripe hanterar kortuppgifter direkt. Vi tar endast emot prenumerationsstatus, prisplan och periodens datum — aldrig kortnummer.",
     "collectImagesTerm": "Bilder du laddar upp",
-    "collectImagesDesc": "När du använder AI-identifiering skickas bilden till vår tredjepartsleverantör för svampigenkänning. Bilder sparas även på din profil för din fyndhistorik.",
+    "collectImagesDesc": "När du använder AI-identifiering skickas bilden till vår tredjepartsleverantör för svampigenkänning. Bilden lagras också hos oss: i din identifieringshistorik i 12 månader — även när du INTE sparar identifieringen som fynd — och permanent på fyndet om du sparar det. Historiken är bara synlig för dig, och du kan radera enskilda poster själv.",
     "legalBasisHeading": "3. Rättslig grund för behandling (GDPR art. 6)",
     "legalBasisContractLabel": "Avtal (art. 6.1 b)",
     "legalBasisContractDesc": "för att ge dig den tjänst du har registrerat dig för: konto, lagring av fynd, prediktion, forum.",
@@ -614,6 +618,8 @@
     "retentionForumDesc": "innehållet behålls så att trådarna förblir läsbara, men författaren ersätts med \"[raderad användare]\". Motivering: GDPR art. 17.3 a tillåter avvägning mot informations-/yttrandefrihet.",
     "retentionNegativeLabel": "Negativa observationer vid radering av konto:",
     "retentionNegativeDesc": "behålls i anonymiserad form (utan koppling till dig) som träningsdata för prediktionsmodellen — endast observationer med ungefärlig delningsnivå (±500 m); privata observationer raderas alltid.",
+    "retentionIdentificationsLabel": "AI-identifieringar:",
+    "retentionIdentificationsDesc": "historiken över dina identifieringar — bilden, artförslagen och positionen — behålls i 12 månader, därefter raderas rad och bild automatiskt. Du kan radera enskilda poster när som helst. Sparar du en identifiering som fynd gäller fyndens egen lagringstid ovan.",
     "retentionPaymentLabel": "Betalningsdata (faktura, prenumeration):",
     "retentionPaymentDesc": "behålls i 5 år, enligt norska bokföringslagen § 13.",
     "retentionAuditLabel": "Revisionslogg (admin_audit_log):",
@@ -791,7 +797,8 @@
     "likesCount": "{count} gilla-markeringar",
     "adminLink": "Admin — statistik & verktyg",
     "forumLink": "Forumet",
-    "myReports": "Mina rapporteringar"
+    "myReports": "Mina rapporteringar",
+    "myIdentifications": "Mina identifieringar"
   },
   "Sikkerhet": {
     "pageTitle": "Säkerhet och ansvar",
@@ -1696,5 +1703,30 @@
     "contactBefore": "Får du det ändå inte att fungera, skicka ett mejl till",
     "contactAfter": ", så gör vi det åt dig.",
     "toFrontpage": "Till startsidan"
+  },
+  "Identifiseringer": {
+    "metaTitle": "Mina identifieringar",
+    "eyebrow": "Bara synlig för dig",
+    "heading": "Mina identifieringar",
+    "intro": "Allt du har kört genom AI-identifieringen.",
+    "summary": "{count, plural, =1 {# identifiering} other {# identifieringar}} de senaste 12 månaderna.",
+    "emptyHeading": "Inga identifieringar än",
+    "emptyBody": "Ta en bild på en svamp, så hamnar förslaget här — och du kan spara det som fynd när du vill.",
+    "identifyNow": "Identifiera en svamp",
+    "loadErrorHeading": "Kunde inte hämta historiken",
+    "loadErrorBody": "Det här är ett tillfälligt fel, inte en tom historik. Försök igen om en stund.",
+    "unknownSpecies": "Okänd art",
+    "probability": "{percent} % träff",
+    "photosAnalyzed": "{count, plural, =1 {1 bild analyserad} other {# bilder analyserade}} · vi sparar den första",
+    "nearPlace": "Nära {lat}, {lng}",
+    "noLocation": "Utan position",
+    "saveAsFinding": "Spara som fynd",
+    "savedBadge": "Sparad som fynd",
+    "openMap": "Se på kartan",
+    "delete": "Radera",
+    "deleteConfirm": "Radera den här identifieringen? Bilden raderas också. Ett fynd du redan har sparat ligger kvar.",
+    "deleted": "Identifieringen är raderad",
+    "deleteFailed": "Kunde inte radera. Försök igen.",
+    "retentionNote": "Identifieringar raderas automatiskt efter 12 månader. Vill du behålla ett ställe för gott sparar du det som fynd — fynd behålls så länge du har konto."
   }
 }

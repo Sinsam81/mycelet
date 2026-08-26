@@ -9,7 +9,7 @@
  * on the map. Re-encoding also shrinks uploads (faster on forest networks).
  */
 
-function drawToCanvas(file: File, maxDim: number): Promise<HTMLCanvasElement> {
+function drawToCanvas(file: Blob, maxDim: number): Promise<HTMLCanvasElement> {
   return new Promise((resolve, reject) => {
     const img = new Image();
 
@@ -68,6 +68,32 @@ export function dataUrlToBlob(dataUrl: string): Blob {
   if (!base64) throw new Error('Ugyldig bilde-data.');
   const mimeType = header.match(/^data:([^;]+)/)?.[1] ?? 'application/octet-stream';
   return base64ToBlob(base64, mimeType);
+}
+
+/**
+ * Historikk-kopien av et identifiseringsbilde.
+ *
+ * Tar base64-strengen som ALLEREDE er sendt til Kindwise (altså den
+ * EXIF-frie 1500 px-versjonen) og krymper den videre til historikkstørrelse.
+ * Vi går bevisst ut fra den og ikke fra originalfila: den er allerede
+ * metadata-fri, og brukeren skal aldri kunne havne i at historikken bærer
+ * GPS-en fra kamerarullen selv om identifiseringen ikke gjorde det.
+ *
+ * Størrelsen er valgt etter Supabase-planen — se HISTORY_IMAGE_MAX_DIM.
+ */
+export async function reencodeBase64ForHistory(
+  base64: string,
+  maxDim: number,
+  quality: number
+): Promise<Blob> {
+  const canvas = await drawToCanvas(base64ToBlob(base64, 'image/jpeg'), maxDim);
+  return new Promise((resolve, reject) => {
+    canvas.toBlob(
+      (blob) => (blob ? resolve(blob) : reject(new Error('Kunne ikke komprimere bilde.'))),
+      'image/jpeg',
+      quality
+    );
+  });
 }
 
 /** EXIF-free base64 JPEG (max 1500px) for the AI identification call. */

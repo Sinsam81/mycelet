@@ -406,7 +406,8 @@
     "networkError": "Fikk ikke kontakt med serveren. Sjekk dekningen og prøv igjen.",
     "quotaHeading": "Du har brukt opp dagens gratis AI-identifikasjoner",
     "quotaComeBackTomorrow": "Vente til i morgen — kvoten nullstilles etter 24 timer",
-    "quotaSeePlans": "Se abonnement"
+    "quotaSeePlans": "Se abonnement",
+    "historyLink": "Mine identifiseringer"
   },
   "IdentifyResult": {
     "errorNotLoggedIn": "Du må være logget inn for å lagre funn.",
@@ -442,7 +443,9 @@
     "sharingPublic": "Eksakt punkt (offentlig)",
     "sharingApproximate": "Omtrentlig (±500m)",
     "sharingPrivate": "Privat",
-    "sharingHelp": "Slik havner funnet på kartet. «Omtrentlig» vises for alle, men flyttet inntil 500 m fra det ekte stedet. «Privat» vises bare for deg."
+    "sharingHelp": "Slik havner funnet på kartet. «Omtrentlig» vises for alle, men flyttet inntil 500 m fra det ekte stedet. «Privat» vises bare for deg.",
+    "historyImageMissing": "Bildet er ikke bevart",
+    "alreadySaved": "Allerede lagret som funn"
   },
   "MineSteder": {
     "metaTitle": "Mine steder",
@@ -477,7 +480,8 @@
     "sortRecent": "Sist besøkt",
     "sortMostFinds": "Flest funn",
     "noSearchHits": "Ingen steder matcher «{query}».",
-    "searchHits": "{count} av {total} steder"
+    "searchHits": "{count} av {total} steder",
+    "identificationsLink": "Mine identifiseringer"
   },
   "Home": {
     "timeAgoToday": "i dag",
@@ -574,7 +578,7 @@
     "collectPaymentTerm": "Betalingsdata",
     "collectPaymentDesc": "Hvis du kjøper et abonnement: Stripe håndterer kort-data direkte. Vi mottar kun abonnements-status, prisplan og periodes-datoer — aldri kortnummer.",
     "collectImagesTerm": "Bilder du laster opp",
-    "collectImagesDesc": "Når du bruker AI-identifikasjon, sendes bildet til vår tredjepartsleverandør for soppgjenkjenning. Bilder lagres også på din profil for funn-historikken din.",
+    "collectImagesDesc": "Når du bruker AI-identifikasjon, sendes bildet til vår tredjepartsleverandør for soppgjenkjenning. Bildet lagres også hos oss: i identifiseringshistorikken din i 12 måneder — også når du IKKE lagrer identifiseringen som funn — og permanent på funnet hvis du lagrer det. Historikken er bare synlig for deg, og du kan slette enkeltoppføringer selv.",
     "legalBasisHeading": "3. Lovlig grunnlag for behandling (GDPR Art. 6)",
     "legalBasisContractLabel": "Avtale (Art. 6(1)(b))",
     "legalBasisContractDesc": "for å gi deg tjenesten du har registrert deg for: konto, funn-oppbevaring, prediksjon, forum.",
@@ -614,6 +618,8 @@
     "retentionForumDesc": "innholdet beholdes så tråder forblir lesbare, men forfatter erstattes med \"[slettet bruker]\". Begrunnelse: GDPR Art. 17(3)(a) tillater avveining mot informasjons-/ytringsfrihet.",
     "retentionNegativeLabel": "Negative observasjoner ved konto-sletting:",
     "retentionNegativeDesc": "beholdes i anonymisert form (uten kobling til deg) som treningsdata for prediksjons-modellen — kun observasjoner med omtrentlig delingsnivå (±500 m); private observasjoner slettes alltid.",
+    "retentionIdentificationsLabel": "AI-identifiseringer:",
+    "retentionIdentificationsDesc": "historikken over identifiseringene dine — bildet, artsforslagene og posisjonen — beholdes i 12 måneder, deretter slettes rad og bilde automatisk. Du kan slette enkeltoppføringer når som helst. Lagrer du en identifisering som funn, følger funnet funnenes egen lagringstid over.",
     "retentionPaymentLabel": "Betalingsdata (faktura, abonnement):",
     "retentionPaymentDesc": "beholdes i 5 år, jf. bokføringsloven § 13.",
     "retentionAuditLabel": "Revisjonslogg (admin_audit_log):",
@@ -791,7 +797,8 @@
     "likesCount": "{count} likes",
     "adminLink": "Admin — statistikk & verktøy",
     "forumLink": "Forumet",
-    "myReports": "Mine rapporteringer"
+    "myReports": "Mine rapporteringer",
+    "myIdentifications": "Mine identifiseringer"
   },
   "Sikkerhet": {
     "pageTitle": "Sikkerhet og ansvar",
@@ -1696,5 +1703,30 @@
     "contactBefore": "Får du det fortsatt ikke til, send en e-post til",
     "contactAfter": ", så gjør vi det for deg.",
     "toFrontpage": "Til forsiden"
+  },
+  "Identifiseringer": {
+    "metaTitle": "Mine identifiseringer",
+    "eyebrow": "Bare synlig for deg",
+    "heading": "Mine identifiseringer",
+    "intro": "Alt du har kjørt gjennom AI-identifiseringen.",
+    "summary": "{count, plural, =1 {# identifisering} other {# identifiseringer}} de siste 12 månedene.",
+    "emptyHeading": "Ingen identifiseringer ennå",
+    "emptyBody": "Ta et bilde av en sopp, så havner forslaget her — og du kan lagre det som funn når du vil.",
+    "identifyNow": "Identifiser en sopp",
+    "loadErrorHeading": "Klarte ikke hente historikken",
+    "loadErrorBody": "Dette er en midlertidig feil, ikke en tom historikk. Prøv igjen om litt.",
+    "unknownSpecies": "Ukjent art",
+    "probability": "{percent} % treff",
+    "photosAnalyzed": "{count, plural, =1 {1 bilde analysert} other {# bilder analysert}} · vi tar vare på det første",
+    "nearPlace": "Nær {lat}, {lng}",
+    "noLocation": "Uten posisjon",
+    "saveAsFinding": "Lagre som funn",
+    "savedBadge": "Lagret som funn",
+    "openMap": "Se i kartet",
+    "delete": "Slett",
+    "deleteConfirm": "Slette denne identifiseringen? Bildet slettes også. Et funn du allerede har lagret, blir liggende.",
+    "deleted": "Identifiseringen er slettet",
+    "deleteFailed": "Kunne ikke slette. Prøv igjen.",
+    "retentionNote": "Identifiseringer slettes automatisk etter 12 måneder. Vil du beholde et sted for godt, lagrer du det som funn — funn beholdes så lenge du har konto."
   }
 }

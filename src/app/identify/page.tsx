@@ -9,10 +9,40 @@ import { PageWrapper } from '@/components/layout/PageWrapper';
 import { Button } from '@/components/ui/Button';
 import { getCurrentPositionOnce } from '@/lib/hooks/useGeolocation';
 import { IdentifyError, useIdentify } from '@/lib/hooks/useIdentify';
-import { base64ToBlob, optimizeImageForIdentification } from '@/lib/utils/image';
+import { base64ToBlob, optimizeImageForIdentification, reencodeBase64ForHistory } from '@/lib/utils/image';
+import { createClient } from '@/lib/supabase/client';
+import {
+  HISTORY_IMAGE_MAX_DIM,
+  HISTORY_IMAGE_QUALITY,
+  IDENTIFY_HISTORY_BUCKET
+} from '@/lib/identifications/config';
 import { MAX_TOTAL_BASE64_CHARS } from '@/lib/utils/identify-images';
 import { isNativePlatform } from '@/lib/native/platform';
 import { captureNativePhoto } from '@/lib/native/camera';
+
+/**
+ * Legger historikk-kopien av bilde 1 i den private bøtta.
+ *
+ * Kjøres UTEN await fra lagringsflyten: opplastingen skal ikke stå mellom
+ * brukeren og resultatet de nettopp betalte en kvoteenhet for. Klientnavigasjon
+ * laster ikke dokumentet på nytt, så forespørselen lever videre på
+ * resultatsiden.
+ *
+ * Stille ved feil, med vilje. Mislykkes den, peker image_path på et objekt som
+ * ikke finnes, og historikklista viser en plassholder i stedet for et bilde —
+ * selve identifiseringen er bevart uansett. Å vise en feil her ville vært å
+ * avbryte brukeren for noe de ikke ba om og ikke kan gjøre noe med.
+ */
+async function lastOppHistorikkbilde(base64: string, path: string): Promise<void> {
+  try {
+    const blob = await reencodeBase64ForHistory(base64, HISTORY_IMAGE_MAX_DIM, HISTORY_IMAGE_QUALITY);
+    await createClient()
+      .storage.from(IDENTIFY_HISTORY_BUCKET)
+      .upload(path, blob, { upsert: true, contentType: 'image/jpeg' });
+  } catch {
+    // se over
+  }
+}
 
 export default function IdentifyPage() {
   const t = useTranslations('Identify');
@@ -142,6 +172,14 @@ export default function IdentifyPage() {
         longitude: coords?.longitude
       });
 
+      // Historikkbildet legges opp i bakgrunnen. Ingen await — se
+      // lastOppHistorikkbilde. Hopper over hvis serveren ikke fikk skrevet
+      // raden: da ville bildet ligget uten noe som peker på det, og
+      // retensjonsjobben (som skanner rader) ville aldri funnet det igjen.
+      if (result.identificationId && result.historyImagePath) {
+        void lastOppHistorikkbilde(filled[0].base64, result.historyImagePath);
+      }
+
       // Kvotefeil HER ville vært grusomt: Kindwise-kallet er alt betalt og
       // kvoteenheten brukt. Tre bilder kan presse sessionStorage-kvoten, så
       // faller full payload, prøver vi igjen med bare første bilde (resultatet
@@ -197,9 +235,17 @@ export default function IdentifyPage() {
   return (
     <PageWrapper>
       <section className="space-y-4">
-        <header>
-          <p className="text-xs font-medium uppercase tracking-widest text-forest-700">{t('eyebrow')}</p>
-          <h1 className="mt-1 font-serif text-3xl font-bold tracking-tight text-forest-900">{t('title')}</h1>
+        <header className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-xs font-medium uppercase tracking-widest text-forest-700">{t('eyebrow')}</p>
+            <h1 className="mt-1 font-serif text-3xl font-bold tracking-tight text-forest-900">{t('title')}</h1>
+          </div>
+          <Link
+            href="/identifiseringer"
+            className="mt-1 shrink-0 text-xs font-semibold text-forest-800 underline"
+          >
+            {t('historyLink')} →
+          </Link>
         </header>
 
         {aiDisabled ? (

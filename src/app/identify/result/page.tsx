@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { Suspense, useEffect, useMemo, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { PageWrapper } from '@/components/layout/PageWrapper';
 import { IdentifyResult } from '@/components/identify/IdentifyResult';
@@ -23,10 +23,17 @@ import { buildUserUploadPath } from '@/lib/storage/upload-path';
 import { dataUrlToBlob } from '@/lib/utils/image';
 import { IdentifyResultPayload } from '@/types/identify';
 
-export default function IdentifyResultPage() {
+function IdentifyResultView() {
   const t = useTranslations('IdentifyResult');
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
+  // ?id= betyr «vis denne raden fra identifiseringshistorikken igjen».
+  // Historikklista lenker HIT i stedet for å ha sin egen lagre-knapp: da er
+  // det den samme siden, den samme porten og den samme forvekslingssjekken
+  // som gjelder uansett hvor lagringen starter. En egen knapp i lista ville
+  // gitt en bekreftelse uten advarselen som gir bekreftelsen mening.
+  const searchParams = useSearchParams();
+  const historyId = searchParams.get('id');
 
   const [payload, setPayload] = useState<IdentifyResultPayload | null>(null);
   const [saving, setSaving] = useState(false);
@@ -54,6 +61,24 @@ export default function IdentifyResultPage() {
   const [acknowledged, setAcknowledged] = useState(false);
 
   useEffect(() => {
+    if (historyId) {
+      // Hydrering fra historikken. Ruta kjører sikkerhetsberikelsen PÅ NYTT —
+      // den lagrede JSON-en brukes aldri som fasit for forvekslingsarter eller
+      // artsnavn, slik at en rad fra i fjor får dagens data og dagens språk.
+      let avbrutt = false;
+      fetch(`/api/identifications/${encodeURIComponent(historyId)}`)
+        .then((r) => (r.ok ? r.json() : Promise.reject(new Error('kunne ikke hente'))))
+        .then((data: IdentifyResultPayload) => {
+          if (!avbrutt) setPayload(data);
+        })
+        .catch(() => {
+          if (!avbrutt) router.replace('/identifiseringer');
+        });
+      return () => {
+        avbrutt = true;
+      };
+    }
+
     const raw = sessionStorage.getItem('identifyResult');
     if (!raw) {
       router.replace('/identify');
@@ -65,7 +90,7 @@ export default function IdentifyResultPage() {
     } catch {
       router.replace('/identify');
     }
-  }, [router]);
+  }, [router, historyId]);
 
   const topSuggestion = payload?.suggestions?.[0];
   // Treat unknown/unmapped edibility as dangerous too: a Kindwise suggestion
@@ -105,8 +130,15 @@ export default function IdentifyResultPage() {
       let imageUrl: string | null = null;
       if (payload.originalImageDataUrl) {
         try {
-          // Decode locally — fetch('data:…') is blocked by the CSP's connect-src.
-          const blob = dataUrlToBlob(payload.originalImageDataUrl);
+          // To kilder, avhengig av hvor visningen kom fra:
+          //   • data:-URL (fersk identifisering) — dekodes LOKALT, fordi
+          //     fetch('data:…') stoppes av connect-src i den håndhevede CSP-en.
+          //   • signert https-URL (hydrert fra historikken) — der ligger bildet
+          //     i den private bøtta, og må hentes ned før det kan legges i den
+          //     offentlige funn-bøtta. supabase.co står i connect-src.
+          const blob = payload.originalImageDataUrl.startsWith('data:')
+            ? dataUrlToBlob(payload.originalImageDataUrl)
+            : await (await fetch(payload.originalImageDataUrl)).blob();
           const fileName = buildUserUploadPath(user.id);
           const { error: uploadError } = await supabase.storage
             .from('finding-images')
@@ -144,6 +176,21 @@ export default function IdentifyResultPage() {
         const body = await saveResponse.json().catch(() => null);
         throw new Error(body?.error || t('errorSaveFailed'));
       }
+      // Koble historikkraden til funnet, slik at lista kan vise «lagret som
+      // funn» i stedet for å invitere til en duplikat-lagring. Best effort:
+      // funnet ER lagret, og en feilet kobling skal ikke se ut som at det ikke
+      // gikk. Verste utfall er at raden kan lagres én gang til.
+      if (payload.identificationId) {
+        const lagretFunnId = (await saveResponse.json().catch(() => null))?.id;
+        if (lagretFunnId) {
+          await fetch(`/api/identifications/${encodeURIComponent(payload.identificationId)}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ findingId: lagretFunnId })
+          }).catch(() => undefined);
+        }
+      }
+
       toast.success(t('saveSuccess'));
       // Gyllent øyeblikk: brukeren fotograferte, identifiserte og LAGRET et
       // funn. Spør (maks én gang noensinne, kun i appskallet) om en
@@ -194,7 +241,18 @@ export default function IdentifyResultPage() {
         ) : null}
 
         <div className="overflow-hidden rounded-2xl bg-white shadow-card">
-          <img src={payload.originalImageDataUrl} alt={t('imageAlt')} className="h-56 w-full object-cover" />
+          {/* Bildet kan mangle når visningen er hydrert fra historikken (gammel
+              rad, eller en opplasting som aldri kom fram). En plassholder som
+              sier fra er bedre enn et knekt bilde. */}
+          {payload.originalImageDataUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={payload.originalImageDataUrl} alt={t('imageAlt')} className="h-56 w-full object-cover" />
+          ) : (
+            <div className="flex h-56 w-full flex-col items-center justify-center gap-1 bg-gray-100 text-sm text-gray-600">
+              <span aria-hidden className="text-4xl">🍄</span>
+              {t('historyImageMissing')}
+            </div>
+          )}
           {/* Alle innsendte bilder vises — brukeren skal SE hva som ble
               analysert (to ulike sopper i ett kall kan gi en selvsikker
               kimære-ID; stripen gjør blandingen synlig). Hero-bildet over ER
@@ -312,9 +370,18 @@ export default function IdentifyResultPage() {
         </div>
 
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-          <Button onClick={handleSave} loading={saving} disabled={!acknowledged || fetchingPosition}>
-            {t('saveAsFinding')}
-          </Button>
+          {payload.savedFindingId ? (
+            // Allerede lagret. Lagre-knappen skjules i stedet for å deaktiveres:
+            // en grå knapp forklarer ingenting, og to funn på samme sopp fra
+            // samme bilde er støy i brukerens eget kart.
+            <Button variant="outline" onClick={() => router.push('/map?mine=1')}>
+              {t('alreadySaved')}
+            </Button>
+          ) : (
+            <Button onClick={handleSave} loading={saving} disabled={!acknowledged || fetchingPosition}>
+              {t('saveAsFinding')}
+            </Button>
+          )}
           <Button variant="outline" onClick={() => router.push('/identify')}>
             {t('takeNewPhoto')}
           </Button>
@@ -324,5 +391,24 @@ export default function IdentifyResultPage() {
         </div>
       </section>
     </PageWrapper>
+  );
+}
+
+/**
+ * useSearchParams() krever Suspense for at Next skal kunne prerendere sida —
+ * samme mønster som /auth/login, /forum/new og /pricing. Uten wrapperen feiler
+ * `npm run build`, ikke kjøretiden, så den er lett å glemme.
+ */
+export default function IdentifyResultPage() {
+  return (
+    <Suspense
+      fallback={
+        <PageWrapper>
+          <p className="text-sm text-gray-700">…</p>
+        </PageWrapper>
+      }
+    >
+      <IdentifyResultView />
+    </Suspense>
   );
 }

@@ -142,6 +142,10 @@ export default async function MineStederPage() {
               <GpxEksportKnapp antall={totalFinds} />
             </div>
           ) : null}
+          {/* Historikken er nabosida: det som ennå ikke er blitt et sted. */}
+          <Link href="/identifiseringer" className="mt-3 inline-block text-xs font-semibold text-forest-800 underline">
+            🔍 {t('identificationsLink')} →
+          </Link>
         </header>
 
         {/* Tom er ikke det samme som feilet. Ved en forbigående spørrefeil

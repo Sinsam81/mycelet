@@ -38,6 +38,17 @@ Dette er bug-klassen som rammet oss i prod (svensk kart blankt, fast i Oslo, dø
 - [ ] 🖐️ Manuell (kvote-/kostnadsavhengig): last opp ett kjent soppbilde → får forslag + forvekslings-sjekk (look-alike). Kjøres sjelden, ikke i hver loop (Kindwise-kreditter).
 - [ ] 🖐️ Manuell lagringsflyt (skriver til prod — kjøres sjelden): bekreftelses-boksen må krysses AKTIVT (aldri forhåndskrysset), delingsnivå-velgeren er synlig og starter på forrige lokalt lagrede valg (nullstilles ved utlogging), ved manglende GPS vises notis + «Hent posisjonen min» som henter posisjon UTEN ny AI-identifisering, og etter lagring lander man på `/map?mine=1` med «Kun mine funn» på (automatisert lese-sjekk av landingen finnes i `e2e/map-geo.e2e.ts`).
 
+### 2b. Identifiseringshistorikk (`/identifiseringer`)
+
+- [ ] `/identifiseringer` laster (innlogget) og viser lista, eller tom-tilstanden «Ingen identifiseringer ennå» — **ikke** feilkortet.
+- [ ] Utlogget: `/identifiseringer` sender til `/auth/login?redirect=/identifiseringer` (gating på sidenivå, så den virker også lokalt der middleware ikke kjører).
+- [ ] Hver rad viser miniatyr (eller 🍄-plassholder), artsnavn på riktig språk, dato og posisjon.
+- [ ] «Lagre som funn» er en LENKE til `/identify/result?id=…` — lista skal aldri lagre selv. Klikk den: resultatsiden viser samme bilde, samme forvekslingssjekk, **umerket** bekreftelsesboks og synlig delingsnivå-velger.
+- [ ] En allerede lagret rad viser «Lagret som funn» + «Se i kartet», og resultatsiden tilbyr da ikke lagring på nytt.
+- [ ] 🖐️ Sletting (skriver til prod): «Slett» spør om bekreftelse, raden forsvinner etter `router.refresh()`, og bildet er borte fra `identify-history`-bøtta.
+- [ ] Bildene ligger i en PRIVAT bøtte: en signert URL fra lista skal virke, men samme sti uten signatur skal gi 400/403.
+- [ ] `GET /api/me/export` har med `identifications` og `_manifest.imageLinksComplete`, og `schemaVersion` er 4.
+
 ## 3. Prediksjon / «Lovende områder»
 
 - [ ] `GET /api/prediction?lat=59.91&lon=10.75` svarer 200 med gyldig JSON (eller dokumentert 502 hvis ingen værkilde — da er det en infra-sak, ikke en kodefeil).

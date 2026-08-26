@@ -173,9 +173,14 @@ export default async function ProfilePage() {
         <article className="rounded-2xl bg-white p-4 shadow-card">
           <div className="mb-3 flex items-center justify-between">
             <h2 className="font-semibold">{t('myLatestFindings')}</h2>
-            <Link href="/mine-steder" className="text-xs font-medium text-forest-800 hover:underline">
-              📍 {t('myPlaces')} →
-            </Link>
+            <div className="flex shrink-0 items-center gap-3">
+              <Link href="/identifiseringer" className="text-xs font-medium text-forest-800 hover:underline">
+                🔍 {t('myIdentifications')} →
+              </Link>
+              <Link href="/mine-steder" className="text-xs font-medium text-forest-800 hover:underline">
+                📍 {t('myPlaces')} →
+              </Link>
+            </div>
           </div>
           {findings.length === 0 ? (
             <p className="text-sm text-gray-700">{t('noFindingsYet')}</p>
