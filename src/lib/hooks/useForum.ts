@@ -445,6 +445,9 @@ export function useMyFindings() {
         .select('id,species_id,species_name_override,found_at,is_zone_finding,zone_label,zone_precision_km,mushroom_species:species_id(norwegian_name,swedish_name)')
         .eq('user_id', user.id)
         .eq('is_negative_observation', false)
+        // Et slettet funn skal ikke kunne velges som kobling på et nytt
+        // forum-innlegg (migrasjon 056).
+        .is('deleted_at', null)
         .order('found_at', { ascending: false })
         .limit(30);
 

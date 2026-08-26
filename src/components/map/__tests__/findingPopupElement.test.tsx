@@ -60,6 +60,32 @@ describe('findingPopupElement', () => {
     expect(html.length).toBeGreaterThan(100);
   });
 
+  /**
+   * Slette-knappen bor i FindingPopup, men eierskapet avgjøres av kartet og
+   * sendes gjennom denne fabrikken. Går et av de to leddene tapt i en
+   * refaktorering, forsvinner den eneste slette-veien i appen uten at noe
+   * annet blir rødt.
+   */
+  it('sender slette-muligheten videre til popupen', () => {
+    const html = renderToString(
+      findingPopupElement({
+        finding,
+        locale: 'nb',
+        messages: nb as unknown as Record<string, unknown>,
+        canDelete: true,
+        onDelete: async () => {}
+      })
+    );
+    expect(html).toContain('Slett funn');
+  });
+
+  it('viser ingen slette-knapp når funnet ikke er leserens eget', () => {
+    const html = renderToString(
+      findingPopupElement({ finding, locale: 'nb', messages: nb as unknown as Record<string, unknown> })
+    );
+    expect(html).not.toContain('Slett funn');
+  });
+
   it('bruker det lokaliserte artsnavnet kartet sender inn', () => {
     const html = renderToString(
       findingPopupElement({

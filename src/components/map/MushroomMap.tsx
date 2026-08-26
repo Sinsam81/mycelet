@@ -1372,6 +1372,94 @@ export function MushroomMap({
     });
   };
 
+  /**
+   * Sletting av eget funn, fra popupen.
+   *
+   * Slettingen er MYK (migrasjon 056): raden får deleted_at, forsvinner fra
+   * alle lesesteder, og hard-slettes av /api/cron/purge-deleted-findings 30
+   * dager senere. Derfor kan varselet under tilby en ekte angreknapp — den
+   * skriver deleted_at tilbake til NULL, den gjenoppretter ikke noe.
+   *
+   * Angreknappen er ikke pynt. Dette er den eneste slette-flaten i appen, den
+   * betjenes med tommelen på en telefon i skogen, og et feilklikk her fjernet
+   * tidligere et funn for godt. To-trinns bekreftelse i popupen fanger de
+   * fleste feilklikkene; angreknappen fanger resten.
+   *
+   * Kartet — ikke popupen — eier dette, fordi det er kartet som må lukke
+   * popupen og tegne laget på nytt. Popupen lever i en løsrevet React-rot som
+   * Leaflet river ned i samme øyeblikk.
+   */
+  const restoreFinding = useCallback(
+    async (findingId: string) => {
+      try {
+        const res = await fetch(`/api/findings/${findingId}/restore`, { method: 'POST' });
+        if (!res.ok) throw new Error('restore failed');
+        await loadFindingsRef.current?.();
+        toast.success(t('findingRestored'));
+      } catch {
+        toast.error(t('findingRestoreFailed'));
+      }
+    },
+    [t]
+  );
+
+  const handleDeleteFinding = useCallback(
+    async (findingId: string) => {
+      const res = await fetch(`/api/findings/${findingId}`, { method: 'DELETE' });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        // Kastes videre til popupen, som viser den der brukeren ser på.
+        throw new Error(body?.details || body?.error || t('findingDeleteFailed'));
+      }
+
+      mapRef.current?.closePopup();
+      await loadFindingsRef.current?.();
+
+      // Strengene hentes HER, i et tre som har next-intl-provideren. Varselet
+      // rendres av <Toaster> et helt annet sted i treet, så det må få ferdig
+      // tekst — ikke en t()-kall som ville krevd provideren der borte.
+      const deletedText = t('findingDeleted');
+      const undoText = t('findingDeleteUndo');
+      toast(
+        (item) => (
+          <span className="flex items-center gap-3">
+            <span>{deletedText}</span>
+            <button
+              type="button"
+              onClick={() => {
+                toast.dismiss(item.id);
+                void restoreFinding(findingId);
+              }}
+              className="shrink-0 rounded-full bg-forest-800 px-3 py-1 text-xs font-semibold text-white hover:bg-forest-700"
+            >
+              {undoText}
+            </button>
+          </span>
+        ),
+        // Lengre enn standardvarselet (4 s): angreknappen er ubrukelig hvis
+        // den forsvinner før brukeren rekker å se at den var der.
+        { duration: 10_000, icon: '🗑️' }
+      );
+    },
+    [restoreFinding, t]
+  );
+
+  /**
+   * Stabil inngang til slettingen.
+   *
+   * loadFindings er avhengighet i en useEffect som HENTER FUNN (linja med
+   * `void loadFindings()`), så alt som havner i dens deps-liste må ha stabil
+   * identitet — ellers henter kartet på nytt ved hver eneste render.
+   * handleDeleteFinding lukker over `t`, og det er ikke en garanti vi vil at
+   * kartets henteløkke skal hvile på. Samme ref-grep som loadFindingsRef
+   * bruker rett under.
+   */
+  const deleteFindingRef = useRef(handleDeleteFinding);
+  useEffect(() => {
+    deleteFindingRef.current = handleDeleteFinding;
+  }, [handleDeleteFinding]);
+  const deleteFinding = useCallback((findingId: string) => deleteFindingRef.current(findingId), []);
+
   const loadFindings = useCallback(async () => {
     const map = mapRef.current;
     const clusters = clusterRef.current;
@@ -1410,6 +1498,11 @@ export function MushroomMap({
             )
             .eq('user_id', currentUserId)
             .eq('is_negative_observation', false)
+            // «Kun mine funn» leser tabellen direkte, ikke public_findings, så
+            // deleted_at-filteret i viewet (migrasjon 056) gjelder ikke her.
+            // Uten denne linja ville et funn brukeren nettopp slettet blitt
+            // tegnet igjen ved neste panorering.
+            .is('deleted_at', null)
             .gte('latitude', bounds.getSouth())
             .lte('latitude', bounds.getNorth())
             .gte('longitude', bounds.getWest())
@@ -1467,7 +1560,12 @@ export function MushroomMap({
           displayName:
             finding.species_id != null ? speciesNamesRef.current.get(finding.species_id) : undefined,
           locale,
-          messages: messages as Record<string, unknown>
+          messages: messages as Record<string, unknown>,
+          // Kun eierens egne funn. Det offentlige laget viser andres nåler
+          // også, og public_findings har user_id, så sammenligningen holder
+          // begge lagene i sjakk.
+          canDelete: currentUserId != null && finding.user_id === currentUserId,
+          onDelete: deleteFinding
         })
       );
       popupRootsRef.current.push(popupRoot);
@@ -1480,7 +1578,7 @@ export function MushroomMap({
 
       clusters.addLayer(marker);
     }
-  }, [currentUserId, currentUsername, filters, supabase, locale, messages]);
+  }, [currentUserId, currentUsername, filters, supabase, locale, messages, deleteFinding]);
 
   useEffect(() => {
     loadFindingsRef.current = loadFindings;

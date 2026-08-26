@@ -104,6 +104,10 @@ export async function GET(request: NextRequest) {
   // has many rows in exports as [], a one-per-user row exports as null.
   const datasets = {
     profile: { shape: 'one', query: supabase.from('profiles').select('*').eq('id', user.id).maybeSingle() },
+    // Uten deleted_at-filter, med vilje: art. 15 gjelder det vi FAKTISK
+    // lagrer om deg. Et funn du har slettet ligger hos oss i inntil 30 dager
+    // til (migrasjon 056 + /api/cron/purge-deleted-findings), og da skal det
+    // stå i uttrekket — med `deleted_at` synlig, så du ser at det er slettet.
     findings: { shape: 'many', query: supabase.from('findings').select('*').eq('user_id', user.id) },
     forumPosts: { shape: 'many', query: supabase.from('forum_posts').select('*').eq('user_id', user.id) },
     comments: { shape: 'many', query: supabase.from('comments').select('*').eq('user_id', user.id) },

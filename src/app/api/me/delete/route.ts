@@ -24,6 +24,9 @@ import {
  *
  *   STEP 1 (this handler, BEFORE auth deletion): explicitly delete the
  *     rows that should NOT be anonymized, and coarsen what is kept:
+ *       - every finding the user had ALREADY deleted themselves
+ *         (deleted_at IS NOT NULL, migration 056) — those must never
+ *         come back as anonymized training data
  *       - all positive findings (any visibility)
  *       - every negative finding whose visibility is NOT 'approximate'
  *         (both 'private' and 'public' — the declaration promises that
@@ -135,7 +138,10 @@ export async function POST(request: NextRequest) {
       .select('id', { count: 'exact', head: true })
       .eq('user_id', user.id)
       .eq('is_negative_observation', true)
-      .eq('visibility', RETAINED_VISIBILITY),
+      .eq('visibility', RETAINED_VISIBILITY)
+      // Det brukeren allerede har slettet, slettes av STEP 1a — det skal ikke
+      // stå i kvitteringen som «beholdt i anonymisert form».
+      .is('deleted_at', null),
     supabase.from('forum_posts').select('id', { count: 'exact', head: true }).eq('user_id', user.id),
     supabase.from('comments').select('id', { count: 'exact', head: true }).eq('user_id', user.id),
     supabase.from('post_likes').select('post_id', { count: 'exact', head: true }).eq('user_id', user.id),
@@ -178,6 +184,33 @@ export async function POST(request: NextRequest) {
         error: 'Kunne ikke fjerne dine personlige funn før kontosletting',
         // Leverandørens feilmelding blir i loggen. Brukeren trenger å vite hva
         // tilstanden er og hva de skal gjøre, ikke hva Postgres het.
+        details: RETRY_IS_SAFE
+      },
+      { status: 500 }
+    );
+  }
+
+  // STEP 1a — funn brukeren ALLEREDE har slettet selv.
+  //
+  // Soft delete (migrasjon 056) lar raden ligge i 30 dager for angrefristens
+  // skyld. Uten dette steget ville en slettet, negativ observasjon med
+  // visibility = 'approximate' sluppet gjennom STEP 1b (den filtrerer på
+  // synlighet, ikke på deleted_at) og blitt liggende som ANONYMISERT
+  // treningsdata etter kontoslettingen — et funn brukeren hadde slettet to
+  // ganger, først enkeltvis og så med hele kontoen.
+  //
+  // Ligger før 1b og 1b2 med vilje: da er de radene ute av veien før noe
+  // vurderer hva som skal beholdes.
+  const { error: softDeletedError } = await admin
+    .from('findings')
+    .delete()
+    .eq('user_id', user.id)
+    .not('deleted_at', 'is', null);
+  if (softDeletedError) {
+    userLog.error('account.self_delete.soft_deleted_purge_failed', softDeletedError);
+    return NextResponse.json(
+      {
+        error: 'Kunne ikke fjerne funn du allerede hadde slettet',
         details: RETRY_IS_SAFE
       },
       { status: 500 }

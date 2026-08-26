@@ -49,6 +49,14 @@ function builder(table: string, record: Operation[], resolve: (op: Operation) =>
       state.filters.push({ kind: 'in', column, value });
       return api;
     },
+    is: (column: string, value: unknown) => {
+      state.filters.push({ kind: 'is', column, value });
+      return api;
+    },
+    not: (column: string, operator: string, value: unknown) => {
+      state.filters.push({ kind: `not.${operator}`, column, value });
+      return api;
+    },
     then: (onFulfilled: (v: unknown) => unknown) => {
       record.push({ ...state, filters: [...state.filters] });
       return Promise.resolve(resolve(state)).then(onFulfilled);
@@ -146,6 +154,29 @@ describe('POST /api/me/delete', () => {
     // Var .eq('visibility', 'private') — da overlevde de OFFENTLIGE, med
     // eksakt koordinat, stikk i strid med erklæringen.
     expect(visibilityFilter).toEqual({ kind: 'neq', column: 'visibility', value: 'approximate' });
+  });
+
+  /**
+   * Soft delete (migrasjon 056) lar raden ligge i 30 dager. En negativ,
+   * 'approximate' observasjon som brukeren ALLEREDE hadde slettet ville ellers
+   * sluppet gjennom filteret på synlighet og blitt liggende som anonymisert
+   * treningsdata — slettet to ganger av brukeren, og likevel beholdt.
+   */
+  it('fjerner funn brukeren allerede hadde slettet selv', async () => {
+    await POST(makeRequest());
+
+    const softDelete = findingDeletes().find((op) =>
+      op.filters.some((f) => f.column === 'deleted_at')
+    );
+    expect(softDelete, 'ingen opprydding av soft-slettede funn').toBeDefined();
+    expect(softDelete!.filters).toContainEqual({
+      kind: 'not.is',
+      column: 'deleted_at',
+      value: null
+    });
+    // Uten synlighetsfilter: ALT brukeren har slettet skal med, også det
+    // negative og omtrentlige som ellers beholdes.
+    expect(softDelete!.filters.some((f) => f.column === 'visibility')).toBe(false);
   });
 
   it('sletter alle positive funn uansett delingsnivå', async () => {

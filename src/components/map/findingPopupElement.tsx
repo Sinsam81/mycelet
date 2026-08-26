@@ -10,6 +10,10 @@ interface FindingPopupElementArgs {
   displayName?: string;
   locale: string;
   messages: Record<string, unknown>;
+  /** Er funnet leserens eget? Avgjør om slette-knappen vises. */
+  canDelete?: boolean;
+  /** Kartets slettehandling — se FindingPopup for arbeidsdelingen. */
+  onDelete?: (findingId: string) => Promise<void>;
 }
 
 /**
@@ -31,13 +35,20 @@ export function findingPopupElement({
   finding,
   displayName,
   locale,
-  messages
+  messages,
+  canDelete,
+  onDelete
 }: FindingPopupElementArgs): ReactElement {
   return (
     // timeZone må settes eksplisitt: uten den bruker next-intl serverens
     // sone, og datoer i popupen kan bli en dag feil for leseren.
     <NextIntlClientProvider locale={locale} timeZone={timeZoneForLocale(locale)} messages={messages}>
-      <FindingPopup finding={finding} displayName={displayName} />
+      <FindingPopup
+        finding={finding}
+        displayName={displayName}
+        canDelete={canDelete}
+        onDelete={onDelete}
+      />
     </NextIntlClientProvider>
   );
 }
