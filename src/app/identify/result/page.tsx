@@ -195,6 +195,25 @@ export default function IdentifyResultPage() {
 
         <div className="overflow-hidden rounded-2xl bg-white shadow-card">
           <img src={payload.originalImageDataUrl} alt={t('imageAlt')} className="h-56 w-full object-cover" />
+          {/* Alle innsendte bilder vises — brukeren skal SE hva som ble
+              analysert (to ulike sopper i ett kall kan gi en selvsikker
+              kimære-ID; stripen gjør blandingen synlig). Hero-bildet over ER
+              bilde 1, så stripen begynner på bilde 2 — og alt-tekstene er
+              nummererte, ikke tre like på rad for en skjermleser. Feltet
+              mangler i payloads fra før flerbilde — da vises bare heroen. */}
+          {payload.originalImageDataUrls && payload.originalImageDataUrls.length > 1 ? (
+            <div className="flex gap-1 bg-white p-1">
+              {payload.originalImageDataUrls.slice(1).map((url, i) => (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  key={i}
+                  src={url}
+                  alt={t('photoAltIndexed', { n: i + 2, total: payload.originalImageDataUrls!.length })}
+                  className="h-14 w-14 rounded object-cover"
+                />
+              ))}
+            </div>
+          ) : null}
         </div>
 
         <p className="text-sm text-gray-700">{t('chooseSpeciesPrompt')}</p>

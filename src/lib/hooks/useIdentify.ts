@@ -15,8 +15,9 @@ export class IdentifyError extends Error {
 import { trackEvent } from '@/lib/analytics';
 
 interface IdentifyRequest {
-  imageBase64: string;
-  originalImageDataUrl: string;
+  /** Inntil tre bilder av SAMME sopp (hatt, underside, stilk), i visningsrekkefølge. */
+  imagesBase64: string[];
+  originalImageDataUrls: string[];
   latitude?: number;
   longitude?: number;
 }
@@ -25,22 +26,31 @@ export function useIdentify() {
   return useMutation({
     mutationFn: async (payload: IdentifyRequest): Promise<IdentifyResultPayload> => {
       trackEvent('identify_started', {
-        has_location: payload.latitude !== undefined && payload.longitude !== undefined
+        has_location: payload.latitude !== undefined && payload.longitude !== undefined,
+        image_count: payload.imagesBase64.length
       });
 
       const response = await fetch('/api/identify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          image: payload.imageBase64,
+          images: payload.imagesBase64,
           latitude: payload.latitude,
           longitude: payload.longitude
         })
       });
 
-      const data = await response.json();
-      if (!response.ok) {
-        trackEvent('identify_failed', { status: response.status, code: data?.code });
+      // Plattformnivå-feil (f.eks. Vercels 413 når kroppen passerer 4,5 MB)
+      // svarer med HTML, ikke rutens JSON-form — en ubetinget .json() ville
+      // kastet SyntaxError og vist rå browser-engelsk for brukeren.
+      let data: (Partial<IdentifyResultPayload> & { error?: string; code?: string }) | null = null;
+      try {
+        data = await response.json();
+      } catch {
+        data = null;
+      }
+      if (!response.ok || data == null) {
+        trackEvent('identify_failed', { status: response.status, code: data?.code ?? 'ukjent' });
         // Koden må overleve kastet. Uten den måtte klienten gjenkjenne
         // tilstanden på selve feilteksten — og en oversatt tekst matcher ikke
         // en norsk delstreng, så AI-deaktivert-panelet ville forsvunnet for
@@ -54,7 +64,10 @@ export function useIdentify() {
       });
 
       return {
-        originalImageDataUrl: payload.originalImageDataUrl,
+        // Første bilde er hero-/funnfotoet; hele lista vises som stripe på
+        // resultatsiden så brukeren SER hva som ble analysert.
+        originalImageDataUrl: payload.originalImageDataUrls[0],
+        originalImageDataUrls: payload.originalImageDataUrls,
         location: {
           latitude: payload.latitude ?? null,
           longitude: payload.longitude ?? null
