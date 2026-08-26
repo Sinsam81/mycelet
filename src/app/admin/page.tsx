@@ -222,7 +222,7 @@ export default async function AdminDashboardPage() {
 
   const fetchTopSpecies = async (limit = 5): Promise<Array<[string, number]>> => {
     // .is('deleted_at', null): admin-statistikken skal telle det brukerne
-    // faktisk har, ikke det de har slettet (migrasjon 055).
+    // faktisk har, ikke det de har slettet (migrasjon 056).
     const { data } = await admin
       .from('findings')
       .select('species_id,species_name_override')

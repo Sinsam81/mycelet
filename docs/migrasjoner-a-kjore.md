@@ -17,11 +17,11 @@ Alle seks er **idempotente** — kjører du en to ganger, gjør andre gang ingen
 | 043 | `043_geo_index_and_definer_hardening.sql` | Geo-indeks + låser `search_path` på fire SECURITY DEFINER-funksjoner | Ingen — indeks + herding |
 | 044 | `044_drop_unused_profile_settings.sql` | Slipper to ubrukte kolonner på `profiles` | **Destruktiv** — se under |
 
-## 055 — sletting av eget funn (lagt til 26. august 2026)
+## 056 — sletting av eget funn (lagt til 26. august 2026)
 
 | # | Fil | Hva den gjør | Risiko |
 |---|---|---|---|
-| 055 | `055_soft_delete_findings.sql` | Legger til `findings.deleted_at`, og filtrerer bort slettede funn i `public_findings`-viewet og `get_user_stats` | Ingen — én ny nullbar kolonne + to `CREATE OR REPLACE` |
+| 056 | `056_soft_delete_findings.sql` | Legger til `findings.deleted_at`, og filtrerer bort slettede funn i `public_findings`-viewet og `get_user_stats` | Ingen — én ny nullbar kolonne + to `CREATE OR REPLACE` |
 
 **Denne må kjøres før slette-knappen virker.** Til den er kjørt svarer
 appen «Funnet ditt er trygt og IKKE slettet» i stedet for å feile stille —

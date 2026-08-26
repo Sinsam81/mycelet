@@ -160,7 +160,7 @@ export default async function HomePage() {
       .select('species_id')
       .eq('user_id', user.id)
       .eq('is_negative_observation', false)
-      // Slettede funn (migrasjon 055) skal ikke telle på statistikk-kortet.
+      // Slettede funn (migrasjon 056) skal ikke telle på statistikk-kortet.
       .is('deleted_at', null)
       .limit(1000);
     // Statistikkortet forsvinner uansett hvis spørringa feiler (userStats

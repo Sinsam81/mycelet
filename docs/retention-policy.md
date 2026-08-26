@@ -14,7 +14,7 @@
 | Datatype                                | Foreslått frist                          | Hvorfor det forslaget                                      |
 |-----------------------------------------|------------------------------------------|------------------------------------------------------------|
 | Inaktive kontoer                        | **3 år** uten innlogging → e-post + 90 dg → slett | Lang nok for sesongbrukere; kort nok til å unngå dataopphoping |
-| Funn (positive + negative)              | **Beholdes så lenge konto eksisterer**   | Brukerens egne data, kjerne-funksjon. Bruker kan slette enkeltfunn når som helst, fra kartpopupen (migrasjon 055) |
+| Funn (positive + negative)              | **Beholdes så lenge konto eksisterer**   | Brukerens egne data, kjerne-funksjon. Bruker kan slette enkeltfunn når som helst, fra kartpopupen (migrasjon 056) |
 | Funn brukeren selv har slettet          | **30 dager** — `deleted_at` settes med én gang, `/api/cron/purge-deleted-findings` hard-sletter raden og bildet etterpå | Angrevindu. Sletting skjer med tommelen på en telefon i skogen; uten frist er et feilklikk endelig |
 | Forum-innlegg + kommentarer             | **Beholdes så lenge konto eksisterer**, men anonymiseres ved konto-sletting | Bevarer forum-tråder ved sletting (ellers blir tråder ulesbare) |
 | Reports filed AV bruker (rapporter andre) | **Beholdes så lenge konto eksisterer**   | Trenger logg over modererings-historikk                    |
@@ -29,7 +29,7 @@
 
 ## Sletting av eget funn — myk, med 30 dagers frist
 
-Lagt til 26. august 2026 (migrasjon 055). Fram til da fantes det ingen vei ut av
+Lagt til 26. august 2026 (migrasjon 056). Fram til da fantes det ingen vei ut av
 et feilregistrert funn: RLS tillot sletting, men ingen flate brukte den, så
 eneste utvei var å slette hele kontoen.
 
@@ -51,7 +51,7 @@ eneste utvei var å slette hele kontoen.
   «identifiser → lagre → slett» gitt en ny gratis runde hver gang.
 
 Vinduet på 30 dager står fire steder og må holdes i takt: her, i
-`PURGE_AFTER_DAYS`, i kommentaren på `findings.deleted_at` (migrasjon 055), og i
+`PURGE_AFTER_DAYS`, i kommentaren på `findings.deleted_at` (migrasjon 056), og i
 personvernerklæringen (`Personvern.retentionActiveDesc`, nb + sv).
 
 ## Tre beslutninger — låst 9. mai 2026

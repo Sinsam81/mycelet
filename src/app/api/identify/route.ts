@@ -178,7 +178,7 @@ export async function POST(request: NextRequest) {
       // saved-find count, so identify keeps working rather than failing.
       if (usageCount === null) {
         // MERK: ingen .is('deleted_at', null) her, og det er med vilje.
-        // Alle andre lesesteder filtrerer bort slettede funn (migrasjon 055),
+        // Alle andre lesesteder filtrerer bort slettede funn (migrasjon 056),
         // men kvoten teller KALL, ikke funn. Filtrerte vi her, ville
         // «identifiser → lagre → slett» gitt en ny gratis AI-runde hver gang.
         const { count: legacy, error: legacyError } = await supabase

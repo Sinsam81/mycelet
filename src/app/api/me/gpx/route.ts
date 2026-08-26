@@ -62,7 +62,7 @@ export async function GET(request: NextRequest) {
       .eq('user_id', user.id)
       .eq('is_negative_observation', false)
       // Et slettet funn skal ikke dukke opp igjen som veipunkt på GPS-en
-      // (migrasjon 055).
+      // (migrasjon 056).
       .is('deleted_at', null)
       .order('found_at', { ascending: false })
       .range(fra, fra + SIDE - 1);

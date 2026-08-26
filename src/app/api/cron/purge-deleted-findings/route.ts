@@ -7,7 +7,7 @@ import { FINDING_IMAGE_BUCKET, findingImagePaths } from '@/lib/storage/finding-i
 /**
  * Rydder funn brukeren har slettet, når angrefristen er ute.
  *
- * Sletting fra appen er MYK (migrasjon 055): raden får `deleted_at`, forsvinner
+ * Sletting fra appen er MYK (migrasjon 056): raden får `deleted_at`, forsvinner
  * overalt der funn vises, og kan angres. Denne jobben er den andre halvdelen —
  * uten den ville «slettede» funn ligget for alltid, og da er de ikke slettet.
  * GDPR art. 5(1)(e) er ikke oppfylt av at noe er usynlig.
@@ -28,7 +28,7 @@ export const maxDuration = 300;
  * Angrefristen. MÅ holdes i takt med tre andre steder:
  *   • docs/retention-policy.md
  *   • personvernerklæringen (Personvern.retentionActiveDesc i nb + sv)
- *   • kommentaren på findings.deleted_at (migrasjon 055)
+ *   • kommentaren på findings.deleted_at (migrasjon 056)
  * Endrer du tallet her, endre det der også — ellers lover vi noe annet enn vi
  * gjør.
  */

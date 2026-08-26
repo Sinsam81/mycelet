@@ -25,7 +25,7 @@ import {
  *   STEP 1 (this handler, BEFORE auth deletion): explicitly delete the
  *     rows that should NOT be anonymized, and coarsen what is kept:
  *       - every finding the user had ALREADY deleted themselves
- *         (deleted_at IS NOT NULL, migration 055) — those must never
+ *         (deleted_at IS NOT NULL, migration 056) — those must never
  *         come back as anonymized training data
  *       - all positive findings (any visibility)
  *       - every negative finding whose visibility is NOT 'approximate'
@@ -186,7 +186,7 @@ export async function POST(request: NextRequest) {
 
   // STEP 1a — funn brukeren ALLEREDE har slettet selv.
   //
-  // Soft delete (migrasjon 055) lar raden ligge i 30 dager for angrefristens
+  // Soft delete (migrasjon 056) lar raden ligge i 30 dager for angrefristens
   // skyld. Uten dette steget ville en slettet, negativ observasjon med
   // visibility = 'approximate' sluppet gjennom STEP 1b (den filtrerer på
   // synlighet, ikke på deleted_at) og blitt liggende som ANONYMISERT

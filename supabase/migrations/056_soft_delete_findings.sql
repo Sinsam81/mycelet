@@ -1,4 +1,4 @@
--- 055: Brukeren kan slette sine egne funn — med angrevei.
+-- 056: Brukeren kan slette sine egne funn — med angrevei.
 --
 -- BAKGRUNNEN
 -- RLS har siden migrasjon 001 hatt policyen «Brukere kan slette egne funn»

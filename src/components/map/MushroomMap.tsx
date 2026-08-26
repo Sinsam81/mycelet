@@ -1375,7 +1375,7 @@ export function MushroomMap({
   /**
    * Sletting av eget funn, fra popupen.
    *
-   * Slettingen er MYK (migrasjon 055): raden får deleted_at, forsvinner fra
+   * Slettingen er MYK (migrasjon 056): raden får deleted_at, forsvinner fra
    * alle lesesteder, og hard-slettes av /api/cron/purge-deleted-findings 30
    * dager senere. Derfor kan varselet under tilby en ekte angreknapp — den
    * skriver deleted_at tilbake til NULL, den gjenoppretter ikke noe.
@@ -1499,7 +1499,7 @@ export function MushroomMap({
             .eq('user_id', currentUserId)
             .eq('is_negative_observation', false)
             // «Kun mine funn» leser tabellen direkte, ikke public_findings, så
-            // deleted_at-filteret i viewet (migrasjon 055) gjelder ikke her.
+            // deleted_at-filteret i viewet (migrasjon 056) gjelder ikke her.
             // Uten denne linja ville et funn brukeren nettopp slettet blitt
             // tegnet igjen ved neste panorering.
             .is('deleted_at', null)

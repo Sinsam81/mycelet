@@ -446,7 +446,7 @@ export function useMyFindings() {
         .eq('user_id', user.id)
         .eq('is_negative_observation', false)
         // Et slettet funn skal ikke kunne velges som kobling på et nytt
-        // forum-innlegg (migrasjon 055).
+        // forum-innlegg (migrasjon 056).
         .is('deleted_at', null)
         .order('found_at', { ascending: false })
         .limit(30);

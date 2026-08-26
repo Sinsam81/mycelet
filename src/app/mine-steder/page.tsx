@@ -112,7 +112,7 @@ export default async function MineStederPage() {
     )
     .eq('user_id', user.id)
     .eq('is_negative_observation', false)
-    // Funn brukeren har slettet (migrasjon 055). De ligger i 30 dager til for
+    // Funn brukeren har slettet (migrasjon 056). De ligger i 30 dager til for
     // angrefristens skyld, men skal ikke telles eller vises noe sted.
     .is('deleted_at', null)
     .order('found_at', { ascending: false })

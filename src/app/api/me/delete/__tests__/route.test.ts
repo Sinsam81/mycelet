@@ -157,7 +157,7 @@ describe('POST /api/me/delete', () => {
   });
 
   /**
-   * Soft delete (migrasjon 055) lar raden ligge i 30 dager. En negativ,
+   * Soft delete (migrasjon 056) lar raden ligge i 30 dager. En negativ,
    * 'approximate' observasjon som brukeren ALLEREDE hadde slettet ville ellers
    * sluppet gjennom filteret på synlighet og blitt liggende som anonymisert
    * treningsdata — slettet to ganger av brukeren, og likevel beholdt.

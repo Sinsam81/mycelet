@@ -17,7 +17,7 @@ export const runtime = 'nodejs';
  *
  * SOFT DELETE. Raden får `deleted_at` og forsvinner overalt der funn vises,
  * men den finnes i 30 dager til slik at slettingen kan angres (se
- * migrasjon 055 og /api/cron/purge-deleted-findings, som hard-sletter raden og
+ * migrasjon 056 og /api/cron/purge-deleted-findings, som hard-sletter raden og
  * rydder bildet i Storage når fristen er ute).
  *
  * Hvorfor bildet IKKE ryddes her: angrer brukeren, skal funnet komme tilbake
