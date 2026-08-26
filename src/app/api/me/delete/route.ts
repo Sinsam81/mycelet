@@ -114,7 +114,8 @@ export async function POST(request: NextRequest) {
     commentsCount,
     likesCount,
     savedCount,
-    reportsCount
+    reportsCount,
+    identificationsCount
   ] = await Promise.all([
     supabase
       .from('findings')
@@ -139,7 +140,12 @@ export async function POST(request: NextRequest) {
     supabase.from('comments').select('id', { count: 'exact', head: true }).eq('user_id', user.id),
     supabase.from('post_likes').select('post_id', { count: 'exact', head: true }).eq('user_id', user.id),
     supabase.from('saved_posts').select('post_id', { count: 'exact', head: true }).eq('user_id', user.id),
-    supabase.from('reports').select('id', { count: 'exact', head: true }).eq('reporter_id', user.id)
+    supabase.from('reports').select('id', { count: 'exact', head: true }).eq('reporter_id', user.id),
+    // Identifiseringshistorikken. Ingen egen slettespørring under: FK-en mot
+    // auth.users er ON DELETE CASCADE (migrasjon 055), så radene går med i
+    // steg 2. Bildene ryddes i steg 1c — identify-history står i
+    // USER_IMAGE_BUCKETS. Telleren finnes for at kvitteringen skal si det.
+    supabase.from('identifications').select('id', { count: 'exact', head: true }).eq('user_id', user.id)
   ]);
 
   let admin;
@@ -285,6 +291,7 @@ export async function POST(request: NextRequest) {
     postLikes: likesCount.count ?? 0,
     savedPosts: savedCount.count ?? 0,
     reportsFiled: reportsCount.count ?? 0,
+    identifications: identificationsCount.count ?? 0,
     // Bildene er nå med i kvitteringen. Uten dette kunne brukeren ikke se at
     // de i det hele tatt ble fjernet — og før denne endringen ble de ikke det.
     uploadedImages: storageResult.removed

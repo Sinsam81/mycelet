@@ -5,6 +5,7 @@ import { checkRateLimit } from '@/lib/rate-limit';
 import { getClientKey, rateLimitResponse } from '@/lib/rate-limit/route';
 import { createRequestLogger } from '@/lib/log/request';
 import { LEGAL_ENTITY } from '@/lib/legal/entity';
+import { IDENTIFY_HISTORY_BUCKET } from '@/lib/identifications/config';
 
 /**
  * GDPR Article 15 — right of access.
@@ -126,7 +127,11 @@ export async function GET(request: NextRequest) {
     },
     // Tidspunktene for AI-identifiseringene dine (grunnlaget for dagskvoten).
     // Leses med tjenesterollen — se kommentaren over.
-    aiIdentifications: { shape: 'many', query: admin.from('ai_identifications').select('*').eq('user_id', user.id) }
+    aiIdentifications: { shape: 'many', query: admin.from('ai_identifications').select('*').eq('user_id', user.id) },
+    // Identifiseringshistorikken (migrasjon 055). I motsetning til
+    // ai_identifications har DENNE eier-RLS, så den leses med øktklienten som
+    // alt annet — det er tabellen brukeren selv ser på /identifiseringer.
+    identifications: { shape: 'many', query: supabase.from('identifications').select('*').eq('user_id', user.id) }
   };
 
   type DatasetKey = keyof typeof datasets;
@@ -161,13 +166,50 @@ export async function GET(request: NextRequest) {
     );
   }
 
+  // Bildene i identifiseringshistorikken ligger i en PRIVAT bøtte. En bar
+  // filsti er ikke et svar på et art. 15-krav — funnbildene er nåbare i dag
+  // bare fordi finding-images er offentlig. Hver rad får derfor en signert
+  // URL ved siden av stien.
+  //
+  // Signeringen feiler IKKE lukket, i motsetning til spørringene over, og det
+  // er et bevisst skille: metadataene i fila er komplette uansett, og et
+  // manglende bildevedlegg er noe annet enn et datasett som stille ble tomt.
+  // Feiler den, står stien der og _notes sier hva man gjør. Å nekte hele
+  // eksporten fordi ÉN signering røk ville gitt brukeren ingenting i stedet
+  // for nesten alt.
+  let imageLinksComplete = true;
+  const identificationRows = (results.identifications.data ?? []) as Array<Record<string, unknown>>;
+  const identificationPaths = identificationRows
+    .map((row) => row.image_path)
+    .filter((p): p is string => typeof p === 'string' && p.length > 0);
+  if (identificationPaths.length > 0) {
+    const { data: signed, error: signError } = await admin.storage
+      .from(IDENTIFY_HISTORY_BUCKET)
+      // Sju dager: lenge nok til at et nedlastet arkiv fortsatt virker når
+      // brukeren rekker å åpne det, kort nok til at en lekket fil ikke er en
+      // permanent nøkkel inn i bildene.
+      .createSignedUrls(identificationPaths, 60 * 60 * 24 * 7);
+    if (signError || !signed) {
+      imageLinksComplete = false;
+      userLog.warn('account.export.image_links_failed', { message: signError?.message });
+    } else {
+      const byPath = new Map(signed.map((entry) => [entry.path ?? '', entry.signedUrl ?? null]));
+      for (const row of identificationRows) {
+        const path = typeof row.image_path === 'string' ? row.image_path : null;
+        row.imageSignedUrl = path ? (byPath.get(path) ?? null) : null;
+        if (path && !row.imageSignedUrl) imageLinksComplete = false;
+      }
+    }
+  }
+
   const rowCount = (value: unknown) => (Array.isArray(value) ? value.length : value == null ? 0 : 1);
   const generatedAt = new Date().toISOString();
 
   const exportData = {
     exportedAt: generatedAt,
     // 3: la til spotFeedback, deletionWarning og aiIdentifications.
-    schemaVersion: 3,
+    // 4: la til identifications (AI-historikken) med signerte bilde-URL-er.
+    schemaVersion: 4,
     account: {
       userId: user.id,
       email: user.email ?? null,
@@ -182,7 +224,11 @@ export async function GET(request: NextRequest) {
       // Lets the recipient verify nothing was quietly dropped in transit, and
       // gives support something concrete to compare against a re-run.
       datasets: Object.fromEntries(keys.map((k) => [k, rowCount(results[k].data)])),
-      complete: true
+      complete: true,
+      // Egen flagg for bildelenkene, fordi de er det ene i denne fila som kan
+      // være ufullstendig uten at eksporten avbrytes. Står den false, mangler
+      // det vedlegg — og da skal det være mulig å se det, ikke gjettes.
+      imageLinksComplete
     },
     _notes: {
       gdprArticle: 'GDPR Art. 15 — Right of access.',
@@ -190,6 +236,7 @@ export async function GET(request: NextRequest) {
         'This export contains all rows in our database tied to your user_id. Public reference data (species, look-alikes, prediction tiles) is intentionally not included since it is not personal data about you.',
       completeness:
         'Every query behind this file succeeded. If any had failed you would have received an error instead of this file — we never ship a partial export as if it were complete.',
+      images: `Bilder i identifiseringshistorikken din ligger i et lukket lager. Hver rad under "identifications" har derfor et felt "imageSignedUrl" med en midlertidig nedlastingslenke som er gyldig i 7 dager fra tidspunktet øverst i fila. Er lenken utløpt eller tom, be om en ny eksport, eller kontakt ${LEGAL_ENTITY.privacyEmail}. Bilder knyttet til lagrede funn ligger på de vanlige URL-ene i "findings".`,
       dataAboutYouFromOthers: `Reports filed BY OTHER USERS about your content are not in this export to protect the reporter. Entries in our admin audit log that mention you (for example an administrator granting you verified-forager status) are also left out, because those rows identify the administrator as well. To request either, contact ${LEGAL_ENTITY.privacyEmail} — manual review required.`
     }
   };

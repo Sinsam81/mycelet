@@ -29,6 +29,7 @@ export default function robots(): MetadataRoute.Robots {
         // Krever innlogging — å krype dem gir bare omdirigeringer.
         '/profile',
         '/mine-steder',
+        '/identifiseringer',
         '/map',
         '/admin',
         '/forum/new',

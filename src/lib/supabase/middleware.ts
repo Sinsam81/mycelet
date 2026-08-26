@@ -23,7 +23,8 @@ export const PROTECTED_PATHS = [
   '/forum/reports',
   '/map',
   '/admin',
-  '/mine-steder'
+  '/mine-steder',
+  '/identifiseringer'
 ];
 
 /** Prefiksmatch: /admin dekker /admin/forum-trust, /map dekker /map?lat=… */

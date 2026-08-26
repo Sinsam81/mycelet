@@ -64,6 +64,10 @@ export function useIdentify() {
       });
 
       return {
+        // Historikkraden ruta nettopp skrev. null = ingen rad, og da skal
+        // hverken bildeopplastingen eller funn-koblingen forsøkes.
+        identificationId: (data as { identificationId?: string | null }).identificationId ?? null,
+        historyImagePath: (data as { imagePath?: string | null }).imagePath ?? null,
         // Første bilde er hero-/funnfotoet; hele lista vises som stripe på
         // resultatsiden så brukeren SER hva som ble analysert.
         originalImageDataUrl: payload.originalImageDataUrls[0],
