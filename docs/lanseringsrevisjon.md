@@ -95,7 +95,7 @@ krevde et oppslag mot ekte data for å se.
   RPC med bivirkninger. Det finnes ingen staging — én Supabase-instans, og den
   har ekte betalende kunder.
 - **Aldri tast et passord, aldri logg inn som en bruker.** Flater bak innlogging
-  verifiseres av Sindre, med presis instruks om hva han skal se etter. Det er en
+  verifiseres manuelt av eieren, med presis instruks om hva som skal ses etter. Det er en
   begrensning som skal stå i rapporten, ikke skjules.
 - Ikke hamre på egne produksjonsendepunkter for å bevise et poeng.
 
@@ -477,7 +477,7 @@ Dette er ikke teoretisk: ved gjennomgang av eksisterende svenske artsnavn viste
 
 ### Krever jurist
 
-- Om ansvarsfraskrivelsen i vilkårene holder. *Hvis galt: Sindre hefter
+- Om ansvarsfraskrivelsen i vilkårene holder. *Hvis galt: eieren hefter
   personlig — ØVERÅS APPS er et ENK, ikke et AS.*
 - GA4 og overføring til USA.
 - Om jitteren på «omtrentlig» er tilstrekkelig anonymisering. *Et posisjonslekk
@@ -486,7 +486,7 @@ Dette er ikke teoretisk: ved gjennomgang av eksisterende svenske artsnavn viste
 - Markedsføringen av det romlige signalet. *Hvis galt: krav om tilbakebetaling
   fra alle som kjøpte for «hvor»-funksjonen.*
 
-### Krever Sindre
+### Krever eieren
 
 - **Ansvars- og produktansvarsforsikring.** *Ett erstatningskrav etter forgiftning
   treffer privatøkonomien direkte. Dette er den største enkeltrisikoen ved å
@@ -560,13 +560,13 @@ reell feilklasse · tilgjengelighet · inkonsistent UX.
 
 Rapporten er ikke målet. En app som tåler lansering er målet.
 
-1. Sindre velger hva som fikses og i hvilken rekkefølge.
+1. Eieren velger hva som fikses og i hvilken rekkefølge.
 2. Én ting per PR, med **sveip etter søsken** — samme gale antakelse andre
    steder. Vanen har bevist seg gjentatte ganger: den svenske blanke-kart-feilen
    hadde et søsken i Göteborg-rutingen, og artsstablingen på kartet hadde et
    søsken i snittberegningen server-side.
 3. Verifiser hver fiks med teknikken som fant feilen — ikke en svakere.
-4. Deploy først når Sindre sier ok.
+4. Deploy først når eieren sier ok.
 5. Etter deploy: verifiser mot **produksjon**, ikke preview. Før i
    `docs/reports/deploys.md`.
 6. Når listen er tom: kjør del 2-verifiseringene på nytt. En fikset app er ikke

@@ -1,6 +1,6 @@
 # Artslista mot NSNFs normliste — et hull vi ikke visste om
 
-**Skrevet 2026-08-04.** Bakgrunn: Sindre videresendte en ekstern gjennomgang av
+**Skrevet 2026-08-04.** Bakgrunn: vi fikk videresendt en ekstern gjennomgang av
 artslista. Den inneholdt én påstand som viste seg å være en **sikkerhetsfeil i
 produksjon**.
 
@@ -57,7 +57,7 @@ Den samme oppslaget avslørte sju uoffisielle norske navn, rettet i `046`.
 
 # Kontrollen ble gjort — 2026-08-04
 
-**Utløst av Sindres spørsmål:** *«Kan vi ikke bare sette de vi er usikre på som
+**Utløst av spørsmålet:** *«Kan vi ikke bare sette de vi er usikre på som
 uspiselig istedenfor å ta sjansen på å si at de er spiselig hvis vi ikke er
 sikre?»*
 
@@ -118,7 +118,7 @@ varmes» (der blodrørsopp står). De har bevisst latt være å plassere honning
 der, fordi allergireaksjonene ikke forsvinner med koking. Vår gamle verdi la
 arten i nettopp den båsen normlisten holdt den utenfor.
 
-**Stankmorkel** er tilfellet Sindre spurte om, i ren form: ikke på normlisten, og
+**Stankmorkel** er tilfellet det ble spurt om, i ren form: ikke på normlisten, og
 vårt eget notat sa «noen reagerer selv etter koking». Da skal den ikke bære
 matsoppmerke.
 

@@ -50,11 +50,11 @@ describe('Logger', () => {
 
   it('redacts PII automatically in context', () => {
     const log = _createTestLogger({ level: 'info', writer: captured.writer });
-    log.info('user.signin', { email: 'sindre@x.no', apiKey: 'secret-123' });
+    log.info('user.signin', { email: 'ola@x.no', apiKey: 'secret-123' });
 
     const out = captured.lines[0].line;
-    expect(out).not.toContain('sindre@x.no');
-    expect(out).toContain('s***@x.no');
+    expect(out).not.toContain('ola@x.no');
+    expect(out).toContain('o***@x.no');
     expect(out).not.toContain('secret-123');
     expect(out).toContain('<redacted>');
   });

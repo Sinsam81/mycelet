@@ -12,7 +12,7 @@
       "runtimeExecutable": "/bin/sh",
       "runtimeArgs": [
         "-c",
-        "cd '/Users/sindreoveras/Documents/Dokumenter – Sindre sin MacBook Air/sopp appen/.claude/worktrees/goofy-saha-783884' && npx next start -p 3100"
+        "cd .claude/worktrees/goofy-saha-783884 && npx next start -p 3100"
       ],
       "port": 3100
     }

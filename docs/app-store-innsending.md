@@ -70,7 +70,7 @@ git-historikken — å slette dem fra filene stopper bare blødningen.
 |---|---|---|
 | `applereview@mycelet.com` | demo-konto for Apples reviewer | bytt passord, legg det nye **bare** i App Store Connect |
 | `qa-autotest@mycelet.com` | **ekte konto på live-appen** | bytt i Supabase → Authentication → Users, oppdater `QA_TEST_PASSWORD` i `.env.local` + GitHub Actions |
-| Apple sandbox-tester | `sindre.alstad+sandbox@gmail.com` | bytt i App Store Connect → Sandbox Testers |
+| Apple sandbox-tester | adressen står i App Store Connect | bytt i App Store Connect → Sandbox Testers |
 
 Kontonummeret (IBAN) lå også ute. Det er mindre kritisk — et IBAN alene lar ingen
 ta penger — men du bør vite det.

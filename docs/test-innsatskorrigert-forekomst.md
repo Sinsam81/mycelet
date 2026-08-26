@@ -5,7 +5,7 @@
 
 ## Spørsmålet
 
-Sindre foreslo å bygge et langt større forekomstdatasett — Artsobservasjoner,
+Det ble foreslått å bygge et langt større forekomstdatasett — Artsobservasjoner,
 Artportalen via SLU, GBIF, iNaturalist, supplert med forumfunn — og å bearbeide
 punktene til rangerte «soppområder» med en poengmodell.
 
@@ -78,7 +78,7 @@ der, er det signal.
 ### Beslutningsregelen, satt på forhånd
 
 - **AUC over 0,60 med p under 0,05, skogmatchet** → skjevhetskorrigeringen
-  virker. Da er hele rørledningen Sindre skisserte verdt å bygge, og
+  virker. Da er hele rørledningen som ble skissert verdt å bygge, og
   poengmodellen hans (sesonger, uavhengige rapportører, ferskhet) er riktig
   utformet.
 - **AUC rundt 0,50** → forekomster er menneskelig nærvær, punktum. Da sparer vi
@@ -93,7 +93,7 @@ kunne tolkes i etterkant.
 ny rørledning — testen kjøres mot GBIF-API-et og valideringsapparatet som allerede
 finnes i `docs/validering-romlig-signal.md`.
 
-## Hvis testen består: det som er riktig i Sindres plan
+## Hvis testen består: det som er riktig i planen
 
 - **Skillet rå/bearbeidet.** Råpunkter i bakgrunnen, rangerte områder i kartet.
 - **Deduplisering.** Artsobservasjoner publiseres også gjennom GBIF; uten

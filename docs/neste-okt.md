@@ -2,7 +2,7 @@
 
 > ⚠️ **ERSTATTET 2026-08-05.** Statustabellen under motsa `launch-critical-path.md`
 > på tre punkter (DSA-status, Paid Apps, og om app-oppføringen skulle opprettes),
-> og ingen av dem kan avgjøres uten Sindres Apple-innlogging. Bruk
+> og ingen av dem kan avgjøres uten Apple-innloggingen. Bruk
 > [`app-store-innsending.md`](app-store-innsending.md) — denne beholdes for
 > historikk, og sandbox-oppskriften i punkt 1 er fortsatt gyldig.
 
@@ -10,7 +10,7 @@
 
 ## Neste oppgave: gjennomgå Codex sin tekniske rapport
 
-Sindre har fått en full teknisk gjennomgang av appen fra Codex med mange forbedringspunkter. **Rapporten er ikke i repoet ennå** — Sindre limer den inn, eller legger den i `docs/reports/`.
+Vi har fått en full teknisk gjennomgang av appen fra Codex med mange forbedringspunkter. **Rapporten er ikke i repoet ennå** — den må limes inn, eller legges i `docs/reports/`.
 
 Nyttig å vite før du leser den:
 
@@ -70,14 +70,14 @@ Appen ligger allerede på telefonen. Passordene finner du i passordbehandleren.
 3. Trykk «Gratis»-merket øverst → Priser
 4. «Velg Premium» → Apple-arket skal vise **[Environment: Sandbox]** → bekreft
    - Sandbox-Apple-ID settes i Innstillinger → Utvikler → Sandbox Apple Account
-     (`sindre.alstad+sandbox@gmail.com`)
+     (adressen står i App Store Connect → Sandbox Testers)
 5. Claude verifiserer at `billing_subscriptions` får rad med `metadata.provider = 'revenuecat'` for QA-brukeren, og at appen flipper til aktiv plan
 
 Blir bygget for gammelt: bygg på nytt fra worktreet med
 `xcodebuild -project ios/App/App.xcodeproj -scheme App -configuration Debug -destination 'id=EBCC8060-6E43-519C-A25F-B1D5CDD76E54' -derivedDataPath /private/tmp/mycelet-ios-build -allowProvisioningUpdates -allowProvisioningDeviceRegistration DEVELOPMENT_TEAM=WUFJ6UBMPG CODE_SIGN_STYLE=Automatic build`
 → `xcrun devicectl device install app --device EBCC8060-6E43-519C-A25F-B1D5CDD76E54 /private/tmp/mycelet-ios-build/Build/Products/Debug-iphoneos/App.app`
 
-## 2. Metadata i App Store Connect (👤 Sindre, copy-paste)
+## 2. Metadata i App Store Connect (👤 manuelt, copy-paste)
 
 Teksten ligger ferdig i `docs/app-store-metadata.md`. Skjermbilder i `docs/app-store-screenshots/` (6,9-tommers slot). App Privacy-skjemaet må fylles ut — Claude guider.
 

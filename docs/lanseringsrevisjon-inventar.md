@@ -589,7 +589,7 @@ Hvert tall appen viser, sporet til der det beregnes. Kolonnen som gjør inventar
 - DOKUMENTASJONSDRIFT: docs/CODEX-HANDOVER.md:48, 161, 207 og 439 sier at RevenueCat/IAP 'is not yet in the code' og at native billing er 'view-only'. Det er feil siden commit a116d95 (PR #90) — koden, SPM-avhengigheten og webhooken er på main. Dokumentet oppgir også feil produkt-id-er (no.mycelet.app
 - OPERASJONELT: ingen pruning av billing_webhook_events (migrasjon 007 har ingen retention, og prune-cronen er ikke deployet). Tabellen vokser ubegrenset og er samtidig idempotensnøkkelen for begge leverandører.
 - DØD KODE MED FEIL SEMANTIKK: payment-mode-grenen i Stripe-webhooken gir sesongpass med hardkodet slutt 30. november, mens checkout alltid oppretter subscription-mode. Grenen kan ikke nås fra dagens kjøpsflyt, men vil gi feil periodeslutt hvis en engangs-price noen gang legges inn. src/app/api/stripe
-- IKKE VERIFISERBART HERFRA (krever Sindre/dashboards): at STRIPE_PRICE_*-verdiene i Vercel matcher price-id-ene på faktiske aktive abonnement; at migrasjon 033 er kjørt i prod; at Stripe-webhookens API-versjon er 2024-06-20; at Stripe Billing Portal er konfigurert til å tillate kansellering; om noen 
+- IKKE VERIFISERBART HERFRA (krever eiertilgang/dashboards): at STRIPE_PRICE_*-verdiene i Vercel matcher price-id-ene på faktiske aktive abonnement; at migrasjon 033 er kjørt i prod; at Stripe-webhookens API-versjon er 2024-06-20; at Stripe Billing Portal er konfigurert til å tillate kansellering; om noen 
 
 
 ## 5. Posisjonspersonvern (35 veier)

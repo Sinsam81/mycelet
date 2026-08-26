@@ -1,7 +1,7 @@
 # Mycelet — veikart
 
 > Sist oppdatert: 10. juni 2026
-> Eier: Sindre Øverås (`sindre.alstad@gmail.com`)
+> Eier: ØVERÅS APPS (org.nr 937 880 871) — kontakt `post@mycelet.com`
 
 Dette dokumentet samler alt arbeid som gjenstår før beta-launch (mai-juni 2026) og åpen launch (august 2026), pluss strategiske avgjørelser som ikke er tatt enda.
 
@@ -38,7 +38,7 @@ Alt live på mycelet.com (etter konkurrent-analyse + UX-ønsker):
 - **Forside:** «Soppforhold i dag»-måler (fargekodet score-ring + «hvorfor»), «Dine funn»-statistikk, «Din siste sopptur».
 - **«Perfekt soppdag»-hjerne:** `src/lib/prediction/mushroom-day.ts` (`assessMushroomDay`) + `/api/mushroom-day` — klar for proaktivt daglig varsel. **Push er utsatt til native-appen** (web-push har dårlig iOS-rekkevidde uten PWA-install).
 
-Gjenstår av dette: 7-dagers værtrend-graf (MET Locationforecast 2.0 — gratis, global), og migrasjon `014_occurrences_observed_at.sql` (Sindre limer i Supabase SQL Editor for presise funn-datoer + sesong-filter — degraderer pent uten).
+Gjenstår av dette: 7-dagers værtrend-graf (MET Locationforecast 2.0 — gratis, global), og migrasjon `014_occurrences_observed_at.sql` (limes inn i Supabase SQL Editor for presise funn-datoer + sesong-filter — degraderer pent uten).
 
 ---
 
@@ -55,14 +55,14 @@ Gjenstår av dette: 7-dagers værtrend-graf (MET Locationforecast 2.0 — gratis
 | Fase A (sikkerhet/GDPR før beta) | ✅ Alle 8 stegene shippet |
 | Fase B sikkerhet (audit-log, rate limiting, Næ 16-oppgradering) | ✅ De fleste stegene shippet |
 | Logger + observability (struktet logging, PII-redaksjon, /api/health) | ✅ Ferdig |
-| `fetchFrost()` — norsk vær | ✅ Kode ferdig (`src/lib/weather/index.ts`) — aktiveres automatisk når `MET_FROST_CLIENT_ID` settes (Sindres oppgave) |
+| `fetchFrost()` — norsk vær | ✅ Kode ferdig (`src/lib/weather/index.ts`) — aktiveres automatisk når `MET_FROST_CLIENT_ID` settes (manuell oppgave) |
 | Live skogdata i prediksjon: NIBIO SR16 (NO) + CORINE (SE) | ✅ Implementert og live-verifisert (`/api/prediction`, modell `v4_computed_habitat`) |
 | **Fase 2 prediksjon** (habitat + vær + per-art kombinert) | 🟡 Kjernen bygget via live-API-kall (ikke raster-pipeline som opprinnelig planlagt). Gjenstår: GBIF-kalibrering + daglig tile-cron i skala |
 | Lansering på Vercel | ⏳ Du har Vercel-konto, ingen prosjekt opprettet ennå |
 
 ---
 
-## 👤 Sindres jobb (kan ikke gjøres i kode)
+## 👤 Manuelle oppgaver (kan ikke gjøres i kode)
 
 ### Før beta-launch (mai-juni 2026)
 
@@ -217,8 +217,8 @@ Med geo-utvikler: halvere alt, og kan inkludere Sentinel-2 NDVI i v1.
 ### Åpne avgjørelser i Fase 2
 
 - ~~**Antall arter i v1?**~~ ✅ Besluttet 7. mai: **5 arter** (kantarell, steinsopp, traktkantarell, piggsopp, svart trompetsopp).
-- **Mapbox vs MapLibre?** Default = MapLibre (gratis, riktig for beta). Mapbox koster ved skala. Sindre må velge.
-- **Geo-utvikler ja/nei?** Strategisk avgjørelse Sindre tar når det er klart hvor mye tid han selv kan dedikere. NB: 5 arter (mot opprinnelig forslag på 3) er fortsatt håndterbart uten geo-utvikler — alle 5 har genus-profiler i `species-scoring.ts` allerede.
+- **Mapbox vs MapLibre?** Default = MapLibre (gratis, riktig for beta). Mapbox koster ved skala. Eieren må velge.
+- **Geo-utvikler ja/nei?** Strategisk avgjørelse som tas når det er klart hvor mye tid vi selv kan dedikere. NB: 5 arter (mot opprinnelig forslag på 3) er fortsatt håndterbart uten geo-utvikler — alle 5 har genus-profiler i `species-scoring.ts` allerede.
 
 ---
 
@@ -230,8 +230,8 @@ Med geo-utvikler: halvere alt, og kan inkludere Sentinel-2 NDVI i v1.
 | ~~B4 Rate limiting~~ | ✅ Shippet (in-memory; Redis senere ved skala) |
 | ~~CSP report-only~~ | ✅ Shippet, ikke flippet til enforce ennå |
 | ~~Major Næ-oppgradering~~ | ✅ Næ 14 → 16 ferdig |
-| **B2 Dataretensjon** (cron sletter inaktive kontoer + gamle funn) | ⏳ Krever beslutning fra Sindre på perioder |
-| **B5 Sentry feil-monitorering** med PII-skrubbing | ⏳ Krever Sentry-konto fra Sindre |
+| **B2 Dataretensjon** (cron sletter inaktive kontoer + gamle funn) | ⏳ Krever beslutning på perioder |
+| **B5 Sentry feil-monitorering** med PII-skrubbing | ⏳ Krever at Sentry-konto opprettes manuelt |
 | **CSP enforce mode** (etter en uke i prod) | ⏳ |
 | ~~**`next-pwa` → Serwist**~~ | ✅ Utgått — `next-pwa` er fjernet fra prosjektet, HIGH-sårbarheten finnes ikke lenger |
 | **Distribuert rate limiting** (Upstash Redis eller Vercel KV) | ⏳ Når trafikken vokser |
@@ -243,7 +243,7 @@ Med geo-utvikler: halvere alt, og kan inkludere Sentinel-2 NDVI i v1.
 
 - **Utvide til flere land enn NO+SE?** Anbefaling: nei nå. Arkitekturen er klar (`getRegion`-funksjonen + væradapter-routing), men prediksjonens dybde i Norden er kjernemurveggen mot Picture Mushroom-typen. Utvid når NO+SE leverer treffsikre prediksjoner og du har betalende brukere som validerer modellen.
 - **Beta-launch dato?** Plan: mai-juni 2026 før hovedsesong august-november.
-- **Geo-utvikler for Fase 2?** Sindre vurderer dette; placeholder-data holder ikke for kommersielt produkt.
+- **Geo-utvikler for Fase 2?** Dette vurderes; placeholder-data holder ikke for kommersielt produkt.
 - ~~**Antall arter i prediksjonens v1?**~~ ✅ Besluttet 7. mai: 5 arter. Hvis NIBIO-integrasjon tar lengre tid enn ventet kan vi falle tilbake til 3 (kantarell + steinsopp + traktkantarell), men 5 er målet.
 
 ---

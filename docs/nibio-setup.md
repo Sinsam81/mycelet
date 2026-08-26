@@ -77,7 +77,7 @@ SR16 dekker **fastlandet i Norge**. For:
 ## Faktiske handlinger for å aktivere
 
 1. Velg vei 1 eller vei 2 over (anbefalt: vei 2).
-2. Hvis vei 2: Last ned SR16 GeoTIFF (Sindre, manuelt — krever NIBIO-konto).
+2. Hvis vei 2: Last ned SR16 GeoTIFF (manuelt — krever NIBIO-konto).
 3. Si fra til Claude — så lager Claude migrasjon 011 og bytter ut stubben.
-4. Test mot kjente koordinater (Sindre har testfunn ved Holmenkollen, Sognsvann, Maridalen — bekreft at NIBIO-data matcher det vi vet om områdene).
+4. Test mot kjente koordinater (vi har testfunn ved Holmenkollen, Sognsvann, Maridalen — bekreft at NIBIO-data matcher det vi vet om områdene).
 5. Generer prediksjons-tiles på nytt med habitat-score lagt til.

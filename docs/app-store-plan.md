@@ -1,7 +1,7 @@
 # Veikart: App Store-lansering + launch-kvalitet
 
 > Sist oppdatert: 23. mai 2026
-> Mål (Sindre): publisere Mycelet i Apple App Store (+ Google Play), med betaling (IAP) i appen.
+> Mål: publisere Mycelet i Apple App Store (+ Google Play), med betaling (IAP) i appen.
 
 Dette er master-planen fra web-app til publisert native app. For prediksjons-arkitektur, se [`docs/roadmap.md`](roadmap.md) og [`CLAUDE.md`](../CLAUDE.md).
 

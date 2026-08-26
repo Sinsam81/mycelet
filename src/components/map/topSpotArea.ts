@@ -8,7 +8,7 @@ import type { Circle, CircleMarker, CircleMarkerOptions, LatLngExpression } from
  * og dette er det beste av dem». Ingen av de to påstandene bæres av dataene:
  * koordinaten er senteret i en rute som er 1,4–10 km bred (se spot-area.ts), og
  * mellom to skogspunkter få kilometer fra hverandre skiller ikke modellen
- * signifikant (AUC 0,654, p = 0,44). Sindre gikk til punktene i felten og fant
+ * signifikant (AUC 0,654, p = 0,44). Vi gikk til punktene i felten og fant
  * ingenting — nettopp fordi nålen lovet et punkt.
  *
  * Her tegnes i stedet ruta slik den faktisk er samplet: en sirkel med radius =

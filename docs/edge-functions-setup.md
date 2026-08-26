@@ -1,6 +1,6 @@
 # Supabase Edge Functions — oppsett (retention-policy)
 
-Tre Edge Functions i `supabase/functions/` håndterer GDPR-retention. Dette dokumentet forklarer hvordan Sindre setter dem opp **én gang** etter migrasjon 011 er kjørt.
+Tre Edge Functions i `supabase/functions/` håndterer GDPR-retention. Dette dokumentet forklarer hvordan de settes opp **én gang** etter migrasjon 011 er kjørt.
 
 ## Oversikt
 
@@ -40,7 +40,7 @@ Dette åpner nettleseren og ber deg autorisere CLI-en.
 
 ### Steg 3 — Koble lokal repo til Supabase-prosjektet
 
-I prosjekt-mappen (`/Users/sindreoveras/Documents/Dokumenter – Sindre sin MacBook Air/sopp appen`):
+I prosjekt-mappen (repo-roten):
 
 ```bash
 supabase link --project-ref <DIN-PROSJEKT-REF>

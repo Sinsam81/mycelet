@@ -6,7 +6,7 @@
  *   - REST-only API works seamlessly from Deno without npm: imports
  *   - Setup is just an API key + a verified domain, no SDK quirks
  *
- * Setup checklist (Sindre):
+ * Setup checklist (manuell):
  *   1. Sign up at https://resend.com (free)
  *   2. Verify domain mycelet.no with the DNS records Resend provides
  *      (SPF + DKIM + return-path). DNS lives at the registrar.

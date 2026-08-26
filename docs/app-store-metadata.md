@@ -1,7 +1,7 @@
 # App Store-metadata for Mycelet
 
 Alt innhold klart til å limes inn i App Store Connect. Utarbeidet 2026-06-12.
-Status: fase 1 (avtaler/bank/skatt) påbegynt — se nederst for Sindres sjekkliste.
+Status: fase 1 (avtaler/bank/skatt) påbegynt — se nederst for sjekklisten.
 
 ## App-informasjon
 
@@ -307,14 +307,14 @@ are implemented there.
 > (2.1). Lenken ligger nå på profilsiden. Flytter du en av disse, oppdater
 > listen samtidig.
 
-## Sindres fase-1-sjekkliste (Agreements, Tax & Banking)
+## Fase-1-sjekkliste (Agreements, Tax & Banking)
 
 1. Logg inn på **https://appstoreconnect.apple.com** (Apple-ID-en din)
 2. Klikk **Business** (evt. «Agreements, Tax, and Banking»)
 3. **Paid Apps Agreement** → Accept (privatperson — ingen org-nr trengs)
 4. **Bank:** DNB, samme konto som Stripe bruker. Kontonummeret står i
    passordbehandleren og hos Stripe — det skal ikke stå her, se notatet nederst.
-   Kontoinnehaver Sindre Alstad Øverås, valuta NOK
+   Kontoinnehaver: den registrerte innehaveren av ENK-et, valuta NOK
 5. **Skatt:** W-8BEN-veiviser → privatperson, bosatt i Norge, «No US activities».
    Adresse: Liaveien 21 A, 1459 Nesodden
 6. Apple bruker vanligvis 1–3 dager på å godkjenne bankinfoen — resten av

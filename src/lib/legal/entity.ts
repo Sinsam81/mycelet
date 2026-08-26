@@ -67,7 +67,7 @@ export const LEGAL_ENTITY: LegalEntity = {
   // where the law points ("geografisk adresse ... der den næringsdrivende er
   // etablert"). Note 21A, not 21 — the register has the letter.
   postalAddress: 'Liaveien 21A, 1459 Nesodden, Norge',
-  // Sindre's own mobile, published by his explicit decision after being told it
+  // The owner's own mobile, published by explicit decision after being told it
   // goes on Apple's public EU product page in all 27 territories, permanently
   // and unlistable. On the website itself the exposure is limited: every page
   // rendering this block is noindex.

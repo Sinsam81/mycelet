@@ -83,7 +83,7 @@ const MID_MONTH_DAY_OF_YEAR = [15, 46, 74, 105, 135, 166, 196, 227, 258, 288, 31
  * måneden — 31. okt 100, 1. nov 87; 30. nov 87, 1. des 65. Sju-dagersstripen
  * krysser et månedsskifte seks dager i måneden, så brukeren så stripen falle et
  * helt hakk uten at noe i været hadde endret seg. Det er nøyaktig samme feilklasse
- * som regnvindus-spranget Sindre allerede har meldt fra om én gang (se
+ * som regnvindus-spranget som allerede er meldt fra om én gang (se
  * headeren i src/app/api/mushroom-forecast/route.ts).
  *
  * Nå interpoleres det lineært mellom månedenes MIDTPUNKTER. To konsekvenser
