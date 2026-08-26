@@ -20,6 +20,12 @@ import { MapFilters, MapFilterState } from './MapFilters';
 import { MapFinding } from '@/types/finding';
 import { OwnFindingRow, ownFindingToMapFinding } from '@/lib/utils/map-findings';
 import {
+  formatUncertaintyMeters,
+  occurrenceYearCutoff,
+  passesYearCutoff,
+  type OccurrenceYearFilter
+} from '@/lib/utils/occurrence-filters';
+import {
   OfflineArea,
   OSM_TILE_TEMPLATE,
   SATELLITE_TILE_TEMPLATE,
@@ -165,6 +171,18 @@ export function MushroomMap() {
   const speciesShapeRef = useRef<Map<number, MarkerShape>>(new Map());
   const occEdibilityRef = useRef<'all' | 'edible' | 'toxic'>('all');
   const occSeasonRef = useRef(false);
+  const occYearRef = useRef<OccurrenceYearFilter>('all');
+  // Migrasjon 054 gir RPC-en p_min_year. Før den er kjørt i prod finnes ikke
+  // parameteren, og kallet feiler — da faller vi tilbake til klient-side
+  // filtrering (med trunkeringsskjevheten kartet allerede advarer mot) i
+  // stedet for et blankt lag. Husket per økt så vi ikke prøver forgjeves på
+  // hver panorering.
+  const occYearParamUnsupportedRef = useRef(false);
+  // To raske filterklikk (eller klikk + panorering) starter overlappende
+  // lastinger; hver rydder og fyller clusteret når DENS henting er ferdig, så
+  // den tregeste vinner — og chip og kart kan vise hver sin sannhet. Bare den
+  // nyeste generasjonen får tegne.
+  const occLoadGenRef = useRef(0);
   const tripActiveRef = useRef(false);
   const tripFindsRef = useRef<string[]>([]);
   const speciesSearchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -213,6 +231,7 @@ export function MushroomMap() {
   const [occTruncated, setOccTruncated] = useState(false);
   const [occEdibility, setOccEdibility] = useState<'all' | 'edible' | 'toxic'>('all');
   const [occSeason, setOccSeason] = useState(false);
+  const [occYear, setOccYear] = useState<OccurrenceYearFilter>('all');
   const [showIntro, setShowIntro] = useState(false);
   const [tripActive, setTripActive] = useState(false);
   const [tripFinds, setTripFinds] = useState<string[]>([]);
@@ -815,28 +834,56 @@ export function MushroomMap() {
       return;
     }
     const b = map.getBounds();
-    // PostgREST kutter hvert svar ved 1000 rader uansett hva p_limit sier, så
-    // dette må pagineres — ellers viser kartet 1000 punkter som (fordi RPC-en
-    // ikke sorterer) i praksis er én til to arter, og ser komplett ut.
-    const { rows: data, truncated } = await fetchRpcPaged<{
+    const gen = ++occLoadGenRef.current;
+    type OccRow = {
       latitude: number;
       longitude: number;
       species_id: number | null;
       observed_at?: string | null;
-    }>(
+      coordinate_uncertainty_m?: number | null;
+    };
+    const baseArgs = {
+      min_lat: b.getSouth(),
+      min_lng: b.getWest(),
+      max_lat: b.getNorth(),
+      max_lng: b.getEast(),
+      p_species_id: filters.speciesId,
+      p_limit: OCCURRENCE_FETCH_LIMIT
+    };
+    // Årsfilteret hører hjemme i RPC-en (migrasjon 054): filtrerer vi klient-
+    // side inne i det avkuttede utvalget, kan «siste 5 år» vise tomt kart i
+    // tette utsnitt selv om ferske funn finnes — trunkeringsskjevheten under.
+    const yearCutoff = occurrenceYearCutoff(occYearRef.current, new Date());
+    let serverYearFiltered = yearCutoff != null && !occYearParamUnsupportedRef.current;
+    // PostgREST kutter hvert svar ved 1000 rader uansett hva p_limit sier, så
+    // dette må pagineres — ellers viser kartet 1000 punkter som (fordi RPC-en
+    // ikke sorterer) i praksis er én til to arter, og ser komplett ut.
+    let result = await fetchRpcPaged<OccRow>(
       supabase,
       'get_occurrences_in_bounds',
-      {
-        min_lat: b.getSouth(),
-        min_lng: b.getWest(),
-        max_lat: b.getNorth(),
-        max_lng: b.getEast(),
-        p_species_id: filters.speciesId,
-        p_limit: OCCURRENCE_FETCH_LIMIT
-      },
+      serverYearFiltered ? { ...baseArgs, p_min_year: yearCutoff } : baseArgs,
       { limit: OCCURRENCE_FETCH_LIMIT }
     );
+    if (result.error && serverYearFiltered) {
+      // fetchRpcPaged KASTER ikke — feil kommer som result.error. Kun den
+      // KONKRETE «ukjent signatur»-feilen (PGRST202: «Could not find the
+      // function … in the schema cache») betyr at migrasjon 054 ikke er
+      // kjørt — da husker vi det for økta og filtrerer klient-side. Alle
+      // andre feil (nettverksglipp midt i pagineringen, timeout på fjelltur)
+      // skal IKKE degradere økta permanent: neste panorering prøver
+      // server-side igjen, og denne lastingen faller bare tilbake én gang.
+      const missingParam =
+        result.error.code === 'PGRST202' || /schema cache|p_min_year/i.test(result.error.message);
+      if (missingParam) occYearParamUnsupportedRef.current = true;
+      serverYearFiltered = false;
+      result = await fetchRpcPaged<OccRow>(supabase, 'get_occurrences_in_bounds', baseArgs, {
+        limit: OCCURRENCE_FETCH_LIMIT
+      });
+    }
+    const { rows: data, truncated } = result;
     const leaflet = (await import('leaflet')).default;
+    // En nyere lasting er i gang — ikke rydd clusteret dens resultat skal inn i.
+    if (gen !== occLoadGenRef.current) return;
     cluster.clearLayers();
     const names = speciesNamesRef.current;
     const edibilities = speciesEdibilityRef.current;
@@ -893,6 +940,9 @@ export function MushroomMap() {
     };
     const all = data;
     const points = all.filter((o) => {
+      // Klient-fallbacken for årsfilteret — kun aktiv når RPC-en mangler
+      // p_min_year (før migrasjon 054); ellers har serveren alt filtrert.
+      if (!serverYearFiltered && !passesYearCutoff(o.observed_at, yearCutoff)) return false;
       if (seasonOnly && !inSeasonMonth(o.observed_at)) return false;
       if (filter === 'all') return true;
       const e = o.species_id != null ? edibilities.get(o.species_id) : undefined;
@@ -928,9 +978,22 @@ export function MushroomMap() {
         : '';
       const found = formatFound(o.observed_at);
       const foundHtml = found ? ` · ${found}` : '';
-      const popup = `<div><b>${name}</b>${ediHtml}<br/><span style="color:#555;font-size:12px">${t('registeredFinding')}${foundHtml}</span><br/><span style="color:#6b7280;font-size:11px">${t('historicalFindingNote')}</span><br/><a href="https://www.google.com/maps/search/?api=1&query=${o.latitude},${o.longitude}" target="_blank" rel="noreferrer" style="color:#15803d;font-weight:600;font-size:12px;text-decoration:underline">${t('openInMap')}</a><br/><span style="color:#9ca3af;font-size:10px">Artsdatabanken/GBIF</span></div>`;
+      // Ærlighets-metadata per punkt: «±X m» når GBIF oppga usikkerheten,
+      // «ukjent» når feltet er NULL (alt importert før migrasjon 054 — ~76 %
+      // av radene er fra før kvalitetsfilteret fantes). Feltet mangler helt
+      // (undefined) før migrasjonen er kjørt; da vises ingen linje i stedet
+      // for å kalle alt ukjent uten dekning i data.
+      const uncertaintyLabel =
+        o.coordinate_uncertainty_m === undefined
+          ? null
+          : formatUncertaintyMeters(o.coordinate_uncertainty_m) ?? t('coordUncertaintyUnknown');
+      const uncertaintyHtml = uncertaintyLabel
+        ? `<br/><span style="color:#6b7280;font-size:11px">${t('coordUncertainty', { value: uncertaintyLabel })}</span>`
+        : '';
+      const popup = `<div><b>${name}</b>${ediHtml}<br/><span style="color:#555;font-size:12px">${t('registeredFinding')}${foundHtml}</span>${uncertaintyHtml}<br/><span style="color:#6b7280;font-size:11px">${t('historicalFindingNote')}</span><br/><a href="https://www.google.com/maps/search/?api=1&query=${o.latitude},${o.longitude}" target="_blank" rel="noreferrer" style="color:#15803d;font-weight:600;font-size:12px;text-decoration:underline">${t('openInMap')}</a><br/><span style="color:#9ca3af;font-size:10px">Artsdatabanken/GBIF</span></div>`;
       leaflet.marker([o.latitude, o.longitude], { icon }).bindPopup(popup).addTo(cluster);
     }
+    if (gen !== occLoadGenRef.current) return;
     setOccCount(points.length);
     // Avkuttingen skal ikke være stille: når vi traff taket viser kartet et
     // utvalg, og spiselighets-/sesongfiltrene over har filtrert INNI det
@@ -971,6 +1034,15 @@ export function MushroomMap() {
     setOccSeason(next);
     void loadOccurrences();
   }, [loadOccurrences]);
+
+  const setOccYearFilter = useCallback(
+    (value: OccurrenceYearFilter) => {
+      occYearRef.current = value;
+      setOccYear(value);
+      void loadOccurrences();
+    },
+    [loadOccurrences]
+  );
 
   // All localStorage-bruk under går via safe-storage. `window.localStorage`
   // KASTER (ikke returnerer null) når nettleseren blokkerer lagring — Chrome
@@ -2032,6 +2104,29 @@ export function MushroomMap() {
             >
               {occSeason ? t('onlyInSeasonNow') : t('showAllTimes')}
             </button>
+            {/* Årsfilteret: ~72 % av punktene er fra før 2021, og gamle
+                herbariebelegg rendret som ferske prikker skjuler datasettets
+                sterkeste signal — datoene. */}
+            <div className="flex items-center gap-1 rounded-full bg-white/95 px-2 py-1 text-[11px] shadow-lg backdrop-blur">
+              {(
+                [
+                  ['all', t('yearAll')],
+                  ['last5', t('yearLast5')],
+                  ['last10', t('yearLast10')]
+                ] as const
+              ).map(([val, label]) => (
+                <button
+                  key={val}
+                  type="button"
+                  onClick={() => setOccYearFilter(val)}
+                  className={`rounded-full px-2 py-0.5 font-medium ${
+                    occYear === val ? 'bg-forest-800 text-white' : 'text-gray-700 hover:bg-gray-100'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
             {occTruncated ? (
               <p className="w-full text-center text-[11px] font-medium text-amber-900">
                 <span className="rounded-full bg-amber-50/95 px-2 py-1 shadow-lg backdrop-blur">

@@ -26,6 +26,7 @@ Dette er bug-klassen som rammet oss i prod (svensk kart blankt, fast i Oslo, dø
 - [ ] «Finn min posisjon»-knappen finnes og er klikkbar, og recentrer kartet (ikke fast i Oslo).
 - [ ] «Beste steder»-knappen finnes; klikk laster nåler eller en lås-/oppsalg-notis (gratis vs premium).
 - [ ] Artssøk-feltet («Hvilken sopp vil du finne …») finnes.
+- [ ] Funn-lagets filterchips vises (spiselighet, sesong og årsfilteret «Alle år / Siste 5 år / Siste 10 år»); å velge «Siste 5 år» gir ikke JS-feil (virker både med og uten migrasjon 054 via klient-fallback).
 - [ ] Ingen ukjente JS-feil i konsollen ved kartlasting.
 - [ ] 🖐️ Native: «Finn meg» fungerer i iOS-appen (Capacitor Geolocation, ikke `navigator.geolocation`).
 
