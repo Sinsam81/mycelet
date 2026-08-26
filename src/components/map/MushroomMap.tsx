@@ -1745,7 +1745,9 @@ export function MushroomMap() {
         rain7dMm: data.weather.rain7dMm ?? null,
         rain14dMm: data.weather.rain14dMm ?? null,
         minTemp7dC: data.weather.minTemp7dC ?? null,
-        maxTemp7dC: data.weather.maxTemp7dC ?? null
+        maxTemp7dC: data.weather.maxTemp7dC ?? null,
+        // Gir «Siste regn: 12mm for 4 dager siden»-linja i panelet.
+        precipDailyMm: data.weather.precipDailyMm ?? null
       },
       species: data.species,
       forest: data.forest

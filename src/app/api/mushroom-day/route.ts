@@ -95,7 +95,10 @@ export async function GET(request: NextRequest) {
         maxTemp7dC: weather.maxTemp7dC,
         // This endpoint feeds the proactive "perfect day" push. Without the
         // moisture veto a phone would buzz on a bone-dry day.
-        soilMoistureIndex: weather.soilMoistureIndex
+        soilMoistureIndex: weather.soilMoistureIndex,
+        // Lets the reasons include "Siste regn: 12mm for 4 dager siden" —
+        // same input the home card gets, or the two would disagree.
+        precipDailyMm: weather.precipDailyMm
       },
       month,
       locale,

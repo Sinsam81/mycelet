@@ -79,6 +79,53 @@ export interface ExplanationWeather {
    * apart from "wet now". Null/undefined outside NO/SE and for forecast days.
    */
   soilMoistureIndex?: number | null;
+  /**
+   * Døgnnedbør eldst→nyest, siste element = i dag (WeatherSummary.precipDailyMm).
+   * Uten serien utelates «siste regn»-linja — summene over kan ikke si NÅR det
+   * regnet, bare hvor mye.
+   */
+  precipDailyMm?: readonly number[] | null;
+}
+
+/** Siste regnvær i døgnserien: samlet mm og hvor mange dager siden det sluttet. */
+export interface SisteRegn {
+  mm: number;
+  /** 0 = i dag, 1 = i går, osv. — regnet fra siste døgn i regnværet. */
+  dagerSiden: number;
+}
+
+// Et døgn med mindre enn dette regnes som opphold, ikke som del av et regnvær.
+const REGN_DAG_MIN_MM = 0.5;
+// Mindre enn dette samlet er yr, ikke et regnvær verdt å datere.
+const REGN_MIN_MM = 5;
+// En rotbløyte som kan drive en flush — samme terskel som SOAK_MM i
+// prediction/flush.ts (ikke importert: flush → mushroom-day → denne modulen,
+// så importen ville lukket en sirkel).
+const REGN_ROTBLOYTE_MM = 8;
+
+/**
+ * Finn siste regnvær i døgnserien: nyeste sammenhengende våte periode med
+ * minst REGN_MIN_MM samlet. Våte dager som ikke når terskelen hoppes over —
+ * 1mm yr i går skjuler ikke rotbløyta for fem dager siden.
+ */
+export function sisteRegnvaer(precipDailyMm: readonly number[] | null | undefined): SisteRegn | null {
+  if (!precipDailyMm || precipDailyMm.length === 0) return null;
+  const siste = precipDailyMm.length - 1;
+  let i = siste;
+  while (i >= 0) {
+    while (i >= 0 && !(precipDailyMm[i] >= REGN_DAG_MIN_MM)) i--;
+    if (i < 0) return null;
+    const slutt = i;
+    let sum = 0;
+    while (i >= 0 && precipDailyMm[i] >= REGN_DAG_MIN_MM) {
+      sum += precipDailyMm[i];
+      i--;
+    }
+    if (sum >= REGN_MIN_MM) {
+      return { mm: Math.round(sum), dagerSiden: siste - slutt };
+    }
+  }
+  return null;
 }
 
 /**
@@ -156,6 +203,7 @@ interface ExplanationCopy {
   rainWellWatered: (mm: number, window: string) => string;
   rainBelowOptimum: (mm: number, window: string) => string;
   rainTooDry: (mm: number, window: string) => string;
+  lastRain: (mm: number, dagerSiden: number) => string;
   fruitingWindow: string;
 
   humidityHigh: (pct: number) => string;
@@ -232,6 +280,12 @@ const COPY: Record<Locale, ExplanationCopy> = {
     rainWellWatered: (mm, window) => `${mm}mm regn siste ${window} — godt fuktet`,
     rainBelowOptimum: (mm, window) => `${mm}mm regn siste ${window} — under optimum`,
     rainTooDry: (mm, window) => `Bare ${mm}mm regn siste ${window} — for tørt`,
+    lastRain: (mm, dagerSiden) =>
+      dagerSiden === 0
+        ? `Siste regn: ${mm}mm i dag`
+        : dagerSiden === 1
+          ? `Siste regn: ${mm}mm i går`
+          : `Siste regn: ${mm}mm for ${dagerSiden} dager siden`,
     fruitingWindow:
       'God fukt-base de siste ukene + tørrere de siste dagene — gunstig vindu for soppfruktsetting',
 
@@ -353,6 +407,12 @@ const COPY: Record<Locale, ExplanationCopy> = {
     rainWellWatered: (mm, window) => `${mm}mm regn senaste ${window} — ordentligt fuktig mark`,
     rainBelowOptimum: (mm, window) => `${mm}mm regn senaste ${window} — under optimum`,
     rainTooDry: (mm, window) => `Bara ${mm}mm regn senaste ${window} — för torrt`,
+    lastRain: (mm, dagerSiden) =>
+      dagerSiden === 0
+        ? `Senaste regnet: ${mm}mm idag`
+        : dagerSiden === 1
+          ? `Senaste regnet: ${mm}mm igår`
+          : `Senaste regnet: ${mm}mm för ${dagerSiden} dagar sedan`,
     fruitingWindow:
       'Bra markfukt de senaste veckorna + torrare de senaste dagarna — gynnsamt läge för svampens fruktsättning',
 
@@ -603,6 +663,28 @@ export function buildExplanation(input: ExplanationInput): Explanation[] {
     lines.push({ level: 'neutral', category: 'rain', text: copy.rainBelowOptimum(rainMm, rain.window) });
   } else {
     lines.push({ level: 'negative', category: 'rain', text: copy.rainTooDry(rainMm, rain.window) });
+  }
+
+  // ── Siste regn (ferdig tolkning av «når regnet det egentlig?») ──────
+  // Erfarne sankere resonnerer i tid, ikke i summer: «det regnet i forrige
+  // uke, gi det noen dager til». Summene over kan ikke si NÅR — 12mm/7d er
+  // både «rotbløyte for seks dager siden» og «yr hver dag». Positiv bare når
+  // regnet var en fersk rotbløyte OG bakken fortsatt holder på fukta (samme
+  // 0.55-grense som flush-vurderingens 'fruiting' — grønt her ved siden av
+  // grått «Tørt — soppen venter på regn» ville motsagt seg selv); ellers en
+  // nøytral opplysning. Uten døgnserie eller uten regnvær i vinduet: ingen
+  // linje — tørke sier regnbåndet over allerede.
+  const sisteRegn = sisteRegnvaer(input.weather.precipDailyMm);
+  if (sisteRegn) {
+    const bakkenHolderFukt =
+      input.weather.soilMoistureIndex == null || input.weather.soilMoistureIndex >= 0.55;
+    const ferskRotbloyte =
+      bakkenHolderFukt && sisteRegn.mm >= REGN_ROTBLOYTE_MM && sisteRegn.dagerSiden <= 7;
+    lines.push({
+      level: ferskRotbloyte ? 'positive' : 'neutral',
+      category: 'rain',
+      text: copy.lastRain(sisteRegn.mm, sisteRegn.dagerSiden)
+    });
   }
 
   // ── Fruiting window (a wet base + recent drying often triggers a flush) ──
