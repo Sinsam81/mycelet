@@ -46,7 +46,7 @@ const COPY = {
     endring: (fra: number, til: number) =>
       `Soppforholdene har gått fra <strong>${fra}</strong> til <strong>${til} av 100</strong> den siste uka.`,
     hvorfor:
-      'Tallet er vær og sesong for området: nedbøren de siste to ukene, hvor fuktig marka er, temperaturen, og hvor vi er i sesongen for artene som vokser der.',
+      'Tallet er vær, sesong og skogtype for området: nedbøren de siste to ukene, hvor fuktig marka er, temperaturen, hvor vi er i sesongen for artene som vokser der, og om treslaget i området passer dem.',
     forbehold:
       'Det sier ingenting om skogen der du står. Gammel granskog med mose slår et høyt tall i feil terreng hver gang. Vi lover ikke at du finner sopp — vi sier at forholdene ligger til rette.',
     knapp: 'Se kartet for området ditt',
@@ -61,7 +61,7 @@ const COPY = {
     endring: (fra: number, til: number) =>
       `Svampförhållandena har gått från <strong>${fra}</strong> till <strong>${til} av 100</strong> den senaste veckan.`,
     hvorfor:
-      'Talet är väder och säsong för området: nederbörden de senaste två veckorna, hur fuktig marken är, temperaturen, och var vi är i säsongen för arterna som växer där.',
+      'Talet är väder, säsong och skogstyp för området: nederbörden de senaste två veckorna, hur fuktig marken är, temperaturen, var vi är i säsongen för arterna som växer där, och om trädslaget i området passar dem.',
     forbehold:
       'Det säger ingenting om skogen där du står. Gammal granskog med mossa slår ett högt tal i fel terräng varje gång. Vi lovar inte att du hittar svamp — vi säger att förhållandena ligger rätt.',
     knapp: 'Se kartan för ditt område',

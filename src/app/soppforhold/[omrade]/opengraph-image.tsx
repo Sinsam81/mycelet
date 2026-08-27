@@ -39,8 +39,8 @@ export default async function OgBilde({ params }: { params: Promise<{ omrade: st
   const etikett = land === 'SE' ? 'Svampläget idag' : 'Soppforhold i dag';
   const bunnlinje =
     land === 'SE'
-      ? 'Väder och säsong för området, inte skogen där du står'
-      : 'Vær og sesong for området, ikke skogen der du står';
+      ? 'Väder, säsong och skogstyp för området, inte skogen där du står'
+      : 'Vær, sesong og skogtype for området, ikke skogen der du står';
   const navn = regionDef.name;
   const scoreTekst = region ? String(region.score) : '–';
   const bandFarge = region ? fargeHex(region.score) : '#9ca3af';

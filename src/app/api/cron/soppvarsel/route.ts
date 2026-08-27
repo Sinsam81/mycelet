@@ -6,6 +6,7 @@ import { skalVarsle, VARSEL_KARANTENE_DAGER, VARSEL_MIN_SCORE } from '@/lib/aler
 import { byggVarselEpost } from '@/lib/alerts/email';
 import { sendEpost } from '@/lib/email/send';
 import type { Locale } from '@/i18n/config';
+import { regionScore } from '@/lib/prediction/region-score';
 
 /**
  * Soppvarselet — kjører hver morgen etter at nattens fliser er generert.
@@ -50,12 +51,6 @@ interface Abonnement {
   locale: string;
   last_notified_at: string | null;
   unsubscribe_token: string;
-}
-
-/** 90-persentilen. Samme definisjon som /api/prediction/regions — hold dem i takt. */
-function percentile90(sorted: number[]): number {
-  if (sorted.length === 0) return 0;
-  return sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * 0.9))];
 }
 
 export async function GET(request: NextRequest) {
@@ -133,7 +128,7 @@ export async function GET(request: NextRequest) {
 
   const scoreIDag = new Map<string, number>();
   for (const [navn, scorer] of perRegion) {
-    scoreIDag.set(navn, Math.round(percentile90([...scorer].sort((a, b) => a - b))));
+    scoreIDag.set(navn, Math.round(regionScore([...scorer].sort((a, b) => a - b))));
   }
 
   // ── 2. Lagre dagens tall ──────────────────────────────────────────────────

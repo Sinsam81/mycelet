@@ -152,6 +152,49 @@ Laget 2026-06-14 via en orkestrert runde (utkast → adversariell gjennomgang av
 
 ---
 
+---
+
+## Innlegg 4 — Delt sesong nord/sør (skrevet 2026-08-27, uke 35)
+
+**Timing:** ferskvare. Premisset er at forholdene ligger klart best an i Nord- og
+Midt-Norge akkurat nå. Sjekk at det fortsatt stemmer før posting — snur været,
+er innlegget feil. Postes ikke i samme gruppe som innlegg #2 innen 7–10 dager.
+
+**Hvorfor ikke #1:** innlegg #1 er skrevet for uke 25 og sier at hovedsesongen
+«kommer ikke før august–oktober». Postet nå er det synlig feil.
+
+**Bevisst utelatt:** hvilken ART som er i gang nordpå. Katalogen setter
+piggsoppens sesong til september–november, mens fenologikurven regner den som i
+gang nå på 67°N. To av våre egne kilder er uenige, og en artspåstand er akkurat
+det noen i en gruppe med 136 000 medlemmer sjekker. Mekanismen under er robust;
+artsnavnet er det ikke.
+
+**Norsk:**
+> Status fra skogen nå i uke 35 — og i år ser det ut til å være et delt land:
+>
+> Forholdene ligger klart best an i Nord- og Midt-Norge om dagen. Lenger sør har det ikke løsnet ennå, og det er verdt å si høyt, for kalenderen sier høysesong og skogen sier noe annet.
+>
+> Grunnen er den samme tommelfingerregelen som gjelder hvert år: sopp kommer i kull rundt 1–2 uker etter et skikkelig regn, så lenge det holder seg mildt etterpå. Det er ikke datoen som bestemmer — det er nedbøren for halvannen uke siden. Har det vært tørt, hjelper det ikke at det er slutten av august.
+>
+> For dere i sør betyr det at ventingen ikke er bortkastet: når regnet først kommer, er det uka etter dere skal ut, ikke samme helg. Bruk tiden til å gå rundene, merke dere hvor det pleier å stå, og være klare når det snur.
+>
+> For dere nordpå: det er nå.
+>
+> En ting til som er lett å glemme i et tørt år — når sesongen først løsner sent, blir den gjerne kortere og mer konsentrert. Da gir tre turer på to uker mer enn én tur i måneden.
+>
+> Husk uansett: ingen sopp i kurven er trygg å spise før den er sikkert bestemt. Er du det minste i tvil, bruk Soppkontrollen, og ved mistanke om forgiftning ring Giftinformasjonen: 22 59 13 00.
+>
+> Hvordan ser det ut der dere er? Er det noen nordpå som har begynt å finne noe for alvor? Jeg lærer fortsatt selv, så rett meg gjerne hvis noe her er upresist.
+>
+> God soppjakt 🌲
+
+📷 Eget mobilbilde: fuktig skogbunn, gjerne mose og barskog. IKKE full kurv, IKKE app-skjermbilder.
+
+**Svensk:** ikke skrevet. Premisset er norsk (nord/sør-delingen i Norge), og
+regel 1 sier uansett aldri begge språk samme sted. En svensk variant måtte
+bygges på svenske forhold — Sundsvall, Östersund og Umeå lå høyest av de
+svenske områdene da dette ble skrevet.
+
 ## Publiseringsplan (de viktigste reglene)
 
 1. **Aldri begge språk samme sted** — svensk gruppe får kun svensk, norsk kun norsk.
