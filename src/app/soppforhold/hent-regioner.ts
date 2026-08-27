@@ -1,4 +1,4 @@
-import { forecastBand } from '@/lib/utils/forecast-scale';
+import { regionBand } from '@/lib/prediction/region-score';
 
 /**
  * Delt datagrunnlag for /soppforhold-sidene (samlesiden, områdesidene og
@@ -41,9 +41,16 @@ export async function hentRegioner(
   }
 }
 
-/** Tailwind-klassen for scorefargen (grønn/gul/grå — samme bånd som stripa). */
+/**
+ * Tailwind-klassen for scorefargen.
+ *
+ * Båndet utledes av regionens egen dommestige, ikke av `forecastBand` — den er
+ * kalibrert på punkt-dagscorer fra mushroom-day (median 86) og gav derfor gul
+ * prikk til tall som samtidig fikk topp-dommen i tekst. Farge og tekst leser nå
+ * samme stige, som er hele poenget med å ha én.
+ */
 export function farge(score: number): string {
-  const band = forecastBand(score, score >= 85);
+  const band = regionBand(score);
   if (band === 'green') return 'bg-forest-600';
   if (band === 'amber') return 'bg-amber-500';
   return 'bg-gray-400';
@@ -51,7 +58,7 @@ export function farge(score: number): string {
 
 /** Hex-utgaven til delingsbildene, der Tailwind ikke finnes. */
 export function fargeHex(score: number): string {
-  const band = forecastBand(score, score >= 85);
+  const band = regionBand(score);
   if (band === 'green') return '#4d7c3a';
   if (band === 'amber') return '#f59e0b';
   return '#9ca3af';

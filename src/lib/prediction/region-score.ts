@@ -53,3 +53,60 @@ export function regionScore(sorted: readonly number[]): number {
 export function erMaksimumIPraksis(antallRuter: number): boolean {
   return antallRuter > 0 && antallRuter <= DEGENERERER_UNDER_ANTALL_RUTER;
 }
+
+/**
+ * Dommestigen for REGIONENS dagstall — en annen fordeling enn rutenes.
+ *
+ * ⚠️ IKKE bruk CONDITION_THRESHOLDS her, og ikke bruk denne på ruter.
+ *
+ * Feilen som gjorde dette nødvendig: regionsendepunktet ble lagt til dagen
+ * etter at CONDITION_THRESHOLDS ble kalibrert (7f5d601 → 8cc2ade, 3.–4. august
+ * 2026) og gjenbrukte `scoreVerdict` uendret. Men de tersklene er målt på
+ * ENKELTRUTER (spenn 43–85, median 55, p95 80), og regionstallet er
+ * 90-persentilen OVER ruter — en ordensstatistikk fra den øvre halen av
+ * nettopp den fordelingen. En terskel satt ved rutenes p95 lander da et sted
+ * rundt p75 blant regionstallene.
+ *
+ * Utslaget var målbart: kommentaren lovet «topp ~10 %», men 22,5 % av
+ * regiondøgnene fikk topp-dommen. Fire områder kunne dele «Nå er det
+ * piggsopp 🍄» med 26 poengs spenn mellom seg.
+ *
+ * MÅLEGRUNNLAG: alle 374 rader i `region_daily_scores`, 22 regioner × 17 dager
+ * (2026-08-11 → 2026-08-27), lest 2026-08-27:
+ *
+ *   min 25 · p05 41 · p10 45 · p25 53 · median 61 · p75 70 · p90 81 · p95 87 · maks 100
+ *
+ * ⚠️ GRUNNLAGET ER ET SMALT VINDU — sytten dager i slutten av august. Kjør
+ * `node --env-file=.env.local scripts/kalibrer-regionterskler.mjs` på nytt når
+ * sesongen er over, og flytt tallene under hvis fordelingen har flyttet seg.
+ * Samme etterprøving som CONDITION_THRESHOLDS ber om for rutene.
+ */
+export const REGION_CONDITION_THRESHOLDS = {
+  excellent: 81, // p90 — topp 10 % av regiondøgnene
+  good: 70, // p75 — topp 25 %
+  moderate: 61 // medianen
+} as const;
+
+export type RegionCondition = 'poor' | 'moderate' | 'good' | 'excellent';
+
+export function regionScoreToCondition(score: number): RegionCondition {
+  if (score >= REGION_CONDITION_THRESHOLDS.excellent) return 'excellent';
+  if (score >= REGION_CONDITION_THRESHOLDS.good) return 'good';
+  if (score >= REGION_CONDITION_THRESHOLDS.moderate) return 'moderate';
+  return 'poor';
+}
+
+/**
+ * Fargebåndet for et regionstall.
+ *
+ * Utledes AV dommen, ikke ved siden av den. Fargen kom tidligere fra
+ * `forecastBand`, som er kalibrert på 99 176 punkt-dagscorer fra mushroom-day
+ * (median 86) — en tredje fordeling bak samme 0-100-etikett. Resultatet var at
+ * samme tall kunne få topp-dommen i tekst og gul prikk i farge samtidig.
+ */
+export function regionBand(score: number): 'green' | 'amber' | 'grey' {
+  const condition = regionScoreToCondition(score);
+  if (condition === 'excellent') return 'green';
+  if (condition === 'poor') return 'grey';
+  return 'amber';
+}

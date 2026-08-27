@@ -784,11 +784,28 @@ const LEVEL_MARK: Record<ExplanationLevel, string> = { positive: '✓', neutral:
 // CONDITION_THRESHOLDS i utils/prediction.ts. Da dommene hadde sin egen stige
 // kunne kartet skrive «Nå er det kantarell 🍄» over en rute malt i fargen for
 // «lite her», siden bare den ene av dem var kalibrert.
-function verdictText(score: number, copy: ExplanationCopy, speciesName?: string): string {
-  if (score >= CONDITION_THRESHOLDS.excellent) return copy.verdictPeak(speciesName);
-  if (score >= CONDITION_THRESHOLDS.good) return copy.verdictGood(speciesName);
-  if (score >= CONDITION_THRESHOLDS.moderate) return copy.verdictStarting(speciesName);
+//
+// `thresholds` finnes fordi det ikke er ÉN fordeling: rutene på kartet og
+// regionstallet på /soppforhold har samme 0-100-etikett, men helt ulike
+// fordelinger — regionstallet er 90-persentilen OVER ruter. Kallere som har et
+// regionstall sender REGION_CONDITION_THRESHOLDS; alle andre får rutestigen.
+function verdictText(
+  score: number,
+  copy: ExplanationCopy,
+  speciesName?: string,
+  thresholds: ConditionThresholds = CONDITION_THRESHOLDS
+): string {
+  if (score >= thresholds.excellent) return copy.verdictPeak(speciesName);
+  if (score >= thresholds.good) return copy.verdictGood(speciesName);
+  if (score >= thresholds.moderate) return copy.verdictStarting(speciesName);
   return copy.verdictQuiet(speciesName);
+}
+
+/** Formen på en dommestige. Se CONDITION_THRESHOLDS og REGION_CONDITION_THRESHOLDS. */
+export interface ConditionThresholds {
+  readonly excellent: number;
+  readonly good: number;
+  readonly moderate: number;
 }
 
 /**
@@ -799,8 +816,13 @@ function verdictText(score: number, copy: ExplanationCopy, speciesName?: string)
  * bare tallet og artsnavnet. Uten denne skrev kartet ut rå «52/100», og det er
  * nettopp tallet uten dom som får alle ruter til å se like ut.
  */
-export function scoreVerdict(score: number, locale?: Locale, speciesName?: string): string {
-  return verdictText(score, copyFor(locale), speciesName);
+export function scoreVerdict(
+  score: number,
+  locale?: Locale,
+  speciesName?: string,
+  thresholds?: ConditionThresholds
+): string {
+  return verdictText(score, copyFor(locale), speciesName, thresholds);
 }
 
 export interface SpotSummary {
