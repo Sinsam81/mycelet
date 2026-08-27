@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useLocale, useTranslations } from 'next-intl';
-import { colorForScore } from '@/lib/utils/condition-colors';
+import { regionBandHex } from '@/lib/prediction/region-score';
 
 /**
  * «Hvor i landet er det best i dag?»
@@ -128,9 +128,14 @@ export function BestRegionsCard() {
                 className="flex items-center gap-3 rounded-lg px-2 py-1.5 transition hover:bg-forest-50"
               >
                 <span className="w-4 shrink-0 text-xs font-semibold text-gray-400">{i + 1}</span>
+                {/* Regionstigen, ikke rutestigen. Prikken kom tidligere fra
+                    colorForScore, som er kalibrert på ENKELTRUTER — derfor
+                    lyste et områdetall på 79 grønt ved siden av en dom som
+                    egentlig sa «gode dager». Farge og dom leser nå samme
+                    stige, som er hele poenget med å ha én. */}
                 <span
                   className="h-2.5 w-2.5 shrink-0 rounded-full"
-                  style={{ backgroundColor: colorForScore(r.score).hex }}
+                  style={{ backgroundColor: regionBandHex(r.score) }}
                   aria-hidden
                 />
                 <span className="min-w-0 flex-1">
@@ -157,6 +162,20 @@ export function BestRegionsCard() {
           {utvidet ? t('bestRegionsCollapse') : t('bestRegionsExpand', { count: iLandet.length - 5 })}
         </button>
       ) : null}
+
+      {/* Veien videre. Uten disse to var /soppforhold UTILGJENGELIG inne fra
+          appen — ingen lenke fra forsiden, ingen fra navigasjonen — og
+          soppvarselets eneste påmeldingsknapp ligger nettopp der. Trakten
+          «se at det er bra et sted → få beskjed neste gang» var brutt for
+          alle som ikke kom inn utenfra. */}
+      <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1">
+        <Link href="/soppforhold" className="text-xs font-medium text-forest-800 hover:underline">
+          {t('bestRegionsAllAreas')} →
+        </Link>
+        <Link href="/profile?vis=soppvarsel" className="text-xs font-medium text-forest-800 hover:underline">
+          {t('bestRegionsAlert')} →
+        </Link>
+      </div>
 
       {/* Forbeholdet hører i detaljen, ikke i overskriften — men det skal stå. */}
       <p className="mt-2 text-[11px] leading-relaxed text-gray-400">{t('bestRegionsDisclaimer')}</p>

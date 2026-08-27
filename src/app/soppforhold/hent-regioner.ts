@@ -1,4 +1,4 @@
-import { regionBand } from '@/lib/prediction/region-score';
+import { regionBand, regionBandHex } from '@/lib/prediction/region-score';
 
 /**
  * Delt datagrunnlag for /soppforhold-sidene (samlesiden, områdesidene og
@@ -8,7 +8,22 @@ import { regionBand } from '@/lib/prediction/region-score';
  * bilde-URL-ene med rasterdatoen (?d=ÅÅÅÅ-MM-DD). Se opengraph-image-filene.
  */
 
-export const SOPPFORHOLD_BASE = 'https://www.mycelet.com';
+/**
+ * Sidene er server-rendret og henter sitt eget API, så URL-en må være absolutt
+ * — en relativ sti har ingen base på serversiden.
+ *
+ * ⚠️ I LOKAL DEV MÅ DEN PEKE PÅ LOKAL SERVER. Sto tidligere hardkodet til
+ * produksjon, og da viste /soppforhold prod-data uansett hva du endret lokalt:
+ * en endring i dommene ga et API-svar med ny tekst og en side med gammel, på
+ * samme maskin. Feilen så ut som at endringen ikke virket.
+ *
+ * Bare `development` skiller seg ut. Preview-deployer henter fortsatt fra
+ * produksjon — det er med vilje: et bygg som henter sin egen ennå ikke
+ * ferdigdeployede URL har et høna-og-egget-problem, og innholdet er uansett
+ * det samme rasteret.
+ */
+export const SOPPFORHOLD_BASE =
+  process.env.NODE_ENV === 'development' ? 'http://localhost:3000' : 'https://www.mycelet.com';
 
 /** Ny beregning kommer daglig; en time er rikelig og sparer oppslag. */
 export const SOPPFORHOLD_REVALIDATE = 3600;
@@ -58,10 +73,7 @@ export function farge(score: number): string {
 
 /** Hex-utgaven til delingsbildene, der Tailwind ikke finnes. */
 export function fargeHex(score: number): string {
-  const band = regionBand(score);
-  if (band === 'green') return '#4d7c3a';
-  if (band === 'amber') return '#f59e0b';
-  return '#9ca3af';
+  return regionBandHex(score);
 }
 
 export function norskDato(iso: string | null): string {

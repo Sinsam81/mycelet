@@ -555,6 +555,8 @@
     "bestRegionsExpand": "Vis {count} til",
     "bestRegionsCollapse": "Vis færre",
     "bestRegionsDisclaimer": "Sammenligner VÆR, SESONG og FUKT mellom landsdeler — ikke hvor soppen står. Forskjellen mellom landsdeler er den modellen måler best.",
+    "bestRegionsAllAreas": "Alle områder",
+    "bestRegionsAlert": "Få varsel på e-post",
     "bestRegionsNorway": "Norge",
     "bestRegionsSweden": "Sverige"
   },

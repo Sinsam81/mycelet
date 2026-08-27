@@ -110,3 +110,14 @@ export function regionBand(score: number): 'green' | 'amber' | 'grey' {
   if (condition === 'poor') return 'grey';
   return 'amber';
 }
+
+/** Hex for båndet, til flater uten Tailwind (delingsbilder, inline style). */
+export const REGION_BAND_HEX: Record<ReturnType<typeof regionBand>, string> = {
+  green: '#4d7c3a',
+  amber: '#f59e0b',
+  grey: '#9ca3af'
+};
+
+export function regionBandHex(score: number): string {
+  return REGION_BAND_HEX[regionBand(score)];
+}
