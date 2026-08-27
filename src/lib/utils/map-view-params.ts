@@ -17,6 +17,16 @@ export interface MapViewParams {
   lat: number;
   lng: number;
   zoom: number;
+  /**
+   * Navnet på stedet lenken peker til, når avsenderen kjenner det.
+   *
+   * Ikke pynt: kartet behandler et dyplenket sted som et SØKT sted, og
+   * nullstillingsknappen sitter i værstripa som viser navnet. Uten et navn
+   * rendres stripa navnløs — og uten stripa finnes det ingen vei ut av
+   * utsnittet, så «Lovende steder» ville regnet rundt Bodø resten av økta selv
+   * etter at brukeren hadde flyttet kartet hjem.
+   */
+  name: string | null;
 }
 
 /** Samme tak som kartet selv bruker (`maxZoom: 20`). */
@@ -37,10 +47,24 @@ function tall(value: string | string[] | undefined): number | null {
  * og å sentrere på halve koordinaten ville flyttet kartet til et vilkårlig
  * sted i stedet for å la det åpne der det pleier.
  */
+/**
+ * Stedsnavnet kommer fra en URL og rendres i UI-et. React escaper det, så
+ * dette handler ikke om XSS, men om at et absurd langt eller kontrolltegn-
+ * spekket navn ikke skal kunne sprenge layouten i værstripa.
+ */
+function stedsnavn(value: string | string[] | undefined): string | null {
+  if (typeof value !== 'string') return null;
+  // eslint-disable-next-line no-control-regex
+  const rent = value.replace(/[\u0000-\u001f\u007f]/g, '').trim();
+  if (rent === '') return null;
+  return rent.slice(0, 60);
+}
+
 export function parseMapViewParams(params: {
   lat?: string | string[];
   lng?: string | string[];
   zoom?: string | string[];
+  sted?: string | string[];
 }): MapViewParams | null {
   const lat = tall(params.lat);
   const lng = tall(params.lng);
@@ -52,5 +76,5 @@ export function parseMapViewParams(params: {
   const zoom =
     rawZoom === null ? DEFAULT_ZOOM : Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, Math.round(rawZoom)));
 
-  return { lat, lng, zoom };
+  return { lat, lng, zoom, name: stedsnavn(params.sted) };
 }

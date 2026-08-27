@@ -262,14 +262,24 @@ export function MushroomMap({
   const [placeSuggestions, setPlaceSuggestions] = useState<PlaceResult[]>([]);
   // Set when the user searches a place — the forecast strip and the reset chip
   // follow the searched location instead of the GPS position.
-  const [searchedPlace, setSearchedPlace] = useState<PlaceResult | null>(null);
+  // Seedes fra dyplenken sammen med referansen under. Settes BARE referansen,
+  // rendres aldri PlaceForecastStrip — og da finnes ikke X-knappen som er den
+  // eneste veien ut av utsnittet. Uten den ville «Lovende steder» regnet rundt
+  // det dyplenkede stedet resten av økta, også etter at brukeren hadde trykket
+  // «Finn meg» og flyttet kartet hjem: generateTopSpots leser referansen FØR
+  // GPS-posisjonen, og avslutter med fitBounds rundt den.
+  const [searchedPlace, setSearchedPlace] = useState<PlaceResult | null>(
+    initialView ? { name: initialView.name ?? '', context: '', lat: initialView.lat, lng: initialView.lng } : null
+  );
   // Mirrors searchedPlace for the GPS effects, which must read the current
   // value without re-running when it changes.
   // Settes ved første render, ikke i en effekt: GPS-effekten under sjekker
   // nettopp denne referansen, og kan fyre før en effekt hadde rukket å sette
   // den. Da ville dyplenken tapt kappløpet mot brukerens posisjon.
   const searchedPlaceRef = useRef<PlaceResult | null>(
-    initialView ? { name: '', context: '', lat: initialView.lat, lng: initialView.lng } : null
+    initialView
+      ? { name: initialView.name ?? '', context: '', lat: initialView.lat, lng: initialView.lng }
+      : null
   );
   // Monotonic id so a slow older typeahead response can't overwrite a newer one.
   const searchReqRef = useRef(0);
@@ -1634,9 +1644,15 @@ export function MushroomMap({
       const map = L.map(containerRef.current, {
         // Oslo as a neutral starting point; the geolocation effect recenters on
         // the user's real position once it resolves (see posRef + setView below).
-        // En dyplenke (?lat&lng&zoom) overstyrer begge deler — se initialView.
-        center: initialView ? [initialView.lat, initialView.lng] : [59.91, 10.75],
-        zoom: initialView?.zoom ?? 11,
+        // Et søkt sted overstyrer begge deler. Det dekker to tilfeller: en
+        // dyplenke (?lat&lng&zoom), og et stedssøk som rakk å løse seg mens
+        // Leaflet-importen fortsatt lastet — der var goToPlace sin setView en
+        // no-op fordi kartet ikke fantes ennå, og kartet ble liggende på Oslo
+        // mens søkefeltet og værstripa sa noe annet.
+        center: searchedPlaceRef.current
+          ? [searchedPlaceRef.current.lat, searchedPlaceRef.current.lng]
+          : [59.91, 10.75],
+        zoom: searchedPlaceRef.current ? initialView?.zoom ?? 12 : 11,
         // Shared display ceiling. Without this the map inherits the ACTIVE layer's
         // max (Terreng = 18), capping zoom there. 20 lets the user zoom much
         // deeper; layers over-zoom (upscale) past their maxNativeZoom.
@@ -1716,11 +1732,12 @@ export function MushroomMap({
       topLayerRef.current = topLayer;
       speciesLayerRef.current = speciesLayer;
 
-      // If geolocation already resolved before this (async) init finished, the
-      // setView effect couldn't run yet (no map). Recenter on the user now —
-      // med mindre en dyplenke ba om et bestemt utsnitt. Samme vern som de to
-      // GPS-effektene lenger nede; uten det her taper dyplenken kappløpet når
-      // posisjonen kommer raskt (varm fiks, gitt tillatelse fra før).
+      // Har posisjonen alt løst seg før denne (asynkrone) initen ble ferdig,
+      // fikk ikke setView-effekten kjørt (ingen kart). Sentrer på brukeren nå —
+      // med mindre et søkt sted eller en dyplenke ba om et bestemt utsnitt.
+      // Samme vern som de to GPS-effektene lenger nede; uten det her taper
+      // dyplenken kappløpet når posisjonen kommer raskt (varm fiks, gitt
+      // tillatelse fra før).
       if (posRef.current && !searchedPlaceRef.current) {
         map.setView([posRef.current.lat, posRef.current.lng], 13);
       }

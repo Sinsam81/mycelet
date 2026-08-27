@@ -9,6 +9,19 @@ import { AlertTriangle } from 'lucide-react';
  * områdesidene. Ikke skriv den om til noe som lover mer, og ikke lag lokale
  * kopier.
  *
+ * ⚠️ TALLET «rundt 30 km²» ER MÅLT, IKKE GJETTET. Rutene er step×step grader
+ * (src/lib/prediction/tile-regions.ts), altså (step·111,32) × (step·111,32·cos φ)
+ * km. Over alle 22 regioner: 21,1 (Tromsø) til 34,2 (Malmö), cellevektet snitt
+ * 29,0 km² over 819 ruter. Sto først «rundt 20», som var regnet på Bodø og Oslo
+ * alene og var feil for 20 av 22 områder — og feil vei: det fikk rasteret til å
+ * virke finere oppløst enn det er, i nettopp det avsnittet som finnes for å
+ * innrømme det motsatte. Runder du, rund OPP.
+ *
+ * ⚠️ «ETT punktoppslag», ikke «snittet». Skogdataene er én GetFeatureInfo mot
+ * senterpikselen (src/lib/nibio/sr16.ts) — ikke et snitt over ruta. Å kalle det
+ * et snitt påstår at ruta er ensartet, som er nøyaktig det spot-area.ts avviste
+ * å påstå.
+ *
  * ⚠️ OPPLISTINGEN MÅ STEMME MED cell-score.ts. Teksten ramset tidligere opp
  * bare vær og sesong, mens rutescoren i tillegg ganges med `habitatFit`
  * (0,7–1,8 ut fra om treslaget matcher artens partnere), `hostGate`, bonitet,
@@ -36,7 +49,7 @@ const COPY = {
     p2a: 'Det sier likevel ',
     p2strong: 'ingenting om skogen der du står',
     p2b:
-      '. Hver rute i rasteret dekker rundt 20 kvadratkilometer, og modellen ser bare snittet av den — inni ruta er det både myr, hogstfelt og gammel granskog. Gammel granskog med mose og en sørvendt li slår et høyt tall i feil terreng hver gang. Og det sier ingenting om hvorvidt noe er trygt å spise.',
+      '. Hver rute i rasteret dekker rundt 30 kvadratkilometer, og skogdataene bak tallet er ETT punktoppslag inne i den — inni ruta er det både myr, hogstfelt og gammel granskog. Gammel granskog med mose og en sørvendt li slår et høyt tall i feil terreng hver gang. Og det sier ingenting om hvorvidt noe er trygt å spise.',
     p3: 'Vi lover heller ikke at du finner sopp. Vi sier når forholdene ligger til rette — resten er skogen, beina dine og litt flaks.',
     aldriSpis: 'Spis aldri en sopp du ikke har fått bestemt.'
   },
@@ -49,7 +62,7 @@ const COPY = {
     p2a: 'Det säger ändå ',
     p2strong: 'ingenting om skogen där du står',
     p2b:
-      '. Varje ruta i rastret täcker ungefär 20 kvadratkilometer, och modellen ser bara snittet av den — inuti rutan finns både myr, hygge och gammal granskog. Gammal granskog med mossa och en sydvänd slänt slår ett högt tal i fel terräng varje gång. Och det säger ingenting om huruvida något är säkert att äta.',
+      '. Varje ruta i rastret täcker ungefär 30 kvadratkilometer, och skogsdatan bakom talet är EN ENDA punktmätning inuti den — inuti rutan finns både myr, hygge och gammal granskog. Gammal granskog med mossa och en sydvänd slänt slår ett högt tal i fel terräng varje gång. Och det säger ingenting om huruvida något är säkert att äta.',
     p3: 'Vi lovar inte heller att du hittar svamp. Vi säger när förhållandena ligger rätt, resten är skogen, dina ben och lite tur.',
     aldriSpis: 'Ät aldrig en svamp du inte fått bestämd.'
   }

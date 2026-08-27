@@ -177,13 +177,30 @@ export async function GET(request: NextRequest) {
     checks.auditLogTable = auditLogTable;
   }
 
-  const allOk = Object.values(checks).every((c) => c?.ok);
+  // E-post står i svaret, men teller IKKE mot 503.
+  //
+  // Appen serverer helt fint uten utsending: kart, arter, identifisering og
+  // betaling er upåvirket. En oppetidsprobe som blir rød for manglende
+  // RESEND-nøkler melder feil problem — og i lokal dev og i `npm run qa` er
+  // nøklene aldri satt, så et 503 der ville gjort helsetesten permanent rød og
+  // dermed verdiløs.
+  //
+  // Den som vil vokte utsendingen, vokter feltet `checks.epost.ok` direkte.
+  // Det er hele grunnen til at sjekken finnes: å gjøre en stille feil synlig,
+  // ikke å felle appen.
+  const { epost, ...oppetidssjekker } = checks;
+  const allOk = Object.values(oppetidssjekker).every((c) => c?.ok);
   const status: 'ok' | 'degraded' = allOk ? 'ok' : 'degraded';
 
   if (!allOk) {
     log.warn('health.degraded', { checks });
   } else if (!fast) {
     log.debug('health.ok');
+  }
+  if (!epost.ok) {
+    // Egen linje, alltid — også når status er ok. Ellers er den ene feilen
+    // som ikke feller appen også den ingen ser.
+    log.warn('health.epost_ikke_konfigurert', { message: epost.message });
   }
 
   const body: HealthResponse = {

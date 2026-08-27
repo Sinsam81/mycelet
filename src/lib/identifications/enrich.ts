@@ -92,7 +92,6 @@ export async function enrichSuggestions(
         speciesId?: number;
         norwegianName?: string;
         imageUrl?: string | null;
-      imageCredit?: PhotoCreditInfo | null;
         imageCredit?: PhotoCreditInfo | null;
         inSeason?: boolean;
         peakSeason?: boolean;
@@ -211,6 +210,7 @@ export async function enrichSuggestions(
       danger: string;
       speciesId?: number;
       imageUrl?: string | null;
+      imageCredit?: PhotoCreditInfo | null;
       edibility?: string | null;
       whySimilar?: string | null;
       howToTell?: string | null;

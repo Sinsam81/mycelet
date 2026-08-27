@@ -124,7 +124,9 @@ export function BestRegionsCard() {
           {vist.map((r, i) => (
             <li key={r.name}>
               <Link
-                href={`/map?lat=${r.lat}&lng=${r.lng}&zoom=10`}
+                // Navnet er ikke pynt: det gir kartet en værstripe med en
+                // nullstillingsknapp, som er den eneste veien ut av utsnittet.
+                href={`/map?lat=${r.lat}&lng=${r.lng}&zoom=10&sted=${encodeURIComponent(r.name)}`}
                 className="flex items-center gap-3 rounded-lg px-2 py-1.5 transition hover:bg-forest-50"
               >
                 <span className="w-4 shrink-0 text-xs font-semibold text-gray-400">{i + 1}</span>

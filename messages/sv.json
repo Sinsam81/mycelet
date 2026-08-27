@@ -554,7 +554,7 @@
     "bestRegionsSubtitle": "Förhållandena där de är bäst i varje region — tryck för att se på kartan.",
     "bestRegionsExpand": "Visa {count} till",
     "bestRegionsCollapse": "Visa färre",
-    "bestRegionsDisclaimer": "Jämför VÄDER, SÄSONG och FUKT mellan landsdelar — inte var svampen står. Skillnaden mellan landsdelar är den modellen mäter bäst.",
+    "bestRegionsDisclaimer": "Jämför VÄDER, SÄSONG och SKOGSTYP mellan landsdelar — inte var svampen står. Skillnaden mellan landsdelar är den modellen mäter bäst.",
     "bestRegionsAllAreas": "Alla områden",
     "bestRegionsAlert": "Få varning via e-post",
     "bestRegionsNorway": "Norge",

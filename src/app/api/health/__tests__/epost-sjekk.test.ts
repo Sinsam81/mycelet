@@ -35,8 +35,17 @@ describe('helsesjekkens e-postsjekk', () => {
     expect(foerFastGrenen).toContain('epost: checkEpost()');
   });
 
-  it('teller inn i statusen, så manglende oppsett gir 503 og ikke et blidt «ok»', () => {
-    expect(kilde).toMatch(/const allOk = Object\.values\(checks\)\.every/);
+  it('teller IKKE mot 503 — appen serverer fint uten e-post', () => {
+    // Første forsøk lot den telle med. Da ble /api/health 503 i lokal dev og i
+    // `npm run qa`, der RESEND aldri er satt — og e2e/public-api.e2e.ts feilet
+    // hardt. En helsetest som alltid er rød blir ignorert, og da hjelper den
+    // ingen. Feilen skal SYNES, ikke felle appen.
+    expect(kilde).toContain('const { epost, ...oppetidssjekker } = checks');
+    expect(kilde).toMatch(/const allOk = Object\.values\(oppetidssjekker\)\.every/);
+  });
+
+  it('logger uansett, så den ene feilen som ikke feller appen ikke blir usynlig', () => {
+    expect(kilde).toContain('health.epost_ikke_konfigurert');
   });
 
   it('sier OM variablene er satt, aldri hva de er — ruta er offentlig', () => {

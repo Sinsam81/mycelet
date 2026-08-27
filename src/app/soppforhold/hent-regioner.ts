@@ -23,7 +23,12 @@ import { regionBand, regionBandHex } from '@/lib/prediction/region-score';
  * det samme rasteret.
  */
 export const SOPPFORHOLD_BASE =
-  process.env.NODE_ENV === 'development' ? 'http://localhost:3000' : 'https://www.mycelet.com';
+  process.env.NODE_ENV === 'development'
+    ? // Porten må LESES, ikke antas: er 3000 opptatt tar Next 3001, og da ville
+      // siden hentet tall fra det som ellers kjører på 3000 — typisk den andre
+      // Mycelet-instansen i hovedmappa. Nøyaktig forvirringen dette skulle fjerne.
+      `http://localhost:${process.env.PORT ?? 3000}`
+    : 'https://www.mycelet.com';
 
 /** Ny beregning kommer daglig; en time er rikelig og sparer oppslag. */
 export const SOPPFORHOLD_REVALIDATE = 3600;

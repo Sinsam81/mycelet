@@ -9,10 +9,11 @@ import { parseMapViewParams } from '../map-view-params';
 describe('parseMapViewParams', () => {
   it('leser lenka «Best i landet i dag» faktisk sender', () => {
     // Bodø, slik BestRegionsCard bygger den.
-    expect(parseMapViewParams({ lat: '67.385', lng: '14.775', zoom: '10' })).toEqual({
+    expect(parseMapViewParams({ lat: '67.385', lng: '14.775', zoom: '10', sted: 'Bodø' })).toEqual({
       lat: 67.385,
       lng: 14.775,
-      zoom: 10
+      zoom: 10,
+      name: 'Bodø'
     });
   });
 
@@ -48,5 +49,26 @@ describe('parseMapViewParams', () => {
     expect(parseMapViewParams({ lat: '67', lng: '14', zoom: '99' })?.zoom).toBe(20);
     expect(parseMapViewParams({ lat: '67', lng: '14', zoom: '-5' })?.zoom).toBe(3);
     expect(parseMapViewParams({ lat: '67', lng: '14', zoom: '10.6' })?.zoom).toBe(11);
+  });
+});
+
+describe('stedsnavnet i dyplenken', () => {
+  it('er valgfritt — en lenke uten navn er fortsatt gyldig', () => {
+    expect(parseMapViewParams({ lat: '67.385', lng: '14.775' })?.name).toBeNull();
+    expect(parseMapViewParams({ lat: '67.385', lng: '14.775', sted: '   ' })?.name).toBeNull();
+  });
+
+  it('kappes, så et absurd navn fra URL-en ikke sprenger værstripa', () => {
+    const navn = parseMapViewParams({ lat: '67', lng: '14', sted: 'A'.repeat(500) })?.name;
+    expect(navn).toHaveLength(60);
+  });
+
+  it('stripper kontrolltegn', () => {
+    expect(parseMapViewParams({ lat: '67', lng: '14', sted: 'Bo\u0000d\u001bø' })?.name).toBe('Bodø');
+  });
+
+  it('beholder norske og svenske tegn', () => {
+    expect(parseMapViewParams({ lat: '67', lng: '14', sted: 'Östersund' })?.name).toBe('Östersund');
+    expect(parseMapViewParams({ lat: '67', lng: '14', sted: 'Ålesund' })?.name).toBe('Ålesund');
   });
 });
