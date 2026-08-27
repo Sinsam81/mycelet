@@ -25,6 +25,30 @@
 	<string>Mycelet bruker posisjonen din til å vise funn i nærheten og gi bedre soppvarsel for området ditt.</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>nb</string>
+	<!-- Språkene appen faktisk leverer. Apple leser «Språk»-raden på
+	     App Store-produktsiden fra BUNTEN, ikke fra metadataen i App Store
+	     Connect (Technical Q&A QA1828). Uten denne nøkkelen oppga den
+	     svenske produktsiden «Norsk bokmål» som eneste språk — under en
+	     helt svensk butikktekst, for en app der hele UI-et, været (SMHI),
+	     artsnavnene og personvernsiden er svenske.
+
+	     QA1828 sier at .lproj-mappene i bunten bestemmer lista, og at
+	     CFBundleLocalizations gjelder for apper som IKKE bruker .lproj til
+	     lokaliserte ressurser. Dette skallet er nettopp det: all tekst
+	     kommer fra web-appen på www.mycelet.com, så det finnes ingen
+	     lokaliserte ressurser å legge i en sv.lproj.
+
+	     BEGGE språkene må stå her, aldri nb alene: iOS' per-app-språkvalg
+	     finnes bare for apper som erklærer flere språk, og det er den
+	     overstyringen som avgjør hvilken Accept-Language WKWebView sender
+	     — altså hva src/i18n/locale.ts lander på. Lista holdes i takt med
+	     LOCALES i src/i18n/config.ts av en test:
+	     src/lib/__tests__/ios-sprakerklaering.test.ts -->
+	<key>CFBundleLocalizations</key>
+	<array>
+		<string>nb</string>
+		<string>sv</string>
+	</array>
 	<key>CFBundleDisplayName</key>
         <string>Mycelet</string>
 	<key>CFBundleExecutable</key>

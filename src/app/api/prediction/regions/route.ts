@@ -9,6 +9,7 @@ import { getClientKey, rateLimitResponse } from '@/lib/rate-limit/route';
 import { createRequestLogger } from '@/lib/log/request';
 import { getUserLocale } from '@/i18n/locale';
 import { DEFAULT_LOCALE, isLocale, type Locale } from '@/i18n/config';
+import { REGION_CONDITION_THRESHOLDS, regionScore } from '@/lib/prediction/region-score';
 
 /**
  * «Hvor i landet er det best akkurat nå?»
@@ -46,12 +47,6 @@ interface TileRow {
   center_lat: number;
   center_lng: number;
   metadata: Record<string, unknown> | null;
-}
-
-/** 90-persentilen — «der det er best i regionen», ikke snittet. Se filhodet. */
-function percentile90(sorted: number[]): number {
-  if (sorted.length === 0) return 0;
-  return sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * 0.9))];
 }
 
 export async function GET(request: NextRequest) {
@@ -161,7 +156,7 @@ export async function GET(request: NextRequest) {
     .map(([name, celler]) => {
       const konfig = PREDICTION_TILE_REGIONS.find((r) => r.name === name);
       const sortert = celler.map((c) => c.score).sort((a, b) => a - b);
-      const score = percentile90(sortert);
+      const score = regionScore(sortert);
       // Arten som drar toppen — et tall uten art er et svar uten spørsmål.
       const beste = celler.reduce((a, b) => (b.score > a.score ? b : a));
       return {
@@ -172,10 +167,14 @@ export async function GET(request: NextRequest) {
         lat: konfig ? (konfig.minLat + konfig.maxLat) / 2 : beste.center_lat,
         lng: konfig ? (konfig.minLng + konfig.maxLng) / 2 : beste.center_lng,
         leadingSpecies: beste.species_id != null ? navnPerArt.get(beste.species_id) ?? null : null,
+        // Regionstigen, ikke rutestigen: dette tallet er p90 OVER ruter og
+        // ligger systematisk høyere enn en enkelt rute. Se
+        // REGION_CONDITION_THRESHOLDS.
         verdict: scoreVerdict(
           score,
           locale,
-          beste.species_id != null ? navnPerArt.get(beste.species_id) ?? undefined : undefined
+          beste.species_id != null ? navnPerArt.get(beste.species_id) ?? undefined : undefined,
+          REGION_CONDITION_THRESHOLDS
         )
       };
     })

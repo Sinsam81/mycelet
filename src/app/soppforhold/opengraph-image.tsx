@@ -65,7 +65,7 @@ export default async function OgBilde() {
         </div>
 
         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 28, color: '#cfe0c2' }}>
-          <div style={{ display: 'flex' }}>Vær og sesong for området, ikke skogen der du står</div>
+          <div style={{ display: 'flex' }}>Vær, sesong og skogtype for området, ikke skogen der du står</div>
           <div style={{ display: 'flex' }}>mycelet.com/soppforhold</div>
         </div>
       </div>

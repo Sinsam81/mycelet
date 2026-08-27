@@ -554,7 +554,9 @@
     "bestRegionsSubtitle": "Forholdene der de er best i hver region — trykk for å se på kartet.",
     "bestRegionsExpand": "Vis {count} til",
     "bestRegionsCollapse": "Vis færre",
-    "bestRegionsDisclaimer": "Sammenligner VÆR, SESONG og FUKT mellom landsdeler — ikke hvor soppen står. Forskjellen mellom landsdeler er den modellen måler best.",
+    "bestRegionsDisclaimer": "Sammenligner VÆR, SESONG og SKOGTYPE mellom landsdeler — ikke hvor soppen står. Forskjellen mellom landsdeler er den modellen måler best.",
+    "bestRegionsAllAreas": "Alle områder",
+    "bestRegionsAlert": "Få varsel på e-post",
     "bestRegionsNorway": "Norge",
     "bestRegionsSweden": "Sverige"
   },
@@ -1422,6 +1424,12 @@
   },
   "SpeciesCard": {
     "noImage": "Ingen bilde"
+  },
+  "PhotoCredit": {
+    "full": "Foto: {photographer} ({license})",
+    "photographerOnly": "Foto: {photographer}",
+    "licenseOnly": "Foto: ukjent fotograf ({license})",
+    "sourceLinkTitle": "Åpne kildesiden for bildet"
   },
   "SpeciesPhotoCarousel": {
     "noPhotosYet": "Ingen bilder enda",

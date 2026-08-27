@@ -38,8 +38,8 @@ import { FORECAST_GREEN_MIN } from '@/lib/utils/forecast-scale';
  *
  * ── Hva vi IKKE lover ───────────────────────────────────────────────────────
  *
- * Tallet er vær og sesong for et OMRÅDE. Det sier ingenting om skogen der
- * mottakeren står. E-posten må formuleres deretter — se alerts/email.ts.
+ * Tallet er vær, sesong og skogtype for et OMRÅDE. Det sier ingenting om
+ * skogen der mottakeren står. E-posten må formuleres deretter — se alerts/email.ts.
  */
 
 /** Under dette er dagen ikke verdt en e-post. Samme grense som grønt på stripa. */

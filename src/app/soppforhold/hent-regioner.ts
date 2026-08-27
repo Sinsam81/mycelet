@@ -1,4 +1,4 @@
-import { forecastBand } from '@/lib/utils/forecast-scale';
+import { regionBand, regionBandHex } from '@/lib/prediction/region-score';
 
 /**
  * Delt datagrunnlag for /soppforhold-sidene (samlesiden, områdesidene og
@@ -8,7 +8,27 @@ import { forecastBand } from '@/lib/utils/forecast-scale';
  * bilde-URL-ene med rasterdatoen (?d=ÅÅÅÅ-MM-DD). Se opengraph-image-filene.
  */
 
-export const SOPPFORHOLD_BASE = 'https://www.mycelet.com';
+/**
+ * Sidene er server-rendret og henter sitt eget API, så URL-en må være absolutt
+ * — en relativ sti har ingen base på serversiden.
+ *
+ * ⚠️ I LOKAL DEV MÅ DEN PEKE PÅ LOKAL SERVER. Sto tidligere hardkodet til
+ * produksjon, og da viste /soppforhold prod-data uansett hva du endret lokalt:
+ * en endring i dommene ga et API-svar med ny tekst og en side med gammel, på
+ * samme maskin. Feilen så ut som at endringen ikke virket.
+ *
+ * Bare `development` skiller seg ut. Preview-deployer henter fortsatt fra
+ * produksjon — det er med vilje: et bygg som henter sin egen ennå ikke
+ * ferdigdeployede URL har et høna-og-egget-problem, og innholdet er uansett
+ * det samme rasteret.
+ */
+export const SOPPFORHOLD_BASE =
+  process.env.NODE_ENV === 'development'
+    ? // Porten må LESES, ikke antas: er 3000 opptatt tar Next 3001, og da ville
+      // siden hentet tall fra det som ellers kjører på 3000 — typisk den andre
+      // Mycelet-instansen i hovedmappa. Nøyaktig forvirringen dette skulle fjerne.
+      `http://localhost:${process.env.PORT ?? 3000}`
+    : 'https://www.mycelet.com';
 
 /** Ny beregning kommer daglig; en time er rikelig og sparer oppslag. */
 export const SOPPFORHOLD_REVALIDATE = 3600;
@@ -41,9 +61,16 @@ export async function hentRegioner(
   }
 }
 
-/** Tailwind-klassen for scorefargen (grønn/gul/grå — samme bånd som stripa). */
+/**
+ * Tailwind-klassen for scorefargen.
+ *
+ * Båndet utledes av regionens egen dommestige, ikke av `forecastBand` — den er
+ * kalibrert på punkt-dagscorer fra mushroom-day (median 86) og gav derfor gul
+ * prikk til tall som samtidig fikk topp-dommen i tekst. Farge og tekst leser nå
+ * samme stige, som er hele poenget med å ha én.
+ */
 export function farge(score: number): string {
-  const band = forecastBand(score, score >= 85);
+  const band = regionBand(score);
   if (band === 'green') return 'bg-forest-600';
   if (band === 'amber') return 'bg-amber-500';
   return 'bg-gray-400';
@@ -51,10 +78,7 @@ export function farge(score: number): string {
 
 /** Hex-utgaven til delingsbildene, der Tailwind ikke finnes. */
 export function fargeHex(score: number): string {
-  const band = forecastBand(score, score >= 85);
-  if (band === 'green') return '#4d7c3a';
-  if (band === 'amber') return '#f59e0b';
-  return '#9ca3af';
+  return regionBandHex(score);
 }
 
 export function norskDato(iso: string | null): string {

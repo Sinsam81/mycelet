@@ -5,17 +5,22 @@ import { PageWrapper } from '@/components/layout/PageWrapper';
 import { createClient } from '@/lib/supabase/server';
 import { MushroomMap } from '@/components/map/MushroomMapLazy';
 import { logger } from '@/lib/log';
+import { parseMapViewParams } from '@/lib/utils/map-view-params';
 
 export default async function MapPage({
   searchParams
 }: {
-  searchParams: Promise<{ mine?: string }>;
+  searchParams: Promise<{ mine?: string; lat?: string; lng?: string; zoom?: string; sted?: string }>;
 }) {
   const t = await getTranslations('MapPage');
   // ?mine=1 settes av lagringsflytene: kartet skal åpne med «Kun mine funn»
   // på, så funnet som nettopp ble lagret faktisk synes (private funn er
   // usynlige i standardlaget).
-  const { mine } = await searchParams;
+  const { mine, lat, lng, zoom, sted } = await searchParams;
+  // «Best i landet i dag» på forsiden lenker hit med koordinatene til området
+  // brukeren trykket på. Ruta deklarerte tidligere bare `mine`, så lat/lng ble
+  // forkastet i stillhet og kartet åpnet på brukerens egen posisjon i stedet.
+  const initialView = parseMapViewParams({ lat, lng, zoom, sted });
   const supabase = createClient();
   const {
     data: { user }
@@ -56,7 +61,7 @@ export default async function MapPage({
             </Link>
           ) : null}
         </div>
-        <MushroomMap startWithOnlyMine={mine === '1'} />
+        <MushroomMap startWithOnlyMine={mine === '1'} initialView={initialView} />
       </div>
     </PageWrapper>
   );

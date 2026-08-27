@@ -1,8 +1,26 @@
+/**
+ * Kreditering for ett bilde. Artsbildene er Wikimedia Commons-filer under
+ * CC BY / CC BY-SA, og de lisensene krever at fotograf og lisens navngis der
+ * bildet vises — også i AI-resultatet, ikke bare på artssiden.
+ *
+ * Gjelder KUN våre egne kuraterte bilder (mushroom_species.primary_image_url).
+ * Kindwise sine similar_images kommer fra deres datasett, uten kreditering vi
+ * kan videreformidle — de skal derfor aldri arve denne.
+ */
+export interface PhotoCreditInfo {
+  photographer: string | null;
+  license: string | null;
+  /** Filsiden på Wikimedia Commons. */
+  sourceUrl: string | null;
+}
+
 export interface IdentifyLookAlike {
   name: string;
   danger: string;
   speciesId?: number;
   imageUrl?: string | null;
+  /** Kreditering for `imageUrl`. */
+  imageCredit?: PhotoCreditInfo | null;
   edibility?: string | null;
   /** Why the two get confused (similarity_description). */
   whySimilar?: string | null;
@@ -22,6 +40,8 @@ export interface IdentifySuggestion {
   speciesId?: number;
   /** The app's curated species photo (mushroom_species.primary_image_url). */
   imageUrl?: string | null;
+  /** Kreditering for `imageUrl` — aldri for bildene i `similarImages`. */
+  imageCredit?: PhotoCreditInfo | null;
   // Local context fused from the app's own data (see identify-ranking.ts)
   inSeason?: boolean;
   peakSeason?: boolean;

@@ -7,6 +7,7 @@ import { LandingPage } from '@/components/landing/LandingPage';
 import { EdibilityBadge } from '@/components/ui/EdibilityBadge';
 import { MushroomDayCard } from '@/components/home/MushroomDayCard';
 import { BestRegionsCard } from '@/components/home/BestRegionsCard';
+import { VarselCta } from '@/components/soppforhold/VarselCta';
 import { LastTripCard } from '@/components/home/LastTripCard';
 import { LanguageToggle } from '@/components/layout/LanguageToggle';
 import { createClient } from '@/lib/supabase/server';
@@ -154,6 +155,11 @@ export default async function HomePage() {
   const speciesNames = new globalThis.Map(species.map((item) => [item.id, getSpeciesDisplayName(item, locale)]));
 
   let userStats: { total: number; species: number } | null = null;
+  // Har brukeren allerede slått på soppvarsel? Da skal ikke forsiden be henne
+  // om det hver eneste dag. På /soppforhold er oppfordringen riktig — der er
+  // publikummet uinnloggede besøkende — men her er alle innlogget, og en del
+  // av dem er abonnenter fra før.
+  let harVarsel = false;
   if (user) {
     const { data: myFindings, error: myFindingsError } = await supabase
       .from('findings')
@@ -169,6 +175,22 @@ export default async function HomePage() {
     if (myFindingsError) {
       logger.error('home.user_findings_failed', { userId: user.id, message: myFindingsError.message });
     }
+    // .limit(1).maybeSingle() av samme grunn som i /api/me/soppvarsel:
+    // tabellen tillater flere rader per bruker. En feil her skal ikke skjule
+    // kortet — da er det bedre å spørre en abonnent én gang for mye enn å
+    // gjemme funksjonen for en som ikke har den.
+    const { data: varsel, error: varselError } = await supabase
+      .from('alert_subscriptions')
+      .select('region')
+      .eq('user_id', user.id)
+      .eq('active', true)
+      .limit(1)
+      .maybeSingle();
+    if (varselError) {
+      logger.warn('home.varsel_oppslag_feilet', { userId: user.id, message: varselError.message });
+    }
+    harVarsel = varsel != null;
+
     const rows = (myFindings ?? []) as { species_id: number | null }[];
     if (rows.length > 0) {
       userStats = {
@@ -205,6 +227,18 @@ export default async function HomePage() {
             47 poengs spenn mellom regioner mot 7 inne i ett kartutsnitt. Se
             BestRegionsCard. */}
         <BestRegionsCard />
+
+        {/* Soppvarselet sto uten en eneste dør inn i appen: bunnmenyen har det
+            ikke, forsiden lenket ikke til /soppforhold (der den eneste
+            påmeldingsknappen lå), og kortet selv ligger nederst på
+            profilsiden — under funn, innlegg, forum og rapporter. Appen heter
+            «Soppvarsel & soppkart» i App Store, så funksjonen var i praksis
+            skjult for alle som ikke kom inn utenfra.
+
+            Her, rett under «hvor er det best i landet», er øyeblikket for det:
+            leseren har akkurat sett at ett sted ligger på 100 og et annet på
+            45, og det neste spørsmålet er «si fra når det snur her». */}
+        {harVarsel ? null : <VarselCta land={locale === 'sv' ? 'SE' : 'NO'} innlogget />}
 
         {inSeasonEdible.length > 0 ? (
           <article className="rounded-2xl border border-gray-200 bg-white p-4">

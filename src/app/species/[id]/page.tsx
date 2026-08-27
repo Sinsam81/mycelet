@@ -119,7 +119,7 @@ export default async function SpeciesDetailPage({ params }: SpeciesDetailPagePro
       .single(),
     supabase
       .from('species_photos')
-      .select('id,image_url,thumbnail_url,caption,is_primary')
+      .select('id,image_url,thumbnail_url,caption,is_primary,photographer,license,source_url')
       .eq('species_id', id)
       .order('is_primary', { ascending: false }),
     supabase
