@@ -3,6 +3,8 @@ import { seasonFitForSpecies } from '@/lib/utils/identify-ranking';
 import { getSpeciesDisplayName } from '@/lib/utils/species-name';
 import type { IdentifySuggestion } from '@/types/identify';
 import type { Locale } from '@/i18n/config';
+import { photoCreditFromSpeciesRow } from '@/lib/utils/photo-credit';
+import type { PhotoCreditInfo } from '@/types/identify';
 
 /**
  * Beriker artsforslag med katalogdata og SIKKERHETSDATA (spiselighet + farlige
@@ -90,6 +92,8 @@ export async function enrichSuggestions(
         speciesId?: number;
         norwegianName?: string;
         imageUrl?: string | null;
+      imageCredit?: PhotoCreditInfo | null;
+        imageCredit?: PhotoCreditInfo | null;
         inSeason?: boolean;
         peakSeason?: boolean;
         nearbyFindings: number;
@@ -111,6 +115,7 @@ export async function enrichSuggestions(
           danger: string;
           speciesId?: number;
           imageUrl?: string | null;
+          imageCredit?: PhotoCreditInfo | null;
           edibility?: string | null;
           whySimilar?: string | null;
           howToTell?: string | null;
@@ -119,8 +124,12 @@ export async function enrichSuggestions(
       mapped.seasonFactor = 1;
       mapped.nearbyFindings = 0;
 
+      // primary_image_* er krediteringen for primary_image_url. Bildene er
+      // Commons-filer under CC BY / CC BY-SA, og lisensene krever at fotograf
+      // og lisens navngis der bildet vises — AI-resultatet viser det samme
+      // bildet som artssiden, så kravet gjelder her også.
       const SPECIES_FIELDS =
-        'id,norwegian_name,swedish_name,edibility,primary_image_url,season_start,season_end,peak_season_start,peak_season_end';
+        'id,norwegian_name,swedish_name,edibility,primary_image_url,primary_image_photographer,primary_image_license,primary_image_source_url,season_start,season_end,peak_season_start,peak_season_end';
 
       // eslint-disable-next-line prefer-const
       let { data: species, error: speciesError } = await supabase
@@ -165,6 +174,7 @@ export async function enrichSuggestions(
         mapped.norwegianName = getSpeciesDisplayName(species, locale);
         mapped.edibility = species.edibility;
         mapped.imageUrl = (species.primary_image_url as string | null) ?? null;
+        mapped.imageCredit = mapped.imageUrl ? photoCreditFromSpeciesRow(species) : null;
         // Samme sesongvindu som kalenderen og artsbiblioteket. Se
         // seasonFitForSpecies for hvorfor det rå katalogvinduet ikke duger.
         const fit = seasonFitForSpecies(month, species);
@@ -190,6 +200,9 @@ export async function enrichSuggestions(
       norwegian_name: string;
       swedish_name: string | null;
       primary_image_url: string | null;
+      primary_image_photographer?: string | null;
+      primary_image_license?: string | null;
+      primary_image_source_url?: string | null;
       edibility: string | null;
     };
 
@@ -205,7 +218,7 @@ export async function enrichSuggestions(
     const { data: lookAlikes, error: lookAlikeError } = await supabase
       .from('look_alikes')
       .select(
-        'species_id, danger_level, similarity_description, difference_description, la:mushroom_species!look_alikes_look_alike_id_fkey(id, norwegian_name, swedish_name, primary_image_url, edibility)'
+        'species_id, danger_level, similarity_description, difference_description, la:mushroom_species!look_alikes_look_alike_id_fkey(id, norwegian_name, swedish_name, primary_image_url, primary_image_photographer, primary_image_license, primary_image_source_url, edibility)'
       )
       .in('species_id', speciesIds)
       .in('danger_level', ['high', 'critical']);
@@ -251,6 +264,7 @@ export async function enrichSuggestions(
         danger: r.danger_level,
         speciesId: laObj.id,
         imageUrl: laObj.primary_image_url ?? null,
+        imageCredit: laObj.primary_image_url ? photoCreditFromSpeciesRow(laObj) : null,
         edibility: laObj.edibility ?? null,
         whySimilar: r.similarity_description ?? null,
         howToTell: r.difference_description ?? null

@@ -1,4 +1,4 @@
-import type { IdentifySuggestion } from '@/types/identify';
+import type { IdentifySuggestion, PhotoCreditInfo } from '@/types/identify';
 
 /**
  * Referansebilder for et AI-forslag — grunnlaget for «Ligner det på …?»-
@@ -17,6 +17,15 @@ import type { IdentifySuggestion } from '@/types/identify';
 export interface ReferencePhoto {
   url: string;
   kind: 'curated' | 'similar';
+  /**
+   * Kreditering. Settes KUN på det kuraterte bildet: det er en Commons-fil
+   * under CC BY / CC BY-SA, som krever navngiving der bildet vises.
+   * Kindwise-bildene har ingen kreditering vi kan videreformidle, og å la dem
+   * arve fotografen fra referansefotoet ville vært en falsk kreditering av et
+   * helt annet bilde. Feltet er utelatt (ikke null) når vi ikke har noe —
+   * ellers ville hvert bilde båret en tom kreditering.
+   */
+  credit?: PhotoCreditInfo;
 }
 
 /**
@@ -27,7 +36,7 @@ export interface ReferencePhoto {
 export const MAX_REFERENCE_PHOTOS = 3;
 
 export function buildReferencePhotos(
-  suggestion: Pick<IdentifySuggestion, 'imageUrl' | 'similarImages'> | null | undefined
+  suggestion: Pick<IdentifySuggestion, 'imageUrl' | 'similarImages' | 'imageCredit'> | null | undefined
 ): ReferencePhoto[] {
   if (!suggestion) return [];
 
@@ -35,7 +44,11 @@ export function buildReferencePhotos(
   const seen = new Set<string>();
 
   if (suggestion.imageUrl) {
-    photos.push({ url: suggestion.imageUrl, kind: 'curated' });
+    photos.push({
+      url: suggestion.imageUrl,
+      kind: 'curated',
+      ...(suggestion.imageCredit ? { credit: suggestion.imageCredit } : {})
+    });
     seen.add(suggestion.imageUrl);
   }
 

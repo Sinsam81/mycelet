@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { buildReferencePhotos } from '@/lib/utils/reference-photos';
+import { PhotoCredit } from '@/components/ui/PhotoCredit';
 import { IdentifySuggestion } from '@/types/identify';
 
 /**
@@ -92,8 +93,18 @@ export function ReferencePhotos({
                     className="h-32 w-full object-cover"
                   />
                 )}
-                <figcaption className="p-2.5 text-[11px] font-semibold uppercase tracking-wide text-gray-500">
-                  {photo.kind === 'curated' ? t('curatedLabel') : t('similarLabel')}
+                <figcaption className="space-y-1 p-2.5">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+                    {photo.kind === 'curated' ? t('curatedLabel') : t('similarLabel')}
+                  </p>
+                  {/* Kun referansefotoet krediteres — Kindwise-bildene har
+                      ingen kreditering vi kan videreformidle, og feltet
+                      settes derfor aldri på dem (se buildReferencePhotos). */}
+                  <PhotoCredit
+                    photographer={photo.credit?.photographer}
+                    license={photo.credit?.license}
+                    sourceUrl={photo.credit?.sourceUrl}
+                  />
                 </figcaption>
               </figure>
             ))}

@@ -4,7 +4,8 @@ import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { AlertTriangle } from 'lucide-react';
 import { EdibilityBadge } from '@/components/ui/EdibilityBadge';
-import { IdentifySuggestion } from '@/types/identify';
+import { PhotoCredit } from '@/components/ui/PhotoCredit';
+import { IdentifySuggestion, PhotoCreditInfo } from '@/types/identify';
 import { Edibility } from '@/types/species';
 
 /**
@@ -27,12 +28,14 @@ function PhotoCard({
   label,
   name,
   imageUrl,
+  imageCredit,
   edibility,
   tone
 }: {
   label: string;
   name: string;
   imageUrl: string | null | undefined;
+  imageCredit: PhotoCreditInfo | null | undefined;
   edibility: Edibility | null;
   tone: 'chosen' | 'danger';
 }) {
@@ -54,6 +57,14 @@ function PhotoCard({
         </p>
         <p className="text-sm font-semibold leading-tight text-gray-900">{name}</p>
         {edibility ? <EdibilityBadge edibility={edibility} /> : null}
+        {/* Artsbildene er Commons-filer under CC BY / CC BY-SA. Krediteringen
+            hører til akkurat det bildet som vises — se kallstedet: den følger
+            aldri med når kortet faller tilbake på et AI-bilde. */}
+        <PhotoCredit
+          photographer={imageCredit?.photographer}
+          license={imageCredit?.license}
+          sourceUrl={imageCredit?.sourceUrl}
+        />
       </figcaption>
     </figure>
   );
@@ -67,6 +78,12 @@ export function LookAlikeCheck({ suggestion }: { suggestion: IdentifySuggestion 
   const critical = lookAlike.danger === 'critical';
   const others = (suggestion.dangerousLookAlikes ?? []).slice(1);
   const chosenName = suggestion.norwegianName ?? suggestion.name;
+
+  // Kortet faller tilbake på et Kindwise-bilde når arten mangler kuratert
+  // foto. Krediteringen gjelder BARE det kuraterte bildet — henger den igjen
+  // på reservebildet, krediterer vi feil fotograf for et helt annet bilde.
+  const chosenImageUrl = suggestion.imageUrl ?? suggestion.similarImages?.[0] ?? null;
+  const chosenImageCredit = suggestion.imageUrl ? suggestion.imageCredit : null;
 
   return (
     <section
@@ -90,7 +107,8 @@ export function LookAlikeCheck({ suggestion }: { suggestion: IdentifySuggestion 
         <PhotoCard
           label={t('yourSuggestion')}
           name={chosenName}
-          imageUrl={suggestion.imageUrl ?? suggestion.similarImages?.[0] ?? null}
+          imageUrl={chosenImageUrl}
+          imageCredit={chosenImageCredit}
           edibility={asEdibility(suggestion.edibility)}
           tone="chosen"
         />
@@ -98,6 +116,7 @@ export function LookAlikeCheck({ suggestion }: { suggestion: IdentifySuggestion 
           label={t('dangerousLookAlike')}
           name={lookAlike.name}
           imageUrl={lookAlike.imageUrl}
+          imageCredit={lookAlike.imageCredit}
           edibility={asEdibility(lookAlike.edibility)}
           tone="danger"
         />

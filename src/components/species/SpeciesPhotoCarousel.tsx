@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { PhotoCredit } from '@/components/ui/PhotoCredit';
 
 interface Photo {
   id: string;
@@ -10,6 +11,12 @@ interface Photo {
   thumbnail_url: string | null;
   caption: string | null;
   is_primary: boolean;
+  /** Opphavsperson. Alle artsbildene er Commons-filer under CC BY / CC BY-SA. */
+  photographer: string | null;
+  /** Lisensens kortnavn, f.eks. «CC BY-SA 4.0». Ikke en kilde. */
+  license: string | null;
+  /** Filsiden på Wikimedia Commons. */
+  source_url: string | null;
 }
 
 interface SpeciesPhotoCarouselProps {
@@ -74,6 +81,16 @@ export function SpeciesPhotoCarousel({ photos, speciesName }: SpeciesPhotoCarous
       {photo.caption ? (
         <p className="mt-1 text-center text-xs italic text-gray-500">{photo.caption}</p>
       ) : null}
+
+      {/* CC BY / CC BY-SA krever at fotograf og lisens navngis der bildet
+          vises. Linja rendrer seg bort av seg selv når vi ikke har ekte
+          verdier — se buildPhotoCredit. */}
+      <PhotoCredit
+        photographer={photo.photographer}
+        license={photo.license}
+        sourceUrl={photo.source_url}
+        className="mt-1 text-center"
+      />
     </div>
   );
 }

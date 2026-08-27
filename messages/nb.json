@@ -1423,6 +1423,12 @@
   "SpeciesCard": {
     "noImage": "Ingen bilde"
   },
+  "PhotoCredit": {
+    "full": "Foto: {photographer} ({license})",
+    "photographerOnly": "Foto: {photographer}",
+    "licenseOnly": "Foto: ukjent fotograf ({license})",
+    "sourceLinkTitle": "Åpne kildesiden for bildet"
+  },
   "SpeciesPhotoCarousel": {
     "noPhotosYet": "Ingen bilder enda",
     "previousPhoto": "Forrige bilde",
