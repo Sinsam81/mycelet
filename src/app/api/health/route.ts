@@ -52,6 +52,7 @@ interface HealthResponse {
   };
   checks: {
     envVars: CheckResult;
+    epost: CheckResult;
     database?: CheckResult;
     auditLogTable?: CheckResult;
   };
@@ -66,6 +67,33 @@ function checkEnvVars(): CheckResult {
   const missing = REQUIRED_ENV_VARS.filter((v) => !process.env[v]);
   if (missing.length > 0) {
     return { ok: false, message: `Mangler: ${missing.join(', ')}` };
+  }
+  return { ok: true };
+}
+
+/**
+ * Kan appen sende e-post i det hele tatt?
+ *
+ * Egen sjekk, ikke en del av REQUIRED_ENV_VARS, fordi konsekvensen er en helt
+ * annen: mangler Supabase-nøklene, er appen åpenbart nede. Mangler
+ * e-postnøklene, ser ALT normalt ut — soppvarselets nattjobb kjører,
+ * regionscorene skrives, loggen sier «epost.ikke-konfigurert» én gang per
+ * mottaker, og ingen e-post går ut. Se src/lib/email/send.ts, som med vilje
+ * svarer {ok:false} i stedet for å kaste.
+ *
+ * Det er den dyreste stille feilen i appen: den rammer bare folk som har
+ * BEDT om å høre fra oss, og de merker den som taushet — som er akkurat det
+ * varselet lover når forholdene ikke har snudd. Derfor står den her, der en
+ * oppetidsprobe kan se den, i stedet for å oppdages den dagen noen spør
+ * hvorfor de aldri får noe.
+ *
+ * Rapporterer bare OM variablene er satt, aldri verdiene — samme regel som
+ * resten av ruta.
+ */
+function checkEpost(): CheckResult {
+  const missing = (['RESEND_API_KEY', 'RESEND_FROM'] as const).filter((v) => !process.env[v]);
+  if (missing.length > 0) {
+    return { ok: false, message: `E-post er ikke konfigurert — mangler: ${missing.join(', ')}. Soppvarselet sender ingenting.` };
   }
   return { ok: true };
 }
@@ -136,8 +164,11 @@ export async function GET(request: NextRequest) {
 
   const envVarsCheck = checkEnvVars();
 
+  // E-postsjekken er med i BEGGE varianter, også ?fast=1: den koster ingenting
+  // (to oppslag i process.env) og er nettopp den feilen man vil se hyppig.
   const checks: HealthResponse['checks'] = {
-    envVars: envVarsCheck
+    envVars: envVarsCheck,
+    epost: checkEpost()
   };
 
   if (!fast) {
