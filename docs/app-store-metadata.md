@@ -124,21 +124,30 @@ kontrollsted).
 
 `kantarell` er den ene svenske broen som er gratis — samme ord i begge språk.
 
-### ⚠️ Svenske ord er bevisst ute — og det er midlertidig
+### ✅ Svensk lokalisering er på plass — nøkkelordene er nå et eget felt
 
-Appen har foreløpig **bare norsk lokalisering**. Uten en svensk butikkside bruker
-Apple den norske også i svensk App Store, inkludert nøkkelordene. `svamp`,
-`svampkarta` og `matsvamp` sto derfor her og stjal 34 tegn fra de norske.
+Denne gjelden er innfridd. Den svenske butikksiden finnes, verifisert mot Apples
+eget lookup-API 27.08.2026:
 
-De er tatt ut fordi neste jobb er å legge til **sv som egen lokalisering**: det
-gir 100 helt nye tegn, svensk undertittel og svensk beskrivelse — halve markedet
-med sitt eget felt i stedet for en tredjedel av vårt.
+```
+curl "https://itunes.apple.com/lookup?bundleId=no.mycelet.app&country=se"
+→ trackName: «Mycelet: Svampkarta & prognos», svensk beskrivelse, 6 svenske
+  skjermbilder, apps.apple.com/se/app/…/id6784672944
+```
 
-Fram til den er på plass er Mycelet i praksis usynlig i svensk søk (bortsett fra
-`kantarell`). **Det er gjelden vi tok opp her.** Krever egne svenske
-skjermbilder, men ikke nytt bygg. Svenske høyverdiord til den runden: `svamp`,
-`svampguide`, `svampplockning`, `svampkarta`, `matsvamp`, `karl`+`johan`
-(= «karl johan», Sveriges steinsopp) og `kantarell`.
+Svensk har dermed sine egne 100 nøkkelordstegn, uavhengig av de norske. Det er
+derfor `svamp`, `svampkarta` og `matsvamp` ikke skal stå i det NORSKE feltet —
+de ville stjålet 34 tegn fra norske ord uten å gi noe tilbake.
+
+Høyverdiord til det svenske feltet: `svamp`, `svampguide`, `svampplockning`,
+`svampkarta`, `matsvamp`, `karl`+`johan` (= «karl johan», Sveriges steinsopp).
+`kantarell` er gratis i begge — samme ord på begge språk.
+
+Butikklokaliseringen krever ikke nytt bygg. Det gjør derimot **språkraden** på
+produktsiden: den leses fra app-bunten, ikke fra metadataen (Apple QA1828). Fram
+til neste bygg er lastet opp oppgir den svenske produktsiden fortsatt «Norsk
+bokmål» som eneste språk — under den svenske teksten. `CFBundleLocalizations` er
+lagt inn i `ios/App/App/Info.plist`; den slår ut ved neste innsending.
 
 ## Reklametekst / Promotional text (maks 170 tegn, kan endres uten ny review)
 

@@ -354,11 +354,21 @@ Det som fortsatt kan sprekke:
 
 ## Ikke gjort, med vilje
 
-- **Svenske tillatelsestekster.** iOS-prosjektet har ingen lokalisering satt opp
-  (`knownRegions = en, Base`), og å legge det til krever håndredigering av
-  `project.pbxproj`. Apple krever det ikke, og risikoen for å ødelegge
-  Xcode-prosjektet rett før innsending er større enn gevinsten. Svenske brukere
-  ser norsk tillatelsestekst.
+- **Svenske tillatelsestekster.** De fire `NS*UsageDescription`-tekstene i
+  `Info.plist` er norske. Å oversette dem krever en ekte `sv.lproj/InfoPlist.strings`,
+  og den må registreres i `project.pbxproj` (ny `PBXFileReference`, begge
+  `PBXVariantGroup`-ene, `sv` i `knownRegions`). Apple krever det ikke, og
+  risikoen for å ødelegge Xcode-prosjektet er større enn gevinsten. Svenske
+  brukere ser norsk tekst i kamera-, bilde- og posisjonsdialogene.
+
+  **NB — dette gjelder ikke lenger språkERKLÆRINGEN.** De to er lett å blande
+  sammen. `CFBundleLocalizations` i `Info.plist` erklærer hvilke språk appen
+  støtter, og krever ingen `.lproj` og ingen `pbxproj`-redigering: Apples
+  Technical Q&A QA1828 sier eksplisitt at nøkkelen er ment for apper som ikke
+  bruker `.lproj` til lokaliserte ressurser — som dette skallet, der all tekst
+  kommer fra web-appen. Nøkkelen står nå med `nb` og `sv`, og
+  `src/lib/__tests__/ios-sprakerklaering.test.ts` holder lista i takt med
+  `LOCALES` i `src/i18n/config.ts`.
 - **Produktansvarsforsikring.** Blokkerer ikke innsending, og jeg kan ikke tegne
   den. Men du driver som ENK — et erstatningskrav treffer privatøkonomien din
   direkte. Sikkerhetsrammen i appen er god, men den er ikke en forsikring.
