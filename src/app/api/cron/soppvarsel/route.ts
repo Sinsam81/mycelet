@@ -4,7 +4,8 @@ import { createRequestLogger } from '@/lib/log/request';
 import { bearerSecretMatches } from '@/lib/security/secret-compare';
 import { skalVarsle, VARSEL_KARANTENE_DAGER, VARSEL_MIN_SCORE } from '@/lib/alerts/decision';
 import { byggVarselEpost } from '@/lib/alerts/email';
-import { sendEpost } from '@/lib/email/send';
+import { manglendeEpostKonfig, sendEpost } from '@/lib/email/send';
+import * as Sentry from '@sentry/nextjs';
 import type { Locale } from '@/i18n/config';
 import { regionScore } from '@/lib/prediction/region-score';
 
@@ -58,6 +59,35 @@ export async function GET(request: NextRequest) {
 
   if (!bearerSecretMatches(request.headers.get('authorization'), process.env.CRON_SECRET)) {
     return NextResponse.json({ error: 'Ikke autorisert' }, { status: 401 });
+  }
+
+  // ── 0. Kan vi sende i det hele tatt? ──────────────────────────────────────
+  // Utsendingen kan være frakoblet uten at noe som helst ser galt ut: jobben
+  // kjører, regionscorene lagres, og hver mottaker gir én linje i loggen som
+  // ingen leser. Det sto slik i nitten dager fordi RESEND_API_KEY manglet i
+  // produksjon, og ble til slutt oppdaget ved at eieren undret seg over at det
+  // var stille — ikke av noe system.
+  //
+  // Alarmen går til Sentry, ikke på e-post. En varsling om at e-post er nede
+  // kan ikke selv være avhengig av e-post for å komme fram.
+  //
+  // Sjekken står FØR alle tidlige returer under (utdaterte fliser, manglende
+  // raster). Ellers ville en urelatert feil tidlig i jobben skjult at
+  // utsendingen er død — og da er alarmen verdiløs akkurat når den trengs.
+  //
+  // Jobben fortsetter etterpå: steg 1-3 lagrer historikk som er verdt å ha
+  // uansett, og den er grunnlaget for /soppforhold.
+  const manglerEpost = manglendeEpostKonfig();
+  if (manglerEpost.length > 0) {
+    log.error('soppvarsel.epost_ikke_konfigurert', { mangler: manglerEpost });
+    Sentry.captureMessage(
+      `Soppvarselet kan ikke sende e-post — mangler ${manglerEpost.join(', ')}`,
+      'error'
+    );
+    // Serverless-funksjoner kan avsluttes før Sentry har rukket å sende.
+    // Hendelsen koster maks to sekunder, én gang i døgnet, og bare når noe
+    // faktisk er galt — billig forsikring mot en alarm som aldri kommer fram.
+    await Sentry.flush(2000);
   }
 
   const db = createAdminClient();

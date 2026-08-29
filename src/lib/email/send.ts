@@ -61,6 +61,20 @@ export interface EpostResultat {
 
 const RESEND_URL = 'https://api.resend.com/emails';
 
+/**
+ * Hvilke e-postvariabler mangler? Tom liste betyr at utsending er konfigurert.
+ *
+ * Egen eksport fordi den stille feilen må kunne oppdages ANDRE steder enn inne
+ * i selve sendingen. Soppvarselets nattjobb slår alarm på denne før den i det
+ * hele tatt begynner å sende — se src/app/api/cron/soppvarsel/route.ts.
+ *
+ * Navnene står dermed ett sted i sendekjeden, så en omdøpt variabel ikke
+ * etterlater seg en alarm som leter etter noe som ikke finnes lenger.
+ */
+export function manglendeEpostKonfig(): string[] {
+  return (['RESEND_API_KEY', 'RESEND_FROM'] as const).filter((v) => !process.env[v]);
+}
+
 export async function sendEpost(args: EpostArgs): Promise<EpostResultat> {
   const nokkel = process.env.RESEND_API_KEY;
   const fra = process.env.RESEND_FROM;
