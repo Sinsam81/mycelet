@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { Microscope } from 'lucide-react';
 import { getTranslations } from 'next-intl/server';
 import { PageWrapper } from '@/components/layout/PageWrapper';
+import { Fasitlogg } from './Fasitlogg';
 
 /**
  * Åpenhetssiden — valideringstallene bak varselet og AI-identifiseringen,
@@ -24,6 +25,8 @@ import { PageWrapper } from '@/components/layout/PageWrapper';
  * Siden snakker som «vi»/Mycelet og rendrer aldri juridisk enhet eller
  * byline — juridisk informasjon hører hjemme på vilkårssidene og bare der.
  */
+
+export const revalidate = 3600;
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations('Apenhet');
@@ -57,6 +60,9 @@ export default async function TransparencyPage() {
             {t('timingCaveat')}
           </p>
         </article>
+
+        {/* ── Fasitloggen: hvert varsel etterprøvd ─────────────────────── */}
+        <Fasitlogg />
 
         {/* ── HVOR: den ærlige svakheten — signaturgrepet på hele siden ── */}
         <article className="rounded-xl border-2 border-forest-300 bg-forest-50 p-4">

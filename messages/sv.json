@@ -281,7 +281,17 @@
     "unknown4": "Rangordning av «bästa stället»: mätt, men inte statistiskt signifikant. Vi behandlar det som okänt.",
     "datesNote": "Siffrorna på den här sidan kontrollerades senast 26 augusti 2026. Kartan innehöll då 428 829 dokumenterade fynd; säsongskurvorna bygger på ögonblicksbilden från 2 augusti 2026.",
     "sourcesLink": "Se alla datakällor och licenser →",
-    "backHome": "← Till startsidan"
+    "backHome": "← Till startsidan",
+    "fasitHeading": "Facitloggen: varje varning, efterprövad",
+    "fasitIntro": "Varje svampvarning vi skickar är ett påstående som kan kontrolleras. Här står de senaste varningarna med facit: hur många svampfynd som registrerades i området veckan efter varningen, mot veckan innan. Vi publicerar siffrorna oavsett utfall.",
+    "fasitColRegion": "Område",
+    "fasitColDato": "Varnad",
+    "fasitColLovet": "Förhållanden",
+    "fasitColEtter": "Fynd veckan efter",
+    "fasitColFor": "Veckan innan",
+    "fasitUmoden": "(mognar)",
+    "fasitEmpty": "Loggen börjar med nästa skickade varning — facit dyker upp här allteftersom säsongen rullar.",
+    "fasitCaveat": "Källor: Artsobservasjoner/GBIF och fynd från Mycelet-användare. Artsobservasjoner publicerar till GBIF med veckors eftersläpning, så färska siffror är systematiskt för låga och växer allteftersom rapporterna kommer in — rader märkta «mognar» är inte färdiga. Fyndtal är också väderberoende i sig: en regntung helg ger färre människor i skogen, oavsett förhållanden."
   },
   "Datakilder": {
     "metaTitle": "Datakällor",

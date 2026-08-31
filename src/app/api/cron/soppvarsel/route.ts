@@ -5,6 +5,7 @@ import { bearerSecretMatches } from '@/lib/security/secret-compare';
 import { skalVarsle, VARSEL_KARANTENE_DAGER, VARSEL_MIN_SCORE } from '@/lib/alerts/decision';
 import { byggVarselEpost } from '@/lib/alerts/email';
 import { arterISesong, velgToppdag, type SesongArt, type Toppdag } from '@/lib/alerts/ekstra';
+import { beregnFasit, FASIT_MODEN_DAGER, type FasitTall } from '@/lib/alerts/fasit';
 import { PREDICTION_TILE_REGIONS } from '@/lib/prediction/tile-regions';
 import { buildWeek, filterUpcomingDays } from '@/lib/prediction/week-scores';
 import { fetchWeatherSummary } from '@/lib/weather';
@@ -70,6 +71,43 @@ interface Abonnement {
  * region+locale for kjøringen: to værkall per varslede region, ikke per
  * abonnent.
  */
+const fasitCache = new Map<string, FasitTall | null>();
+
+/**
+ * Fasit for FORRIGE varsel i regionen — kvitteringskulturen fra strategien
+ * 2026-08-31: hvert varsel er en falsifiserbar påstand, og neste varsel
+ * bærer fasiten for det forrige. Kun når varselet er minst FASIT_MODEN_DAGER
+ * gammelt (GBIF-etterslepet) og begge kildene svarte — vi feller aldri dom på
+ * umodne tall. Best-effort som alt annet krydder.
+ */
+async function hentFasit(
+  db: ReturnType<typeof createAdminClient>,
+  region: string,
+  naa: Date
+): Promise<FasitTall | null> {
+  if (fasitCache.has(region)) return fasitCache.get(region) ?? null;
+  let fasit: FasitTall | null = null;
+  try {
+    const grense = new Date(naa.getTime() - FASIT_MODEN_DAGER * 86_400_000).toISOString().slice(0, 10);
+    const { data } = await db
+      .from('varsel_hendelser')
+      .select('dato')
+      .eq('region', region)
+      .lte('dato', grense)
+      .order('dato', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (data?.dato) {
+      const beregnet = await beregnFasit(db, region, data.dato as string, naa);
+      if (beregnet?.moden) fasit = beregnet;
+    }
+  } catch {
+    // kvitteringen er pynt — aldri i veien for varselet
+  }
+  fasitCache.set(region, fasit);
+  return fasit;
+}
+
 const ekstraCache = new Map<string, { toppdag: Toppdag | null; arter: string[] }>();
 let sesongArter: SesongArt[] | null = null;
 
@@ -133,6 +171,7 @@ export async function GET(request: NextRequest) {
   // Modulnivå-cache overlever varme serverless-instanser — nullstill per kjøring
   // så gårsdagens prognose aldri gjenbrukes i dag.
   ekstraCache.clear();
+  fasitCache.clear();
   sesongArter = null;
 
   if (!bearerSecretMatches(request.headers.get('authorization'), process.env.CRON_SECRET)) {
@@ -317,6 +356,7 @@ export async function GET(request: NextRequest) {
   }
 
   const naa = new Date();
+  const loggedeRegioner = new Set<string>();
   let sendt = 0;
   let feilet = 0;
   const avslag: Record<string, number> = {};
@@ -370,6 +410,23 @@ export async function GET(request: NextRequest) {
     const avmeldingsUrl = `${appUrl}/api/soppvarsel/av?t=${ab.unsubscribe_token}`;
     const spraak = (ab.locale === 'sv' ? 'sv' : 'nb') as Locale;
     const ekstra = await hentEkstra(db, ab.region, spraak, naa);
+    const fasit = await hentFasit(db, ab.region, naa);
+
+    // Loggfør dagens varselhendelse for regionen — én rad per region per dag
+    // (upsert på (region, dato)), FØR utsendingen: en e-post som gikk ut skal
+    // aldri mangle sin rad i fasitloggen, selv om noe under feiler.
+    const iDagIso = naa.toISOString().slice(0, 10);
+    if (!loggedeRegioner.has(ab.region)) {
+      loggedeRegioner.add(ab.region);
+      const { error: loggErr } = await db
+        .from('varsel_hendelser')
+        .upsert(
+          { region: ab.region, dato: iDagIso, fra_score: beslutning.fra, til_score: beslutning.til },
+          { onConflict: 'region,dato' }
+        );
+      if (loggErr) log.warn('soppvarsel.hendelseslogg_feilet', { region: ab.region, message: loggErr.message });
+    }
+
     const { emne, html, tekst } = byggVarselEpost({
       region: ab.region,
       fra: beslutning.fra,
@@ -378,7 +435,8 @@ export async function GET(request: NextRequest) {
       appUrl,
       avmeldingsUrl,
       toppdag: ekstra.toppdag,
-      arter: ekstra.arter
+      arter: ekstra.arter,
+      fasit: fasit ? { dato: fasit.dato, ukenEtter: fasit.ukenEtter, ukenFor: fasit.ukenFor } : null
     });
 
     const res = await sendEpost({ til: epost, emne, html, tekst, avmeldingsUrl });
