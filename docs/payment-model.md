@@ -41,3 +41,28 @@
 - `GET /api/prediction`
   - Betalt plan: full hotspot-detalj.
   - Gratis/utlogget: begrenset hotspot-sett (coarse visning + upsell-message).
+
+## Prisendring 2026-08-31: Premium månedlig 79 → 99 kr
+
+Besluttet av eier sammen med innføring av 7 dagers gratis prøveperiode.
+Rasjonale: styrker Sesongpass-ankeret (to høstmåneder = 198 kr mot 249 for
+helt år) og hever CAC-taket for annonsene. Gjennomført:
+
+- Apple: Scheduled Price Change fra 2026-09-01, «Preserve current price» for
+  eksisterende (ASC, 175 land, basert på 99 NOK).
+- Stripe: NY pris `price_1UAVfuPvIc25pUd2GDMz6iF4` (99 NOK/mnd) på
+  prod_UgdoS42xnanlgP; gamle 79-prisen består for eksisterende abonnenter.
+  `STRIPE_PRICE_PREMIUM_MONTHLY` i Vercel må peke på den nye ID-en.
+- Kode: plans.ts, kjøpsvilkår (nb+sv), begge statiske landingssider, vaktest.
+
+**⚠️ Restanse:** den NORSKE App Store-beskrivelsen sier fortsatt «79 kr per
+måned» og kan bare endres ved neste versjonsinnsending. Adopter da den svenske
+løsningen («aktuelle priser vises i appen og i App Store») permanent, så
+forsvinner denne koblingen.
+
+**📌 Eksplisitt eksperiment for oktober:** vurder 129 kr/mnd HVIS RevenueCat
+viser at månedsplanen kannibaliserer Sesongpasset (høy månedsandel). Ved 129 er
+måneden en ren lokkepris (2 mnd = 258 > 249). Besluttet UTSATT 2026-08-31 pga.
+null datapunkter, førsteinntrykk for ny app, og at prisøkninger for nye kunder
+er gratis å gjøre senere.
+

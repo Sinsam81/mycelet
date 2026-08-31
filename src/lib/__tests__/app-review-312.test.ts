@@ -218,8 +218,8 @@ describe('Den statiske forsiden — det Apple faktisk ser', () => {
 
     it(`${fil}: prisene er skjult i appen`, () => {
       // Beløpene er hardkodede norske kroner. App Store trekker i kontoens egen
-      // valuta — en svensk konto fikk «79 kr» presentert som sin pris (3.1.2).
-      expect(omsluttendeTagg(html, '79 kr', 'section')).toContain('data-web-only');
+      // valuta — en svensk konto fikk «79 kr» (nå 99) presentert som sin pris (3.1.2).
+      expect(omsluttendeTagg(html, '99 kr', 'section')).toContain('data-web-only');
       expect(omsluttendeTagg(html, '249 kr', 'section')).toContain('data-web-only');
     });
 

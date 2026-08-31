@@ -46,7 +46,7 @@ type BillingStatusResponse = {
 
 // Amounts come from BILLING_PLANS (the same source the checkout uses), so the
 // page can never advertise a different price than Stripe charges.
-const PREMIUM_MONTHLY = BILLING_PLANS.premium.monthlyNok ?? 79;
+const PREMIUM_MONTHLY = BILLING_PLANS.premium.monthlyNok ?? 99;
 const SEASON_YEARLY = BILLING_PLANS.season_pass.yearlyNok ?? 249;
 // Bump this whenever the consent wording in the checkbox changes, so a stored
 // consent can be traced back to the exact text the customer was shown.

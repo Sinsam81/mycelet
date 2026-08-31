@@ -19,7 +19,7 @@ export const BILLING_PLANS: Record<
   premium: {
     tier: 'premium',
     label: 'Premium',
-    monthlyNok: 79,
+    monthlyNok: 99,
     description: 'Ubegrenset AI-identifikasjon, prediksjon og premium-funksjoner.',
     priceEnvKey: 'STRIPE_PRICE_PREMIUM_MONTHLY'
   },
