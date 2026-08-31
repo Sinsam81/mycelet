@@ -27,7 +27,7 @@ import { BILLING_PLANS, FREE_DAILY_AI_LIMIT } from '@/lib/billing/plans';
  * own; the bottom nav doubles as an invitation to explore the open pages.
  */
 
-const PREMIUM_MONTHLY = BILLING_PLANS.premium.monthlyNok ?? 79;
+const PREMIUM_MONTHLY = BILLING_PLANS.premium.monthlyNok ?? 99;
 const SEASON_YEARLY = BILLING_PLANS.season_pass.yearlyNok ?? 249;
 
 /** Én rad i FAQ-en. Egen komponent fordi én av dem skjules i iOS-skallet. */

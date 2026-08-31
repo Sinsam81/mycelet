@@ -81,7 +81,12 @@ export function useIdentify() {
         // Serveren setter dette når et oppslag av spiselighet eller
         // forvekslingsarter feilet. Da MÅ resultatsiden si fra — uten flagget
         // ser «vi klarte ikke sjekke» ut nøyaktig som «ingen fare funnet».
-        safetyDataIncomplete: Boolean(data.safetyDataIncomplete)
+        safetyDataIncomplete: Boolean(data.safetyDataIncomplete),
+        // «N igjen i dag»-hintet på resultatsiden. null = betalende/ukjent.
+        freeQuotaRemaining:
+          typeof (data as { freeQuotaRemaining?: unknown }).freeQuotaRemaining === 'number'
+            ? ((data as { freeQuotaRemaining: number }).freeQuotaRemaining)
+            : null
       };
     }
   });

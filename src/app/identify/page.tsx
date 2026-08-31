@@ -284,23 +284,27 @@ export default function IdentifyPage() {
               <Sparkles className="h-5 w-5 shrink-0 text-forest-700" />
               <div className="space-y-2">
                 <p className="font-semibold text-forest-900">{t('quotaHeading')}</p>
-                <p className="text-sm text-forest-900">{quotaMessage}</p>
-                <ul className="list-disc pl-5 text-sm text-forest-900">
-                  <li>{t('disabledSearchDb')}</li>
-                  <li>{t('disabledBrowseSeason')}</li>
-                  <li>{t('quotaComeBackTomorrow')}</li>
-                </ul>
-                <div className="flex flex-wrap gap-2 pt-2">
+                {/* Rekkefølgen er snudd med vilje: brukeren står med en sopp
+                    de vil ha svar på NÅ — det er appens varmeste
+                    kjøpsøyeblikk. Selg svaret først, ventingen sist. */}
+                <p className="text-sm text-forest-900">{t('quotaUpgradeLead')}</p>
+                <div className="flex flex-wrap gap-2 pt-1">
                   <Link
                     href="/pricing"
                     className="inline-flex items-center justify-center rounded-lg bg-forest-700 px-4 py-2 text-sm font-semibold text-white hover:bg-forest-800"
                   >
-                    {t('quotaSeePlans')}
+                    {t('quotaUpgradeCta')}
                   </Link>
                   <Button variant="outline" onClick={() => router.push('/species')}>
                     {t('searchDb')}
                   </Button>
                 </div>
+                <p className="pt-1 text-sm text-forest-900">{quotaMessage}</p>
+                <ul className="list-disc pl-5 text-sm text-forest-900">
+                  <li>{t('disabledSearchDb')}</li>
+                  <li>{t('disabledBrowseSeason')}</li>
+                  <li>{t('quotaComeBackTomorrow')}</li>
+                </ul>
               </div>
             </div>
           </div>

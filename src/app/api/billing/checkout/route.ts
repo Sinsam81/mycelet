@@ -201,6 +201,14 @@ export async function POST(request: NextRequest) {
           delivery_consent_version: consentVersion
         },
         subscription_data: {
+          // 7 dagers gratis prøveperiode — men KUN for førstegangskjøpere.
+          // Stripe gir ellers ny prøve ved hvert nye abonnement, og «si opp,
+          // tegn på nytt, prøv gratis igjen» ville vært en evighetsmaskin.
+          // Har raden noen gang pekt på et Stripe-abonnement eller en
+          // IAP-leverandør, har brukeren hatt tilgangen før.
+          ...(existing?.stripe_subscription_id || existing?.metadata?.provider
+            ? {}
+            : { trial_period_days: 7 }),
           metadata: {
             user_id: user.id,
             tier: plan,

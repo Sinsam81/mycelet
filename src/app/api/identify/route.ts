@@ -150,6 +150,11 @@ export async function POST(request: NextRequest) {
     const subscription = await getUserBillingSubscription(supabase, user.id);
     const capabilities = getBillingCapabilities(subscription);
 
+    // Gjenstående gratiskvote ETTER dette kallet — null for betalende.
+    // Klienten bruker tallet til «N igjen i dag»-hintet, slik at taket er
+    // kjent FØR veggen treffes, ikke en overraskelse på forsøk seks.
+    let freeQuotaRemaining: number | null = null;
+
     if (!capabilities.paid) {
       const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
 
@@ -201,6 +206,7 @@ export async function POST(request: NextRequest) {
           { status: 429 }
         );
       }
+      freeQuotaRemaining = Math.max(0, FREE_DAILY_AI_LIMIT - usageCount - 1);
     }
 
     const body = (await request.json()) as IdentifyRequest;
@@ -396,6 +402,8 @@ export async function POST(request: NextRequest) {
       suggestions: ranked,
       isPlant: plantIdData?.result?.is_plant?.binary ?? false,
       safetyDataIncomplete,
+      // null = betalende (ingen kvote). Tall = gjenstående gratis i dag.
+      freeQuotaRemaining,
       // null betyr «ingen rad ble skrevet» — klienten skal da ikke laste opp
       // et historikkbilde som ingenting peker på.
       identificationId: history.identificationId,

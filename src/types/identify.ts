@@ -100,6 +100,8 @@ export interface IdentifyResultPayload {
    * betyr da IKKE at det er trygt — bare at vi ikke vet.
    */
   safetyDataIncomplete?: boolean;
+  /** Gjenstående gratis AI-kall i dag etter dette; null for betalende. */
+  freeQuotaRemaining?: number | null;
   /**
    * Satt ved hydrering fra historikken når identifiseringen ALLEREDE er lagret
    * som funn. Da skal resultatsiden vise det i stedet for å invitere til en
