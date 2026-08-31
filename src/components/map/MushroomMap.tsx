@@ -5,7 +5,7 @@ import type { MapViewParams } from '@/lib/utils/map-view-params';
 import { useLocale, useMessages, useTranslations } from 'next-intl';
 import { NonNativeOnly } from '@/components/native/NonNativeOnly';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Download, MoreHorizontal, Navigation, Trash2, X } from 'lucide-react';
+import { Download, Filter, MoreHorizontal, Navigation, Trash2, X } from 'lucide-react';
 import { createRoot, Root } from 'react-dom/client';
 import { createClient } from '@/lib/supabase/client';
 import { fetchRpcPaged } from '@/lib/supabase/paged-rpc';
@@ -254,6 +254,11 @@ export function MushroomMap({
   const [occEdibility, setOccEdibility] = useState<'all' | 'edible' | 'toxic'>('all');
   const [occSeason, setOccSeason] = useState(false);
   const [occYear, setOccYear] = useState<OccurrenceYearFilter>('all');
+  // Antall aktive funnfiltre — badgen på trakt-knappen. Uten den ville et
+  // filter satt inne i det lukkede panelet vært usynlig tilstand: kartet viser
+  // færre funn og ingenting sier hvorfor.
+  const occFilterCount =
+    Number(occEdibility !== 'all') + Number(occSeason) + Number(occYear !== 'all');
   const [showIntro, setShowIntro] = useState(false);
   const [tripActive, setTripActive] = useState(false);
   const [tripFinds, setTripFinds] = useState<string[]>([]);
@@ -304,6 +309,7 @@ export function MushroomMap({
   const [offlineOpen, setOfflineOpen] = useState(false);
   const [storageMb, setStorageMb] = useState<number | null>(null);
   const [toolsOpen, setToolsOpen] = useState(false);
+  const [occFiltersOpen, setOccFiltersOpen] = useState(false);
   const [topSpots, setTopSpots] = useState<TopSpot[] | null>(null);
   const [topLoading, setTopLoading] = useState(false);
   const [topMsg, setTopMsg] = useState<string | null>(null);
@@ -2093,30 +2099,45 @@ export function MushroomMap({
             }}
           />
         ) : null}
-        <div className="flex justify-center gap-1.5">
+        <div className="flex flex-wrap items-center justify-center gap-1.5">
+          {/* Korte, stabile etiketter med vilje: den gamle «Skjul funn (minst
+              6000)» brakk over tre linjer på mobil og dyttet alt under seg.
+              Antallet bor nå i filterpanelet, der det leses i ro. */}
           <button
             type="button"
             onClick={toggleOccurrences}
-            className={`rounded-full px-3 py-1.5 text-xs font-medium shadow-lg backdrop-blur ${
+            className={`whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-medium shadow-lg backdrop-blur ${
               showOccurrences ? 'bg-forest-800 text-white hover:bg-forest-700' : 'bg-white/95 text-gray-800 hover:bg-white'
             }`}
           >
-            {/* «Skjul funn (3000)» ville påstått at det er nøyaktig 3000 funn i
-                utsnittet. Traff vi hentetaket vet vi bare at det er minst så
-                mange, og da skal tallet vise det. */}
-            {showOccurrences
-              ? occCount
-                ? occTruncated
-                  ? t('hideFindingsAtLeast', { count: occCount })
-                  : t('hideFindingsCount', { count: occCount })
-                : t('hideFindings')
-              : t('findingsButton')}
+            {showOccurrences ? t('hideFindingsShort') : t('showFindingsShort')}
           </button>
+          {showOccurrences ? (
+            <button
+              type="button"
+              onClick={() => {
+                setOccFiltersOpen((open) => !open);
+                setToolsOpen(false);
+                setOfflineOpen(false);
+              }}
+              aria-expanded={occFiltersOpen}
+              aria-controls="map-occ-filters"
+              aria-label={t('occFiltersLabel')}
+              className={`inline-flex items-center gap-1 whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-medium shadow-lg backdrop-blur ${
+                occFiltersOpen || occFilterCount > 0
+                  ? 'bg-forest-800 text-white hover:bg-forest-700'
+                  : 'bg-white/95 text-gray-800 hover:bg-white'
+              }`}
+            >
+              <Filter className="h-3.5 w-3.5" />
+              {occFilterCount > 0 ? <span className="font-semibold">{occFilterCount}</span> : null}
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={() => (topSpots ? clearTopSpots() : void generateTopSpots())}
             disabled={topLoading}
-            className={`rounded-full px-3 py-1.5 text-xs font-medium shadow-lg backdrop-blur disabled:opacity-60 ${
+            className={`whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-medium shadow-lg backdrop-blur disabled:opacity-60 ${
               topSpots ? 'bg-forest-800 text-white hover:bg-forest-700' : 'bg-white/95 text-gray-800 hover:bg-white'
             }`}
           >
@@ -2127,10 +2148,11 @@ export function MushroomMap({
             onClick={() => {
               setToolsOpen((open) => !open);
               setOfflineOpen(false);
+              setOccFiltersOpen(false);
             }}
             aria-expanded={toolsOpen}
             aria-controls="map-more-tools"
-            className={`inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-medium shadow-lg backdrop-blur ${
+            className={`inline-flex items-center gap-1 whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-medium shadow-lg backdrop-blur ${
               toolsOpen || offlineOpen || speciesSpots
                 ? 'bg-forest-800 text-white hover:bg-forest-700'
                 : 'bg-white/95 text-gray-800 hover:bg-white'
@@ -2223,9 +2245,34 @@ export function MushroomMap({
             </button>
           </div>
         ) : null}
-        {showOccurrences ? (
-          <div className="flex flex-wrap items-center justify-center gap-1">
-            <div className="flex items-center gap-1 rounded-full bg-white/95 px-2 py-1 text-[11px] shadow-lg backdrop-blur">
+        {/* Funnfiltrene lå før som tre ALLTID synlige rader (spiselighet,
+            sesong, år) pluss et avkortingsbanner — sammen med søk og knapper
+            dekket de en tredjedel av kartet på mobil. Nå bor de i et panel bak
+            trakt-knappen: kartet er helten, filtrene er ett trykk unna. */}
+        {showOccurrences && occFiltersOpen ? (
+          <div id="map-occ-filters" className="w-full max-w-xs rounded-xl border border-gray-200 bg-white/95 p-2 shadow-xl backdrop-blur">
+            <div className="mb-1 flex items-center justify-between px-1">
+              <p className="text-xs font-semibold text-gray-900">{t('occFiltersHeading')}</p>
+              <button
+                type="button"
+                onClick={() => setOccFiltersOpen(false)}
+                aria-label={t('closeOccFilters')}
+                className="rounded-full p-1 text-gray-500 hover:bg-gray-100"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+            {/* Antallet (og «minst»-forbeholdet fra hentetaket) leses her i ro
+                i stedet for å blåse opp knappen eller legge et eget banner
+                over kartet. */}
+            <p className="px-1 pb-1 text-[11px] text-gray-600">
+              {occTruncated
+                ? t('findingsTruncated', { count: OCCURRENCE_FETCH_LIMIT })
+                : occCount
+                  ? t('occCountShown', { count: occCount })
+                  : null}
+            </p>
+            <div className="flex flex-wrap items-center gap-1 px-1 pb-1">
               {(
                 [
                   ['all', t('filterAll')],
@@ -2237,27 +2284,29 @@ export function MushroomMap({
                   key={val}
                   type="button"
                   onClick={() => setOccEdibilityFilter(val)}
-                  className={`rounded-full px-2 py-0.5 font-medium ${
-                    occEdibility === val ? 'bg-forest-800 text-white' : 'text-gray-700 hover:bg-gray-100'
+                  className={`rounded-full px-2.5 py-1 text-[11px] font-medium ${
+                    occEdibility === val ? 'bg-forest-800 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                   }`}
                 >
                   {label}
                 </button>
               ))}
             </div>
-            <button
-              type="button"
-              onClick={toggleOccSeason}
-              className={`rounded-full px-3 py-1 text-[11px] font-medium shadow-lg backdrop-blur ${
-                occSeason ? 'bg-amber-600 text-white' : 'bg-white/95 text-gray-700 hover:bg-white'
-              }`}
-            >
-              {occSeason ? t('onlyInSeasonNow') : t('showAllTimes')}
-            </button>
+            <div className="px-1 pb-1">
+              <button
+                type="button"
+                onClick={toggleOccSeason}
+                className={`rounded-full px-2.5 py-1 text-[11px] font-medium ${
+                  occSeason ? 'bg-amber-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                {occSeason ? t('onlyInSeasonNow') : t('showAllTimes')}
+              </button>
+            </div>
             {/* Årsfilteret: ~72 % av punktene er fra før 2021, og gamle
                 herbariebelegg rendret som ferske prikker skjuler datasettets
                 sterkeste signal — datoene. */}
-            <div className="flex items-center gap-1 rounded-full bg-white/95 px-2 py-1 text-[11px] shadow-lg backdrop-blur">
+            <div className="flex flex-wrap items-center gap-1 px-1 pb-1">
               {(
                 [
                   ['all', t('yearAll')],
@@ -2269,21 +2318,14 @@ export function MushroomMap({
                   key={val}
                   type="button"
                   onClick={() => setOccYearFilter(val)}
-                  className={`rounded-full px-2 py-0.5 font-medium ${
-                    occYear === val ? 'bg-forest-800 text-white' : 'text-gray-700 hover:bg-gray-100'
+                  className={`rounded-full px-2.5 py-1 text-[11px] font-medium ${
+                    occYear === val ? 'bg-forest-800 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                   }`}
                 >
                   {label}
                 </button>
               ))}
             </div>
-            {occTruncated ? (
-              <p className="w-full text-center text-[11px] font-medium text-amber-900">
-                <span className="rounded-full bg-amber-50/95 px-2 py-1 shadow-lg backdrop-blur">
-                  {t('findingsTruncated', { count: OCCURRENCE_FETCH_LIMIT })}
-                </span>
-              </p>
-            ) : null}
           </div>
         ) : null}
       </div>
