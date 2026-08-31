@@ -52,6 +52,23 @@ test.describe('Analyse-samtykke', () => {
       // som faktisk ligger øverst. Playwright sin .click() ville nektet å
       // klikke, og dermed skjult hva som lå over lenken.
       await page.mouse.click(box!.x + box!.width / 2, box!.y + box!.height / 2);
+
+      // waitForLoadState('domcontentloaded') var en felle: den svarer for
+      // dokumentet som ALLEREDE står, ikke for navigasjonen klikket nettopp
+      // utløste. Neste iterasjons goto('/species') kolliderte da med den
+      // fortsatt-pågående navigasjonen (spesielt /map, som skal innom
+      // innloggings-redirecten i prod) og døde med net::ERR_ABORTED — 8 av 10
+      // kjøringer røk. Vent i stedet til URL-en beviselig har FLYTTET seg:
+      // målet selv, eller /auth-redirecten for beskyttede ruter. Lenken til
+      // /species peker på siden vi står på og navigerer ikke — den hoppes
+      // over, sammen med '/', som i prod er utlogget-landingssiden uten
+      // klientruting og derfor alltid gir full dokumentlast.
+      if (href !== '/species') {
+        await page.waitForURL(
+          (u) => u.pathname === href || u.pathname.startsWith('/auth'),
+          { timeout: 15_000 }
+        );
+      }
       await page.waitForLoadState('domcontentloaded');
 
       expect(await readConsent(page), `trykk på ${href} registrerte et samtykke`).toBeNull();
