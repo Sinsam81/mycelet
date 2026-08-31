@@ -198,6 +198,25 @@ export default async function SoppforholdPage() {
           </div>
         </section>
 
+        {/* Varsel-CTA-en står HER, rett etter at leseren har sett tallene for
+            sitt område — det er øyeblikket «si fra når dette snur» gir mening.
+            Denne siden er også et SEO-inntak («soppforhold i dag»), så hver
+            organiske besøkende får ett tydelig neste steg som ikke krever
+            konto. */}
+        <section className="rounded-2xl border border-forest-200 bg-forest-50 p-5 text-center">
+          <h2 className="font-serif text-xl font-semibold text-forest-900">📬 Få beskjed når det snur</h2>
+          <p className="mx-auto mt-1 max-w-md text-sm text-forest-900">
+            Gratis soppvarsel på e-post — vi sier fra den dagen forholdene krysser fra dårlige til gode i
+            området ditt. Maks én e-post i uka, ingen konto nødvendig.
+          </p>
+          <Link
+            href="/soppvarsel"
+            className="mt-3 inline-block rounded-full bg-forest-800 px-6 py-2.5 text-sm font-semibold text-white hover:bg-forest-700"
+          >
+            Meld deg på soppvarselet
+          </Link>
+        </section>
+
         <p className="text-xs text-gray-500">
           Datagrunnlag: MET Norway og SMHI (vær), NIBIO og CORINE (skog), GBIF og Artsdatabanken (funn). Se{' '}
           <Link href="/datakilder" className="underline">
