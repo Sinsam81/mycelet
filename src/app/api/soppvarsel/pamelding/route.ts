@@ -55,7 +55,7 @@ export async function POST(request: NextRequest) {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? request.nextUrl.origin;
   const tilbake = (status: string) =>
     skjema
-      ? NextResponse.redirect(`${appUrl}/soppvarsel?status=${status}`, 303)
+      ? NextResponse.redirect(`${appUrl}/soppvarsel?status=${status}#status`, 303)
       : NextResponse.json({ ok: status === 'sendt' , status});
 
   if (!EPOST_MONSTER.test(email) || !GYLDIGE_REGIONER.has(region)) {

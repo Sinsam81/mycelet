@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? request.nextUrl.origin;
 
   const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  if (!UUID.test(token)) return NextResponse.redirect(`${appUrl}/soppvarsel?status=ugyldig-lenke`, 303);
+  if (!UUID.test(token)) return NextResponse.redirect(`${appUrl}/soppvarsel?status=ugyldig-lenke#status`, 303);
 
   const db = createAdminClient();
   const { data, error } = await db
@@ -26,9 +26,9 @@ export async function GET(request: NextRequest) {
 
   if (error || !data) {
     log.warn('varselbekreftelse.ukjent_token');
-    return NextResponse.redirect(`${appUrl}/soppvarsel?status=ugyldig-lenke`, 303);
+    return NextResponse.redirect(`${appUrl}/soppvarsel?status=ugyldig-lenke#status`, 303);
   }
 
   log.info('varselbekreftelse.ok', { region: data.region });
-  return NextResponse.redirect(`${appUrl}/soppvarsel?status=bekreftet`, 303);
+  return NextResponse.redirect(`${appUrl}/soppvarsel?status=bekreftet#status`, 303);
 }

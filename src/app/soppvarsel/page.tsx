@@ -114,8 +114,15 @@ export default async function SoppvarselSide({
         <h1 className="font-serif text-3xl font-bold tracking-tight text-forest-900">🍄 {t.tittel}</h1>
         <p className="text-sm leading-relaxed text-gray-700">{t.ingress}</p>
 
+        {/* id="status" + #status-fragmentet i redirectene: eieren sendte inn
+            skjemaet, ble redirectet til toppen av siden — og sto igjen nede
+            ved et tomt skjema som «ikke virket». Meldingen må lande der øyet
+            er, og fragmentet lar nettleseren scrolle dit selv, uten JS. */}
         {statusTekst ? (
-          <p className={`rounded-xl border px-4 py-3 text-sm font-medium ${STATUSFARGE[status ?? ''] ?? ''}`}>
+          <p
+            id="status"
+            className={`scroll-mt-24 rounded-xl border px-4 py-3 text-sm font-medium ${STATUSFARGE[status ?? ''] ?? ''}`}
+          >
             {statusTekst}
           </p>
         ) : null}
