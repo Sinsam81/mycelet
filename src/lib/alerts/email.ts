@@ -37,6 +37,10 @@ interface VarselEpostArgs {
   locale: Locale;
   appUrl: string;
   avmeldingsUrl: string;
+  /** Beste dag i 7-dagersutsikten — valgfri: mangler prognosen, mangler linja. */
+  toppdag?: { dag: string; score: number; erIDag: boolean } | null;
+  /** Ferdig lokaliserte artsnavn i sesong nå — valgfri, samme regel. */
+  arter?: string[];
 }
 
 const COPY = {
@@ -49,6 +53,11 @@ const COPY = {
       'Tallet er vær, sesong og skogtype for området: nedbøren de siste to ukene, hvor fuktig marka er, temperaturen, hvor vi er i sesongen for artene som vokser der, og om treslaget i området passer dem.',
     forbehold:
       'Det sier ingenting om skogen der du står. Gammel granskog med mose slår et høyt tall i feil terreng hver gang. Vi lover ikke at du finner sopp — vi sier at forholdene ligger til rette.',
+    toppdagIDag: (score: number) =>
+      `Utsikten fremover: i dag ser ut til å bli ukas beste dag (${score} av 100).`,
+    toppdag: (dag: string, score: number) =>
+      `Utsikten fremover: best ${dag} (${score} av 100) — samme tall som 7-dagersstripa i appen.`,
+    arter: (liste: string) => `I sesong nå: ${liste}.`,
     knapp: 'Se kartet for området ditt',
     sikkerhet:
       'Spis aldri en sopp du ikke har fått bestemt. Ingen app kan si at en sopp er trygg. Er du i tvil, la den stå — eller få den kontrollert.',
@@ -64,6 +73,11 @@ const COPY = {
       'Talet är väder, säsong och skogstyp för området: nederbörden de senaste två veckorna, hur fuktig marken är, temperaturen, var vi är i säsongen för arterna som växer där, och om trädslaget i området passar dem.',
     forbehold:
       'Det säger ingenting om skogen där du står. Gammal granskog med mossa slår ett högt tal i fel terräng varje gång. Vi lovar inte att du hittar svamp — vi säger att förhållandena ligger rätt.',
+    toppdagIDag: (score: number) =>
+      `Utsikten framöver: i dag ser ut att bli veckans bästa dag (${score} av 100).`,
+    toppdag: (dag: string, score: number) =>
+      `Utsikten framöver: bäst ${dag} (${score} av 100) — samma siffra som 7-dagarsremsan i appen.`,
+    arter: (liste: string) => `I säsong nu: ${liste}.`,
     knapp: 'Se kartan för ditt område',
     sikkerhet:
       'Ät aldrig en svamp du inte fått bestämd. Ingen app kan säga att en svamp är säker. Är du osäker, låt den stå — eller få den kontrollerad.',
@@ -87,6 +101,17 @@ export function byggVarselEpost(args: VarselEpostArgs) {
 
     <p style="font-size: 14px; line-height: 1.55;">${t.hvorfor}</p>
     <p style="font-size: 14px; line-height: 1.55; color: #4b5563;">${t.forbehold}</p>
+${
+  args.toppdag
+    ? `\n    <p style="font-size: 14px; line-height: 1.55; font-weight: 600; color: #1A3409;">${
+        args.toppdag.erIDag ? t.toppdagIDag(args.toppdag.score) : t.toppdag(args.toppdag.dag, args.toppdag.score)
+      }</p>`
+    : ''
+}${
+  args.arter && args.arter.length
+    ? `\n    <p style="font-size: 14px; line-height: 1.55;">🍄 ${t.arter(args.arter.join(', '))}</p>`
+    : ''
+}
 
     <p style="margin: 26px 0;">
       <a href="${kartUrl}" style="background: #1A3409; color: #ffffff; padding: 12px 22px; border-radius: 8px; text-decoration: none; display: inline-block; font-weight: 600;">
@@ -109,6 +134,11 @@ export function byggVarselEpost(args: VarselEpostArgs) {
   // Ren tekst uten HTML-taggene fra endring().
   const endringRen = t.endring(args.fra, args.til).replace(/<\/?strong>/g, '');
 
+  const toppdagLinje = args.toppdag
+    ? `\n${args.toppdag.erIDag ? t.toppdagIDag(args.toppdag.score) : t.toppdag(args.toppdag.dag, args.toppdag.score)}\n`
+    : '';
+  const arterLinje = args.arter && args.arter.length ? `\n${t.arter(args.arter.join(', '))}\n` : '';
+
   const tekst = `${t.tittel(args.region)}
 
 ${endringRen}
@@ -116,7 +146,7 @@ ${endringRen}
 ${t.hvorfor}
 
 ${t.forbehold}
-
+${toppdagLinje}${arterLinje}
 ${t.knapp}: ${kartUrl}
 
 ${t.sikkerhet}

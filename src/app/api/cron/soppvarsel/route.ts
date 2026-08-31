@@ -4,6 +4,11 @@ import { createRequestLogger } from '@/lib/log/request';
 import { bearerSecretMatches } from '@/lib/security/secret-compare';
 import { skalVarsle, VARSEL_KARANTENE_DAGER, VARSEL_MIN_SCORE } from '@/lib/alerts/decision';
 import { byggVarselEpost } from '@/lib/alerts/email';
+import { arterISesong, velgToppdag, type SesongArt, type Toppdag } from '@/lib/alerts/ekstra';
+import { PREDICTION_TILE_REGIONS } from '@/lib/prediction/tile-regions';
+import { buildWeek, filterUpcomingDays } from '@/lib/prediction/week-scores';
+import { fetchWeatherSummary } from '@/lib/weather';
+import { fetchDailyForecast } from '@/lib/weather/forecast';
 import { manglendeEpostKonfig, sendEpost } from '@/lib/email/send';
 import * as Sentry from '@sentry/nextjs';
 import type { Locale } from '@/i18n/config';
@@ -58,8 +63,77 @@ interface Abonnement {
   unsubscribe_token: string;
 }
 
+/**
+ * Krydderet i e-posten: toppdag fra 7-dagersutsikten + arter i sesong.
+ * Best-effort med vilje — enhver feil her returnerer null/tomt og varselet
+ * går som før. Omslaget er nyheten; dette er tillegget. Cachet per
+ * region+locale for kjøringen: to værkall per varslede region, ikke per
+ * abonnent.
+ */
+const ekstraCache = new Map<string, { toppdag: Toppdag | null; arter: string[] }>();
+let sesongArter: SesongArt[] | null = null;
+
+async function hentEkstra(
+  db: ReturnType<typeof createAdminClient>,
+  region: string,
+  locale: 'nb' | 'sv',
+  naa: Date
+): Promise<{ toppdag: Toppdag | null; arter: string[] }> {
+  const nokkel = `${region}:${locale}`;
+  const cached = ekstraCache.get(nokkel);
+  if (cached) return cached;
+
+  let toppdag: Toppdag | null = null;
+  let arter: string[] = [];
+
+  try {
+    const r = PREDICTION_TILE_REGIONS.find((x) => x.name === region);
+    if (r) {
+      const lat = (r.minLat + r.maxLat) / 2;
+      const lon = (r.minLng + r.maxLng) / 2;
+      const [observed, forecast] = await Promise.all([
+        fetchWeatherSummary({ lat, lon }),
+        fetchDailyForecast({ lat, lon })
+      ]);
+      if (observed) {
+        const todayKey = naa.toISOString().slice(0, 10);
+        const { days } = buildWeek(observed, filterUpcomingDays(forecast, todayKey), {
+          todayKey,
+          month: naa.getUTCMonth() + 1,
+          dayOfMonth: naa.getUTCDate(),
+          locale
+        });
+        toppdag = velgToppdag(days);
+      }
+    }
+  } catch {
+    // prognosen er pynt — aldri i veien for varselet
+  }
+
+  try {
+    if (sesongArter === null) {
+      const { data } = await db
+        .from('mushroom_species')
+        .select('norwegian_name,swedish_name,season_start,season_end,peak_season_start,peak_season_end,commonality')
+        .eq('edibility', 'edible');
+      sesongArter = (data ?? []) as SesongArt[];
+    }
+    arter = arterISesong(sesongArter, naa.getUTCMonth() + 1, locale);
+  } catch {
+    // samme regel
+  }
+
+  const resultat = { toppdag, arter };
+  ekstraCache.set(nokkel, resultat);
+  return resultat;
+}
+
 export async function GET(request: NextRequest) {
   const log = createRequestLogger(request);
+  // Modulnivå-cache overlever varme serverless-instanser — nullstill per kjøring
+  // så gårsdagens prognose aldri gjenbrukes i dag.
+  ekstraCache.clear();
+  sesongArter = null;
 
   if (!bearerSecretMatches(request.headers.get('authorization'), process.env.CRON_SECRET)) {
     return NextResponse.json({ error: 'Ikke autorisert' }, { status: 401 });
@@ -294,13 +368,17 @@ export async function GET(request: NextRequest) {
     // passiv bekreftelse — en lenke dit ville vist «du er avmeldt» uten å melde
     // av noen. API-ruta gjør jobben og sender mennesket videre til siden selv.
     const avmeldingsUrl = `${appUrl}/api/soppvarsel/av?t=${ab.unsubscribe_token}`;
+    const spraak = (ab.locale === 'sv' ? 'sv' : 'nb') as Locale;
+    const ekstra = await hentEkstra(db, ab.region, spraak, naa);
     const { emne, html, tekst } = byggVarselEpost({
       region: ab.region,
       fra: beslutning.fra,
       til: beslutning.til,
-      locale: (ab.locale === 'sv' ? 'sv' : 'nb') as Locale,
+      locale: spraak,
       appUrl,
-      avmeldingsUrl
+      avmeldingsUrl,
+      toppdag: ekstra.toppdag,
+      arter: ekstra.arter
     });
 
     const res = await sendEpost({ til: epost, emne, html, tekst, avmeldingsUrl });
