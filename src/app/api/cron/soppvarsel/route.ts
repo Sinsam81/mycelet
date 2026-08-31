@@ -47,7 +47,11 @@ interface TileRow {
 
 interface Abonnement {
   id: string;
-  user_id: string;
+  // NULL for konto-løse e-postpåmeldinger (migrasjon 057) — da bor adressen
+  // i email-kolonnen i stedet for i auth.users.
+  user_id: string | null;
+  email: string | null;
+  confirmed_at: string | null;
   region: string;
   locale: string;
   last_notified_at: string | null;
@@ -226,7 +230,7 @@ export async function GET(request: NextRequest) {
     const fra = side * 1000;
     const { data, error: abErr } = await db
       .from('alert_subscriptions')
-      .select('id,user_id,region,locale,last_notified_at,unsubscribe_token')
+      .select('id,user_id,email,confirmed_at,region,locale,last_notified_at,unsubscribe_token')
       .eq('active', true)
       .order('id', { ascending: true })
       .range(fra, fra + 999);
@@ -244,6 +248,13 @@ export async function GET(request: NextRequest) {
   const avslag: Record<string, number> = {};
 
   for (const ab of abonnenter) {
+    // E-postrader uten fullført dobbel opt-in er usynlige for utsendingen —
+    // det er selve garantien i migrasjon 057. Kontorader har confirmed_at
+    // backfyllt, så filteret koster dem ingenting.
+    if (!ab.user_id && !ab.confirmed_at) {
+      avslag['ubekreftet'] = (avslag['ubekreftet'] ?? 0) + 1;
+      continue;
+    }
     const iDag = scoreIDag.get(ab.region);
     if (iDag === undefined) {
       avslag['ingen-region'] = (avslag['ingen-region'] ?? 0) + 1;
@@ -264,11 +275,16 @@ export async function GET(request: NextRequest) {
       continue;
     }
 
-    // E-postadressen ligger i auth.users, ikke i profiles — den er ikke
-    // eksponert gjennom PostgREST, og det er med vilje.
-    const { data: bruker, error: brukerErr } = await db.auth.admin.getUserById(ab.user_id);
-    const epost = bruker?.user?.email;
-    if (brukerErr || !epost) {
+    // Kontorader: adressen ligger i auth.users, ikke i profiles — den er ikke
+    // eksponert gjennom PostgREST, og det er med vilje. E-postrader bærer
+    // adressen selv.
+    let epost = ab.email;
+    if (!epost && ab.user_id) {
+      const { data: bruker, error: brukerErr } = await db.auth.admin.getUserById(ab.user_id);
+      epost = bruker?.user?.email ?? null;
+      if (brukerErr) log.warn('soppvarsel.brukeroppslag_feilet', { abonnement: ab.id });
+    }
+    if (!epost) {
       log.warn('soppvarsel.mangler_epost', { abonnement: ab.id });
       feilet += 1;
       continue;

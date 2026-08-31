@@ -129,3 +129,69 @@ ${t.signatur}`;
 
   return { emne: t.emne(args.region, args.til), html, tekst };
 }
+
+interface BekreftelsesEpostArgs {
+  region: string;
+  locale: Locale;
+  bekreftUrl: string;
+}
+
+/**
+ * Bekreftelses-eposten for konto-løse påmeldinger (dobbel opt-in, migrasjon
+ * 057). Uten dette steget kunne hvem som helst meldt på andres adresser — og
+ * avsender-omdømmet på send.mycelet.com er for dyrt kjøpt til å risikere det.
+ * Samme visuelle språk som selve varselet, så bekreftelsen føles som en
+ * forsmak, ikke et fremmedelement.
+ */
+const BEKREFT_COPY = {
+  nb: {
+    emne: (region: string) => `Bekreft soppvarselet ditt for ${region}`,
+    tittel: 'Ett trykk igjen',
+    brodtekst: (region: string) =>
+      `Du (eller noen med adressen din) ba om soppvarsel for <strong>${region}</strong>. Trykk på knappen for å bekrefte — så sier vi fra når forholdene snur, maks én e-post i uka.`,
+    knapp: 'Bekreft soppvarselet',
+    ikkeDeg: 'Var det ikke deg? Da kan du trygt ignorere denne e-posten — uten bekreftelse sendes ingenting.',
+    signatur: 'Mycelet — soppvarsel for Norge og Sverige'
+  },
+  sv: {
+    emne: (region: string) => `Bekräfta din svampvarning för ${region}`,
+    tittel: 'Ett tryck kvar',
+    brodtekst: (region: string) =>
+      `Du (eller någon med din adress) bad om svampvarning för <strong>${region}</strong>. Tryck på knappen för att bekräfta — så säger vi till när förhållandena vänder, max ett mejl i veckan.`,
+    knapp: 'Bekräfta svampvarningen',
+    ikkeDeg: 'Var det inte du? Då kan du tryggt ignorera det här mejlet — utan bekräftelse skickas ingenting.',
+    signatur: 'Mycelet — svampvarning för Norge och Sverige'
+  }
+} as const;
+
+export function byggBekreftelsesEpost(args: BekreftelsesEpostArgs) {
+  const t = BEKREFT_COPY[args.locale] ?? BEKREFT_COPY.nb;
+
+  const html = `<!doctype html>
+<html lang="${args.locale}">
+  <body style="font-family: -apple-system, system-ui, sans-serif; color: #1f2937; max-width: 560px; margin: 24px auto; padding: 0 16px;">
+    <h1 style="font-size: 20px; font-weight: 600; color: #1A3409; margin-bottom: 8px;">${t.tittel}</h1>
+    <p style="font-size: 14px; line-height: 1.55;">${t.brodtekst(args.region)}</p>
+    <p style="margin: 26px 0;">
+      <a href="${args.bekreftUrl}" style="background: #1A3409; color: #ffffff; padding: 12px 22px; border-radius: 8px; text-decoration: none; display: inline-block; font-weight: 600;">
+        ${t.knapp}
+      </a>
+    </p>
+    <p style="font-size: 13px; color: #6b7280;">${t.ikkeDeg}</p>
+    <hr style="margin: 28px 0; border: none; border-top: 1px solid #e5e7eb;">
+    <p style="font-size: 12px; color: #9ca3af;">${t.signatur}</p>
+  </body>
+</html>`;
+
+  const tekst = `${t.tittel}
+
+${t.brodtekst(args.region).replace(/<\/?strong>/g, '')}
+
+${t.knapp}: ${args.bekreftUrl}
+
+${t.ikkeDeg}
+
+${t.signatur}`;
+
+  return { emne: t.emne(args.region), html, tekst };
+}
