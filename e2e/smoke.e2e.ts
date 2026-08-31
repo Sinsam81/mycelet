@@ -32,7 +32,8 @@ test.describe('Offentlige sider', () => {
     await page.goto('/pricing');
     await expect(page.getByText('Premium').first()).toBeVisible();
     await expect(page.getByText(/Sesongpass/i).first()).toBeVisible();
-    await expect(page.getByText('79').first()).toBeVisible();
+    // 99 siden 2026-09-01 (prisendringen i PR #213) — 79 gjelder kun eksisterende abonnenter.
+    await expect(page.getByText('99').first()).toBeVisible();
     await expect(page.getByText('249').first()).toBeVisible();
   });
 
