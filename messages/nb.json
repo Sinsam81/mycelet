@@ -281,7 +281,17 @@
     "unknown4": "Rangering av «beste sted»: målt, men ikke statistisk signifikant. Vi behandler det som ukjent.",
     "datesNote": "Tallene på denne siden ble sist kontrollert 26. august 2026. Kartet inneholdt da 428 829 dokumenterte funn; sesongkurvene bygger på øyeblikksbildet fra 2. august 2026.",
     "sourcesLink": "Se alle datakilder og lisenser →",
-    "backHome": "← Til forsiden"
+    "backHome": "← Til forsiden",
+    "fasitHeading": "Fasitloggen: hvert varsel, etterprøvd",
+    "fasitIntro": "Hvert soppvarsel vi sender er en påstand som kan sjekkes. Her står de siste varslene med fasit: hvor mange sopfunn som ble registrert i området uken etter varselet, mot uken før. Vi publiserer tallene uansett utfall.",
+    "fasitColRegion": "Område",
+    "fasitColDato": "Varslet",
+    "fasitColLovet": "Forhold",
+    "fasitColEtter": "Funn uken etter",
+    "fasitColFor": "Uken før",
+    "fasitUmoden": "(modnes)",
+    "fasitEmpty": "Loggen starter med neste sendte varsel — fasit dukker opp her etter hvert som sesongen ruller.",
+    "fasitCaveat": "Kilder: Artsobservasjoner/GBIF og funn fra Mycelet-brukere. Artsobservasjoner publiserer til GBIF med ukers etterslep, så ferske tall er systematisk for lave og vokser etter hvert som rapportene kommer inn — rader merket «modnes» er ikke ferdige. Funntall er også væravhengige i seg selv: en regntung helg gir færre folk i skogen, uansett forhold."
   },
   "Datakilder": {
     "metaTitle": "Datakilder",

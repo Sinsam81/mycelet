@@ -120,3 +120,41 @@ describe('byggVarselEpost med ekstrainnhold', () => {
     expect(html).toContain('I säsong nu: karljohan.');
   });
 });
+
+describe('byggVarselEpost med fasit', () => {
+  const base = {
+    region: 'Oslo',
+    fra: 62,
+    til: 91,
+    appUrl: 'https://www.mycelet.com',
+    avmeldingsUrl: 'https://www.mycelet.com/api/soppvarsel/av?t=x'
+  } as const;
+
+  it('fasitlinjen står i html og tekst, med norsk dato', () => {
+    const { html, tekst } = byggVarselEpost({
+      ...base,
+      locale: 'nb',
+      fasit: { dato: '2026-08-14', ukenEtter: 214, ukenFor: 71 }
+    });
+    for (const kropp of [html, tekst]) {
+      expect(kropp).toContain('Fasit for forrige varsel (14. august)');
+      expect(kropp).toContain('214 sopfunn');
+      expect(kropp).toContain('71 uken før');
+      expect(kropp).toContain('mycelet.com/apenhet');
+    }
+  });
+
+  it('svensk fasit med svensk datoform', () => {
+    const { tekst } = byggVarselEpost({
+      ...base,
+      locale: 'sv',
+      fasit: { dato: '2026-08-14', ukenEtter: 214, ukenFor: 71 }
+    });
+    expect(tekst).toContain('Facit för förra varningen (14 augusti)');
+  });
+
+  it('uten fasit: ingen fasitlinje — kvitteringen venter til tallene er modne', () => {
+    const { html } = byggVarselEpost({ ...base, locale: 'nb' });
+    expect(html).not.toContain('Fasit for forrige varsel');
+  });
+});

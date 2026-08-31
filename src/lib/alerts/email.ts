@@ -41,6 +41,8 @@ interface VarselEpostArgs {
   toppdag?: { dag: string; score: number; erIDag: boolean } | null;
   /** Ferdig lokaliserte artsnavn i sesong nå — valgfri, samme regel. */
   arter?: string[];
+  /** Fasit for FORRIGE varsel i regionen — kun når tallene er modne (fasit.ts). */
+  fasit?: { dato: string; ukenEtter: number; ukenFor: number } | null;
 }
 
 const COPY = {
@@ -53,6 +55,8 @@ const COPY = {
       'Tallet er vær, sesong og skogtype for området: nedbøren de siste to ukene, hvor fuktig marka er, temperaturen, hvor vi er i sesongen for artene som vokser der, og om treslaget i området passer dem.',
     forbehold:
       'Det sier ingenting om skogen der du står. Gammel granskog med mose slår et høyt tall i feil terreng hver gang. Vi lover ikke at du finner sopp — vi sier at forholdene ligger til rette.',
+    fasit: (dato: string, etter: number, foer: number) =>
+      `Fasit for forrige varsel (${dato}): uken etter ble det registrert ${etter} sopfunn i området, mot ${foer} uken før. Kilder: Artsobservasjoner/GBIF og Mycelet-brukere. Vi publiserer fasiten uansett utfall — se hele loggen på mycelet.com/apenhet.`,
     toppdagIDag: (score: number) =>
       `Utsikten fremover: i dag ser ut til å bli ukas beste dag (${score} av 100).`,
     toppdag: (dag: string, score: number) =>
@@ -73,6 +77,8 @@ const COPY = {
       'Talet är väder, säsong och skogstyp för området: nederbörden de senaste två veckorna, hur fuktig marken är, temperaturen, var vi är i säsongen för arterna som växer där, och om trädslaget i området passar dem.',
     forbehold:
       'Det säger ingenting om skogen där du står. Gammal granskog med mossa slår ett högt tal i fel terräng varje gång. Vi lovar inte att du hittar svamp — vi säger att förhållandena ligger rätt.',
+    fasit: (dato: string, etter: number, foer: number) =>
+      `Facit för förra varningen (${dato}): veckan efter registrerades ${etter} svampfynd i området, mot ${foer} veckan innan. Källor: Artsobservasjoner/GBIF och Mycelet-användare. Vi publicerar facit oavsett utfall — se hela loggen på mycelet.com/apenhet.`,
     toppdagIDag: (score: number) =>
       `Utsikten framöver: i dag ser ut att bli veckans bästa dag (${score} av 100).`,
     toppdag: (dag: string, score: number) =>
@@ -85,6 +91,18 @@ const COPY = {
     signatur: 'Mycelet — svampvarning för Norge och Sverige'
   }
 } as const;
+
+const MND: Record<Locale, string[]> = {
+  nb: ['januar', 'februar', 'mars', 'april', 'mai', 'juni', 'juli', 'august', 'september', 'oktober', 'november', 'desember'],
+  sv: ['januari', 'februari', 'mars', 'april', 'maj', 'juni', 'juli', 'augusti', 'september', 'oktober', 'november', 'december']
+};
+
+/** «2026-08-14» → «14. august» (nb) / «14 augusti» (sv). */
+export function fasitDato(iso: string, locale: Locale): string {
+  const [, m, d] = iso.split('-').map(Number);
+  const navn = (MND[locale] ?? MND.nb)[(m ?? 1) - 1];
+  return locale === 'sv' ? `${d} ${navn}` : `${d}. ${navn}`;
+}
 
 export function byggVarselEpost(args: VarselEpostArgs) {
   const t = COPY[args.locale] ?? COPY.nb;
@@ -99,6 +117,11 @@ export function byggVarselEpost(args: VarselEpostArgs) {
       ${t.endring(args.fra, args.til)}
     </p>
 
+${
+  args.fasit
+    ? `\n    <p style="font-size: 13px; line-height: 1.55; color: #4b5563; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 10px 12px;">📊 ${t.fasit(fasitDato(args.fasit.dato, args.locale), args.fasit.ukenEtter, args.fasit.ukenFor)}</p>`
+    : ''
+}
     <p style="font-size: 14px; line-height: 1.55;">${t.hvorfor}</p>
     <p style="font-size: 14px; line-height: 1.55; color: #4b5563;">${t.forbehold}</p>
 ${
@@ -134,6 +157,9 @@ ${
   // Ren tekst uten HTML-taggene fra endring().
   const endringRen = t.endring(args.fra, args.til).replace(/<\/?strong>/g, '');
 
+  const fasitLinje = args.fasit
+    ? `\n${t.fasit(fasitDato(args.fasit.dato, args.locale), args.fasit.ukenEtter, args.fasit.ukenFor)}\n`
+    : '';
   const toppdagLinje = args.toppdag
     ? `\n${args.toppdag.erIDag ? t.toppdagIDag(args.toppdag.score) : t.toppdag(args.toppdag.dag, args.toppdag.score)}\n`
     : '';
@@ -142,7 +168,7 @@ ${
   const tekst = `${t.tittel(args.region)}
 
 ${endringRen}
-
+${fasitLinje}
 ${t.hvorfor}
 
 ${t.forbehold}
