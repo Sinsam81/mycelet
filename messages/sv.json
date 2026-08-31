@@ -407,7 +407,9 @@
     "quotaHeading": "Du har använt upp dagens gratis AI-identifieringar",
     "quotaComeBackTomorrow": "Vänta till i morgon — kvoten nollställs efter 24 timmar",
     "quotaSeePlans": "Se abonnemang",
-    "historyLink": "Mina identifieringar"
+    "historyLink": "Mina identifieringar",
+    "quotaUpgradeLead": "Med Premium får du svar direkt — obegränsad AI-identifiering, hela säsongen.",
+    "quotaUpgradeCta": "Få svar nu med Premium"
   },
   "IdentifyResult": {
     "errorNotLoggedIn": "Du måste vara inloggad för att spara fynd.",
@@ -445,7 +447,10 @@
     "sharingPrivate": "Privat",
     "sharingHelp": "Så hamnar fyndet på kartan. ”Ungefärlig” visas för alla, men flyttat upp till 500 m från den riktiga platsen. ”Privat” visas bara för dig.",
     "historyImageMissing": "Bilden är inte bevarad",
-    "alreadySaved": "Redan sparad som fynd"
+    "alreadySaved": "Redan sparad som fynd",
+    "quotaHintSome": "{remaining} gratis identifiering kvar i dag.",
+    "quotaHintNone": "Det var dagens sista gratis identifiering.",
+    "quotaHintCta": "Premium ger obegränsat →"
   },
   "MineSteder": {
     "metaTitle": "Mina platser",
@@ -771,7 +776,9 @@
     "purchaseTermsLink": "köpvillkoren",
     "termsLink": "användarvillkoren",
     "privacyLink": "integritetspolicy",
-    "legalLinksLabel": "Juridiska länkar"
+    "legalLinksLabel": "Juridiska länkar",
+    "trialNote": "7 dagars gratis provperiod för nya prenumeranter",
+    "seasonUrgency": "🍂 Högsäsongen pågår — september och oktober är årets bästa svampmånader."
   },
   "Profile": {
     "categoryFind": "Fynd",

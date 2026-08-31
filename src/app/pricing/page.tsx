@@ -431,6 +431,11 @@ function PricingInner() {
           <p className="mx-auto mt-2 max-w-md text-sm text-gray-700">
             {t('subheading')}
           </p>
+          {/* Ærlig sesong-urgency: september–oktober ER toppen. Ingen falske
+              nedtellinger — bare det fenologimodellen selv sier. */}
+          <p className="mx-auto mt-2 max-w-md text-sm font-medium text-amber-900">
+            {t('seasonUrgency')}
+          </p>
           <div className="mt-3 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs text-gray-600">
             {/* "Sikker betaling med Stripe" må ikke vises i den native appen —
                 der går kjøp via Apple (3.1.1), og Stripe-omtale kan flagges i review. */}
@@ -569,6 +574,9 @@ function PricingInner() {
                   {displayPrice}
                   <span className="text-sm font-medium text-gray-600">{displayPeriod}</span>
                 </p>
+                {plan.id !== 'free' ? (
+                  <p className="mt-1 text-xs font-semibold text-forest-800">{t('trialNote')}</p>
+                ) : null}
                 {plan.lead ? <p className="mt-3 text-xs font-semibold uppercase tracking-wide text-gray-500">{plan.lead}</p> : null}
                 <ul className={`${plan.lead ? 'mt-1.5' : 'mt-3'} flex-1 space-y-1.5 text-sm text-gray-700`}>
                   {plan.features.map((feature) => (

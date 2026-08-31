@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
+import Link from 'next/link';
 import { PageWrapper } from '@/components/layout/PageWrapper';
 import { IdentifyResult } from '@/components/identify/IdentifyResult';
 import { LookAlikeCheck } from '@/components/identify/LookAlikeCheck';
@@ -237,6 +238,21 @@ function IdentifyResultView() {
             className="rounded-xl border-2 border-amber-500 bg-amber-50 px-3 py-2.5 text-sm font-semibold text-amber-900"
           >
             ⚠️ {t('safetyDataIncomplete')}
+          </p>
+        ) : null}
+
+        {/* Kvotehintet vises fra og med nest siste gratis-kall — taket skal
+            være kjent FØR veggen treffes, ikke en overraskelse på forsøk seks.
+            /pricing er også native-paywallen (PR #91), så lenken gjelder
+            begge plattformer — samme mønster som kvoteveggen på identify. */}
+        {typeof payload.freeQuotaRemaining === 'number' && payload.freeQuotaRemaining <= 1 ? (
+          <p className="rounded-lg bg-forest-50 px-3 py-2 text-sm text-forest-900">
+            {payload.freeQuotaRemaining === 0
+              ? t('quotaHintNone')
+              : t('quotaHintSome', { remaining: payload.freeQuotaRemaining })}{' '}
+            <Link href="/pricing" className="font-semibold underline">
+              {t('quotaHintCta')}
+            </Link>
           </p>
         ) : null}
 

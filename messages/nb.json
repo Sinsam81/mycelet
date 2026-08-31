@@ -407,7 +407,9 @@
     "quotaHeading": "Du har brukt opp dagens gratis AI-identifikasjoner",
     "quotaComeBackTomorrow": "Vente til i morgen — kvoten nullstilles etter 24 timer",
     "quotaSeePlans": "Se abonnement",
-    "historyLink": "Mine identifiseringer"
+    "historyLink": "Mine identifiseringer",
+    "quotaUpgradeLead": "Med Premium får du svar med én gang — ubegrenset AI-identifisering, hele sesongen.",
+    "quotaUpgradeCta": "Få svar nå med Premium"
   },
   "IdentifyResult": {
     "errorNotLoggedIn": "Du må være logget inn for å lagre funn.",
@@ -445,7 +447,10 @@
     "sharingPrivate": "Privat",
     "sharingHelp": "Slik havner funnet på kartet. «Omtrentlig» vises for alle, men flyttet inntil 500 m fra det ekte stedet. «Privat» vises bare for deg.",
     "historyImageMissing": "Bildet er ikke bevart",
-    "alreadySaved": "Allerede lagret som funn"
+    "alreadySaved": "Allerede lagret som funn",
+    "quotaHintSome": "{remaining} gratis identifisering igjen i dag.",
+    "quotaHintNone": "Det var dagens siste gratis identifisering.",
+    "quotaHintCta": "Premium gir ubegrenset →"
   },
   "MineSteder": {
     "metaTitle": "Mine steder",
@@ -771,7 +776,9 @@
     "purchaseTermsLink": "kjøpsvilkårene",
     "termsLink": "vilkårene",
     "privacyLink": "personvern",
-    "legalLinksLabel": "Juridiske lenker"
+    "legalLinksLabel": "Juridiske lenker",
+    "trialNote": "7 dager gratis prøveperiode for nye abonnenter",
+    "seasonUrgency": "🍂 Høysesongen er i gang — september og oktober er årets beste soppmåneder."
   },
   "Profile": {
     "categoryFind": "Funn",
