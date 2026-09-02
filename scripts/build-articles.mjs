@@ -16,6 +16,9 @@ import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const landing = readFileSync(join(root, 'public/landing/index.html'), 'utf8');
+// Svensk chrome for artikler med `lang: sv` i frontmatter — samme løfte som
+// for norsk: en artikkel kan aldri drifte fra den designede sidens drakt.
+const landingSv = readFileSync(join(root, 'public/landing/index.sv.html'), 'utf8');
 const contentDir = join(root, 'content/sanketips');
 const outDir = join(root, 'public/landing/sanketips');
 
@@ -25,8 +28,9 @@ function landingStyles() {
   return blocks.join('\n');
 }
 
-function landingFragment(tag) {
-  const m = landing.match(new RegExp(`<${tag}[\\s\\S]*?</${tag}>`));
+function landingFragment(tag, lang = 'nb') {
+  const kilde = lang === 'sv' ? landingSv : landing;
+  const m = kilde.match(new RegExp(`<${tag}[\\s\\S]*?</${tag}>`));
   if (!m) throw new Error(`Fant ikke <${tag}> i landingssiden`);
   // Article pages live one level deeper: /sanketips/<slug>. Absolute app links
   // already work; in-page anchors must point back at the landing page.
@@ -144,12 +148,43 @@ function parseArticle(file) {
   return { meta, body };
 }
 
+/** Alt som er språk i selve malen — utvid her, aldri med if-er nede i HTML-en. */
+const CHROME = {
+  nb: {
+    tilbake: '← Alle sanketips',
+    tilbakeHref: '/#laer',
+    lesMer: 'Les mer',
+    kicker: 'Sanketips',
+    ogLocale: 'nb_NO',
+    sikkerhet:
+      '<strong>Er du i tvil, la soppen stå.</strong> Ingen artikkel — og ingen app — erstatter det å kjenne arten selv. Ta med funnet til soppkontroll hos <a href="https://soppognyttevekster.no" style="color:#2d5238">Norges sopp- og nyttevekstforbund</a> hvis du er usikker.'
+  },
+  sv: {
+    tilbake: '← Alla plocktips',
+    tilbakeHref: '/#plocktips',
+    lesMer: 'Läs mer',
+    kicker: 'Plocktips',
+    ogLocale: 'sv_SE',
+    sikkerhet:
+      '<strong>Är du osäker, låt svampen stå.</strong> Ingen artikel — och ingen app — ersätter att kunna arten själv. Ta med fyndet till en svampkonsulent via <a href="https://svampkonsulent.se" style="color:#2d5238">Svampkonsulenternas Riksförbund</a> om du är osäker.'
+  }
+};
+
 function page({ meta, body }, others) {
+  const lang = meta.lang === 'sv' ? 'sv' : 'nb';
+  const c = CHROME[lang];
+  // Søsterspråk-lenking (SEO): `alternate: <slug>` i frontmatter gir
+  // hreflang-par begge veier, så Google serverer riktig språk i riktig land.
+  const alternate = meta.alternate
+    ? `\n<link rel="alternate" hreflang="${lang === 'sv' ? 'nb' : 'sv'}" href="https://www.mycelet.com/sanketips/${meta.alternate}">` +
+      `\n<link rel="alternate" hreflang="${lang}" href="https://www.mycelet.com/sanketips/${meta.slug}">`
+    : '';
   const related = others
     .filter((o) => o.meta.slug !== meta.slug)
+    .filter((o) => (o.meta.lang === 'sv' ? 'sv' : 'nb') === lang)
     .map(
       (o) => `<a href="/sanketips/${o.meta.slug}" style="display:block;background:#ffffff;border-radius:20px;padding:24px 26px;text-decoration:none;color:inherit">
-  <p style="font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:#8a5f06;margin:0 0 10px">${escapeHtml(o.meta.kicker ?? 'Sanketips')}</p>
+  <p style="font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:#8a5f06;margin:0 0 10px">${escapeHtml(o.meta.kicker ?? c.kicker)}</p>
   <h3 style="font-family:Newsreader,Georgia,serif;font-size:21px;font-weight:600;color:#1a3a24;margin:0 0 8px;line-height:1.3">${escapeHtml(o.meta.title)}</h3>
   <p style="font-size:15px;color:#5b6659;margin:0;line-height:1.5">${escapeHtml(o.meta.summary ?? '')}</p>
 </a>`
@@ -157,16 +192,16 @@ function page({ meta, body }, others) {
     .join('\n');
 
   return `<!DOCTYPE html>
-<html lang="nb">
+<html lang="${lang}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${escapeHtml(meta.title)} — Mycelet</title>
 <meta name="description" content="${escapeHtml(meta.summary ?? '')}">
-<link rel="canonical" href="https://www.mycelet.com/sanketips/${meta.slug}">
+<link rel="canonical" href="https://www.mycelet.com/sanketips/${meta.slug}">${alternate}
 <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
 <meta property="og:type" content="article">
-<meta property="og:locale" content="nb_NO">
+<meta property="og:locale" content="${c.ogLocale}">
 <meta property="og:site_name" content="Mycelet">
 <meta property="og:title" content="${escapeHtml(meta.title)}">
 <meta property="og:description" content="${escapeHtml(meta.summary ?? '')}">
@@ -176,7 +211,7 @@ function page({ meta, body }, others) {
   '@type': 'Article',
   headline: meta.title,
   description: meta.summary ?? '',
-  inLanguage: 'nb',
+  inLanguage: lang,
   ...(meta.published ? { datePublished: meta.published } : {}),
   ...(meta.updated ? { dateModified: meta.updated } : {}),
   mainEntityOfPage: `https://www.mycelet.com/sanketips/${meta.slug}`,
@@ -193,28 +228,28 @@ function page({ meta, body }, others) {
 </style>
 </head>
 <body>
-${landingFragment('header')}
+${landingFragment('header', lang)}
 <main>
   <article class="wrap" style="padding-top:clamp(24px,4vw,48px);padding-bottom:clamp(48px,6vw,80px)">
-    <a href="/#laer" style="display:inline-block;font-size:14px;color:#5b6659;text-decoration:none;margin-bottom:22px">← Alle sanketips</a>
-    <p style="font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:#8a5f06;margin:0 0 12px">${escapeHtml(meta.kicker ?? 'Sanketips')}</p>
+    <a href="${c.tilbakeHref}" style="display:inline-block;font-size:14px;color:#5b6659;text-decoration:none;margin-bottom:22px">${c.tilbake}</a>
+    <p style="font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:#8a5f06;margin:0 0 12px">${escapeHtml(meta.kicker ?? c.kicker)}</p>
     <h1 style="font-family:Newsreader,Georgia,serif;font-size:clamp(34px,5vw,48px);font-weight:600;color:#1a3a24;line-height:1.12;letter-spacing:-.01em;margin:0 0 18px">${escapeHtml(meta.title)}</h1>
     ${meta.summary ? `<p style="font-size:21px;line-height:1.55;color:#5b6659;margin:0 0 8px">${escapeHtml(meta.summary)}</p>` : ''}
     <hr style="border:0;border-top:1px solid #e3ddcd;margin:32px 0">
     ${renderMarkdown(body)}
     <aside style="margin-top:44px;padding:22px 26px;background:#fdf6e3;border-radius:18px;border:1px solid #f0e2bd">
-      <p style="margin:0;font-size:16px;line-height:1.6"><strong>Er du i tvil, la soppen stå.</strong> Ingen artikkel — og ingen app — erstatter det å kjenne arten selv. Ta med funnet til soppkontroll hos <a href="https://soppognyttevekster.no" style="color:#2d5238">Norges sopp- og nyttevekstforbund</a> hvis du er usikker.</p>
+      <p style="margin:0;font-size:16px;line-height:1.6">${c.sikkerhet}</p>
     </aside>
   </article>
 
   <section class="wrap" style="max-width:1180px;padding-bottom:clamp(48px,6vw,80px)">
-    <h2 style="font-family:Newsreader,Georgia,serif;font-size:28px;font-weight:600;color:#1a3a24;margin:0 0 20px">Les mer</h2>
+    <h2 style="font-family:Newsreader,Georgia,serif;font-size:28px;font-weight:600;color:#1a3a24;margin:0 0 20px">${c.lesMer}</h2>
     <div class="mycelet-split" style="display:grid;grid-template-columns:1fr 1fr;gap:18px">
 ${related}
     </div>
   </section>
 </main>
-${landingFragment('footer')}
+${landingFragment('footer', lang)}
 </body>
 </html>
 `;

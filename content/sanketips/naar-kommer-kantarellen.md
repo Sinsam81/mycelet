@@ -2,6 +2,7 @@
 published: 2026-09-01
 updated: 2026-09-01
 slug: naar-kommer-kantarellen
+alternate: nar-kommer-kantarellen
 kicker: Vær og timing · 6 min
 summary: 19 592 daterte funn avliver julimyten — kantarellsesongen topper i september. Kurvene viser uke for uke når det løsner der du bor, i Norge og Sverige.
 ---
