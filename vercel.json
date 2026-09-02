@@ -14,6 +14,10 @@
       "schedule": "0 5 * * *"
     },
     {
+      "path": "/api/cron/xpost",
+      "schedule": "30 5 * * *"
+    },
+    {
       "path": "/api/cron/purre-bekreftelse",
       "schedule": "0 7 * * *"
     },
