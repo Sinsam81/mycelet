@@ -66,6 +66,7 @@ const COPY = {
     sikkerhet:
       'Spis aldri en sopp du ikke har fått bestemt. Ingen app kan si at en sopp er trygg. Er du i tvil, la den stå — eller få den kontrollert.',
     avmeld: 'Vil du ikke ha flere varsler? Meld deg av her.',
+    folgX: 'Omslagene og fasiten publiseres også åpent på X — følg @mycelet.',
     signatur: 'Mycelet — soppvarsel for Norge og Sverige'
   },
   sv: {
@@ -88,6 +89,7 @@ const COPY = {
     sikkerhet:
       'Ät aldrig en svamp du inte fått bestämd. Ingen app kan säga att en svamp är säker. Är du osäker, låt den stå — eller få den kontrollerad.',
     avmeld: 'Vill du inte ha fler varningar? Avregistrera dig här.',
+    folgX: 'Omslagen och facit publiceras också öppet på X — följ @mycelet.',
     signatur: 'Mycelet — svampvarning för Norge och Sverige'
   }
 } as const;
@@ -148,6 +150,9 @@ ${
 
     <hr style="margin: 28px 0; border: none; border-top: 1px solid #e5e7eb;">
     <p style="font-size: 12px; color: #6b7280;">
+      <a href="https://x.com/mycelet" style="color: #6b7280;">${t.folgX}</a>
+    </p>
+    <p style="font-size: 12px; color: #6b7280;">
       <a href="${args.avmeldingsUrl}" style="color: #6b7280;">${t.avmeld}</a>
     </p>
     <p style="font-size: 12px; color: #9ca3af;">${t.signatur}</p>
@@ -178,6 +183,7 @@ ${t.knapp}: ${kartUrl}
 ${t.sikkerhet}
 
 ---
+${t.folgX} https://x.com/mycelet
 ${t.avmeld}
 ${args.avmeldingsUrl}
 

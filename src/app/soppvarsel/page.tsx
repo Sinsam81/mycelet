@@ -44,7 +44,9 @@ const COPY = {
     statusFeil: 'Noe gikk galt hos oss. Prøv igjen om et øyeblikk.',
     harKonto: 'Har du konto i appen? Da kan du også skru på varselet under',
     profilen: 'profilen din',
-    personvern: 'personvernerklæringen'
+    personvern: 'personvernerklæringen',
+    folgX: 'Omslagene og fasiten publiseres også åpent på X —',
+    folgXLenke: 'følg @mycelet'
   },
   sv: {
     tittel: 'Svampvarningen',
@@ -71,7 +73,9 @@ const COPY = {
     statusFeil: 'Något gick fel hos oss. Försök igen om en stund.',
     harKonto: 'Har du konto i appen? Då kan du också slå på varningen under',
     profilen: 'din profil',
-    personvern: 'integritetspolicyn'
+    personvern: 'integritetspolicyn',
+    folgX: 'Omslagen och facit publiceras också öppet på X —',
+    folgXLenke: 'följ @mycelet'
   }
 } as const;
 
@@ -187,6 +191,14 @@ export default async function SoppvarselSide({
 
         <p className="text-xs text-gray-500">
           {t.harKonto} <Link href="/profile" className="underline">{t.profilen}</Link>.
+        </p>
+
+        <p className="text-xs text-gray-500">
+          {t.folgX}{' '}
+          <a href="https://x.com/mycelet" className="underline" rel="noopener">
+            {t.folgXLenke}
+          </a>
+          .
         </p>
       </section>
     </PageWrapper>
