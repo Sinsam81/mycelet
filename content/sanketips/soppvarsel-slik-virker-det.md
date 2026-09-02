@@ -2,6 +2,7 @@
 published: 2026-09-01
 updated: 2026-09-01
 slug: soppvarsel-slik-virker-det
+alternate: svampvarning-sa-fungerar-det
 kicker: Soppvarsel · 5 min
 summary: Ett gratis e-postvarsel når soppforholdene snur i ditt område — bygget på vær-, skogs- og funndata for 22 områder i Norge og Sverige. Slik regnes det ut, og derfor sender vi maks én e-post i uka.
 ---
