@@ -23,6 +23,7 @@ Etter fire uker skal disse tre være tall, ikke gjetninger:
 - **Kun Søk-nettverket, kun Norge, kun eksakt match.**
 - **Trafikken går til www.mycelet.com, aldri til App Store.** Apple tar 30 % av en årskunde.
 - **Start nå.** September er toppsesong, og det er nå folk søker. En test i oktober måler et annet marked.
+- **Dette er web-kanalen.** App Store-søk har sin egen plan i `docs/apple-search-ads-oppsett.md` (laget 2026-08-30) med et mer optimistisk regnestykke, fordi den som søker «soppapp» i App Store allerede har bestemt seg for å laste ned noe. De to testene svarer på hver sin ting, og skal leses hver for seg: raden `google/soppkart-test` i dagsrapporten gjelder bare denne.
 
 Med 40 kr/dag og 12–18 kr per klikk blir det 2–3 klikk om dagen, rundt 80–125 klikk
 totalt. Det er nok til å se om kanalen er død eller lever, ikke nok til å finstille noe.
@@ -37,7 +38,7 @@ Uten dette hadde du bare visst hva klikkene kostet, ikke hva de ble til.
 Cookien settes bare på forsiden. Annonsen må derfor peke til `/`, ikke til en
 artikkel.
 
-## Steg 1 — konto og Keyword Planner (Sindre, ~30 min, koster ingenting)
+## Steg 1 — konto og Keyword Planner (eieren, ~30 min, koster ingenting)
 
 1. Gå til ads.google.com og opprett konto med post@mycelet.com.
 2. Google vil lede deg inn i en «smart kampanje» med en gang. **Ikke lag den.**
