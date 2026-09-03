@@ -6,7 +6,7 @@ import { byggDagsrapport, type AbonnementRad, type Dagsrapport } from '@/lib/rap
 import { sendEpost } from '@/lib/email/send';
 
 /**
- * Dagsrapport til Sindre: hva skjedde med Mycelet i går?
+ * Dagsrapport til eieren: hva skjedde med Mycelet i går?
  *
  * ── HVORFOR I APPEN OG IKKE SOM EN JOBB PÅ EN MASKIN ───────────────────────
  *

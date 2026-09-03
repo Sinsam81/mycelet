@@ -6,7 +6,7 @@
  * ═══════════════════════════════════════════════════════════════════════════
  *
  * En rapport som lyver er verre enn ingen rapport: den fjerner grunnen til å
- * gå og se etter selv. Tallene her styrer om Sindre bruker en kveld på
+ * gå og se etter selv. Tallene her styrer om eieren bruker en kveld på
  * soppforeningene eller lener seg tilbake, så de må tåle å bli sjekket.
  *
  * Derfor er utregningen skilt fra e-posten og fra databasen, og testet.
