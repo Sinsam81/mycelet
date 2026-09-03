@@ -1,0 +1,187 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { createAdminClient } from '@/lib/supabase/admin';
+import { createRequestLogger } from '@/lib/log/request';
+import { bearerSecretMatches } from '@/lib/security/secret-compare';
+import { byggDagsrapport, type AbonnementRad, type Dagsrapport } from '@/lib/rapport/dagsrapport';
+import { sendEpost } from '@/lib/email/send';
+
+/**
+ * Dagsrapport til eieren: hva skjedde med Mycelet i går?
+ *
+ * ── HVORFOR I APPEN OG IKKE SOM EN JOBB PÅ EN MASKIN ───────────────────────
+ *
+ * Det opplagte er en planlagt oppgave lokalt. Den dør den dagen maskinen byttes
+ * ut, står avslått, eller er på et fly. Arbeidet flyttet fra én Mac til en annen
+ * 10. august; en rapport som ikke overlever det, er ikke en rapport.
+ *
+ * Her går den på samme Vercel-cron som soppvarselet, leser samme database, og
+ * bruker samme Resend-oppsett. Ingenting å skru på, ingenting å huske.
+ *
+ * ── HVA DEN IKKE KAN SVARE PÅ ──────────────────────────────────────────────
+ *
+ * ⚠️ BESØKSTALL FOR FORSIDEN MANGLER, og rapporten sier det selv i stedet for å
+ * tie om det. Den utloggede forsiden er `public/landing/index.html`, servert via
+ * en middleware-omskriving, og den har NULL JavaScript med vilje — derfor kjører
+ * ikke Google Analytics der. `src/lib/supabase/middleware.ts` logger riktignok
+ * hvert besøk med hvor det kom fra, men det går til Vercel-loggen, som ikke lar
+ * seg summere herfra.
+ *
+ * Å telle dem krever en teller i databasen skrevet fra middleware. Det er en
+ * endring i den varmeste kodestien vi har, og den er ikke gjort. Rapporten
+ * skriver «ikke målt» heller enn å la et tomt felt se ut som null besøk.
+ */
+
+export const maxDuration = 60;
+
+/** Rapporten går hit. Ingen andre skal ha den — den inneholder forretningstall. */
+const MOTTAKER = 'post@mycelet.com';
+
+export async function GET(request: NextRequest) {
+  const log = createRequestLogger(request);
+
+  if (!bearerSecretMatches(request.headers.get('authorization'), process.env.CRON_SECRET)) {
+    return NextResponse.json({ error: 'Ikke autorisert' }, { status: 401 });
+  }
+
+  const db = createAdminClient();
+  const naa = new Date();
+
+  // ── Brukere ───────────────────────────────────────────────────────────────
+  // auth.users er ikke eksponert gjennom PostgREST; admin-API-et er veien inn.
+  const { data: brukerData, error: brukerErr } = await db.auth.admin.listUsers({ page: 1, perPage: 1000 });
+  if (brukerErr) {
+    log.error('dagsrapport.brukere_feilet', { message: brukerErr.message });
+    return NextResponse.json({ error: 'Kunne ikke hente brukere' }, { status: 500 });
+  }
+  const brukere = (brukerData?.users ?? []).map((u) => ({
+    created_at: u.created_at,
+    last_sign_in_at: u.last_sign_in_at ?? null
+  }));
+
+  // ── Abonnement ────────────────────────────────────────────────────────────
+  const { data: abData } = await db
+    .from('billing_subscriptions')
+    .select('tier,status,current_period_end,created_at,metadata');
+
+  // ── Varselabonnement ──────────────────────────────────────────────────────
+  const { count: varselAntall } = await db
+    .from('alert_subscriptions')
+    .select('id', { count: 'exact', head: true })
+    .eq('active', true);
+
+  // ── Regionscorer, i dag og i går ──────────────────────────────────────────
+  const { data: scorer } = await db
+    .from('region_daily_scores')
+    .select('region,tile_date,score')
+    .order('tile_date', { ascending: false })
+    .limit(60);
+
+  const datoer = [...new Set((scorer ?? []).map((s) => s.tile_date as string))].sort().reverse();
+  const iDagDato = datoer[0];
+  const iGarDato = datoer[1];
+  const velg = (d: string | undefined) =>
+    d ? (scorer ?? []).filter((s) => s.tile_date === d).map((s) => ({ region: s.region as string, score: s.score as number })) : [];
+
+  const rapport = byggDagsrapport({
+    brukere,
+    abonnement: (abData ?? []) as AbonnementRad[],
+    varselabonnement: varselAntall ?? 0,
+    regionerIDag: velg(iDagDato),
+    regionerIGar: velg(iGarDato),
+    naa
+  });
+
+  const { emne, html, tekst } = byggRapportEpost(rapport, naa);
+  const res = await sendEpost({ til: MOTTAKER, emne, html, tekst });
+
+  log.info('dagsrapport.ferdig', {
+    sendt: res.ok,
+    nyeBrukere24t: rapport.nyeBrukere.siste24t,
+    betalende: rapport.betalende.totalt,
+    flanker: rapport.flanker.length
+  });
+
+  return NextResponse.json({ ok: true, sendt: res.ok, detalj: res.detalj, rapport });
+}
+
+/**
+ * E-posten. Bevisst nøktern: dette er et arbeidsverktøy, ikke markedsføring.
+ * Tallene skal kunne leses på en telefon på tre sekunder.
+ */
+function byggRapportEpost(r: Dagsrapport, naa: Date) {
+  const dato = naa.toLocaleDateString('nb-NO', { day: 'numeric', month: 'long' });
+  const b = r.betalende;
+
+  const overskrift =
+    r.nyeBrukere.siste24t > 0
+      ? `${r.nyeBrukere.siste24t} ny${r.nyeBrukere.siste24t === 1 ? '' : 'e'} bruker${r.nyeBrukere.siste24t === 1 ? '' : 'e'} i går`
+      : 'Ingen nye brukere i går';
+
+  const rad = (navn: string, verdi: string) =>
+    `<tr><td style="padding:6px 0;color:#4b5563">${navn}</td><td style="padding:6px 0;text-align:right;font-weight:600;color:#1A3409">${verdi}</td></tr>`;
+
+  const flankeTekst = r.flanker.length
+    ? r.flanker.map((f) => `${f.region} ${f.fra} → ${f.til}`).join(', ')
+    : 'ingen';
+
+  const html = `<!doctype html>
+<html lang="nb"><body style="font-family:-apple-system,system-ui,sans-serif;color:#1f2937;max-width:520px;margin:24px auto;padding:0 16px">
+  <p style="font-size:12px;color:#6b7280;margin:0">Mycelet · ${dato}</p>
+  <h1 style="font-size:19px;color:#1A3409;margin:4px 0 18px">${overskrift}</h1>
+
+  <table style="width:100%;border-collapse:collapse;font-size:14px">
+    ${rad('Nye brukere siste døgn', String(r.nyeBrukere.siste24t))}
+    ${rad('Nye siste 7 dager', String(r.nyeBrukere.siste7d))}
+    ${rad('Registrerte totalt', String(r.nyeBrukere.totalt))}
+    ${rad('…som aldri logget inn igjen', String(r.aldriInnloggetIgjen))}
+  </table>
+
+  <h2 style="font-size:14px;color:#1A3409;margin:22px 0 6px">Abonnement</h2>
+  <table style="width:100%;border-collapse:collapse;font-size:14px">
+    ${rad('Løpende totalt', String(b.totalt))}
+    ${rad('— betalt via Stripe', String(b.perKilde.stripe))}
+    ${rad('— betalt via App Store', String(b.perKilde.revenuecat))}
+    ${rad('— gavepass og testkontoer', String(b.perKilde.manuell))}
+    ${rad('Nye ekte kjøp siste 7 dager', String(b.nyeSiste7d))}
+    ${r.utloptMenMarkertAktiv > 0 ? rad('⚠️ utløpt, men merket aktiv', String(r.utloptMenMarkertAktiv)) : ''}
+  </table>
+
+  <h2 style="font-size:14px;color:#1A3409;margin:22px 0 6px">I skogen</h2>
+  <table style="width:100%;border-collapse:collapse;font-size:14px">
+    ${rad('Best i dag', r.toppRegioner.map((t) => `${t.region} ${t.score}`).join(' · ') || '—')}
+    ${rad('Snudde i natt', flankeTekst)}
+    ${rad('Abonnerer på soppvarsel', String(r.varselabonnement))}
+  </table>
+
+  <p style="font-size:12px;color:#9ca3af;margin-top:24px;line-height:1.5">
+    Besøkstall for forsiden er ikke målt — den statiske landingssiden har ingen
+    JavaScript, så analyseverktøyet kjører ikke der. Se kommentaren i
+    <code>api/cron/dagsrapport</code>.
+  </p>
+</body></html>`;
+
+  const tekst = `Mycelet · ${dato}
+${overskrift}
+
+BRUKERE
+  siste døgn ................ ${r.nyeBrukere.siste24t}
+  siste 7 dager ............. ${r.nyeBrukere.siste7d}
+  totalt .................... ${r.nyeBrukere.totalt}
+  aldri logget inn igjen .... ${r.aldriInnloggetIgjen}
+
+ABONNEMENT
+  løpende totalt ............ ${b.totalt}
+    via Stripe .............. ${b.perKilde.stripe}
+    via App Store ........... ${b.perKilde.revenuecat}
+    gavepass/test ........... ${b.perKilde.manuell}
+  nye ekte kjøp (7 d) ....... ${b.nyeSiste7d}${r.utloptMenMarkertAktiv > 0 ? `\n  ⚠️ utløpt men merket aktiv .. ${r.utloptMenMarkertAktiv}` : ''}
+
+I SKOGEN
+  best i dag ................ ${r.toppRegioner.map((t) => `${t.region} ${t.score}`).join(', ') || '—'}
+  snudde i natt ............. ${flankeTekst}
+  soppvarsel-abonnenter ..... ${r.varselabonnement}
+
+Besøkstall for forsiden er ikke målt — landingssiden har ingen JavaScript.`;
+
+  return { emne: `Mycelet ${dato}: ${overskrift.toLowerCase()}`, html, tekst };
+}
