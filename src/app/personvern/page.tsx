@@ -380,6 +380,15 @@ export default async function PersonvernPage() {
               <span className="font-medium">{t('cookiesStripeLabel')}</span> {t('cookiesStripeDesc')}
             </li>
           </ul>
+          {/* Ikke strengt nødvendig, og sagt rett ut: den finnes for at vi
+              skal vite hvilke kanaler som gir brukere. Kjeden er beskrevet i
+              src/lib/analytics/kilde.ts. */}
+          <p className="text-sm text-gray-700">{t('cookiesKildeIntro')}</p>
+          <ul className="list-disc space-y-1 pl-5 text-sm text-gray-700">
+            <li>
+              <span className="font-medium">{t('cookiesKildeLabel')}</span> {t('cookiesKildeDesc')}
+            </li>
+          </ul>
           <p className="text-sm text-gray-700">{t('cookiesOptionalIntro')}</p>
           <ul className="list-disc space-y-1 pl-5 text-sm text-gray-700">
             <li>

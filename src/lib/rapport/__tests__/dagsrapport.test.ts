@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { byggDagsrapport, type AbonnementRad, type RapportInn } from '../dagsrapport';
+import { byggDagsrapport, type AbonnementRad, type BrukerRad, type RapportInn } from '../dagsrapport';
 
 /**
  * Testene her er skrevet mot ÉN feil: at rapporten oppgir flere kunder enn
@@ -18,11 +18,22 @@ function dagerSiden(n: number): string {
 
 function ab(over: Partial<AbonnementRad> = {}): AbonnementRad {
   return {
+    user_id: 'u-uten-profil',
     tier: 'premium',
     status: 'active',
     current_period_end: dagerSiden(-30),
     created_at: dagerSiden(60),
     metadata: { provider: 'stripe' },
+    ...over
+  };
+}
+
+function br(over: Partial<BrukerRad> = {}): BrukerRad {
+  return {
+    id: `u-${Math.random().toString(36).slice(2, 8)}`,
+    created_at: dagerSiden(30),
+    last_sign_in_at: null,
+    kilde: null,
     ...over
   };
 }
@@ -114,15 +125,60 @@ describe('brukere', () => {
     const r = byggDagsrapport(
       inn({
         brukere: [
-          { created_at: dagerSiden(0.5), last_sign_in_at: dagerSiden(0.4) },
-          { created_at: dagerSiden(3), last_sign_in_at: null },
-          { created_at: dagerSiden(6), last_sign_in_at: null },
-          { created_at: dagerSiden(30), last_sign_in_at: dagerSiden(2) }
+          br({ created_at: dagerSiden(0.5), last_sign_in_at: dagerSiden(0.4) }),
+          br({ created_at: dagerSiden(3) }),
+          br({ created_at: dagerSiden(6) }),
+          br({ created_at: dagerSiden(30), last_sign_in_at: dagerSiden(2) })
         ]
       })
     );
     expect(r.nyeBrukere).toEqual({ siste24t: 1, siste7d: 3, totalt: 4 });
     expect(r.aldriInnloggetIgjen).toBe(2);
+  });
+});
+
+describe('kilder — det annonsetesten skal leses av', () => {
+  it('teller registrerte og ekte betalende per kilde', () => {
+    const r = byggDagsrapport(
+      inn({
+        brukere: [
+          br({ id: 'a1', kilde: 'google/soppkart-test', created_at: dagerSiden(2) }),
+          br({ id: 'a2', kilde: 'google/soppkart-test', created_at: dagerSiden(20) }),
+          br({ id: 'f1', kilde: 'sosialt:facebook.com', created_at: dagerSiden(1) }),
+          br({ id: 'd1', created_at: dagerSiden(1) })
+        ],
+        abonnement: [
+          ab({ user_id: 'a2', metadata: { provider: 'stripe' } }),
+          ab({ user_id: 'f1', metadata: null }) // gavepass — teller ikke som kanalens fortjeneste
+        ]
+      })
+    );
+    expect(r.kilder).toEqual([
+      { kilde: 'google/soppkart-test', totalt: 2, siste7d: 1, betalende: 1 },
+      { kilde: 'sosialt:facebook.com', totalt: 1, siste7d: 1, betalende: 0 },
+      { kilde: 'ukjent', totalt: 1, siste7d: 1, betalende: 0 }
+    ]);
+  });
+
+  it('legger «ukjent» sist selv når den er størst', () => {
+    // Alle fra før målingen startet er «ukjent». Den raden vil være størst i
+    // lang tid, og skal ikke skyve annonsetesten ut av synsfeltet.
+    const r = byggDagsrapport(
+      inn({
+        brukere: [br(), br(), br(), br({ kilde: 'google/soppkart-test' })]
+      })
+    );
+    expect(r.kilder.map((k) => k.kilde)).toEqual(['google/soppkart-test', 'ukjent']);
+  });
+
+  it('teller et utløpt abonnement som ikke-betalende for kilden', () => {
+    const r = byggDagsrapport(
+      inn({
+        brukere: [br({ id: 'a1', kilde: 'google/soppkart-test' })],
+        abonnement: [ab({ user_id: 'a1', current_period_end: '2026-07-02T00:00:00Z' })]
+      })
+    );
+    expect(r.kilder[0].betalende).toBe(0);
   });
 });
 

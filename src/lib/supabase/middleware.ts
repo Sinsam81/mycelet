@@ -4,6 +4,7 @@ import { logger } from '@/lib/log';
 import { getOrCreateRequestId } from '@/lib/log/request';
 import { LOCALE_COOKIE, isLocale, type Locale } from '@/i18n/config';
 import { classifyTrafficSource } from '@/lib/analytics/traffic-source';
+import { KILDE_COOKIE, KILDE_COOKIE_MAX_AGE, kildeFraBesok } from '@/lib/analytics/kilde';
 
 /**
  * Fasit for hvilke ruter en utlogget besøkende sendes til innlogging fra.
@@ -146,17 +147,23 @@ export async function updateSession(request: NextRequest) {
     //
     // Ingen IP, ingen informasjonskapsler, ingen full adresse — bare hvilken
     // tjeneste de kom fra. Teller trafikk, sporer ikke personer.
-    const kilde = classifyTrafficSource(
-      request.headers.get('referer'),
-      request.nextUrl.host,
-      request.nextUrl.searchParams.get('utm_source')
-    );
+    //
+    // Google Ads legger på `gclid` automatisk. Mangler utm-merkingen (noen
+    // glemte den i annonsen), er gclid alene nok til å vite at det var en
+    // annonse.
+    const params = request.nextUrl.searchParams;
+    const utmSource = params.get('utm_source') ?? (params.has('gclid') ? 'google' : null);
+    const utmCampaign = params.get('utm_campaign') ?? (params.has('gclid') ? 'annonse' : null);
+    // hostname, ikke host: `host` tar med portnummer, og da telles et internt
+    // klikk som henvisning på `next start -p 3100`. Uten port i prod, men
+    // sammenligningen skal være riktig begge steder.
+    const kilde = classifyTrafficSource(request.headers.get('referer'), request.nextUrl.hostname, utmSource);
     log.info('landing.besok', {
       kilde: kilde.kind,
       vert: kilde.host,
       kampanje: kilde.campaign,
-      utm_medium: request.nextUrl.searchParams.get('utm_medium'),
-      utm_campaign: request.nextUrl.searchParams.get('utm_campaign')
+      utm_medium: params.get('utm_medium'),
+      utm_campaign: utmCampaign
     });
 
     const landingLocale = resolveLandingLocale(request);
@@ -164,6 +171,16 @@ export async function updateSession(request: NextRequest) {
     const landingResponse = NextResponse.rewrite(new URL(landingFile, request.url), {
       headers: { 'x-request-id': reqId }
     });
+    // Ta kilden med videre til registreringen — se @/lib/analytics/kilde for
+    // hele kjeden. Første besøk vinner, så en eksisterende cookie røres ikke.
+    const registreringskilde = kildeFraBesok(kilde, utmCampaign);
+    if (registreringskilde && !request.cookies.has(KILDE_COOKIE)) {
+      landingResponse.cookies.set(KILDE_COOKIE, registreringskilde, {
+        path: '/',
+        maxAge: KILDE_COOKIE_MAX_AGE,
+        sameSite: 'lax'
+      });
+    }
     // A ?lang= click on the landing toggle persists the choice in the same
     // cookie the in-app language switcher uses, so landing and app stay in
     // the same language from then on.

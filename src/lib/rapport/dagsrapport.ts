@@ -35,6 +35,7 @@
 export type Betalingskilde = 'stripe' | 'revenuecat' | 'manuell';
 
 export interface AbonnementRad {
+  user_id: string;
   tier: string;
   status: string;
   current_period_end: string | null;
@@ -43,8 +44,15 @@ export interface AbonnementRad {
 }
 
 export interface BrukerRad {
+  id: string;
   created_at: string;
   last_sign_in_at: string | null;
+  /**
+   * Hvor de kom fra, fra user_metadata.kilde — se src/lib/analytics/kilde.ts.
+   * null for direkte besøk, og for alle som registrerte seg før målingen
+   * startet (september 2026).
+   */
+  kilde: string | null;
 }
 
 export interface RapportInn {
@@ -68,7 +76,16 @@ export interface Dagsrapport {
   toppRegioner: Array<{ region: string; score: number }>;
   /** Regioner som krysset varselterskelen i natt. */
   flanker: Array<{ region: string; fra: number; til: number }>;
+  /**
+   * Hvor de registrerte kom fra, og hvor mange av dem som betaler. Det er
+   * dette annonsetesten (docs/google-ads-test.md) skal leses av. Sortert etter
+   * antall, med «ukjent» alltid sist — den raden er direkte besøk pluss alle
+   * fra før målingen startet, og skal ikke skygge for de navngitte.
+   */
+  kilder: Array<{ kilde: string; totalt: number; siste7d: number; betalende: number }>;
 }
+
+export const UKJENT_KILDE = 'ukjent';
 
 /** Terskelen varselet bruker. Importeres ikke, for å holde modulen fri for UI-kode. */
 const VARSEL_TERSKEL = 85;
@@ -98,6 +115,32 @@ export function byggDagsrapport(inn: RapportInn): Dagsrapport {
   const perKilde: Record<Betalingskilde, number> = { stripe: 0, revenuecat: 0, manuell: 0 };
   for (const a of aktive) perKilde[kilde(a)] += 1;
 
+  // ── Kilder ────────────────────────────────────────────────────────────────
+  const kildeForBruker = new Map(inn.brukere.map((b) => [b.id, b.kilde ?? UKJENT_KILDE]));
+  const perKildeTall = new Map<string, { totalt: number; siste7d: number; betalende: number }>();
+  const tall = (k: string) => {
+    let t = perKildeTall.get(k);
+    if (!t) perKildeTall.set(k, (t = { totalt: 0, siste7d: 0, betalende: 0 }));
+    return t;
+  };
+  for (const b of inn.brukere) {
+    const t = tall(b.kilde ?? UKJENT_KILDE);
+    t.totalt += 1;
+    if (nyere(b.created_at, dag7)) t.siste7d += 1;
+  }
+  // Bare ekte kjøp — et gavepass sier ingenting om kanalen.
+  for (const a of aktive) {
+    if (kilde(a) === 'manuell') continue;
+    tall(kildeForBruker.get(a.user_id) ?? UKJENT_KILDE).betalende += 1;
+  }
+  const kilder = [...perKildeTall.entries()]
+    .map(([k, t]) => ({ kilde: k, ...t }))
+    .sort((x, y) => {
+      if (x.kilde === UKJENT_KILDE) return 1;
+      if (y.kilde === UKJENT_KILDE) return -1;
+      return y.totalt - x.totalt || x.kilde.localeCompare(y.kilde);
+    });
+
   const flanker: Array<{ region: string; fra: number; til: number }> = [];
   const igar = new Map(inn.regionerIGar.map((r) => [r.region, r.score]));
   for (const r of inn.regionerIDag) {
@@ -125,6 +168,7 @@ export function byggDagsrapport(inn: RapportInn): Dagsrapport {
     ).length,
     varselabonnement: inn.varselabonnement,
     toppRegioner: [...inn.regionerIDag].sort((a, b) => b.score - a.score).slice(0, 3),
-    flanker
+    flanker,
+    kilder
   };
 }
