@@ -1,6 +1,6 @@
 ---
 published: 2026-09-02
-updated: 2026-09-02
+updated: 2026-09-03
 slug: nar-kommer-karljohan
 lang: sv
 alternate: naar-kommer-steinsoppen
@@ -27,3 +27,17 @@ Som alltid: kurvan mäter när svampen blir *hittad*, vilket är summan av när 
 I skrivande stund (2 september) säger våra förhållandetal att det står bäst till i Jämtland (Östersund: 91 av 100) och norrut mot Umeå — se [dagens siffror för ditt område](/soppforhold). Vill du hellre få besked den dag det vänder hos dig: [svampvarningen](/soppvarsel) är gratis och skickar max ett mejl i veckan — [så fungerar den](/sanketips/svampvarning-sa-fungerar-det).
 
 Och som alltid: en karljohan är ingen karljohan förrän den är säkert bestämd — gallsoppen har lurat mången korg. Är du osäker, låt den stå eller anlita en svampkonsulent.
+
+## Frågor och svar
+
+### När är karljohansäsongen som bäst?
+
+Toppveckan är vecka 36, 31 augusti till 6 september, nästan samtidigt i hela Norden. September står för 44,7 procent av de 15 423 daterade fynden, augusti för 34,3 och juli för bara 7,5.
+
+### Hur snabbt kommer karljohan efter regn?
+
+Appens fältregel är runt fem dagar, mot två veckor för kantarellerna. Kommer ett rejält regn i första halvan av september är det karljohansveckan som följer.
+
+### Varför är karljohan svår att förutsäga?
+
+I Mycelets eget stränga holdout-test presterade temperaturprofilen för karljohan sämre än slumpen. Erfarna plockare beskriver en sekvens av varm sommar, köldskifte och regn som ingen enkel tröskel fångar.

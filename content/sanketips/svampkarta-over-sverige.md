@@ -1,6 +1,6 @@
 ---
 published: 2026-09-02
-updated: 2026-09-02
+updated: 2026-09-03
 slug: svampkarta-over-sverige
 lang: sv
 alternate: soppkart-over-norge
@@ -39,3 +39,17 @@ Kartan låter dig registrera egna fynd med bild och GPS, och reglerna är gjorda
 En karta berättar var. Den berättar aldrig *vad* — artbestämningen är din. En prick som säger «kantarell» är en historisk observation, ingen garanti för att det du plockar på platsen är kantarell. Är du osäker: låt den stå, eller anlita en svampkonsulent.
 
 Källorna och licenserna bakom kartan står öppet på [datakällssidan](/datakilder) — fynddata från Artportalen, Artsdatabanken och GBIF, kartor från OpenStreetMap (och norska Kartverket i Norge), skogsdata från CORINE.
+
+## Frågor och svar
+
+### Vad visar Mycelets svampkarta?
+
+428 829 registrerade fynd av 80 matnyttiga och giftiga arter i Sverige och Norge, hämtade från Artportalen, Artsdatabanken och GBIF. Varje prick är en dokumenterad observation med art och oftast datum.
+
+### Betyder ett gammalt fynd att det står svamp där i dag?
+
+Nej, det betyder att stället har levererat förr. 72 procent av fynden är från före 2021, och kartan har därför ett årsfilter för senaste 5 och senaste 10 åren, så du kan skilja färsk aktivitet från ren historia.
+
+### Kan andra se mitt kantarellställe?
+
+Du väljer själv om ett fynd visas offentligt, med avsiktligt oprecis position (±500 meter), eller helt privat. Privata fynd är osynliga för alla andra, och bilder rensas från GPS-data före uppladdning.

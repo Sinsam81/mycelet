@@ -1,6 +1,6 @@
 ---
 published: 2026-09-02
-updated: 2026-09-02
+updated: 2026-09-03
 slug: soppsesongen-2026
 lang: nb
 alternate: svampsasongen-2026
@@ -38,3 +38,17 @@ At nord leder er ikke tilfeldig — det er mønsteret fra forskningen: sopp fruk
 Kalenderen sier at september er årets viktigste soppmåned — over en tredjedel av alle daterte funn i databasen vår skjer da. Men *hvilken uke* det løsner hos deg, avgjøres av regnet: de fleste matsoppene bruker fra fem dager (steinsopp) til to uker (kantarellene) fra rotbløyte til plukkbar sopp — [her er hvorfor](/sanketips/sopp-etter-regn). Følg med på nedbøren der du bor, eller la [soppvarselet](/soppvarsel) gjøre det for deg: gratis, maks én e-post i uka, og den kommer den dagen forholdene snur i ditt område. Hvert varsel vi sender, etterprøves offentlig i [fasitloggen](/apenhet).
 
 Denne siden oppdateres gjennom sesongen. Og uansett hvor god uka er: en sopp i kurven skal være sikkert bestemt — er du i tvil, la den stå eller bruk soppkontroll.
+
+## Spørsmål og svar
+
+### Hvilke arter er i sesong i september 2026?
+
+Steinsopp topper i uke 35–36, nesten samtidig i hele landet. Kantarellen er på vei mot toppen i uke 38 i sør, tidligere jo lenger nord du bor. Traktkantarellen skyter fart fra midten av september og bærer sesongen inn i november.
+
+### Hvor var soppforholdene best 2. september 2026?
+
+Trondheim 100, Bodø 97 og Ålesund 92 ledet. Oslo 66 og Stavanger 64 lå midt på treet fordi jordfuktigheten etter tørkesommeren fortsatt hang etter. Dagens ferske tall står alltid på soppforhold-siden.
+
+### Hvorfor er september den viktigste soppmåneden?
+
+Over en tredjedel av alle daterte funn i databasen skjer i september. Hvilken uke det løsner hos deg, avgjøres av regnet: de fleste matsoppene bruker fra fem dager (steinsopp) til to uker (kantarellene) fra rotbløyte til plukkbar sopp.

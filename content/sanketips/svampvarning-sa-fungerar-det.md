@@ -1,6 +1,6 @@
 ---
 published: 2026-09-01
-updated: 2026-09-01
+updated: 2026-09-03
 slug: svampvarning-sa-fungerar-det
 lang: sv
 alternate: soppvarsel-slik-virker-det
@@ -41,3 +41,21 @@ Siffran gäller ett *område*, inte skogen där du står. Gammal granskog med mo
 Gå till [mycelet.com/soppvarsel](/soppvarsel), skriv in din e-postadress och välj område — Sverige eller Norge, inget konto behövs. Du bekräftar med en länk via mejl, och varje mejl har avregistreringslänk. Det är gratis, och adressen används inte till något annat.
 
 Sedan kan du ägna väntetiden åt det som faktiskt kräver en människa: att läsa terrängen — och att glädja dig.
+
+## Frågor och svar
+
+### Vad är svampvarningen?
+
+Ett gratis mejl som skickas den dag svampförhållandena i ditt område korsar från dåliga till goda. Förhållandena beräknas varje natt på en skala från 0 till 100 för 22 områden i Sverige och Norge.
+
+### Hur ofta kommer svampvarningen?
+
+Max ett mejl i veckan, oavsett hur mycket vädret vickar. Varningen går på omslaget, dagen förhållandena vänder, inte på varje dag som är «bra».
+
+### Vad bygger siffran för svampförhållanden på?
+
+Nederbörden de senaste två veckorna från SMHI och MET Norge, hur fuktig marken faktiskt är, temperaturen, säsongskurvor byggda på över 400 000 daterade fynd, och skogstypen i området.
+
+### Behöver jag ett konto för att få svampvarningen?
+
+Nej. Skriv in din e-postadress på mycelet.com/soppvarsel, välj område och bekräfta med en länk via mejl. Varje mejl har avregistreringslänk, och adressen används inte till något annat.

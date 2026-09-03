@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { ORGANISASJON } from '@/lib/seo/organisasjon';
 import Link from 'next/link';
 import { ChevronRight, MapPin, CalendarDays } from 'lucide-react';
 import { PageWrapper } from '@/components/layout/PageWrapper';
@@ -79,7 +80,7 @@ export default async function SoppforholdPage() {
     inLanguage: 'nb',
     ...(tileDate ? { dateModified: tileDate } : {}),
     isPartOf: { '@type': 'WebSite', name: 'Mycelet', url: 'https://www.mycelet.com' },
-    publisher: { '@type': 'Organization', name: 'Mycelet', url: 'https://www.mycelet.com' }
+    publisher: ORGANISASJON
   };
 
   return (

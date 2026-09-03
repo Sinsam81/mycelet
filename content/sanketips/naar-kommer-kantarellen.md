@@ -1,6 +1,6 @@
 ---
 published: 2026-09-01
-updated: 2026-09-01
+updated: 2026-09-03
 slug: naar-kommer-kantarellen
 alternate: nar-kommer-kantarellen
 kicker: Vær og timing · 6 min
@@ -34,3 +34,17 @@ Og som alltid: kurven er flerårig klimatologi, ikke en prognose for i år. Akku
 Det er nøyaktig dette [soppvarselet](/soppvarsel) er til: vi regner ut soppforholdene for 22 områder i Norge og Sverige hver natt — nedbør, markfuktighet, temperatur og sesongkurvene fra denne artikkelen — og sender én e-post den dagen forholdene snur fra dårlige til gode i ditt område. Maks én i uka, gratis, uten konto. [Slik virker det](/sanketips/soppvarsel-slik-virker-det).
 
 Én regel til slutt, som alltid: en kantarell er ikke en kantarell før den er sikkert bestemt. Lær deg [forvekslingene](/sanketips/fem-forvekslinger), og er du i tvil — la den stå, eller få den kontrollert.
+
+## Spørsmål og svar
+
+### Når er kantarellsesongen på topp?
+
+Sør for 61 grader topper funnene i uke 38 (14.–20. september), i båndet 61–64 grader nord rundt uke 35 (24.–30. august). Bare 15,5 prosent av de 19 592 daterte funnene er gjort i juli; september alene står for 34,5 prosent.
+
+### Kommer kantarellen i juli?
+
+De første kommer tidlig: sør for 61 grader passerer funnkurven 25 prosent av toppnivået rundt månedsskiftet juni–juli. Men mengden, ukene da skogen faktisk leverer, kommer langt senere, i september.
+
+### Hvor lenge etter regn kommer kantarellen?
+
+Erfaringsmessig rundt to uker fra en skikkelig rotbløyte til synlig vekst. Det er en feltregel, ikke en målt konstant, og datoen å følge med på er første ordentlige regnvær, ikke 14. september.

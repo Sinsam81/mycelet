@@ -1,6 +1,6 @@
 ---
 published: 2026-07-29
-updated: 2026-08-02
+updated: 2026-09-03
 slug: fem-forvekslinger
 kicker: Trygg sanking · 8 min
 summary: Hva du må se på under hatten, og hvilke arter du bør lære å kjenne igjen før du plukker dem du vil spise.
@@ -116,3 +116,21 @@ Regelen som gjelder over alle andre: spis bare sopp du er helt sikker på. Er du
 Mistenker du at noen har spist en giftig sopp, ring **Giftinformasjonen på 22 59 13 00** — døgnåpent. Er du i Sverige: ring **112** ved akutt fare, ellers **Giftinformationscentralen på 010-456 67 00**. Ring med en gang, selv om ingen har symptomer ennå, og selv om noen først ble dårlige og så virker friskere. Både orellanin og amatoksiner har forsinket eller villedende forløp.
 
 Det gjelder også apper. Bildegjenkjenning — vår egen inkludert — foreslår arter. Den bekrefter ikke at noe er spiselig, og skal aldri være grunnlaget for å legge sopp i panna. Mycelet er bygget for det som kommer *før* artsbestemmelsen: å fortelle deg når sesongen og været faktisk gjør det verdt å dra ut, og hvilken type skog arten du er ute etter hører hjemme i. Hva som ligger i kurven når du kommer hjem, må fortsatt du — eller en soppkontrollør — svare for.
+
+## Spørsmål og svar
+
+### Hvilken enkel regel skiller ut de giftigste soppene?
+
+Alle de seks giftigste soppene i Norge har skiver under hatten: hvit fluesopp, grønn fluesopp, spiss giftslørsopp, butt giftslørsopp, flatklokkehatt og giftparasollsoppene. Regelen gjelder utvokst sopp og betyr ikke at alt annet er trygt; sandmorkel har ikke skiver og står likevel som giftig.
+
+### Hvordan skiller jeg sjampinjong fra hvit fluesopp?
+
+Se på skivefargen: hvit fluesopp har hvite skiver hele livet, sjampinjong har skiver med farge, først rosa og etter hvert brune. Hvit fluesopp har dessuten en poseformet slire nederst rundt en knollformet fot, så ta hele soppen opp av bakken. Plukk aldri sjampinjong med hatten fortsatt lukket.
+
+### Hvordan skiller jeg kantarell fra falsk kantarell?
+
+Kantarellens ribber sitter godt fast og lar seg ikke skrape av; falsk kantarell har gaffeldelte skiver som kan skrapes av. Skjærer du soppen i to på langs, er kantarell hvit til kremhvit inni, mens falsk kantarell er oransje hele veien gjennom.
+
+### Hva gjør jeg ved mistanke om soppforgiftning?
+
+Ring Giftinformasjonen på 22 59 13 00, døgnåpent, med en gang, også før noen har symptomer. I Sverige: 112 ved akutt fare, ellers Giftinformationscentralen på 010-456 67 00.

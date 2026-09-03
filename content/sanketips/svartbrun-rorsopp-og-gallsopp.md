@@ -1,6 +1,6 @@
 ---
 published: 2026-09-02
-updated: 2026-09-02
+updated: 2026-09-03
 slug: svartbrun-rorsopp-og-gallsopp
 lang: nb
 kicker: Arter og forveksling · 6 min
@@ -40,3 +40,17 @@ Verdt å vite: å få en gallerørsopp i kurven er et kulinarisk havari, ikke et
 Vil du time jakten på den svartbrune: [soppvarselet](/soppvarsel) sier fra når forholdene snur i ditt område, og [regn-artikkelen](/sanketips/sopp-etter-regn) forklarer hvorfor rørsoppene kommer rundt fem dager etter rotbløyta.
 
 Og som alltid, uten unntak: en sopp i kurven skal være sikkert bestemt. Er du i tvil — la den stå, eller ta den med til soppkontroll hos Norges sopp- og nyttevekstforbund.
+
+## Spørsmål og svar
+
+### Hvordan skiller jeg gallerørsopp fra steinsopp og svartbrun rørsopp?
+
+Se på rørlaget og stilken. Gallerørsoppens rørlag blir rosa med alderen og får brunrosa flekker ved trykk, aldri blått, og stilken har et grovt, mørkt nettmønster. Svartbrun rørsopp blåner ved trykk og mangler tydelig nett. Steinsopp har hvitt mot gulgrønt rørlag som ikke blåner, og et fint, lyst nett.
+
+### Er gallerørsopp giftig?
+
+Den regnes som uspiselig på grunn av bitterheten, ikke som farlig. Én enkelt sopp kan gjøre en hel gryte uspiselig, og bitterheten forsvinner ikke ved koking.
+
+### Når kommer svartbrun rørsopp?
+
+Toppuka er uke 38 (14.–20. september). September står for 48 prosent av de 8 915 daterte funnene og oktober for 21. Gallerørsoppen topper i uke 34, tre–fire uker tidligere.
