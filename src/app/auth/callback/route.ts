@@ -3,6 +3,7 @@ import { cookies } from 'next/headers';
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { getSafeNext } from '@/lib/auth/safe-redirect';
 import { ensureProfile } from '@/lib/auth/ensure-profile';
+import { lesKildeCookie, normaliserKilde } from '@/lib/analytics/kilde';
 
 export async function GET(request: NextRequest) {
   const requestUrl = new URL(request.url);
@@ -50,6 +51,16 @@ export async function GET(request: NextRequest) {
     // det finnes ÉN regel for hvordan en profil sikres — inkludert utveien når
     // brukernavnet er opptatt. Se src/lib/auth/ensure-profile.ts.
     await ensureProfile(supabase, user);
+
+    // Google-innlogging går ikke gjennom signUp, så kilden fra forsidebesøket
+    // (cookien `mycelet_kilde`) står ikke i metadata ennå. Bare for helt
+    // ferske kontoer: en som logger inn igjen etter et nytt forsidebesøk skal
+    // beholde den kilden de faktisk kom fra første gang.
+    const kilde = lesKildeCookie(request.headers.get('cookie'));
+    const fersk = Date.now() - new Date(user.created_at).getTime() < 15 * 60_000;
+    if (kilde && fersk && !normaliserKilde(user.user_metadata?.kilde)) {
+      await supabase.auth.updateUser({ data: { kilde } });
+    }
   }
 
   return response;

@@ -577,7 +577,7 @@
   },
   "Personvern": {
     "title": "Personvernerklæring",
-    "lastUpdatedDate": "29. juli 2026",
+    "lastUpdatedDate": "3. september 2026",
     "lastUpdatedIntro": "Sist oppdatert: {date}. Denne erklæringen forklarer hvordan Mycelet behandler personopplysningene dine.",
     "controllerHeading": "1. Behandlingsansvarlig",
     "controllerIntro": "Behandlingsansvarlig for personopplysningene dine er:",
@@ -671,6 +671,9 @@
     "cookiesLocaleDesc": "husker om du vil ha Mycelet på norsk eller svensk. Settes når du velger språk, og varer i 12 måneder.",
     "cookiesStripeLabel": "Stripe (kun ved betaling):",
     "cookiesStripeDesc": "vi setter ingen Stripe-cookie på mycelet.com. Skal du betale, sendes du til Stripes egen betalingsside (checkout.stripe.com) — det er der Stripe setter sine cookies, for å sikre betalingen og hindre svindel.",
+    "cookiesKildeIntro": "I tillegg setter vi én cookie som ikke er nødvendig for at tjenesten skal virke, men som vi trenger for å drive den fornuftig:",
+    "cookiesKildeLabel": "Hvor du kom fra (mycelet_kilde):",
+    "cookiesKildeDesc": "settes bare på forsiden, og bare hvis du kom via en lenke fra et annet nettsted, et søk eller en annonse. Den inneholder kun navnet på tjenesten (for eksempel «google» eller «facebook») og eventuelt kampanjenavnet i lenka — ingen ID, ingen sporing på tvers av nettsteder, og ingen tredjepart leser den. Registrerer du deg, lagres den samme korte teksten på kontoen din, slik at vi vet hvilke kanaler som faktisk gir oss brukere. Varer i 30 dager.",
     "cookiesOptionalIntro": "Hvis du velger «Tillat analyse», bruker vi i tillegg:",
     "cookiesAnalyticsLabel": "Google Analytics (_ga):",
     "cookiesAnalyticsDesc": "hjelper oss å forstå sidevisninger og sentrale produktflyter. Cookien utløper senest etter 13 måneder. Google Analytics lastes ikke, og ingen analysedata sendes, før du samtykker.",
