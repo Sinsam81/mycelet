@@ -1,6 +1,6 @@
 ---
 published: 2026-09-01
-updated: 2026-09-01
+updated: 2026-09-03
 slug: nar-kommer-kantarellen
 lang: sv
 alternate: naar-kommer-kantarellen
@@ -35,3 +35,17 @@ Och som alltid: kurvan är flerårig klimatologi, ingen prognos för i år. Exak
 Det är precis vad [svampvarningen](/soppvarsel) är till för: vi räknar ut svampförhållandena för 22 områden i Sverige och Norge varje natt — nederbörd, markfuktighet, temperatur och säsongskurvorna från den här artikeln — och mejlar dig den dag förhållandena vänder från dåliga till goda i ditt område. Max ett mejl i veckan, gratis, utan konto. [Så fungerar det](/sanketips/svampvarning-sa-fungerar-det).
 
 En regel till sist, som alltid: en kantarell är ingen kantarell förrän den är säkert bestämd. Är du osäker — låt den stå, eller ta den till en svampkonsulent.
+
+## Frågor och svar
+
+### När är kantarellsäsongen som bäst?
+
+Söder om 61:a breddgraden toppar fynden vecka 38 (14–20 september), på breddgrad 61–64 runt vecka 35 (24–30 augusti). Bara 15,5 procent av de 19 592 daterade fynden görs i juli; september ensam står för 34,5 procent.
+
+### Kommer kantarellen i juli?
+
+De första kommer tidigt: söder om 61:a breddgraden passerar fyndkurvan 25 procent av toppnivån runt månadsskiftet juni–juli. Men mängden, veckorna då skogen faktiskt levererar, kommer långt senare, i september.
+
+### Hur länge efter regn kommer kantarellen?
+
+Erfarenhetsmässigt runt två veckor från ett rejält rotblöt till synlig växt. Datumet att hålla ögonen på är första ordentliga regnvädret veckorna innan, inte 14 september.

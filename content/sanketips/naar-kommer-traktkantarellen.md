@@ -1,6 +1,6 @@
 ---
 published: 2026-08-26
-updated: 2026-08-26
+updated: 2026-09-03
 slug: naar-kommer-traktkantarellen
 kicker: Vær og timing · 6 min
 summary: 8 383 daterte funn tegner traktkantarellens sesong uke for uke — når den skyter fart, når den topper der du bor, og hvorfor første skikkelige regnvær er datoen å følge med på.
@@ -50,6 +50,20 @@ Ingen tekst på nett, heller ikke denne, erstatter et par øyne som kan det: ta 
 Sesongkurven gir deg vinduet: fra rundt 10. september og fem uker fremover sør i landet, et par uker tidligere i båndet 61–64 grader nord. Været gir deg dagen: følg med på første skikkelige regnvær, og legg til et par ukers tid. Dag-for-dag-vurderingen for 22 områder i Norge og Sverige ligger åpent på [soppforhold-siden](/soppforhold), og [sesongkalenderen](/calendar) viser vinduene for over 70 arter.
 
 Vi lover ikke at du finner sopp. Vi lover at vurderingen du får, bygger på data vi tør å vise frem.
+
+## Spørsmål og svar
+
+### Når kommer traktkantarellen?
+
+Kurven løfter seg for alvor fra midten av august. Toppen kommer rundt 10. september i båndet 61–64 grader nord, rundt 17. september nord for 64 grader, og rundt 24. september sør for 61 grader, der de beste ukene strekker seg fra rundt 10. september til midten av oktober.
+
+### Hvor lenge varer traktkantarellsesongen?
+
+Traktkantarellen tåler å bli gjennomfrosset og kan i mildt vær med lite snø stå langt ut i november, i milde kyststrøk unntaksvis inn i desember. Sopp som har frosset og tint flere ganger brytes ned, så plukk bare faste, friske eksemplarer.
+
+### Hvordan skiller jeg traktkantarell fra spiss giftslørsopp?
+
+Se på undersiden av hatten. Traktkantarell har ingen ekte skiver, bare grunne, gaffeldelte årer som renner nedover den hule stilken. Spiss giftslørsopp har ekte, tykke, rustbrune skiver, fast stilk og gjerne en spiss pukkel på hatten. Ekte rustbrune skiver betyr «la den stå», og er du usikker, skal hele soppen til soppkontroll.
 
 ## Kilder
 

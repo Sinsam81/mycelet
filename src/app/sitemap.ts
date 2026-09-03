@@ -1,5 +1,6 @@
 import type { MetadataRoute } from 'next';
 import { alleRegionSlugs } from '@/lib/prediction/region-slug';
+import { SANKETIPS } from '@/lib/sanketips/manifest.generated';
 
 /**
  * sitemap.xml — fantes ikke. `GET /sitemap.xml` ga 404 fram til 2026-08-08.
@@ -19,18 +20,12 @@ import { alleRegionSlugs } from '@/lib/prediction/region-slug';
  * Sanketips-artiklene er de viktigste oppføringene: de er skrevet for å
  * bli funnet i søk, de er lange og kildebelagte, og de er den eneste kanalen
  * som gir trafikk uten at noen betaler for den.
+ *
+ * Artikkellista kom fra et håndskrevet array her, og det sto på seks mens
+ * det fantes atten (oppdaget 2026-09-03). Nå leses den fra manifestet
+ * scripts/build-articles.mjs skriver, med ekte datoer og hreflang-par.
  */
 const BASE = 'https://www.mycelet.com';
-
-/** Artiklene i content/sanketips/, servert som rene URL-er via next.config.js. */
-const SANKETIPS = [
-  'les-terrenget',
-  'fem-forvekslinger',
-  'sopp-etter-regn',
-  'hva-viser-soppkartene',
-  'hvorfor-finner-du-ikke-sopp',
-  'naar-kommer-traktkantarellen'
-];
 
 async function artsIder(): Promise<number[]> {
   const base = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -56,6 +51,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { sti: '', prioritet: 1.0, frekvens: 'daily' },
     // Den delbare siden — oppdateres daglig og er hele poenget med å bli funnet.
     { sti: '/soppforhold', prioritet: 0.95, frekvens: 'daily' },
+    // Soppvarsel uten konto — den offentlige påmeldingssiden.
+    { sti: '/soppvarsel', prioritet: 0.8, frekvens: 'monthly' },
     // Soppforholdene endrer seg hver dag — det er hele produktet.
     { sti: '/calendar', prioritet: 0.8, frekvens: 'daily' },
     { sti: '/species', prioritet: 0.8, frekvens: 'weekly' },
@@ -65,6 +62,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     // Åpenhetssiden dokumenterer valideringstallene bak varselet — den skal
     // være funnbar, ikke bare pliktoppfyllende.
     { sti: '/apenhet', prioritet: 0.5, frekvens: 'monthly' },
+    { sti: '/om', prioritet: 0.5, frekvens: 'monthly' },
     { sti: '/datakilder', prioritet: 0.4, frekvens: 'monthly' },
     { sti: '/kontakt', prioritet: 0.4, frekvens: 'yearly' },
     // Juridiske sider: må være funnbare, men skal ikke konkurrere med innholdet.
@@ -80,12 +78,26 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       changeFrequency: s.frekvens,
       priority: s.prioritet
     })),
-    ...SANKETIPS.map((slug) => ({
-      url: `${BASE}/sanketips/${slug}`,
-      lastModified: nå,
-      changeFrequency: 'monthly' as const,
-      priority: 0.9
-    })),
+    ...SANKETIPS.map((a) => {
+      const dato = a.updated ?? a.published;
+      const annet = a.lang === 'sv' ? 'nb' : 'sv';
+      return {
+        url: `${BASE}/sanketips/${a.slug}`,
+        lastModified: dato ? new Date(dato) : nå,
+        changeFrequency: 'monthly' as const,
+        priority: 0.9,
+        ...(a.alternate
+          ? {
+              alternates: {
+                languages: {
+                  [a.lang]: `${BASE}/sanketips/${a.slug}`,
+                  [annet]: `${BASE}/sanketips/${a.alternate}`
+                }
+              }
+            }
+          : {})
+      };
+    }),
     // Artssidene: 80 arter med per-art metadata — se filhodet om fallbacken.
     ...(await artsIder()).map((id) => ({
       url: `${BASE}/species/${id}`,

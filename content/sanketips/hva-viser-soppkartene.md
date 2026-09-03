@@ -1,7 +1,7 @@
 ---
 slug: hva-viser-soppkartene
 published: 2026-08-13
-updated: 2026-08-13
+updated: 2026-09-03
 kicker: Data og kart · 9 min
 summary: Prikkene på et soppkart viser hvor folk har registrert funn — ikke hvor sopp vokser. Her er forskjellen, målt på våre egne data.
 ---
@@ -157,6 +157,24 @@ Er du det minste i tvil: la den stå. Bruk soppkontroll. Norges sopp- og nytteve
 Verken kartet, prediksjonen eller bildeidentifiseringen i Mycelet er en spiselighetsdom, og ingen av dem skal være siste ord. Vi har brukt denne artikkelen på å vise fram svakhetene i «hvor»-delen vår — det gjør ikke resten av appen til en fasit.
 
 Mistenker du at noen har spist en giftig sopp, ring **Giftinformasjonen på 22 59 13 00** — døgnåpent. Ring med en gang, selv om ingen har symptomer ennå, og selv om noen først ble dårlige og så virker friskere. I Sverige: **112** ved akutt fare, ellers Giftinformationscentralen på **010-456 67 00**.
+
+## Spørsmål og svar
+
+### Viser et soppkart hvor sopp vokser?
+
+Nei, det viser hvor noen har registrert et funn. En prikk krever at soppen fruktifiserte, at et menneske var på stedet, kjente igjen arten og registrerte den. Bare det første handler om sopp.
+
+### Hva betyr et tomt område på soppkartet?
+
+At ingen har meldt fra derfra, ikke at det ikke finnes sopp der. For sopp i Norge er bare 348 poster i GBIF registrert som fravær, mot over 2,3 millioner som tilstedeværelse.
+
+### Hvor godt treffer Mycelets kart?
+
+Tidsmodellen har AUC 0,88, trent på data før 2021 og testet på 2021 og senere. Den romlige modellen ligger på 0,50–0,52, nær myntkast, og ren tetthet av historiske funn på 0,47. Derfor påvirker forekomstpunktene ikke poengsummen.
+
+### Er soppfunn skjevt fordelt på helger?
+
+Samlet for 2015–2025 ble 31,8 prosent av de norske funnene gjort i helgen, mot 28,6 ved jevn fordeling, men andelen falt fra 36,6 prosent i 2015 til 28,0 i 2025. I dagens data er helgeskjevheten i praksis borte.
 
 ## Kilder
 

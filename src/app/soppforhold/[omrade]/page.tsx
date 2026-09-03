@@ -1,4 +1,5 @@
 import { Suspense } from 'react';
+import { ORGANISASJON } from '@/lib/seo/organisasjon';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
@@ -239,7 +240,7 @@ export default async function OmradePage({ params }: SideProps) {
     inLanguage: land === 'SE' ? 'sv' : 'nb',
     ...(tileDate ? { dateModified: tileDate } : {}),
     isPartOf: { '@type': 'WebSite', name: 'Mycelet', url: 'https://www.mycelet.com' },
-    publisher: { '@type': 'Organization', name: 'Mycelet', url: 'https://www.mycelet.com' }
+    publisher: ORGANISASJON
   };
 
   return (

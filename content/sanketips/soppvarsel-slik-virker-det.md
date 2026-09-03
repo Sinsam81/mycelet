@@ -1,6 +1,6 @@
 ---
 published: 2026-09-01
-updated: 2026-09-01
+updated: 2026-09-03
 slug: soppvarsel-slik-virker-det
 alternate: svampvarning-sa-fungerar-det
 kicker: Soppvarsel · 5 min
@@ -40,3 +40,21 @@ Tallet gjelder et *område*, ikke skogen der du står. Gammel granskog med mose 
 Gå til [mycelet.com/soppvarsel](/soppvarsel), skriv inn e-postadressen din og velg område — Norge eller Sverige, ingen konto nødvendig. Du bekrefter med en lenke på e-post, og hver eneste e-post har avmeldingslenke. Det er gratis, og adressen brukes ikke til noe annet.
 
 Så kan du bruke ventetiden på det som faktisk krever et menneske: å [lese terrenget](/sanketips/les-terrenget) — og å glede deg.
+
+## Spørsmål og svar
+
+### Hva er soppvarselet?
+
+En gratis e-post som sendes den dagen soppforholdene i ditt område krysser fra dårlige til gode. Forholdene beregnes hver natt på en skala fra 0 til 100 for 22 områder i Norge og Sverige.
+
+### Hvor ofte kommer soppvarselet?
+
+Maks én e-post i uka, uansett hvor mye været vipper. Varselet går på omslaget, dagen forholdene snur, ikke på hver dag som er «bra».
+
+### Hva bygger soppforholdstallet på?
+
+Nedbøren de siste to ukene fra MET Norge og SMHI, hvor fuktig marka faktisk er, temperaturen, sesongkurver bygget på over 400 000 daterte funn, og skogtypen i området fra NIBIO og CORINE.
+
+### Trenger jeg konto for å få soppvarsel?
+
+Nei. Skriv inn e-postadressen din på mycelet.com/soppvarsel, velg område, og bekreft med en lenke på e-post. Hver e-post har avmeldingslenke, og adressen brukes ikke til noe annet.

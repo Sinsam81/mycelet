@@ -1,6 +1,6 @@
 ---
 published: 2026-09-02
-updated: 2026-09-02
+updated: 2026-09-03
 slug: naar-kommer-steinsoppen
 lang: nb
 alternate: nar-kommer-karljohan
@@ -27,3 +27,17 @@ Som alltid: kurven måler når soppen blir *funnet*, som er summen av når den s
 I skrivende stund (2. september) sier forholdstallene våre at det står best til i Trøndelag (Trondheim: 100 av 100), Nordland og på Nordvestlandet — se [dagens tall for ditt område](/soppforhold). Vil du heller få beskjed den dagen det snur hos deg: [soppvarselet](/soppvarsel) er gratis og sender maks én e-post i uka.
 
 Og som alltid: en steinsopp er ikke en steinsopp før den er sikkert bestemt — gallerørsoppen har lurt mang en kurv. Er du i tvil, la den stå eller bruk soppkontroll.
+
+## Spørsmål og svar
+
+### Når er steinsoppsesongen på topp?
+
+Toppuka er uke 36, 31. august til 6. september, nesten samtidig i hele landet. September står for 44,7 prosent av de 15 423 daterte funnene, august for 34,3 og juli for bare 7,5.
+
+### Hvor raskt kommer steinsoppen etter regn?
+
+Appens feltregel er rundt fem dager, mot to uker for kantarellene. Kommer det en rotbløyte i første halvdel av september, er det steinsoppuka som følger.
+
+### Hvorfor er steinsopp vanskelig å varsle?
+
+I Mycelets egen strenge holdout-test scoret temperaturprofilen for steinsopp dårligere enn tilfeldig. Erfarne plukkere beskriver en sekvens av varm sommer, kuldeskifte og regn som ingen enkel terskel fanger.

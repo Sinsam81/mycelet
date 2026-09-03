@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { ORGANISASJON } from '@/lib/seo/organisasjon';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
@@ -172,7 +173,9 @@ export default async function SpeciesDetailPage({ params }: SpeciesDetailPagePro
     '@type': 'Taxon',
     name: displayName,
     alternateName: species.latin_name,
-    taxonRank: 'species'
+    taxonRank: 'species',
+    // Hvem som står bak siden — samme Organization som overalt ellers.
+    publisher: ORGANISASJON
   };
 
   return (

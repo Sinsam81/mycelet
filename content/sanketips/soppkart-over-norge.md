@@ -1,6 +1,6 @@
 ---
 published: 2026-09-02
-updated: 2026-09-02
+updated: 2026-09-03
 slug: soppkart-over-norge
 lang: nb
 alternate: svampkarta-over-sverige
@@ -39,3 +39,17 @@ Kartet lar deg registrere egne funn med bilde og GPS, og her er reglene laget fo
 Et kart forteller hvor. Det forteller aldri *hva* — artsbestemmelsen er din. En prikk som sier «kantarell» er en historisk observasjon, ikke en garanti for at det du plukker på stedet er kantarell. Er du i tvil: la den stå, eller bruk soppkontroll.
 
 Kildene og lisensene bak kartet står åpent på [datakildesiden](/datakilder) — funndata fra Artsdatabanken, Artportalen og GBIF, kart fra Kartverket og OpenStreetMap, skogdata fra NIBIO og CORINE.
+
+## Spørsmål og svar
+
+### Hva viser Mycelets soppkart?
+
+428 829 registrerte funn av 80 matnyttige og giftige arter i Norge og Sverige, hentet fra Artsdatabanken, Artportalen og GBIF. Hver prikk er en dokumentert observasjon med art og som regel dato.
+
+### Betyr et gammelt funn at det står sopp der i dag?
+
+Nei, det betyr at stedet har levert før. 72 prosent av funnene er fra før 2021, og kartet har derfor et årsfilter for siste 5 og siste 10 år, så du kan skille fersk aktivitet fra ren historie.
+
+### Kan andre se kantarellstedet mitt?
+
+Du velger selv om et funn vises offentlig, med bevisst unøyaktig posisjon (±500 meter), eller helt privat. Private funn er usynlige for alle andre, og bilder renses for GPS-data før opplasting.

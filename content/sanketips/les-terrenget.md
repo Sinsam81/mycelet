@@ -1,6 +1,6 @@
 ---
 published: 2026-07-29
-updated: 2026-08-02
+updated: 2026-09-03
 slug: les-terrenget
 kicker: Sanketips · 6 min
 summary: Alder på skogen, mose, skyggesider og gamle skogsveier — tegnene som skiller en tom tur fra en full kurv.
@@ -97,3 +97,21 @@ God terrenglesing forteller deg hvor du bør lete. Den forteller deg **ingenting
 - **Været virker over uker og måneder**, ikke på ti dager.
 
 Det er dette Mycelet forsøker å hjelpe med: å si noe om **når** forholdene er gode der du bor, ut fra sesong og faktisk vær, og **hvilken type skog** du bør sikte deg inn på. Prediksjonslaget på kartet viser forhold og sannsynlighet for gode forhold. Registrerte funn kan slås på som et eget lag — de vises som kontekst, ikke som en del av vurderingen. Hvor soppen står, må du fortsatt finne ut selv. Det er tross alt hele poenget med å gå.
+
+## Spørsmål og svar
+
+### Gir gammel skog mest sopp?
+
+Delvis feil. Artssammensetningen endres med skogens alder, men mengden gjør ikke nødvendigvis det. Se etter tilstanden i skogen, ikke årstallet.
+
+### Finnes det sopp på hogstflater?
+
+Avstanden til nærmeste levende tre er den harde begrensningen. I Skogforsks forsøk ved Mora halverte antallet mykorrhizasopparter seg da avstanden økte fra 3 til 14 meter. Kantsonen inn mot bestandet kan være god, men tjue meter ut på bar flate går du fra soppen.
+
+### Er det mer sopp langs stier og veikanter?
+
+Trolig ikke. Ingen nordisk fagfellevurdert studie dokumenterer det, og den mest sannsynlige forklaringen er observasjonsskjevhet: du ser bedre der. Ikke plukk i kanten av trafikkert vei.
+
+### Hva forteller bunnsjiktet om soppen?
+
+Lav og tørt lyngdekke under furu er den tørreste og fattigste skogtypen, blåbærmark med sammenhengende mosematte er kjerneterrenget for mye av det vi plukker, og rik lauvskog gir helt andre arter. Bunnsjiktet er en indikator, ikke en garanti, og ingen sopp kan artsbestemmes på voksested.

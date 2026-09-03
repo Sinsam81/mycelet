@@ -1,6 +1,6 @@
 ---
 published: 2026-09-02
-updated: 2026-09-02
+updated: 2026-09-03
 slug: svamp-efter-regn
 lang: sv
 alternate: sopp-etter-regn
@@ -116,6 +116,24 @@ Ingenting i den här artikeln handlar om vad som är ätligt. Timing och artbest
 Är du det minsta osäker på en svamp: låt den stå. Anlita en svampkonsulent — Svampkonsulenternas Riksförbund har utbildade konsulenter över hela landet, se svampkonsulent.se. Vid misstänkt förgiftning: ring Giftinformationscentralen, 010-456 6700 (vid akut fara 112). Ingen app, den här inräknad, ersätter det.
 
 Mycelet försöker göra en sak bra: uppskatta när förhållandena i ditt område pekar mot svamp, utifrån väder, vattenbalans, skogstyp och vad över 316 000 nordiska fynd säger om artens årsrytm. Var svampen står måste du fortfarande lista ut själv — och det är den bästa delen av turen.
+
+## Frågor och svar
+
+### Hur många dagar efter regn kommer svampen?
+
+Det beror på arten, och «sju till fjorton dagar» är en tumregel, inte ett publicerat mätvärde. Mycelet använder fältregler per släkte: runt fem dagar för karljohan och strävsoppar, runt två veckor för kantarell och trattkantarell, längst för taggsvampar. Kalkylen förutsätter att marken inte var torr sedan tidigare.
+
+### Varför ger inte regn på torr mark svamp?
+
+Efter en torrperiod går de första tiotals millimetrarna bara till att fylla upp marken igen. Mycelets hinkmodell räknar med runt 50 millimeter tillgängligt vatten i rotzonen, och det är regnet efter det första regnet som ger svamp.
+
+### Vilken temperatur är bäst för svamp?
+
+Den tyska karljohanserien fann ett temperaturoptimum runt 13 grader, mätt som snitt över de 20 föregående dygnen, och en schweizisk serie antydde att hösttoppen kan hänga ihop med att temperaturen faller under runt 14 grader. Båda siffrorna kommer från enskilda ytor utanför Norden och ska användas som fingervisning, inte tröskel.
+
+### Kan en hel svampsäsong utebli?
+
+Ja. Den tyska karljohanserien registrerade fyra fruktkroppar 2016 mot 354 år 2020, och författarna tillskriver 2016 ovanligt torra förhållanden under den viktigaste fruktifieringsperioden.
 
 ## Källor
 

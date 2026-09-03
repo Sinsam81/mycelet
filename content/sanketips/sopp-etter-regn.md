@@ -1,6 +1,6 @@
 ---
 published: 2026-07-29
-updated: 2026-08-14
+updated: 2026-09-03
 slug: sopp-etter-regn
 alternate: svamp-efter-regn
 kicker: Vær og timing · 5 min
@@ -115,6 +115,24 @@ Ingenting i denne artikkelen handler om hva som er spiselig. Timing og artsbeste
 Er du det minste i tvil om en sopp: la den stå. Bruk soppkontroll. Norges sopp- og nyttevekstforbund driver kontroller mange steder i landet, mest i august og september — sjekk oversikten og åpningstidene på soppognyttevekster.no før du drar. Ingen app, denne inkludert, er en erstatning for det.
 
 Mycelet forsøker å gjøre én ting godt: å anslå når forholdene i ditt område peker mot sopp, basert på vær, vannbalanse, skogtype og hva over 316 000 nordiske funn sier om årsrytmen til arten. Hvor soppen står, må du fortsatt finne ut selv — og det er den beste delen av turen.
+
+## Spørsmål og svar
+
+### Hvor mange dager etter regn kommer soppen?
+
+Det avhenger av arten, og «sju til fjorten dager» er en tommelfingerregel, ikke et publisert måltall. Mycelet bruker feltregler per slekt: rundt fem dager for steinsopp og skrubb, rundt to uker for kantarell og traktkantarell, og lengst for piggsopp. Regnestykket forutsetter at jorda ikke var tørr fra før.
+
+### Hvorfor gir ikke regn på tørr jord sopp?
+
+Etter en tørkeperiode går de første titalls millimeterne bare til å fylle opp jorda igjen. Mycelets bøttemodell regner med rundt 50 millimeter tilgjengelig vann i rotsonen, og det er regnet etter det første regnet som gir sopp.
+
+### Hvilken temperatur er best for sopp?
+
+Den tyske steinsoppserien fant et temperaturoptimum rundt 13 grader, målt som snitt over de 20 foregående døgnene, og en sveitsisk serie antydet at høsttoppen kan henge sammen med at temperaturen faller under rundt 14 grader. Begge tallene kommer fra enkeltlokaliteter utenfor Norden og skal brukes som pekepinn, ikke terskel.
+
+### Kan en hel soppsesong utebli?
+
+Ja. Tørke kan bety nesten ingenting: den tyske steinsoppserien registrerte fire fruktlegemer i 2016 mot 354 i 2020, og forfatterne tilskriver 2016 uvanlig tørre forhold i den viktigste fruktifiseringsperioden.
 
 ## Kilder
 

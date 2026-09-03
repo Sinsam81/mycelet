@@ -1,6 +1,6 @@
 ---
 published: 2026-09-02
-updated: 2026-09-02
+updated: 2026-09-03
 slug: svampsasongen-2026
 lang: sv
 alternate: soppsesongen-2026
@@ -36,3 +36,17 @@ Att norr leder är inget sammanträffande — det är mönstret från forskninge
 Kalendern säger att september är årets viktigaste svampmånad — över en tredjedel av alla daterade fynd i vår databas görs då. Men *vilken vecka* det lossnar hos dig avgörs av regnet: de flesta matsvamparna behöver från fem dagar (karljohan) till två veckor (kantarellerna) från rotblöta till plockbar svamp. Håll koll på nederbörden där du bor, eller låt [svampvarningen](/soppvarsel) göra det åt dig: gratis, max ett mejl i veckan, och det kommer den dag förhållandena vänder i ditt område. Varje varning vi skickar efterprövas offentligt i [facitloggen](/apenhet).
 
 Den här sidan uppdateras under säsongen. Och oavsett hur bra veckan är: en svamp i korgen ska vara säkert bestämd — är du osäker, låt den stå eller anlita en svampkonsulent.
+
+## Frågor och svar
+
+### Vilka arter är i säsong i september 2026?
+
+Karljohan toppar vecka 35–36, nästan samtidigt i hela Norden. Kantarellen är på väg mot toppen vecka 38 i söder, tidigare ju längre norrut du bor. Trattkantarellen skjuter fart från mitten av september och bär säsongen in i november.
+
+### Var var svampförhållandena bäst 2 september 2026?
+
+Östersund 91 och Umeå 85 ledde, följda av Uppsala 84, Växjö 83 och Stockholm 81. Dagens färska siffror står alltid på sidan för svampförhållanden.
+
+### Varför är september årets viktigaste svampmånad?
+
+Över en tredjedel av alla daterade fynd i databasen görs då. Vilken vecka det lossnar hos dig avgörs av regnet: de flesta matsvamparna behöver från fem dagar (karljohan) till två veckor (kantarellerna) från rotblöta till plockbar svamp.

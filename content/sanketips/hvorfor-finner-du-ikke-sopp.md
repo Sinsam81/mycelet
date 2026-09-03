@@ -1,7 +1,7 @@
 ---
 slug: hvorfor-finner-du-ikke-sopp
 published: 2026-08-14
-updated: 2026-08-14
+updated: 2026-09-03
 kicker: Vær og timing · 8 min
 summary: Tom kurv? Seks årsaker du kan sjekke selv — tørke, timing, temperatur, sesong, skogtype og hvem som gikk der før deg.
 ---
@@ -132,6 +132,24 @@ Ved tvil — la den stå. Bruk soppkontroll; Norges sopp- og nyttevekstforbund h
 Mistenker du at du har spist feil sopp, ring Giftinformasjonen på 22 59 13 00 — i Sverige 112 ved akutt fare, ellers Giftinformationscentralen på 010-456 67 00 — og kontakt lege. Ring også hvis du ennå ikke er syk, og også hvis noen først ble dårlige og så virker friskere.
 
 Dagstallet på [/soppforhold](https://www.mycelet.com/soppforhold) baker inn de fire første punktene i diagnoselisten — nedbør, fukt, temperatur og sesong — og oppdateres hver morgen for 22 områder. Det skiller ikke punktene fra hverandre, men det er det raskeste svaret på «er det vits i å dra ut?». Det femte punktet ser du av skogen rundt deg, og det sjette må du fortsatt gå ut og finne ut av. Det er tross alt hele poenget med turen.
+
+## Spørsmål og svar
+
+### Hvorfor finner jeg ikke sopp selv om det har regnet?
+
+Etter en lang tørkeperiode går de første titalls millimeterne bare til å fylle opp jorda igjen. Se på nedbøren de siste 14 dagene, ikke de siste tre, og tell dagene fra jorda faktisk ble våt igjen, ikke fra første byge.
+
+### Hvor lenge etter regn bør jeg gå ut?
+
+Mycelets feltregler er rundt fem dager for steinsopp og skrubb og nærmere to uker for kantarell, regnet fra et regn som monnet. Var du der før det, dro du for tidlig. Gå tilbake til samme sted.
+
+### Tømmer plukking soppstedet?
+
+Nei. Langvarig, systematisk plukking i sveitsiske soppreservater reduserte verken framtidige avlinger eller artsrikdommen, uansett om soppen ble skåret eller vridd opp. Tråkk reduserte derimot antall fruktlegemer til rundt 70 prosent.
+
+### Kan Mycelet si hvor soppen står?
+
+Nei. Modellen rangerer tidspunkt med AUC 0,88, men evnen til å rangere sted ligger på tilfeldighetsnivå, mellom 0,47 og 0,52. Mycelet sier når forholdene i ditt område peker mot sopp, og hvilken type skog arten hører hjemme i.
 
 ## Kilder
 
