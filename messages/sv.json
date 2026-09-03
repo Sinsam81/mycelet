@@ -577,7 +577,7 @@
   },
   "Personvern": {
     "title": "Integritetspolicy",
-    "lastUpdatedDate": "29 juli 2026",
+    "lastUpdatedDate": "3 september 2026",
     "lastUpdatedIntro": "Senast uppdaterad: {date}. Denna policy förklarar hur Mycelet behandlar dina personuppgifter.",
     "controllerHeading": "1. Personuppgiftsansvarig",
     "controllerIntro": "Personuppgiftsansvarig för dina personuppgifter är:",
@@ -671,6 +671,9 @@
     "cookiesLocaleDesc": "kommer ihåg om du vill ha Mycelet på svenska eller norska. Sätts när du väljer språk och gäller i 12 månader.",
     "cookiesStripeLabel": "Stripe (endast vid betalning):",
     "cookiesStripeDesc": "vi sätter ingen Stripe-kaka på mycelet.com. Ska du betala skickas du till Stripes egen betalsida (checkout.stripe.com) — det är där Stripe sätter sina kakor, för att säkra betalningen och förhindra bedrägeri.",
+    "cookiesKildeIntro": "Dessutom sätter vi en kaka som inte är nödvändig för att tjänsten ska fungera, men som vi behöver för att driva den förnuftigt:",
+    "cookiesKildeLabel": "Var du kom ifrån (mycelet_kilde):",
+    "cookiesKildeDesc": "sätts bara på startsidan, och bara om du kom via en länk från en annan webbplats, en sökning eller en annons. Den innehåller enbart tjänstens namn (till exempel «google» eller «facebook») och eventuellt kampanjnamnet i länken — inget ID, ingen spårning över webbplatser, och ingen tredje part läser den. Registrerar du dig sparas samma korta text på ditt konto, så att vi vet vilka kanaler som faktiskt ger oss användare. Gäller i 30 dagar.",
     "cookiesOptionalIntro": "Om du väljer «Tillåt analys» använder vi dessutom:",
     "cookiesAnalyticsLabel": "Google Analytics (_ga):",
     "cookiesAnalyticsDesc": "hjälper oss att förstå sidvisningar och centrala produktflöden. Kakan löper ut senast efter 13 månader. Google Analytics laddas inte och inga analysdata skickas innan du samtycker.",

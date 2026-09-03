@@ -47,6 +47,13 @@ forsvart.
 
 ## 💸 GOOGLE ADS: IKKE BRUK PENGER NÅ
 
+> **Revidert 2026-09-03.** Konklusjonen står som *salgskanal*. Men det kjøres
+> én liten, avgrenset **test** (maks 1 500 kr, 4 uker, september 2026) for å
+> bytte ut anslagene under — klikkpris, søkevolum, klikk per registrering — med
+> målte tall. Hele oppskriften og beslutningsreglene: `docs/google-ads-test.md`.
+> Registreringer og betalende per kilde måles nå i dagsrapporten
+> (`src/lib/analytics/kilde.ts`).
+
 NEI — ikke bruk penger på Google Ads nå. Ikke én krone denne sesongen. Tre grunner, i rekkefølge etter hvor avgjørende de er:
 
 **1. Regnestykket går ikke opp — og det er ikke et sporingsproblem, det er et matematikkproblem.**

@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createRequestLogger } from '@/lib/log/request';
 import { bearerSecretMatches } from '@/lib/security/secret-compare';
-import { byggDagsrapport, type AbonnementRad, type Dagsrapport } from '@/lib/rapport/dagsrapport';
+import { byggDagsrapport, UKJENT_KILDE, type AbonnementRad, type Dagsrapport } from '@/lib/rapport/dagsrapport';
+import { normaliserKilde } from '@/lib/analytics/kilde';
 import { sendEpost } from '@/lib/email/send';
 
 /**
@@ -29,6 +30,14 @@ import { sendEpost } from '@/lib/email/send';
  * Å telle dem krever en teller i databasen skrevet fra middleware. Det er en
  * endring i den varmeste kodestien vi har, og den er ikke gjort. Rapporten
  * skriver «ikke målt» heller enn å la et tomt felt se ut som null besøk.
+ *
+ * ── MEN: REGISTRERINGER PER KILDE ER MÅLT (fra september 2026) ─────────────
+ *
+ * Forsidebesøket setter cookien `mycelet_kilde`, signUp legger den i
+ * user_metadata, og her leses den ut igjen — se src/lib/analytics/kilde.ts.
+ * Det svarer på det annonsetesten (docs/google-ads-test.md) trenger: hvor
+ * mange av dem som kom via annonsen registrerte seg, og betalte. «ukjent» er
+ * direkte besøk pluss alle som registrerte seg før målingen startet.
  */
 
 export const maxDuration = 60;
@@ -54,14 +63,16 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Kunne ikke hente brukere' }, { status: 500 });
   }
   const brukere = (brukerData?.users ?? []).map((u) => ({
+    id: u.id,
     created_at: u.created_at,
-    last_sign_in_at: u.last_sign_in_at ?? null
+    last_sign_in_at: u.last_sign_in_at ?? null,
+    kilde: normaliserKilde(u.user_metadata?.kilde)
   }));
 
   // ── Abonnement ────────────────────────────────────────────────────────────
   const { data: abData } = await db
     .from('billing_subscriptions')
-    .select('tier,status,current_period_end,created_at,metadata');
+    .select('user_id,tier,status,current_period_end,created_at,metadata');
 
   // ── Varselabonnement ──────────────────────────────────────────────────────
   const { count: varselAntall } = await db
@@ -124,6 +135,12 @@ function byggRapportEpost(r: Dagsrapport, naa: Date) {
     ? r.flanker.map((f) => `${f.region} ${f.fra} → ${f.til}`).join(', ')
     : 'ingen';
 
+  // Hvor de kom fra. Én linje per kilde: «12 · 3 siste 7 d · 1 betaler».
+  const kildeNavn = (k: string) => (k === UKJENT_KILDE ? 'direkte / ukjent' : k);
+  const kildeVerdi = (k: Dagsrapport['kilder'][number]) =>
+    `${k.totalt} · ${k.siste7d} siste 7 d · ${k.betalende} betaler`;
+  const kildeRader = r.kilder.slice(0, 8);
+
   const html = `<!doctype html>
 <html lang="nb"><body style="font-family:-apple-system,system-ui,sans-serif;color:#1f2937;max-width:520px;margin:24px auto;padding:0 16px">
   <p style="font-size:12px;color:#6b7280;margin:0">Mycelet · ${dato}</p>
@@ -153,10 +170,16 @@ function byggRapportEpost(r: Dagsrapport, naa: Date) {
     ${rad('Abonnerer på soppvarsel', String(r.varselabonnement))}
   </table>
 
+  <h2 style="font-size:14px;color:#1A3409;margin:22px 0 6px">Hvor de registrerte kom fra</h2>
+  <table style="width:100%;border-collapse:collapse;font-size:14px">
+    ${kildeRader.map((k) => rad(kildeNavn(k.kilde), kildeVerdi(k))).join('\n    ') || rad('—', 'ingen registrerte')}
+  </table>
+
   <p style="font-size:12px;color:#9ca3af;margin-top:24px;line-height:1.5">
     Besøkstall for forsiden er ikke målt — den statiske landingssiden har ingen
-    JavaScript, så analyseverktøyet kjører ikke der. Se kommentaren i
-    <code>api/cron/dagsrapport</code>.
+    JavaScript, så analyseverktøyet kjører ikke der. Kilde per registrering er
+    målt fra september 2026; «direkte / ukjent» er direkte besøk pluss alle som
+    registrerte seg før det. Se kommentaren i <code>api/cron/dagsrapport</code>.
   </p>
 </body></html>`;
 
@@ -181,7 +204,12 @@ I SKOGEN
   snudde i natt ............. ${flankeTekst}
   soppvarsel-abonnenter ..... ${r.varselabonnement}
 
-Besøkstall for forsiden er ikke målt — landingssiden har ingen JavaScript.`;
+HVOR DE REGISTRERTE KOM FRA
+${kildeRader.map((k) => `  ${kildeNavn(k.kilde).padEnd(26, '.')} ${kildeVerdi(k)}`).join('\n') || '  ingen registrerte'}
+
+Besøkstall for forsiden er ikke målt — landingssiden har ingen JavaScript.
+Kilde per registrering er målt fra september 2026; «direkte / ukjent» er
+direkte besøk pluss alle fra før det.`;
 
   return { emne: `Mycelet ${dato}: ${overskrift.toLowerCase()}`, html, tekst };
 }
