@@ -6,6 +6,8 @@ import { bearerSecretMatches } from '@/lib/security/secret-compare';
 import { beregnFasit, FASIT_MODEN_DAGER } from '@/lib/alerts/fasit';
 import { byggOmslagsPost, byggUkesPost, finnOmslag, type UkensFasit } from '@/lib/x/innlegg';
 import { manglendeXKonfig, postTilX } from '@/lib/x/klient';
+import { byggPresseVarsel } from '@/lib/alerts/presse';
+import { sendEpost } from '@/lib/email/send';
 
 /**
  * X-posteren — den offentlige utgaven av soppvarselet, på @mycelet.
@@ -171,6 +173,17 @@ export async function GET(request: NextRequest) {
     if (!krav || krav.length === 0) {
       hoppetOver += 1;
       continue; // allerede postet i dag
+    }
+
+    // Presse-varselet til eieren: samme omslag, pitchen ferdig utfylt. Går
+    // FØR X-kallet og uavhengig av om det lykkes — omslaget er nyheten, ikke
+    // posten. Dedupe-raden over sørger for maks én e-post per dag. Best effort:
+    // uten PRESSE_VARSEL_TIL, eller om Resend feiler, går X-posten som før.
+    const presseTil = process.env.PRESSE_VARSEL_TIL;
+    if (post.type === 'omslag' && presseTil) {
+      const varsel = byggPresseVarsel(omslag, iDagIso, process.env.NEXT_PUBLIC_APP_URL ?? 'https://www.mycelet.com');
+      const sendtRes = await sendEpost({ til: presseTil, ...varsel });
+      if (!sendtRes.ok) log.warn('xpost.pressevarsel_feilet', { detalj: sendtRes.detalj });
     }
 
     const res = await postTilX(post.tekst);

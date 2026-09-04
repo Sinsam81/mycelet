@@ -33,6 +33,13 @@ aldri konkurrentnavn. Samme ærlighetslinje som i selve produktet.
 
 ## Når pitchen skal sendes
 
+**Du får beskjed automatisk.** De morgenene soppvarselet slår ut, sender
+cron-jobben (`/api/cron/xpost`, 07:30) en e-post til adressen i
+`PRESSE_VARSEL_TIL` med pitchen ferdig utfylt per region — tall, lenke,
+mottakere, riktig språk (`src/lib/alerts/presse.ts`; teksten der SKAL være
+identisk med pitchen under). Ingenting sendes til noen redaksjon automatisk.
+Du kopierer, sjekker adressen, og sender selv.
+
 **På en omslagsdag.** Pitchen er sterkest den morgenen soppvarselet faktisk
 slår ut i journalistens region — da er «det snudde i natt» selve saken, og
 tallet i emnefeltet er ferskt. Cron-jobben kjører 07:00; sjekk
