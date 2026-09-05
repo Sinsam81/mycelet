@@ -62,6 +62,8 @@ describe('POST /api/me/bruksdag', () => {
 
   it('avviser ukjent flate og manglende innlogging', async () => {
     expect((await post({ flate: 'profil' })).status).toBe(400);
+    expect((await post(null)).status).toBe(400);
+    expect((await post('tekst')).status).toBe(400);
     bruker = null;
     expect((await post({ flate: 'kart' })).status).toBe(401);
     expect(upserts).toHaveLength(0);

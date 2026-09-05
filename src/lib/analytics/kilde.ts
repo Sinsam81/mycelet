@@ -104,10 +104,6 @@ export function normaliserKilde(raw: unknown): string | null {
 }
 
 /**
- * Leser `mycelet_kilde` fra en cookie-streng — `document.cookie` i nettleseren,
- * eller `Cookie`-headeren på serveren. Begge har formatet «a=1; b=2».
- */
-/**
  * Kilden som skrives på en NY konto. Inne i appen (Capacitor) finnes ingen
  * forsidebesøk og ingen cookie — brukeren kom fra App Store, og det er
  * kilden: «app». Uten dette havnet hver eneste app-registrering i «direkte /
@@ -122,6 +118,10 @@ export function registreringsKilde(cookieString: string | null | undefined, erNa
   return lesKildeCookie(cookieString);
 }
 
+/**
+ * Leser `mycelet_kilde` fra en cookie-streng — `document.cookie` i nettleseren,
+ * eller `Cookie`-headeren på serveren. Begge har formatet «a=1; b=2».
+ */
 export function lesKildeCookie(cookieString: string | null | undefined): string | null {
   if (!cookieString) return null;
   for (const del of cookieString.split(';')) {

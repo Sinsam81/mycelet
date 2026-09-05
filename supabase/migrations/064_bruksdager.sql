@@ -6,9 +6,12 @@
 -- innloggede brukere fantes som definisjoner i planen, ikke som data.
 --
 -- Én rad per bruker, dag og flate. Ingen posisjon, ingen tidspunkt utover
--- dagen (Oslo-dato), ingen innhold — bare at prognosen ble vist. For
--- områdesidene lagres områdenavnet (22 grove regioner), fordi partnerrapporten
--- skal kunne si «abonnentene fra Bergen bruker Bergen-siden».
+-- dagen (Oslo-dato), ingen innhold — bare at prognosen ble vist. Derfor
+-- heller ingen created_at: personvernerklæringen lover «ikke klokkeslett»,
+-- og en standardkolonne med now() ville brutt det løftet i GDPR-eksporten.
+-- For områdesidene lagres områdenavnet (22 grove regioner) med tanke på en
+-- senere partnerrapport («abonnentene fra Bergen bruker Bergen-siden»);
+-- ingenting leser kolonnen ennå.
 --
 --   flate   'hjem'    forsidens «soppforhold i dag»-kort
 --           'kart'    /map (prognoselaget)
@@ -26,7 +29,6 @@ create table if not exists bruksdager (
   dag        date not null,
   flate      text not null check (flate in ('hjem', 'kart', 'omrade')),
   omrade     text not null default '',
-  created_at timestamptz not null default now(),
   primary key (user_id, dag, flate, omrade)
 );
 

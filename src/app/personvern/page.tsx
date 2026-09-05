@@ -100,6 +100,8 @@ export default async function PersonvernPage() {
             <div>
               <dt className="font-medium text-gray-900">{t('collectBruksdagerTerm')}</dt>
               <dd>{t('collectBruksdagerDesc')}</dd>
+            </div>
+            <div>
               <dt className="font-medium text-gray-900">{t('collectAlertTerm')}</dt>
               <dd>{t('collectAlertDesc')}</dd>
             </div>

@@ -609,7 +609,7 @@
     "collectHeading": "2. Hvilke opplysninger vi samler inn",
     "collectIntro": "Når du bruker Mycelet behandler vi:",
     "collectAccountTerm": "Konto-opplysninger",
-    "collectAccountDesc": "E-post, brukernavn, valgfritt visningsnavn, profilbilde, biografi, hjemstedsregion.",
+    "collectAccountDesc": "E-post, brukernavn, valgfritt visningsnavn, profilbilde, biografi, hjemstedsregion, og om kontoen ble opprettet i appen (iOS/Android) eller på nettet.",
     "collectUsageTerm": "Bruksdata",
     "collectUsageDesc": "Soppfunn du registrerer (koordinater, art, dato, bilder, notater), forum-innlegg, kommentarer, likes, lagrede innlegg.",
     "collectLocationTerm": "Posisjonsdata",

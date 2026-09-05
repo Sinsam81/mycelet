@@ -36,7 +36,8 @@ export async function POST(request: NextRequest) {
   const rl = checkRateLimit(`bruksdag:${getClientKey(request, user.id)}`, 30, 60);
   if (!rl.allowed) return rateLimitResponse(rl);
 
-  const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
+  const raa = await request.json().catch(() => null);
+  const body = (raa && typeof raa === 'object' ? raa : {}) as Record<string, unknown>;
   const flate = body.flate;
   if (!erFlate(flate)) return NextResponse.json({ error: 'Ugyldig flate' }, { status: 400 });
 

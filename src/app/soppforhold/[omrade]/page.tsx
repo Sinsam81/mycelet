@@ -262,7 +262,7 @@ export default async function OmradePage({ params, searchParams }: SideProps) {
     <PageWrapper>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
       <article className="space-y-8 py-6">
-        {/* Innloggede: «så området i dag» (migrasjon 064). Klientkomponent, så siden forblir statisk. */}
+        {/* Innloggede: «så området i dag» (migrasjon 064). Klientkomponent: siden henter prognosen anonymt. */}
         <RegistrerBruksdag flate="omrade" omrade={omrade} />
         <header className="space-y-3">
           <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-forest-700">

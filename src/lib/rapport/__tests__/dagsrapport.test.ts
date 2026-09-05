@@ -304,6 +304,14 @@ describe('bruk av soppforholdene — aktivering og gjenbruk', () => {
     expect(r.bruk.perFlate).toEqual({ hjem: 2, kart: 1, omrade: 1 });
   });
 
+  it('registreringsdagen er Oslo-dato: registrert 23:30Z (= 01:30 neste dag i Oslo), sett samme Oslo-dag → ikke tilbake', () => {
+    const b = br({ id: 'natt', created_at: '2026-08-10T23:30:00Z' });
+    const samme = byggDagsrapport(inn({ brukere: [b], bruksdager: [{ user_id: 'natt', dag: '2026-08-11', flate: 'kart' }] }));
+    expect(samme.bruk.komTilbake).toBe(0);
+    const neste = byggDagsrapport(inn({ brukere: [b], bruksdager: [{ user_id: 'natt', dag: '2026-08-12', flate: 'kart' }] }));
+    expect(neste.bruk.komTilbake).toBe(1);
+  });
+
   it('gjenbruk = bruksdager i to ulike ISO-uker siste 28 dager', () => {
     const r = byggDagsrapport(
       inn({

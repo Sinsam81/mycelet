@@ -96,9 +96,11 @@ export async function GET(request: NextRequest) {
   // ── Bruksdager siste 28 dager ─────────────────────────────────────────────
   // Mangler tabellen (migrasjonen ikke kjørt), sier rapporten «ikke målt» i
   // stedet for å vise null — null ser ut som «ingen bruker det».
-  let bruksdager: BruksdagRad[] | undefined = [];
   const bruksGrense = osloDag(new Date(naa.getTime() - 27 * 24 * 3600_000));
-  for (let side = 0; side < 50; side += 1) {
+  const MAKS_SIDER = 50;
+  const samledeBruksdager: BruksdagRad[] = [];
+  let bruksdagerMaalt = true;
+  for (let side = 0; side < MAKS_SIDER; side += 1) {
     const fra = side * 1000;
     const { data: bruksRader, error: bruksErr } = await db
       .from('bruksdager')
@@ -111,12 +113,18 @@ export async function GET(request: NextRequest) {
       .range(fra, fra + 999);
     if (bruksErr) {
       log.warn('dagsrapport.bruksdager_feilet', { message: bruksErr.message });
-      bruksdager = undefined;
+      bruksdagerMaalt = false;
       break;
     }
-    bruksdager.push(...((bruksRader ?? []) as BruksdagRad[]));
+    samledeBruksdager.push(...((bruksRader ?? []) as BruksdagRad[]));
     if ((bruksRader ?? []).length < 1000) break;
+    if (side === MAKS_SIDER - 1) {
+      // Mer enn 50 000 rader på 28 dager: heller «ikke målt» enn et tall som er for lavt.
+      log.warn('dagsrapport.bruksdager_avkortet', { sider: MAKS_SIDER });
+      bruksdagerMaalt = false;
+    }
   }
+  const bruksdager = bruksdagerMaalt ? samledeBruksdager : undefined;
 
   // ── Regionscorer, i dag og i går ──────────────────────────────────────────
   const { data: scorer } = await db
