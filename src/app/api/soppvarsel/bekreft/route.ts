@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createRequestLogger } from '@/lib/log/request';
 import { HOPP_COOKIE, HOPP_COOKIE_MAX_AGE } from '@/lib/analytics/kilde';
+import { regionSlug } from '@/lib/prediction/region-slug';
+import { PREDICTION_TILE_REGIONS } from '@/lib/prediction/tile-regions';
 
 /**
  * Bekreftelseslenka fra opt-in-eposten. Samme grep som avmeldingsruta
@@ -45,9 +47,16 @@ export async function GET(request: NextRequest) {
     log.warn('varselbekreftelse.ukjent_token');
     return videre(`${appUrl}/soppvarsel?status=ugyldig-lenke#status`);
   }
+  // Kvitteringen er områdesiden selv: dagens tall og uka fremover, med et
+  // banner som forklarer når neste varsel kommer. Et tomt «du er påmeldt»
+  // forklarte ikke stillheten som følger i en godværsperiode.
+  const omradeSide = PREDICTION_TILE_REGIONS.some((r) => r.name === rad.region)
+    ? `${appUrl}/soppforhold/${regionSlug(rad.region as string)}?status=bekreftet#pameldt`
+    : `${appUrl}/soppvarsel?status=bekreftet#status`;
+
   if (rad.confirmed_at && rad.active) {
     log.info('varselbekreftelse.allerede_bekreftet', { region: rad.region });
-    return videre(`${appUrl}/soppvarsel?status=bekreftet#status`);
+    return videre(omradeSide);
   }
   if (rad.confirmed_at && !rad.active) {
     log.info('varselbekreftelse.avmeldt_rad', { region: rad.region });
@@ -65,5 +74,5 @@ export async function GET(request: NextRequest) {
   }
 
   log.info('varselbekreftelse.ok', { region: rad.region });
-  return videre(`${appUrl}/soppvarsel?status=bekreftet#status`);
+  return videre(omradeSide);
 }

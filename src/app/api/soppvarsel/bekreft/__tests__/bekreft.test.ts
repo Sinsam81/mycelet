@@ -52,6 +52,8 @@ describe('bekreft', () => {
     rad = { id: 'r1', region: 'Oslo', active: true, confirmed_at: null, user_id: null };
     const res = await GET(new NextRequest(`http://localhost/api/soppvarsel/bekreft?t=${TOKEN}`));
     expect(res.headers.get('set-cookie')).toContain('mycelet_hopp=1');
+    // Kvitteringen er områdesiden, ikke et tomt takk-skjema.
+    expect(res.headers.get('location')).toContain('/soppforhold/oslo?status=bekreftet');
     rad = { id: 'r1', region: 'Oslo', active: true, confirmed_at: null, user_id: null };
     oppdateringer = [];
     expect(await klikk()).toBe('bekreftet');

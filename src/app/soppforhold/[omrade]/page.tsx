@@ -3,11 +3,12 @@ import { ORGANISASJON } from '@/lib/seo/organisasjon';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { ArrowLeft, CalendarDays, MapPin } from 'lucide-react';
+import { ArrowLeft, BellRing, CalendarDays, MapPin } from 'lucide-react';
 import { PageWrapper } from '@/components/layout/PageWrapper';
 import { SoppforholdForbehold } from '@/components/soppforhold/Forbehold';
 import { UkeStripe } from '@/components/soppforhold/UkeStripe';
 import { VarselCta } from '@/components/soppforhold/VarselCta';
+import { DelOmrade } from '@/components/soppforhold/DelOmrade';
 import { alleRegionSlugs, regionFromSlug } from '@/lib/prediction/region-slug';
 import { computeRegionWeek, type RegionWeek } from '@/lib/prediction/region-week';
 import { fetchWeatherSummary } from '@/lib/weather';
@@ -66,6 +67,9 @@ const COPY = {
       'Tallet over gjelder hele området. I appen regner vi det samme for stedet du faktisk står, viser 428 000 registrerte funn på kart, og forteller hvilke arter som er i sesong akkurat nå.',
     provGratis: 'Prøv gratis',
     alleOmradene: 'Alle områdene',
+    pameldtTittel: (navn: string) => `Du er påmeldt soppvarselet for ${navn}`,
+    pameldtTekst:
+      'Under ser du dagens forhold og uka fremover. Neste e-post kommer den dagen forholdene krysser fra under til over terskelen etter en reell bedring — aldri oftere enn én gang i uka. Er det stille, er det fordi det ikke har snudd.',
     kilder:
       'Datagrunnlag: MET Norway og SMHI (vær), NIBIO og CORINE (skog), GBIF og Artsdatabanken (funn). Se',
     kilderLenke: 'datakilder',
@@ -95,6 +99,9 @@ const COPY = {
       'Talet ovan gäller hela området. I appen beräknar vi samma sak för platsen där du faktiskt står, visar 428 000 registrerade fynd på karta, och berättar vilka arter som är i säsong just nu.',
     provGratis: 'Prova gratis',
     alleOmradene: 'Alla områden',
+    pameldtTittel: (navn: string) => `Du är anmäld till svampvarningen för ${navn}`,
+    pameldtTekst:
+      'Nedan ser du dagens läge och veckan framöver. Nästa mejl kommer den dag förhållandena korsar tröskeln efter en verklig förbättring — aldrig oftare än en gång i veckan. Är det tyst är det för att det inte har vänt.',
     kilder:
       'Dataunderlag: MET Norway och SMHI (väder), NIBIO och CORINE (skog), GBIF och Artdatabanken (fynd). Se',
     kilderLenke: 'datakällor',
@@ -108,6 +115,8 @@ export function generateStaticParams() {
 
 interface SideProps {
   params: Promise<{ omrade: string }>;
+  /** ?status=bekreftet fra /api/soppvarsel/bekreft — kvitteringen vises her. */
+  searchParams: Promise<{ status?: string }>;
 }
 
 export async function generateMetadata({ params }: SideProps): Promise<Metadata> {
@@ -218,8 +227,13 @@ function plassering(region: SoppforholdRegion, alle: SoppforholdRegion[]): { nr:
   return { nr: iSammeLand.findIndex((r) => r.name === region.name) + 1, av: iSammeLand.length };
 }
 
-export default async function OmradePage({ params }: SideProps) {
+export default async function OmradePage({ params, searchParams }: SideProps) {
   const { omrade } = await params;
+  // Ruta er dynamisk uansett (rot-layouten leser språkcookien), så en server-
+  // lest searchParam koster ingenting — og lar oss bytte ut påmeldings-CTA-en
+  // på nettopp kvitteringsskjermen, der «meld deg på» ville motsagt banneret.
+  const { status } = await searchParams;
+  const pameldt = status === 'bekreftet';
   const regionDef = regionFromSlug(omrade);
   if (!regionDef) notFound();
 
@@ -255,7 +269,23 @@ export default async function OmradePage({ params }: SideProps) {
           <h1 className="font-serif text-3xl font-bold tracking-tight text-forest-900 sm:text-4xl">
             {t.h1(regionDef.name)}
           </h1>
+          <div>
+            <DelOmrade navn={regionDef.name} land={land} />
+          </div>
         </header>
+
+        {/* Kvittering etter bekreftet varselpåmelding (?status=bekreftet fra
+            /api/soppvarsel/bekreft): den som bekrefter midt i en godværs-
+            periode må forstå at stillheten som følger er tilsiktet. */}
+        {pameldt ? (
+          <section id="pameldt" role="status" className="scroll-mt-24 rounded-xl border border-forest-300 bg-forest-50 p-4 text-forest-900">
+            <h2 className="flex items-center gap-2 font-serif text-lg font-semibold">
+              <BellRing className="h-5 w-5" aria-hidden="true" />
+              {t.pameldtTittel(regionDef.name)}
+            </h2>
+            <p className="mt-1 text-sm leading-relaxed">{t.pameldtTekst}</p>
+          </section>
+        ) : null}
 
         {region ? (
           <section className="rounded-xl border border-gray-200 bg-white p-5">
@@ -305,7 +335,9 @@ export default async function OmradePage({ params }: SideProps) {
           <UkeStripeSeksjon regionDef={regionDef} land={land} />
         </Suspense>
 
-        <VarselCta regionNavn={regionDef.name} land={land} />
+        {/* Ikke «meld deg på» rett under «du er påmeldt» — og en ny innsending
+            av samme adresse ville svart «sjekk innboksen» uten å sende noe. */}
+        {pameldt ? null : <VarselCta regionNavn={regionDef.name} land={land} />}
 
         <SoppforholdForbehold land={land} />
 
