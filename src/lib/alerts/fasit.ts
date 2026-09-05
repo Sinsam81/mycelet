@@ -49,6 +49,48 @@ export interface FasitTall {
   ukenFor: number;
   /** Andel av etter-uken som er eldre enn GBIF-etterslepet — grov modenhet. */
   moden: boolean;
+  /** false når GBIF ikke svarte — da er tallene bare egne funn og skal vises som «–», ikke som 0. */
+  gbifOk: boolean;
+}
+
+/**
+ * Fasitvinduene for ett varsel. Like lange, disjunkte, og varseldagen i
+ * NØYAKTIG ett av dem: etter = [d, d+6] (varselet går om morgenen, så dagens
+ * funn hører til «etter»), før = [d−7, d−1].
+ *
+ * GBIF sin `eventDate=a,b` tar med BEGGE endepunktene. Første utgave sendte
+ * d..d+7 og d−7..d — åtte dager hver, med varseldagen telt i begge vinduer
+ * (Trondheim 14. aug: 68/54 i stedet for 58/51). Egne funn telles halvåpent
+ * [fra, til), så de trenger dagen ETTER siste dag som øvre grense.
+ */
+export function fasitVinduer(varselDato: string) {
+  return {
+    etter: {
+      fra: varselDato,
+      tilInkl: plussDager(varselDato, FASIT_VINDU_DAGER - 1),
+      tilEksk: plussDager(varselDato, FASIT_VINDU_DAGER)
+    },
+    for: {
+      fra: plussDager(varselDato, -FASIT_VINDU_DAGER),
+      tilInkl: plussDager(varselDato, -1),
+      tilEksk: varselDato
+    }
+  };
+}
+
+/**
+ * UTC-tidspunktet for lokal midnatt i Europe/Oslo den gitte datoen. GBIF sin
+ * eventDate er lokal kalenderdato; egne funn lagres som tidsstempel. Med
+ * `T00:00:00Z` som grense havnet et app-funn kl. 00–02 lokal tid på dagen
+ * FØR — de to kildene talte ikke samme døgn.
+ */
+export function osloMidnattIso(dagIso: string): string {
+  const gjett = new Date(`${dagIso}T00:00:00Z`);
+  const osloTime = Number(
+    new Intl.DateTimeFormat('en-US', { timeZone: 'Europe/Oslo', hour: 'numeric', hour12: false }).format(gjett)
+  );
+  // Ved 00:00Z viser Oslo 01 (CET) eller 02 (CEST); lokal midnatt er så mange timer tidligere.
+  return new Date(gjett.getTime() - (osloTime % 24) * 3_600_000).toISOString();
 }
 
 function isoDag(d: Date): string {
@@ -61,7 +103,7 @@ function plussDager(iso: string, dager: number): string {
   return isoDag(d);
 }
 
-/** GBIF-telling for regionboksen i [fra, til] — kun antallet, aldri innholdet. */
+/** GBIF-telling for regionboksen i [fra, til], BEGGE inkludert — kun antallet, aldri innholdet. */
 async function tellGbif(
   region: (typeof PREDICTION_TILE_REGIONS)[number],
   fraIso: string,
@@ -97,8 +139,8 @@ async function tellEgneFunn(
     .lte('latitude', region.maxLat)
     .gte('longitude', region.minLng)
     .lte('longitude', region.maxLng)
-    .gte('found_at', `${fraIso}T00:00:00Z`)
-    .lt('found_at', `${tilIso}T00:00:00Z`)
+    .gte('found_at', osloMidnattIso(fraIso))
+    .lt('found_at', osloMidnattIso(tilIso))
     .is('deleted_at', null);
   return error ? 0 : (count ?? 0);
 }
@@ -117,22 +159,22 @@ export async function beregnFasit(
   const region = PREDICTION_TILE_REGIONS.find((r) => r.name === regionNavn);
   if (!region) return null;
 
-  const etterFra = varselDato;
-  const etterTil = plussDager(varselDato, FASIT_VINDU_DAGER);
-  const forFra = plussDager(varselDato, -FASIT_VINDU_DAGER);
+  const v = fasitVinduer(varselDato);
 
   const [gbifEtter, gbifFor, egneEtter, egneFor] = await Promise.all([
-    tellGbif(region, etterFra, etterTil),
-    tellGbif(region, forFra, varselDato),
-    tellEgneFunn(db, region, etterFra, etterTil),
-    tellEgneFunn(db, region, forFra, varselDato)
+    tellGbif(region, v.etter.fra, v.etter.tilInkl),
+    tellGbif(region, v.for.fra, v.for.tilInkl),
+    tellEgneFunn(db, region, v.etter.fra, v.etter.tilEksk),
+    tellEgneFunn(db, region, v.for.fra, v.for.tilEksk)
   ]);
 
+  const gbifOk = gbifEtter !== null && gbifFor !== null;
   return {
     region: regionNavn,
     dato: varselDato,
     ukenEtter: (gbifEtter ?? 0) + egneEtter,
     ukenFor: (gbifFor ?? 0) + egneFor,
-    moden: gbifEtter !== null && gbifFor !== null && erFasitModen(varselDato, naa)
+    moden: gbifOk && erFasitModen(varselDato, naa),
+    gbifOk
   };
 }

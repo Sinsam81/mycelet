@@ -77,10 +77,11 @@ export async function Fasitlogg() {
                     {hendelse.fra_score} → {hendelse.til_score}
                   </td>
                   <td className="py-1.5 pr-3">
-                    {fasit ? fasit.ukenEtter : '–'}
-                    {fasit && !fasit.moden ? <span className="ml-1 text-xs text-amber-700">{t('fasitUmoden')}</span> : null}
+                    {/* Uten GBIF-svar er tallet bare egne funn — «–», ikke en falsk null. */}
+                    {fasit?.gbifOk ? fasit.ukenEtter : '–'}
+                    {fasit?.gbifOk && !fasit.moden ? <span className="ml-1 text-xs text-amber-700">{t('fasitUmoden')}</span> : null}
                   </td>
-                  <td className="py-1.5">{fasit ? fasit.ukenFor : '–'}</td>
+                  <td className="py-1.5">{fasit?.gbifOk ? fasit.ukenFor : '–'}</td>
                 </tr>
               ))}
             </tbody>
