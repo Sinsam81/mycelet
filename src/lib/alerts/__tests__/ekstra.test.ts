@@ -13,16 +13,24 @@ const dag = (date: string, label: string, score: number, isToday = false) => ({
 describe('velgToppdag', () => {
   it('velger dagen med høyest score', () => {
     const valgt = velgToppdag([dag('2026-09-01', 'I dag', 80, true), dag('2026-09-03', 'tor', 91)]);
-    expect(valgt).toEqual({ dag: 'tor', score: 91, erIDag: false });
+    expect(valgt).toEqual({ dag: 'tor', score: 91, erIDag: false, delteDager: [], jevn: false });
   });
 
-  it('ved likhet vinner den tidligste dagen — sopp venter ikke', () => {
+  it('ved likhet peker dag på den tidligste — men begge navngis som like gode', () => {
     const valgt = velgToppdag([
       dag('2026-09-01', 'I dag', 80, true),
       dag('2026-09-03', 'tor', 91),
       dag('2026-09-05', 'lør', 91)
     ]);
     expect(valgt?.dag).toBe('tor');
+    expect(valgt?.delteDager).toEqual(['tor', 'lør']);
+    expect(valgt?.jevn).toBe(false);
+  });
+
+  it('en helt jevn uke er ikke «i dag er ukas beste dag»', () => {
+    // 63 % av sesongukene har delt toppscore — uten dette sto artefakten i de fleste varslene.
+    const valgt = velgToppdag([dag('2026-09-01', 'I dag', 100, true), dag('2026-09-02', 'tir', 100), dag('2026-09-03', 'ons', 100)]);
+    expect(valgt).toMatchObject({ dag: 'I dag', erIDag: true, jevn: true, delteDager: ['I dag', 'tir', 'ons'] });
   });
 
   it('tom liste gir null, aldri krasj', () => {
@@ -107,6 +115,22 @@ describe('byggVarselEpost med ekstrainnhold', () => {
       toppdag: { dag: 'I dag', score: 88, erIDag: true }
     });
     expect(tekst).toContain('i dag ser ut til å bli ukas beste dag (88 av 100)');
+  });
+
+  it('delte toppdager navngis som like gode; en jevn uke sier det rett ut', () => {
+    const delt = byggVarselEpost({
+      ...base,
+      locale: 'nb',
+      toppdag: { dag: 'tor', score: 91, erIDag: false, delteDager: ['tor', 'lør'], jevn: false }
+    }).tekst;
+    expect(delt).toContain('tor og lør ser like gode ut (91 av 100)');
+    const jevn = byggVarselEpost({
+      ...base,
+      locale: 'nb',
+      toppdag: { dag: 'I dag', score: 100, erIDag: true, delteDager: ['I dag', 'tir', 'ons'], jevn: true }
+    }).tekst;
+    expect(jevn).toContain('jevnt hele uka (100 av 100)');
+    expect(jevn).not.toContain('ukas beste dag');
   });
 
   it('svensk er svensk', () => {

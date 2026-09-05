@@ -77,11 +77,23 @@ export async function Fasitlogg() {
                     {hendelse.fra_score} → {hendelse.til_score}
                   </td>
                   <td className="py-1.5 pr-3">
-                    {/* Uten GBIF-svar er tallet bare egne funn — «–», ikke en falsk null. */}
-                    {fasit?.gbifOk ? fasit.ukenEtter : '–'}
-                    {fasit?.gbifOk && !fasit.moden ? <span className="ml-1 text-xs text-amber-700">{t('fasitUmoden')}</span> : null}
+                    {/* GBIF-tallet står alene; egne funn som «+N» — kildene har
+                        ulikt etterslep og skal ikke smelte sammen. Feiler en
+                        kilde: «–», aldri en falsk null. */}
+                    {fasit?.gbifOk && fasit.egneOk ? fasit.gbifEtter : '–'}
+                    {fasit?.gbifOk && fasit.egneOk && fasit.egneEtter > 0 ? (
+                      <span className="ml-1 text-xs text-gray-500">+{fasit.egneEtter}</span>
+                    ) : null}
+                    {fasit?.gbifOk && fasit.egneOk && !fasit.moden ? (
+                      <span className="ml-1 text-xs text-amber-700">{t('fasitUmoden')}</span>
+                    ) : null}
                   </td>
-                  <td className="py-1.5">{fasit?.gbifOk ? fasit.ukenFor : '–'}</td>
+                  <td className="py-1.5">
+                    {fasit?.gbifOk && fasit.egneOk ? fasit.gbifFor : '–'}
+                    {fasit?.gbifOk && fasit.egneOk && fasit.egneFor > 0 ? (
+                      <span className="ml-1 text-xs text-gray-500">+{fasit.egneFor}</span>
+                    ) : null}
+                  </td>
                 </tr>
               ))}
             </tbody>

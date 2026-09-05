@@ -283,15 +283,15 @@
     "sourcesLink": "Se alle datakilder og lisenser →",
     "backHome": "← Til forsiden",
     "fasitHeading": "Fasitloggen: hvert varsel, etterprøvd",
-    "fasitIntro": "Hvert soppvarsel vi sender er en påstand som kan sjekkes. Her står de siste varslene med fasit: hvor mange sopfunn som ble registrert i området uken etter varselet, mot uken før. Vi publiserer tallene uansett utfall.",
+    "fasitIntro": "Hvert omslag vi varsler — på e-post eller på X — er en påstand som kan sjekkes. Her står de siste med fasit: hvor mange sopfunn som ble registrert i området uken etter varselet, mot uken før. Vi publiserer tallene uansett utfall.",
     "fasitColRegion": "Område",
     "fasitColDato": "Varslet",
     "fasitColLovet": "Forhold",
     "fasitColEtter": "Funn uken etter",
     "fasitColFor": "Uken før",
     "fasitUmoden": "(modnes)",
-    "fasitEmpty": "Loggen starter med neste sendte varsel — fasit dukker opp her etter hvert som sesongen ruller.",
-    "fasitCaveat": "Kilder: Artsobservasjoner/GBIF og funn fra Mycelet-brukere. Artsobservasjoner publiserer til GBIF med ukers etterslep, så ferske tall er systematisk for lave og vokser etter hvert som rapportene kommer inn — rader merket «modnes» er ikke ferdige. Funntall er også væravhengige i seg selv: en regntung helg gir færre folk i skogen, uansett forhold."
+    "fasitEmpty": "Loggen starter med neste publiserte varsel — fasit dukker opp her etter hvert som sesongen ruller.",
+    "fasitCaveat": "Kilder: Artsobservasjoner/GBIF (tallet) og funn fra Mycelet-brukere («+N», uten etterslep; negative observasjoner telles ikke). Bare tilstedeværelse-poster fra observasjoner og belegg — ikke jordprøver. Artsobservasjoner publiserer til GBIF med ukers etterslep, så ferske tall er systematisk for lave og vokser etter hvert som rapportene kommer inn — rader merket «modnes» er ikke ferdige. Funntall er også væravhengige i seg selv: en regntung helg gir færre folk i skogen, uansett forhold."
   },
   "Om": {
     "metaTitle": "Om oss — hva vi gjør, og hva vi ikke gjør",
