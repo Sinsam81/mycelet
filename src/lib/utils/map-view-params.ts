@@ -60,6 +60,21 @@ function stedsnavn(value: string | string[] | undefined): string | null {
   return rent.slice(0, 60);
 }
 
+/** «Let etter denne arten» fra artsiden: `/map?art=<id>&artnavn=<visningsnavn>`. */
+export interface MapSpeciesParam {
+  id: number;
+  /** Visningsnavn fra avsenderen, bare til søkefeltet og popup-tekst. Tom streng om det mangler. */
+  name: string;
+}
+
+export function parseSpeciesParam(params: { art?: string | string[]; artnavn?: string | string[] }): MapSpeciesParam | null {
+  const raw = Array.isArray(params.art) ? params.art[0] : params.art;
+  if (typeof raw !== 'string' || !/^\d{1,7}$/.test(raw)) return null;
+  const id = Number(raw);
+  if (!Number.isInteger(id) || id <= 0) return null;
+  return { id, name: stedsnavn(params.artnavn) ?? '' };
+}
+
 export function parseMapViewParams(params: {
   lat?: string | string[];
   lng?: string | string[];
