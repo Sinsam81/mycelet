@@ -25,20 +25,33 @@ interface UpsertCall {
 }
 
 let upserts: UpsertCall[] = [];
+let updates: UpsertCall[] = [];
 let existingBillingRow: Record<string, unknown> | null = null;
+/** Rader per user_id — for TRANSFER, der ruta leser to ulike rader. */
+let existingRows: Record<string, Record<string, unknown>> = {};
 
 function makeAdminClient() {
   return {
     from(table: string) {
+      let sisteEq: unknown = null;
       const builder: Record<string, unknown> = {
         select: () => builder,
-        eq: () => builder,
+        eq: (_k: string, v: unknown) => {
+          sisteEq = v;
+          return builder;
+        },
         maybeSingle: async () => {
           if (table === 'billing_webhook_events') return { data: null, error: null };
-          return { data: existingBillingRow, error: null };
+          const perBruker = typeof sisteEq === 'string' ? existingRows[sisteEq] : undefined;
+          return { data: perBruker ?? (Object.keys(existingRows).length ? null : existingBillingRow), error: null };
         },
         insert: async () => ({ error: null }),
-        update: () => ({ eq: async () => ({ error: null }) }),
+        update: (values: Record<string, unknown>) => ({
+          eq: async () => {
+            updates.push({ table, values });
+            return { error: null };
+          }
+        }),
         upsert: async (values: Record<string, unknown>) => {
           upserts.push({ table, values });
           return { error: null };
@@ -50,6 +63,7 @@ function makeAdminClient() {
 }
 
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: () => makeAdminClient() }));
+vi.mock('@sentry/nextjs', () => ({ captureMessage: vi.fn(), flush: async () => true }));
 
 vi.mock('@/lib/log/request', () => {
   const logger = {
@@ -122,7 +136,9 @@ function sandboxPurchase(overrides: Partial<RevenueCatEvent> = {}): RevenueCatEv
 
 beforeEach(() => {
   upserts = [];
+  updates = [];
   existingBillingRow = null;
+  existingRows = {};
   process.env.REVENUECAT_WEBHOOK_AUTH = AUTH;
   // Må stå på gjennom App Review — reviewer kjøper nettopp i sandkassen.
   process.env.REVENUECAT_ALLOW_SANDBOX = '1';
@@ -258,5 +274,60 @@ describe('gulvet gir ingen gratis tilgang til ekte kunder', () => {
     const meta = row.metadata as Record<string, unknown>;
     expect(meta.provider).toBe('revenuecat');
     expect(meta.manual_grant).toMatchObject({ tier: 'season_pass', current_period_end: grantEnd });
+  });
+});
+
+describe('TRANSFER: kjøp flyttet til en ny konto', () => {
+  const FRA = '11111111-1111-4111-8111-111111111111';
+  const TIL = '22222222-2222-4222-8222-222222222222';
+  const rcRad = (userId: string, ekstra: Record<string, unknown> = {}) => ({
+    user_id: userId,
+    tier: 'premium',
+    status: 'active',
+    current_period_start: new Date(Date.now() - 10 * 24 * 3600 * 1000).toISOString(),
+    current_period_end: isoIn(20 * 24 * 3600 * 1000),
+    cancel_at_period_end: false,
+    metadata: { provider: 'revenuecat', rc_product_id: 'no.mycelet.premium.monthly' },
+    ...ekstra
+  });
+  const transfer = (): RevenueCatEvent => ({
+    type: 'TRANSFER',
+    id: `evt-${Math.random().toString(36).slice(2)}`,
+    transferred_from: [FRA],
+    transferred_to: [TIL],
+    store: 'APP_STORE',
+    environment: 'PRODUCTION',
+    event_timestamp_ms: Date.now()
+  });
+
+  it('flytter en RevenueCat-betalt rad til den nye kontoen og sier opp den gamle', async () => {
+    existingRows = { [FRA]: rcRad(FRA) };
+    const res = await postEvent(transfer());
+    expect(res.status).toBe(200);
+    expect((await res.json()).ignored).toBe('transfer_applied');
+    const ny = billingUpsert();
+    expect(ny.user_id).toBe(TIL);
+    expect(ny.tier).toBe('premium');
+    expect((ny.metadata as Record<string, unknown>).transferred_from).toBe(FRA);
+    const gammel = updates.find((u) => u.table === 'billing_subscriptions');
+    expect(gammel?.values.status).toBe('canceled');
+  });
+
+  it('rører ikke en målkonto som betaler via Stripe', async () => {
+    existingRows = {
+      [FRA]: rcRad(FRA),
+      [TIL]: rcRad(TIL, { metadata: { provider: 'stripe' } })
+    };
+    const res = await postEvent(transfer());
+    expect((await res.json()).ignored).toBe('transfer_dest_protected');
+    expect(billingUpsertOrNull()).toBeNull();
+    expect(updates.filter((u) => u.table === 'billing_subscriptions')).toHaveLength(0);
+  });
+
+  it('uten kilderad (slettet konto) skrives ingenting — bare varsel', async () => {
+    existingRows = { [TIL]: rcRad(TIL, { status: 'canceled' }) };
+    const res = await postEvent(transfer());
+    expect((await res.json()).ignored).toBe('transfer_no_source_row');
+    expect(billingUpsertOrNull()).toBeNull();
   });
 });
