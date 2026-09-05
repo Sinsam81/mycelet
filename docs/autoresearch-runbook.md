@@ -29,9 +29,18 @@ treningen). Kanonisk = tren <2021, test ≥2021, rørt én gang.
 det konservative, og det loopen skal måles på. Journalfør begge for
 basislinjen så tallene på /apenhet kan oppdateres ærlig.
 
-**Basislinje 2026-09-01, kanonisk splitt (tren <2021, test ≥2021):**
-`0.88226` over 456 064 sammenligninger, 72 kurver, 114 016 testfunn.
-Dev-basislinjen (CUTOFF=2020) måles som iterasjon 0 i selve kjøringen.
+**Basislinjer (målt 2026-09-05 med skriptet i denne utgaven):**
+
+| Splitt | Negativ-vindu | Testfunn | AUC empirisk | AUC månedsmodell |
+|---|---|---|---|---|
+| Kanonisk (tren <2021, test ≥2021) | hele året | 114 016 | 0,88226 | 0,83328 |
+| Kanonisk | **innen sesong** | 114 016 | **0,83061** | 0,78019 |
+| Dev (tren <2019, test 2019–2020) | innen sesong | 38 966 | 0,83046 | 0,76600 |
+
+Loopen måles på dev/innen-sesong (0,83046 er iterasjon 0). Sluttdommen er
+kanonisk/innen-sesong (0,83061). Hel-års-tallet 0,882 er det som står på
+/apenhet i dag — det er ikke feil, men det måler en lettere oppgave; vurder
+å vise innen-sesong-tallet der (eierbeslutning, det er en offentlig påstand).
 
 ## Mutasjonsflaten (det ENESTE agenten får røre)
 
