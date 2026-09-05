@@ -228,14 +228,25 @@ export default async function MineStederPage() {
                         ))}
                         {more > 0 ? <span className="px-1 py-0.5 text-[11px] text-gray-500">{t('moreSpecies', { count: more })}</span> : null}
                       </div>
-                      <a
-                        href={`https://www.google.com/maps/search/?api=1&query=${spot.lat.toFixed(5)},${spot.lng.toFixed(5)}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-forest-800 underline"
-                      >
-                        <ExternalLink className="h-3 w-3" /> {t('openInMap')}
-                      </a>
+                      {/* Hovedhandlingen holder brukeren i Mycelet: kartet åpner på stedet
+                          med dagens forhold (værstripa) og egne funn synlige (mine=1). Google
+                          er veibeskrivelsen, ikke stedet. */}
+                      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
+                        <Link
+                          href={`/map?lat=${spot.lat.toFixed(5)}&lng=${spot.lng.toFixed(5)}&zoom=14&sted=${encodeURIComponent(spot.label)}&mine=1`}
+                          className="inline-flex items-center gap-1 text-xs font-semibold text-forest-800 underline"
+                        >
+                          <MapPin className="h-3 w-3" /> {t('seeConditionsHere')}
+                        </Link>
+                        <a
+                          href={`https://www.google.com/maps/search/?api=1&query=${spot.lat.toFixed(5)},${spot.lng.toFixed(5)}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1 text-xs font-medium text-gray-600 underline"
+                        >
+                          <ExternalLink className="h-3 w-3" /> {t('navigateThere')}
+                        </a>
+                      </div>
                     </div>
                   </div>
                 </li>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseMapViewParams } from '../map-view-params';
+import { parseMapViewParams, parseSpeciesParam } from '../map-view-params';
 
 /**
  * Feilen dette kom av: «Best i landet i dag» lenker til
@@ -70,5 +70,23 @@ describe('stedsnavnet i dyplenken', () => {
   it('beholder norske og svenske tegn', () => {
     expect(parseMapViewParams({ lat: '67', lng: '14', sted: 'Östersund' })?.name).toBe('Östersund');
     expect(parseMapViewParams({ lat: '67', lng: '14', sted: 'Ålesund' })?.name).toBe('Ålesund');
+  });
+});
+
+describe('parseSpeciesParam — «Let etter denne arten»', () => {
+  it('leser id og visningsnavn', () => {
+    expect(parseSpeciesParam({ art: '97', artnavn: 'Krittøsterssopp' })).toEqual({ id: 97, name: 'Krittøsterssopp' });
+  });
+
+  it('avviser alt som ikke er en positiv heltalls-id', () => {
+    expect(parseSpeciesParam({ art: '0' })).toBeNull();
+    expect(parseSpeciesParam({ art: '-3' })).toBeNull();
+    expect(parseSpeciesParam({ art: '12abc' })).toBeNull();
+    expect(parseSpeciesParam({})).toBeNull();
+  });
+
+  it('navnet renses og kappes som stedsnavn; mangler det, er det tomt', () => {
+    expect(parseSpeciesParam({ art: '5', artnavn: 'a\u0000b' })).toEqual({ id: 5, name: 'ab' });
+    expect(parseSpeciesParam({ art: '5' })).toEqual({ id: 5, name: '' });
   });
 });

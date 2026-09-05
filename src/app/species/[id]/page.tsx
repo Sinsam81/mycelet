@@ -3,7 +3,7 @@ import { ORGANISASJON } from '@/lib/seo/organisasjon';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
-import { AlertTriangle, ChevronLeft, Info } from 'lucide-react';
+import { AlertTriangle, ChevronLeft, Info, MapPin } from 'lucide-react';
 import { EdibilityBadge } from '@/components/ui/EdibilityBadge';
 import { PageWrapper } from '@/components/layout/PageWrapper';
 import { SpeciesPhotoCarousel } from '@/components/species/SpeciesPhotoCarousel';
@@ -201,6 +201,16 @@ export default async function SpeciesDetailPage({ params }: SpeciesDetailPagePro
                 {displayName}
               </h1>
               <p className="text-base italic text-gray-600">{species.latin_name}</p>
+              {/* Biblioteket og kartet hang ikke sammen: valgte du en art her, måtte
+                  du søke den opp igjen i kartet. Lenka bytter art og lar kartet
+                  huske utsnittet du hadde (husket-utsnitt.ts). */}
+              <Link
+                href={`/map?art=${species.id}&artnavn=${encodeURIComponent(displayName)}`}
+                className="inline-flex items-center gap-2 rounded-full bg-forest-800 px-4 py-2 text-sm font-semibold text-white hover:bg-forest-900"
+              >
+                <MapPin className="h-4 w-4" aria-hidden="true" />
+                {t('findOnMap')}
+              </Link>
               {(species.norwegian_name || species.swedish_name || species.english_name) ? (
                 <div className="flex flex-wrap gap-x-4 text-xs text-gray-500">
                   {locale === 'sv' && species.norwegian_name ? <span>🇳🇴 {species.norwegian_name}</span> : null}
