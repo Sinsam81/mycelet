@@ -49,6 +49,13 @@ interface AddFindingSheetProps {
    * uten dette leses «lagret!» + et kart uten funnet som at lagringen feilet.
    */
   onSaved: (speciesName?: string, sharingMode?: SharingMode) => void;
+  /**
+   * Arten brukeren alt har valgt i kartet («Lovende områder for kantarell»).
+   * Skjemaet startet tomt uansett, så målarten måtte søkes opp på nytt med
+   * våte fingre. Bare et forslag — feltet kan tømmes eller byttes som før.
+   */
+  initialSpeciesId?: number | null;
+  initialSpeciesName?: string | null;
 }
 
 interface SpeciesOption {
@@ -63,7 +70,9 @@ export function AddFindingSheet({
   fallbackLatitude = null,
   fallbackLongitude = null,
   onClose,
-  onSaved
+  onSaved,
+  initialSpeciesId = null,
+  initialSpeciesName = null
 }: AddFindingSheetProps) {
   // GPS først, kartsenteret som reserve. `brukerKartsenter` styrer teksten —
   // brukeren skal vite hvilken av de to som lagres.
@@ -76,9 +85,13 @@ export function AddFindingSheet({
   const supabase = useMemo(() => createClient(), []);
 
   const [findingType, setFindingType] = useState<FindingType>('positive');
-  const [speciesQuery, setSpeciesQuery] = useState('');
+  // Forhåndsvalg bare når BÅDE id og navn finnes: en id uten synlig navn
+  // (arten valgt i filterpanelet, som ikke setter navnet) ville lagret en art
+  // brukeren aldri så.
+  const forhaandsvalgt = initialSpeciesId && initialSpeciesName ? { id: initialSpeciesId, name: initialSpeciesName } : null;
+  const [speciesQuery, setSpeciesQuery] = useState(forhaandsvalgt?.name ?? '');
   const [speciesOptions, setSpeciesOptions] = useState<SpeciesOption[]>([]);
-  const [speciesId, setSpeciesId] = useState<number | null>(null);
+  const [speciesId, setSpeciesId] = useState<number | null>(forhaandsvalgt?.id ?? null);
   const [notes, setNotes] = useState('');
   // Starter på brukerens forrige valg (kun lagret lokalt — se delingsniva.ts);
   // velgeren er alltid synlig, og samme standard gjelder i AI-resultatflyten
@@ -156,6 +169,9 @@ export function AddFindingSheet({
 
   const searchSpecies = async (value: string) => {
     setSpeciesQuery(value);
+    // Teksten er endret → det som var valgt gjelder ikke lenger. Uten dette
+    // fulgte en gammel id med selv om feltet var tømt eller skrevet om.
+    setSpeciesId(null);
     if (value.trim().length < 2) {
       setSpeciesOptions([]);
       return;

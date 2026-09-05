@@ -212,7 +212,8 @@ export default async function HomePage() {
           </h1>
           {inSeasonEdible.length > 0 ? (
             <p className="mt-1 text-sm text-gray-700">
-              {t('edibleInSeasonCount', { count: inSeasonEdible.length })}
+              {/* Hele tallet — ikke de seks kortene vi viser. Overskriften og denne linja sa 46 og 6 om samme sak. */}
+              {t('edibleInSeasonCount', { count: edibleInSeasonCount })}
               {dangerousInSeason.length > 0
                 ? ` · ${t('dangerousToWatch', { count: dangerousInSeason.length })}`
                 : ''}
@@ -302,9 +303,15 @@ export default async function HomePage() {
           <article className="rounded-xl bg-white p-4 shadow-sm">
             <div className="flex items-center justify-between">
               <h2 className="font-semibold text-forest-900">🍄 {t('yourFindings')}</h2>
-              <Link href="/profile" className="text-xs font-medium text-forest-800 hover:underline">
-                {t('seeYourProfile')} →
-              </Link>
+              <div className="flex gap-3">
+                {/* Mine steder lå bare bak Profil — én dør inn til «skogen min» herfra. */}
+                <Link href="/mine-steder" className="text-xs font-medium text-forest-800 hover:underline">
+                  📍 {t('myPlaces')} →
+                </Link>
+                <Link href="/profile" className="text-xs font-medium text-forest-800 hover:underline">
+                  {t('seeYourProfile')} →
+                </Link>
+              </div>
             </div>
             <div className="mt-3 flex gap-8">
               <div>
