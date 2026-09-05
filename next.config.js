@@ -13,8 +13,8 @@
 
 // Stripe + Supabase + Wikimedia + Kindwise + Norwegian/Swedish map tile
 // providers, plus the weather APIs we hit server-side. If you wire a new
-// third-party SDK, add it here AND verify in dev console that the report-only
-// header doesn't flag it before flipping to enforce.
+// third-party SDK, add its hosts here BEFORE deploying — the policy is
+// enforcing, so a missing host is a silent block in production.
 const isDev = process.env.NODE_ENV !== 'production';
 
 const cspDirectives = [
@@ -101,7 +101,7 @@ const securityHeaders = [
     key: 'X-XSS-Protection',
     value: '0'
   },
-  // Report-only CSP — see policy + monitoring notes at top of file.
+  // Enforcing CSP — see policy notes at top of file.
   {
     key: 'Content-Security-Policy',
     value: csp

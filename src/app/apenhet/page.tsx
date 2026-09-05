@@ -16,7 +16,9 @@ import { Fasitlogg } from './Fasitlogg';
  *    docs/reports/prediction-model.md). «0,89» fra den løsere hash-splitten
  *    skal ALDRI siteres offentlig — runbooken forbyr å kalle den temporal
  *    validering. En vaktest låser dette.
- *  · HVOR: 0,50–0,52 (full modell), 0,54 (habitat), 0,47–0,52 (funntetthet).
+ *  · HVOR: 0,50–0,52 (skog × habitat × sesongkurve — backtest-full-pipeline
+ *    scorer IKKE vær/jord/terreng; si aldri «full modell»), 0,54 (habitat),
+ *    0,47–0,52 (funntetthet).
  *    «Beste sted»-statistikken (AUC 0,65, p = 0,44) gjelder de 18 av 26
  *    områdene med skogdata — se docs/validering-romlig-signal.md.
  *  · Kindwise: kun deres egne publiserte tall, merket som leverandørens,

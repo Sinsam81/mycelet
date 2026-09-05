@@ -84,12 +84,12 @@ Mycelets **tidsmodell** — den empiriske fenologien, altså når på året hver
 
 Mycelets **romlige modell** — den som skulle si *hvor* — måler slik, i en validering bygget for å motstå lekkasje mellom trening og test:
 
-- hele den romlige modellen: **0,504**
+- skog- og habitatleddet ganget med sesongkurven — den delen av den romlige modellen som lar seg validere uten historisk vær: **0,504**
 - bare habitat (skogtype, bonitet, volum): **0,536**
 - bare tetthet av historiske funn: **0,472**
 - jordas dreneringsgrad, målt på svenske data: **rundt 0,47** — den ble aldri koblet inn i modellen, nettopp fordi den ikke skilte
 
-Ulike kjøringer av fullmodellen har landet på 0,504 og 0,521, avhengig av hvordan bakgrunnspunktene velges. Uansett hvilken vi bruker: nær myntkast. Og ren forekomsttetthet — å sende folk dit det er registrert mest sopp fra før — ligger på samme tilfeldighetsnivå, mellom 0,47 og 0,52 avhengig av kjøring. Registrerte funn peker ikke ut morgendagens funnsteder i våre målinger.
+Ulike kjøringer av denne delmodellen har landet på 0,504 og 0,521, avhengig av hvordan bakgrunnspunktene velges. Uansett hvilken vi bruker: nær myntkast. Og ren forekomsttetthet — å sende folk dit det er registrert mest sopp fra før — ligger på samme tilfeldighetsnivå, mellom 0,47 og 0,52 avhengig av kjøring. Registrerte funn peker ikke ut morgendagens funnsteder i våre målinger.
 
 Derfor er den delen slått av. I koden står den nå som en enkelt linje der forekomstfaktoren er satt til 1 — altså ingen effekt — med målingen skrevet inn som begrunnelse rett ved siden av.
 
@@ -170,7 +170,7 @@ At ingen har meldt fra derfra, ikke at det ikke finnes sopp der. For sopp i Norg
 
 ### Hvor godt treffer Mycelets kart?
 
-Tidsmodellen har AUC 0,88, trent på data før 2021 og testet på 2021 og senere. Den romlige modellen ligger på 0,50–0,52, nær myntkast, og ren tetthet av historiske funn på 0,47. Derfor påvirker forekomstpunktene ikke poengsummen.
+Tidsmodellen har AUC 0,88, trent på data før 2021 og testet på 2021 og senere. Den romlige delmodellen (skog, habitat og sesongkurve — værleddet er ikke med i målingen) ligger på 0,50–0,52, nær myntkast, og ren tetthet av historiske funn på 0,47. Derfor påvirker forekomstpunktene ikke poengsummen.
 
 ### Er soppfunn skjevt fordelt på helger?
 
@@ -187,4 +187,4 @@ Samlet for 2015–2025 ble 31,8 prosent av de norske funnene gjort i helgen, mot
 - Norges sopp- og nyttevekstforbund, [soppkontroll.no](https://soppkontroll.no) og [Soppsesongen 2026](https://soppognyttevekster.no/soppsesongen-2026/) — Digital soppkontroll åpner 1. juli; de fysiske kontrollene «starter opp i løpet av august og holder det gående i løpet av sesongen».
 - Egne uttrekk fra GBIFs åpne API, 9. august 2026: 2 358 630 soppfunn fra Norge; 61 % «human observation», 30 % herbariebelegg; 48 % *Agaricomycetes*, 35 % lavdannende sopp, 7 % fra ett eDNA-datasett fra jordprøver; 348 fraværsposter mot 2 358 282 tilstedeværelsesposter.
 - Egen fullstendig dagsopptelling mot samme API, 9. august 2026: alle 4 018 dager fra 2015 til 2025, filtrert på Norge, sopp, «human observation» og koordinat — 907 069 funn, ingen dag utelatt. Helgeandel 31,84 % samlet; 36,64 % i 2015, fallende til 27,96 % i 2025. Lørdag 16,59 %, mandag 11,64 %. Januar–februar 42,91 %, juli 25,88 %. (Samme filter med årsintervall i stedet for dag-for-dag gir 907 363 — de vel 290 postenes forskjell er datoer som ikke lar seg feste til én enkelt dag.)
-- Mycelets egne valideringskjøringer: fenologi AUC 0,88 (mot 0,83 for den gamle månedsheuristikken); romlig fullmodell 0,504 og 0,521 i to kjøringer, habitat 0,536, forekomsttetthet 0,47–0,52 på tvers av kjøringer (tilfeldighetsnivå).
+- Mycelets egne valideringskjøringer: fenologi AUC 0,88 (mot 0,83 for den gamle månedsheuristikken); romlig delmodell (skog × habitat × sesongkurve, uten vær) 0,504 og 0,521 i to kjøringer, habitat 0,536, forekomsttetthet 0,47–0,52 på tvers av kjøringer (tilfeldighetsnivå).
