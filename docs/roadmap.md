@@ -1,5 +1,8 @@
 # Mycelet — veikart
 
+> ⚠️ **Gjeldende prioriteringer ligger i [`docs/strategi-2026-2027.md`](strategi-2026-2027.md)**
+> (levende plan, oppdateres ukentlig). Dette dokumentet er historikk og bakgrunn.
+
 > Sist oppdatert: 10. juni 2026
 > Eier: ØVERÅS APPS (org.nr 937 880 871) — kontakt `post@mycelet.com`
 
