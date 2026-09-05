@@ -122,6 +122,19 @@ arten i nettopp den båsen normlisten holdt den utenfor.
 vårt eget notat sa «noen reagerer selv etter koking». Da skal den ikke bære
 matsoppmerke.
 
+### Rettet i migrasjon 065 (2026-09-05)
+
+| art | før | etter | hvorfor |
+|---|---|---|---|
+| **Krittøsterssopp** | `conditionally_edible` | `inedible` | Merket «Spiselig — giftig rå» lovet at steking hjelper; artens egen tekst sa «Koking eller steking fjerner ikke risikoen» og frarådet den. NSNFs merknad gjelder nyrefunksjon, ikke tilberedning. |
+
+Samme feil som honningsopp og stankmorkel, en måned senere, og av samme
+strukturelle grunn: «Spiselig med merknad» og «Spiselig etter avkoking» er én
+klasse hos oss, og merkets ordlyd antar alltid den siste. Fra nå finnes en
+vaktbikkje: `npm run kontroller:spiselighet` leser hele artslista og sier fra
+når merke og tekst motsier hverandre (regler og tester i
+`src/lib/species/spiselighetskontroll.ts`). Kjør den etter hver artsendring.
+
 ### Bevisst IKKE fulgt — vi er strengere
 
 | art | vi | normlisten | hvorfor vi blir stående |
