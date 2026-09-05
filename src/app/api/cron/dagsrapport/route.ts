@@ -63,6 +63,11 @@ export async function GET(request: NextRequest) {
     log.error('dagsrapport.brukere_feilet', { message: brukerErr.message });
     return NextResponse.json({ error: 'Kunne ikke hente brukere' }, { status: 500 });
   }
+  // Interne kontoer: QA-brukeren og Apples demokonto ligger på @mycelet.com.
+  // Deres App Store-kjøp er testing, ikke salg (se RapportInn.interneBrukere).
+  const interneBrukere = new Set(
+    (brukerData?.users ?? []).filter((u) => u.email?.toLowerCase().endsWith('@mycelet.com')).map((u) => u.id)
+  );
   const brukere = (brukerData?.users ?? []).map((u) => ({
     id: u.id,
     created_at: u.created_at,
@@ -145,6 +150,7 @@ export async function GET(request: NextRequest) {
     varselabonnement: varselAntall,
     varselabonnenter,
     bruksdager,
+    interneBrukere,
     regionerIDag: velg(iDagDato),
     regionerIGar: velg(iGarDato),
     naa

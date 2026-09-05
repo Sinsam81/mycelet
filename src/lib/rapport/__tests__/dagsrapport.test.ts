@@ -333,4 +333,17 @@ describe('bruk av soppforholdene — aktivering og gjenbruk', () => {
     expect(r.bruk.brukereSiste7d).toBe(1);
     expect(r.bruk.perFlate).toEqual({ hjem: 0, kart: 0, omrade: 0, steder: 0 });
   });
+
+  it('interne kontoer (QA, Apples demo) telles som testkontoer selv med ekte App Store-kjøp', () => {
+    // Produksjon 6. september 2026: QA-kontoens RevenueCat-abonnement (PRODUCTION) sto som «betalt via App Store: 1».
+    const r = byggDagsrapport(
+      inn({
+        abonnement: [ab({ user_id: 'qa', metadata: { provider: 'revenuecat', rc_environment: 'PRODUCTION' }, created_at: dagerSiden(2) })],
+        interneBrukere: new Set(['qa'])
+      })
+    );
+    expect(r.betalende.perKilde.revenuecat).toBe(0);
+    expect(r.betalende.perKilde.manuell).toBe(1);
+    expect(r.betalende.nyeSiste7d).toBe(0);
+  });
 });
