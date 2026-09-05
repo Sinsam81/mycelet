@@ -53,6 +53,6 @@ der, ser en svensk bruker et kart uten et eneste søkeområde — uavhengig av h
 riktig fargene og dommene er. Da er ingen av forbedringene i
 [kalibrering-av-dommene.md](kalibrering-av-dommene.md) synlige for dem.
 
-Rutene lages av `scripts/generate-prediction-tiles.ts`. Å utvide dekningen er en
+Rutene lages av `/api/cron/generate-tiles` (nattlig cron, se vercel.json). Å utvide dekningen er en
 kjøring, ikke en omskriving — men den bør gjøres bevisst, og kostnaden ved flere
 ruter (lagring + generereringstid + vær-API-kall) bør regnes på først.

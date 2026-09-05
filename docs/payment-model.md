@@ -2,8 +2,8 @@
 
 ## Planer
 - `Gratis`: 5 AI-identifikasjoner per døgn.
-- `Premium`: 79 kr/mnd (Stripe abonnement).
-- `Sesongpass`: 199 kr per sesong (Stripe engangsbetaling, aktiv ut november).
+- `Premium`: 99 kr/mnd (Stripe abonnement, 7 dagers gratis prøve for førstegangskjøpere).
+- `Sesongpass`: 249 kr/år (Stripe abonnement, fornyes årlig — ikke engangskjøp).
 
 ## Teknisk implementasjon
 - Stripe Checkout for kjøp:
