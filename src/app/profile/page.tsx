@@ -263,7 +263,15 @@ export default async function ProfilePage() {
 
         <BlockedUsersList />
 
-        <AccountDataActions />
+        <AccountDataActions
+          abonnementKanal={
+            subscription?.metadata?.provider === 'revenuecat'
+              ? 'apple'
+              : subscription?.stripe_subscription_id
+                ? 'stripe'
+                : null
+          }
+        />
 
         {/* Terms, privacy and contact must be reachable from inside the app —
             App Store Schedule 2 § 3.8(b) and review guideline 1.2. */}

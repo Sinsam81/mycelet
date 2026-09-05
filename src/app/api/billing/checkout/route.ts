@@ -15,6 +15,27 @@ import { DEFAULT_LOCALE, type Locale } from '@/i18n/config';
 
 type CheckoutPlan = 'premium' | 'season_pass';
 
+/**
+ * Slett konto → registrer på nytt med samme e-post → ny gratis prøveuke:
+ * raden vår er borte, men Stripe husker kunden. Best effort — feiler
+ * oppslaget, får kunden prøven (som før) heller enn at kjøpet stopper.
+ */
+async function harHattStripeAbonnementFor(
+  stripe: { customers: { list: (p: { email: string; limit: number }) => Promise<{ data: Array<{ id: string }> }> }; subscriptions: { list: (p: { customer: string; status: 'all'; limit: number }) => Promise<{ data: unknown[] }> } },
+  email: string
+): Promise<boolean> {
+  try {
+    const kunder = await stripe.customers.list({ email, limit: 5 });
+    for (const kunde of kunder.data) {
+      const abonnement = await stripe.subscriptions.list({ customer: kunde.id, status: 'all', limit: 1 });
+      if (abonnement.data.length > 0) return true;
+    }
+  } catch {
+    // stille: prøven er default
+  }
+  return false;
+}
+
 export const runtime = 'nodejs';
 
 export async function POST(request: NextRequest) {
@@ -180,6 +201,12 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    const harHattTilgangFor = Boolean(
+      existing?.stripe_subscription_id ||
+        existing?.metadata?.provider ||
+        (user.email ? await harHattStripeAbonnementFor(stripe, user.email) : false)
+    );
+
     const idempotencyKey = `checkout_${user.id}_${plan}_${Math.floor(Date.now() / (1000 * 60 * 5))}`;
 
     const session = await stripe.checkout.sessions.create(
@@ -205,10 +232,10 @@ export async function POST(request: NextRequest) {
           // Stripe gir ellers ny prøve ved hvert nye abonnement, og «si opp,
           // tegn på nytt, prøv gratis igjen» ville vært en evighetsmaskin.
           // Har raden noen gang pekt på et Stripe-abonnement eller en
-          // IAP-leverandør, har brukeren hatt tilgangen før.
-          ...(existing?.stripe_subscription_id || existing?.metadata?.provider
-            ? {}
-            : { trial_period_days: 7 }),
+          // IAP-leverandør, har brukeren hatt tilgangen før — og har
+          // e-posten hatt et Stripe-abonnement under en SLETTET konto
+          // (raden forsvinner med cascaden), teller det også.
+          ...(harHattTilgangFor ? {} : { trial_period_days: 7 }),
           metadata: {
             user_id: user.id,
             tier: plan,

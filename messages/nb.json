@@ -1392,7 +1392,7 @@
     "deletedFindings": "Alle dine soppfunn med koordinater og bilder",
     "deletedForum": "Alle dine forum-innlegg og kommentarer",
     "deletedInteractions": "Likes, lagrede innlegg, rapporteringer du har sendt",
-    "deletedSubscription": "Abonnements-status (Stripe-data fjernes automatisk)",
+    "deletedSubscription": "Stripe-abonnementet ditt sies opp med én gang. Betalingshistorikken beholdes i fem år (bokføringsloven).",
     "backupNote": "Backup-rotasjon kan beholde data i opptil 30 dager før permanent fjerning.",
     "confirmInstruction": "For å bekrefte, skriv inn nøyaktig:",
     "cancel": "Avbryt",
