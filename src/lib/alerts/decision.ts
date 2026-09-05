@@ -1,4 +1,4 @@
-import { FORECAST_GREEN_MIN } from '@/lib/utils/forecast-scale';
+import { REGION_CONDITION_THRESHOLDS } from '@/lib/prediction/region-score';
 
 /**
  * Når skal et soppvarsel sendes?
@@ -16,11 +16,12 @@ import { FORECAST_GREEN_MIN } from '@/lib/utils/forecast-scale';
  *
  * ── Hvorfor en FLANKE, ikke et nivå ──────────────────────────────────────────
  *
- * Det opplagte er «varsle når det er bra». Det er feil. Terskelen for grønt (85)
- * er kalibrert slik at omtrent halvparten av dagene i sesong er grønne — se
- * forecast-scale.ts, median 86 målt over 99 176 dagscorer. En nivåregel ville
- * altså sendt e-post annenhver dag i august. Det er ikke et varsel, det er en
- * abonnementsavis ingen har bedt om.
+ * Det opplagte er «varsle når det er bra». Det er feil. Terskelen er
+ * regionskalaens topp-dom («excellent», p90 over regiondøgn — se
+ * region-score.ts), og selv den passeres omtrent hver sjette dag i sesong
+ * (18 % av 562 regiondøgn, 11.08–05.09.2026). En nivåregel ville altså sendt
+ * e-post hver uke i august uansett hva som skjedde. Det er ikke et varsel,
+ * det er en abonnementsavis ingen har bedt om.
  *
  * Vi varsler derfor på OVERGANGEN: i går under terskelen, i dag over. Det er
  * øyeblikket som faktisk er nyheten — «det snudde i natt» — og det er det eneste
@@ -33,7 +34,7 @@ import { FORECAST_GREEN_MIN } from '@/lib/utils/forecast-scale';
  * ── Karantenen ──────────────────────────────────────────────────────────────
  *
  * Været kan vippe rundt terskelen i dagevis. Uten karantene ville en uke med
- * 84-86-84-87 gitt tre e-poster om samme værsituasjon. Én per uke er taket,
+ * 80-82-80-83 gitt tre e-poster om samme værsituasjon. Én per uke er taket,
  * uansett hvor mange ganger flanken krysses.
  *
  * ── Hva vi IKKE lover ───────────────────────────────────────────────────────
@@ -42,8 +43,24 @@ import { FORECAST_GREEN_MIN } from '@/lib/utils/forecast-scale';
  * skogen der mottakeren står. E-posten må formuleres deretter — se alerts/email.ts.
  */
 
-/** Under dette er dagen ikke verdt en e-post. Samme grense som grønt på stripa. */
-export const VARSEL_MIN_SCORE = FORECAST_GREEN_MIN;
+/**
+ * Under dette er dagen ikke verdt en e-post.
+ *
+ * ⚠️ REGIONSKALAEN, ikke punkt-stripa. Første utgave importerte
+ * FORECAST_GREEN_MIN (85) — grønt på 7-dagersstripa, kalibrert på PUNKT-
+ * dagscorer (median 86). Men cronen sender inn regionens score, som er
+ * 90-persentilen over ruter og har en helt annen fordeling: der var 85 topp
+ * 12 % av døgnene, og 7 av 22 regioner — Oslo og Stockholm blant dem — nådde
+ * aldri 85 på 26 dager i august–september 2026. Varselet og X-posten var
+ * stumme i de største markedene gjennom høysesongen, og docstringen over
+ * («halvparten av dagene») beskrev en fordeling som aldri kom inn hit.
+ *
+ * Terskelen er nå bundet til regionstigen, så en justering av punkt-skalaen
+ * aldri flytter varselet i stillhet, og nivået ER topp-dommen på /soppforhold:
+ * «det snudde» i e-posten og «utmerket» på siden er samme påstand. Måles på
+ * nytt med scripts/kalibrer-regionterskler.mjs etter sesongen.
+ */
+export const VARSEL_MIN_SCORE: number = REGION_CONDITION_THRESHOLDS.excellent;
 
 /**
  * Minste antall dager mellom to varsler til samme abonnement.
@@ -64,7 +81,7 @@ export const VARSEL_KARANTENE_DAGER = 7;
  * den perioden mottakeren vil høre om.
  *
  * Mot ukas bunn fanges begge tilfellene riktig: den jevne oppturen får 85−55=30
- * og slipper gjennom, mens en flat uke rundt terskelen (84-85-84-85) får 85−84=1
+ * og slipper gjennom, mens en flat uke rundt terskelen (80-81-80-81) får 81−80=1
  * og tier. Det siste er poenget — det er støy i modellen, ikke en nyhet.
  */
 export const VARSEL_MIN_OKNING = 8;

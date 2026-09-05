@@ -50,8 +50,8 @@ describe('skalVarsle — flanken', () => {
 
   it('tier når det var bra i går også — da er ingenting nytt', () => {
     // Hele grunnen til at regelen er en flanke og ikke et nivå: terskelen er
-    // kalibrert slik at ~halvparten av dagene i sesong er grønne, så en
-    // nivåregel ville sendt e-post annenhver dag i august.
+    // regionskalaens topp-dom, og selv den passeres ~hver sjette dag i sesong,
+    // så en nivåregel ville sendt e-post hver uke i august.
     expect(skalVarsle(tilstand({ scoreIGar: 88, scoreIDag: 92 }))).toEqual({
       send: false,
       grunn: 'var-allerede-bra'
@@ -68,9 +68,9 @@ describe('skalVarsle — flanken', () => {
   });
 
   it('tier under terskelen, uansett hvor stor økningen er', () => {
-    // 20 → 80 er en dramatisk bedring, men 80 er fortsatt ikke en dag vi vil be
-    // noen ta fri for. Vi selger ikke bevegelse, vi selger «verdt turen».
-    expect(skalVarsle(tilstand({ lavesteSisteUke: 20, scoreIGar: 70, scoreIDag: 80 }))).toEqual({
+    // 20 → rett under terskelen er en dramatisk bedring, men fortsatt ikke en
+    // dag vi vil be noen ta fri for. Vi selger ikke bevegelse, vi selger «verdt turen».
+    expect(skalVarsle(tilstand({ lavesteSisteUke: 20, scoreIGar: 70, scoreIDag: VARSEL_MIN_SCORE - 1 }))).toEqual({
       send: false,
       grunn: 'under-terskel'
     });
@@ -79,9 +79,9 @@ describe('skalVarsle — flanken', () => {
 
 describe('skalVarsle — økningen måles mot uka', () => {
   it('tier når uka har vippet rundt terskelen uten å bevege seg', () => {
-    // 84-85-84-85: krysser terskelen annenhver dag, men ingenting har skjedd.
+    // 80-81-80-81: krysser terskelen annenhver dag, men ingenting har skjedd.
     const b = skalVarsle(
-      tilstand({ scoreIGar: 84, lavesteSisteUke: 84, scoreIDag: VARSEL_MIN_SCORE })
+      tilstand({ scoreIGar: VARSEL_MIN_SCORE - 1, lavesteSisteUke: VARSEL_MIN_SCORE - 1, scoreIDag: VARSEL_MIN_SCORE })
     );
     expect(b).toEqual({ send: false, grunn: 'for-liten-okning' });
   });

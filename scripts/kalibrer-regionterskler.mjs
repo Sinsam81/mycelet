@@ -111,11 +111,15 @@ async function main() {
     const n = scorer.filter((s) => s >= verdi).length;
     console.log(`  ≥${String(verdi).padStart(3)} (${trinn.padEnd(9)}) ${String(n).padStart(5)} av ${scorer.length} = ${((100 * n) / scorer.length).toFixed(1)} %`);
   }
-  // Varselet leser samme tall og må forbli sjeldnere enn topp-dommen.
-  const varsel = scorer.filter((s) => s >= 85).length;
+  // Varselet (decision.ts: VARSEL_MIN_SCORE = REGION_CONDITION_THRESHOLDS.excellent)
+  // er per definisjon lik topp-dommen — flyttes excellent, flytter varselet med.
+  // Fram til 2026-09-05 var det hardkodet 85 fra punkt-skalaen: topp 12 % av
+  // regiondøgnene, og sju regioner (Oslo, Stockholm …) nådde det aldri.
+  // Sjeldenheten kommer fra flanken, økningskravet og karantenen, ikke nivået.
+  const varselTerskel = NAAVAERENDE.excellent;
+  const varsel = scorer.filter((s) => s >= varselTerskel).length;
   console.log(
-    `  ≥ 85 (varsel   ) ${String(varsel).padStart(5)} av ${scorer.length} = ${((100 * varsel) / scorer.length).toFixed(1)} %` +
-      (85 > NAAVAERENDE.excellent ? '   ✅ strengere enn topp-dommen' : '   ⚠️  IKKE strengere enn topp-dommen')
+    `  ≥ ${varselTerskel} (varsel   ) ${String(varsel).padStart(5)} av ${scorer.length} = ${((100 * varsel) / scorer.length).toFixed(1)} %   = topp-dommen`
   );
 }
 
