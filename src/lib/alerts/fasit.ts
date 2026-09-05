@@ -13,12 +13,34 @@ import { PREDICTION_TILE_REGIONS } from '@/lib/prediction/tile-regions';
  * — de vokser etter hvert som rapportene når GBIF. Derfor:
  *   · fasit regnes alltid LIVE, aldri lagret (se migrasjon 060)
  *   · all visning må bære modningsforbeholdet
- *   · e-postkvitteringen venter til varselet er minst FASIT_MODEN_DAGER
- *     gammelt før den feller dom
+ *   · e-postkvitteringen venter til etter-uken er minst FASIT_MODEN_DAGER
+ *     gammel før den feller dom (se FASIT_MODEN_ETTER_VARSEL_DAGER)
  * Appens egne funn har ikke etterslep og telles separat.
  */
 
 export const FASIT_MODEN_DAGER = 14;
+
+/** Fasitvinduet: uken ETTER varselet (og uken før, som referanse). */
+export const FASIT_VINDU_DAGER = 7;
+
+/**
+ * Så gammelt må VARSELET være før fasiten regnes som moden — modenheten
+ * teller fra vinduets SLUTT, ikke fra varseldagen.
+ *
+ * Første utgave målte 14 dager fra varseldagen. Da var den yngste dagen i
+ * etter-uken bare sju dager gammel — mens før-uken var to uker eldre og
+ * dermed langt mer komplett i GBIF. Skjevheten dro systematisk mot «bom»:
+ * Trondheim 21. august sto med 68 funn før og 32 etter på dag 15, ikke fordi
+ * det ble mindre sopp, men fordi etter-uken ikke var rapportert ennå. En
+ * fasit som er ærlig i feil retning er fortsatt feil.
+ */
+export const FASIT_MODEN_ETTER_VARSEL_DAGER = FASIT_MODEN_DAGER + FASIT_VINDU_DAGER;
+
+/** Ren modenhetsregel, testet for seg: er varselet gammelt nok til dom? */
+export function erFasitModen(varselDato: string, naa: Date): boolean {
+  const alderDager = (naa.getTime() - Date.parse(`${varselDato}T00:00:00Z`)) / 86_400_000;
+  return alderDager >= FASIT_MODEN_ETTER_VARSEL_DAGER;
+}
 
 export interface FasitTall {
   region: string;
@@ -96,8 +118,8 @@ export async function beregnFasit(
   if (!region) return null;
 
   const etterFra = varselDato;
-  const etterTil = plussDager(varselDato, 7);
-  const forFra = plussDager(varselDato, -7);
+  const etterTil = plussDager(varselDato, FASIT_VINDU_DAGER);
+  const forFra = plussDager(varselDato, -FASIT_VINDU_DAGER);
 
   const [gbifEtter, gbifFor, egneEtter, egneFor] = await Promise.all([
     tellGbif(region, etterFra, etterTil),
@@ -106,13 +128,11 @@ export async function beregnFasit(
     tellEgneFunn(db, region, forFra, varselDato)
   ]);
 
-  const alderDager = (naa.getTime() - Date.parse(`${varselDato}T00:00:00Z`)) / 86_400_000;
-
   return {
     region: regionNavn,
     dato: varselDato,
     ukenEtter: (gbifEtter ?? 0) + egneEtter,
     ukenFor: (gbifFor ?? 0) + egneFor,
-    moden: gbifEtter !== null && gbifFor !== null && alderDager >= FASIT_MODEN_DAGER
+    moden: gbifEtter !== null && gbifFor !== null && erFasitModen(varselDato, naa)
   };
 }

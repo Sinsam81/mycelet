@@ -5,7 +5,7 @@ import { bearerSecretMatches } from '@/lib/security/secret-compare';
 import { skalVarsle, VARSEL_KARANTENE_DAGER, VARSEL_MIN_SCORE } from '@/lib/alerts/decision';
 import { byggVarselEpost } from '@/lib/alerts/email';
 import { arterISesong, velgToppdag, type SesongArt, type Toppdag } from '@/lib/alerts/ekstra';
-import { beregnFasit, FASIT_MODEN_DAGER, type FasitTall } from '@/lib/alerts/fasit';
+import { beregnFasit, FASIT_MODEN_ETTER_VARSEL_DAGER, type FasitTall } from '@/lib/alerts/fasit';
 import { PREDICTION_TILE_REGIONS } from '@/lib/prediction/tile-regions';
 import { buildWeek, filterUpcomingDays } from '@/lib/prediction/week-scores';
 import { fetchWeatherSummary } from '@/lib/weather';
@@ -76,8 +76,8 @@ const fasitCache = new Map<string, FasitTall | null>();
 /**
  * Fasit for FORRIGE varsel i regionen — kvitteringskulturen fra strategien
  * 2026-08-31: hvert varsel er en falsifiserbar påstand, og neste varsel
- * bærer fasiten for det forrige. Kun når varselet er minst FASIT_MODEN_DAGER
- * gammelt (GBIF-etterslepet) og begge kildene svarte — vi feller aldri dom på
+ * bærer fasiten for det forrige. Kun når varselet er minst
+ * FASIT_MODEN_ETTER_VARSEL_DAGER gammelt (GBIF-etterslepet) og begge kildene svarte — vi feller aldri dom på
  * umodne tall. Best-effort som alt annet krydder.
  */
 async function hentFasit(
@@ -88,7 +88,7 @@ async function hentFasit(
   if (fasitCache.has(region)) return fasitCache.get(region) ?? null;
   let fasit: FasitTall | null = null;
   try {
-    const grense = new Date(naa.getTime() - FASIT_MODEN_DAGER * 86_400_000).toISOString().slice(0, 10);
+    const grense = new Date(naa.getTime() - FASIT_MODEN_ETTER_VARSEL_DAGER * 86_400_000).toISOString().slice(0, 10);
     const { data } = await db
       .from('varsel_hendelser')
       .select('dato')
