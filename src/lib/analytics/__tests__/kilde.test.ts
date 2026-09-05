@@ -86,12 +86,26 @@ describe('kildeForForesporsel — cookien på alle inngangssider', () => {
     expect(kildeForForesporsel({ ...basis, pathname: '/pricing', referer: 'https://checkout.stripe.com/c/pay' })).toBeNull();
   });
 
-  it('API, innloggingsflyt og filer er aldri inngangen', () => {
+  it('API, OAuth-retur og filer er aldri inngangen — men registreringssiden er det', () => {
     expect(erInngangssti('/api/soppvarsel/bekreft')).toBe(false);
     expect(erInngangssti('/auth/callback')).toBe(false);
     expect(erInngangssti('/landing/soppforhold.webp')).toBe(false);
     expect(erInngangssti('/soppforhold/oslo')).toBe(true);
+    expect(erInngangssti('/auth/register')).toBe(true);
     expect(kildeForForesporsel({ ...basis, pathname: '/auth/callback', referer: 'https://www.google.com/' })).toBeNull();
+    expect(kildeForForesporsel({ ...basis, pathname: '/auth/register', utmSource: 'bergen-snf', referer: null })).toBe('bergen-snf');
+  });
+
+  it('webmail utenfor mail.-mønsteret er heller ikke kilder', () => {
+    for (const ref of ['https://www.icloud.com/mail/', 'https://app.fastmail.com/', 'https://webmail.domeneshop.no/', 'https://mail2.example.com/']) {
+      expect(kildeForForesporsel({ ...basis, pathname: '/soppvarsel', referer: ref })).toBeNull();
+    }
+  });
+
+  it('videresending fra egne e-postruter (?fra=…) leser aldri Referer som kilde', () => {
+    expect(kildeForForesporsel({ ...basis, pathname: '/soppforhold/bergen', referer: 'https://www.telenor.no/webmail/', fraEgenEpostrute: true })).toBeNull();
+    // …men merket lenke i selve e-posten vinner fortsatt.
+    expect(kildeForForesporsel({ ...basis, pathname: '/soppforhold/bergen', referer: 'https://www.telenor.no/', fraEgenEpostrute: true, utmSource: 'bergen-snf' })).toBe('bergen-snf');
   });
 
   it('gclid uten utm teller som Google-annonse', () => {

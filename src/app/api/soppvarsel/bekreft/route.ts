@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? request.nextUrl.origin;
 
   const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  if (!UUID.test(token)) return NextResponse.redirect(`${appUrl}/soppvarsel?status=ugyldig-lenke#status`, 303);
+  if (!UUID.test(token)) return NextResponse.redirect(`${appUrl}/soppvarsel?status=ugyldig-lenke&fra=epost#status`, 303);
 
   const db = createAdminClient();
 
@@ -35,15 +35,15 @@ export async function GET(request: NextRequest) {
 
   if (leseErr || !rad || rad.user_id) {
     log.warn('varselbekreftelse.ukjent_token');
-    return NextResponse.redirect(`${appUrl}/soppvarsel?status=ugyldig-lenke#status`, 303);
+    return NextResponse.redirect(`${appUrl}/soppvarsel?status=ugyldig-lenke&fra=epost#status`, 303);
   }
   if (rad.confirmed_at && rad.active) {
     log.info('varselbekreftelse.allerede_bekreftet', { region: rad.region });
-    return NextResponse.redirect(`${appUrl}/soppvarsel?status=bekreftet#status`, 303);
+    return NextResponse.redirect(`${appUrl}/soppvarsel?status=bekreftet&fra=epost#status`, 303);
   }
   if (rad.confirmed_at && !rad.active) {
     log.info('varselbekreftelse.avmeldt_rad', { region: rad.region });
-    return NextResponse.redirect(`${appUrl}/soppvarsel?status=ugyldig-lenke#status`, 303);
+    return NextResponse.redirect(`${appUrl}/soppvarsel?status=ugyldig-lenke&fra=epost#status`, 303);
   }
 
   const { error } = await db
@@ -53,9 +53,9 @@ export async function GET(request: NextRequest) {
     .is('confirmed_at', null);
   if (error) {
     log.error('varselbekreftelse.oppdatering_feilet', { message: error.message });
-    return NextResponse.redirect(`${appUrl}/soppvarsel?status=feil#status`, 303);
+    return NextResponse.redirect(`${appUrl}/soppvarsel?status=feil&fra=epost#status`, 303);
   }
 
   log.info('varselbekreftelse.ok', { region: rad.region });
-  return NextResponse.redirect(`${appUrl}/soppvarsel?status=bekreftet#status`, 303);
+  return NextResponse.redirect(`${appUrl}/soppvarsel?status=bekreftet&fra=epost#status`, 303);
 }

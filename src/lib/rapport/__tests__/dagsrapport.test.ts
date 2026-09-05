@@ -244,16 +244,29 @@ describe('soppvarselet som trakt', () => {
     ]);
   });
 
-  it('aktivering krever et klikk som ikke bare er e-postskanneren', () => {
-    const sendt = dagerSiden(1);
-    const rettEtter = new Date(new Date(sendt).getTime() + 2 * 60_000).toISOString();
-    const senere = new Date(new Date(sendt).getTime() + 3 * 3600_000).toISOString();
-    const v = bygg([
-      va({ last_notified_at: sendt, forste_apnet_at: rettEtter }), // skanner
-      va({ last_notified_at: sendt, forste_apnet_at: senere }), // menneske
-      va({ last_notified_at: sendt, forste_apnet_at: null }),
-      va({ last_notified_at: null, forste_apnet_at: senere }) // klikk uten varsel finnes ikke
-    ]);
+  it('aktivert = forste_apnet_at satt (avgjort i klikkøyeblikket, ikke her)', () => {
+    const v = bygg([va({ forste_apnet_at: dagerSiden(1) }), va({ forste_apnet_at: null }), va({ forste_apnet_at: dagerSiden(2), active: false })]);
     expect(v.aktiverte).toBe(1);
+  });
+
+  it('renser kilde og region ved innlesing — tabellen eies av brukeren via RLS og havner i en HTML-e-post', () => {
+    const v = bygg([va({ kilde: '<a href="x">Åpne</a>', region: '<img src=x>' }), va({ kilde: 'bergen-snf/host-2026' })]);
+    const kilder = v.perKilde.map((k) => k.kilde);
+    expect(kilder).toContain('bergen-snf/host-2026');
+    expect(kilder.some((k) => /[<>"]/.test(k))).toBe(false);
+    expect(v.perRegion.map((r) => r.region).sort()).toEqual(['Bergen', 'ukjent område']);
+  });
+
+  it('kontorader arver kontoens kilde', () => {
+    const inn: RapportInn = {
+      brukere: [br({ id: 'u1', kilde: 'bergen-snf/host-2026' })],
+      abonnement: [],
+      varselabonnement: 0,
+      varselabonnenter: [va({ user_id: 'u1', confirmed_at: null, kilde: null })],
+      regionerIDag: [],
+      regionerIGar: [],
+      naa: NAA
+    };
+    expect(byggDagsrapport(inn).varsel.perKilde[0].kilde).toBe('bergen-snf/host-2026');
   });
 });

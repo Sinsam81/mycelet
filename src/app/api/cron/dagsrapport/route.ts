@@ -77,12 +77,19 @@ export async function GET(request: NextRequest) {
   // ── Varselabonnement ──────────────────────────────────────────────────────
   // Radene, ikke bare tallet: kilde, region og aktivering er det strategien
   // måler på. Ingen e-postadresser hentes.
-  const { data: varselRader } = await db
-    .from('alert_subscriptions')
-    .select('user_id,region,active,confirmed_at,created_at,last_notified_at,forste_apnet_at,kilde')
-    .order('id', { ascending: true })
-    .range(0, 4999);
-  const varselabonnenter = (varselRader ?? []) as VarselAbonnentRad[];
+  // PostgREST kapper på 1000 rader uansett range — paginert som i
+  // soppvarsel-cronen, ellers forsvinner de nyeste påmeldingene stille.
+  const varselabonnenter: VarselAbonnentRad[] = [];
+  for (let side = 0; side < 20; side += 1) {
+    const fra = side * 1000;
+    const { data: varselRader } = await db
+      .from('alert_subscriptions')
+      .select('user_id,region,active,confirmed_at,created_at,last_notified_at,forste_apnet_at,kilde')
+      .order('id', { ascending: true })
+      .range(fra, fra + 999);
+    varselabonnenter.push(...((varselRader ?? []) as VarselAbonnentRad[]));
+    if ((varselRader ?? []).length < 1000) break;
+  }
   const varselAntall = varselabonnenter.filter((r) => r.active).length;
 
   // ── Regionscorer, i dag og i går ──────────────────────────────────────────
@@ -134,8 +141,11 @@ function byggRapportEpost(r: Dagsrapport, naa: Date) {
       ? `${r.nyeBrukere.siste24t} ny${r.nyeBrukere.siste24t === 1 ? '' : 'e'} bruker${r.nyeBrukere.siste24t === 1 ? '' : 'e'} i går`
       : 'Ingen nye brukere i går';
 
+  // Alt som havner i tabellen er tekst fra databasen (kilder, regioner) —
+  // aldri markup. Rensingen i byggDagsrapport er første lag; dette er andre.
+  const esc = (v: string) => v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   const rad = (navn: string, verdi: string) =>
-    `<tr><td style="padding:6px 0;color:#4b5563">${navn}</td><td style="padding:6px 0;text-align:right;font-weight:600;color:#1A3409">${verdi}</td></tr>`;
+    `<tr><td style="padding:6px 0;color:#4b5563">${esc(navn)}</td><td style="padding:6px 0;text-align:right;font-weight:600;color:#1A3409">${esc(verdi)}</td></tr>`;
 
   const flankeTekst = r.flanker.length
     ? r.flanker.map((f) => `${f.region} ${f.fra} → ${f.til}`).join(', ')
@@ -181,7 +191,7 @@ function byggRapportEpost(r: Dagsrapport, naa: Date) {
   <table style="width:100%;border-collapse:collapse;font-size:14px">
     ${rad('Bekreftede abonnenter', String(v.bekreftede))}
     ${rad('Nye bekreftede siste 7 dager', String(v.nyeSiste7d))}
-    ${rad('Aktivert (åpnet områdesiden etter varsel)', String(v.aktiverte))}
+    ${rad('Klikket varsel → områdesiden', String(v.aktiverte))}
     ${v.perKilde.slice(0, 6).map((k) => rad(`— ${kildeNavn(k.kilde)}`, `${k.bekreftede} · ${k.siste7d} siste 7 d · ${k.aktiverte} aktivert`)).join('\n    ')}
     ${v.perRegion.length ? rad('Flest abonnenter', v.perRegion.map((r) => `${r.region} ${r.bekreftede}`).join(' · ')) : ''}
   </table>
@@ -223,7 +233,7 @@ I SKOGEN
 SOPPVARSELET SOM TRAKT
   bekreftede ................ ${v.bekreftede}
   nye bekreftede (7 d) ...... ${v.nyeSiste7d}
-  aktivert etter varsel ..... ${v.aktiverte}
+  klikket varsel → område ... ${v.aktiverte}
 ${v.perKilde.slice(0, 6).map((k) => `  ${kildeNavn(k.kilde).padEnd(26, '.')} ${k.bekreftede} · ${k.siste7d} siste 7 d · ${k.aktiverte} aktivert`).join('\n')}${v.perRegion.length ? `\n  flest ..................... ${v.perRegion.map((r) => `${r.region} ${r.bekreftede}`).join(', ')}` : ''}
 
 HVOR DE REGISTRERTE KOM FRA

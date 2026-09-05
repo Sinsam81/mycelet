@@ -169,7 +169,7 @@ export async function GET(request: NextRequest) {
       query: hentAlle((fra, til) =>
         admin
           .from('alert_subscriptions')
-          .select('id,user_id,email,region,locale,active,confirmed_at,last_notified_at,last_notified_score,created_at')
+          .select('id,user_id,email,region,locale,active,confirmed_at,last_notified_at,last_notified_score,created_at,kilde,forste_apnet_at,sist_apnet_at')
           .or(epost ? `user_id.eq.${user.id},email.eq."${epost}"` : `user_id.eq.${user.id}`)
           .order('id')
           .range(fra, til)

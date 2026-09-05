@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createRequestLogger } from '@/lib/log/request';
 import { regionFromSlug, regionSlug } from '@/lib/prediction/region-slug';
+import { checkRateLimit } from '@/lib/rate-limit';
+import { getClientKey } from '@/lib/rate-limit/route';
+import { AKTIVERING_MIN_MS } from '@/lib/rapport/dagsrapport';
 
 /**
  * Klikk fra varsel-e-posten → områdesiden, med ett notat på veien.
@@ -26,22 +29,42 @@ export async function GET(request: NextRequest) {
   const region = regionFromSlug(slug);
   const mal = region ? `${appUrl}/soppforhold/${regionSlug(region.name)}` : `${appUrl}/soppforhold`;
 
-  if (UUID.test(token)) {
+  // Samme tak som avmeldingsruta: anonym GET som skriver til databasen skal
+  // ikke kunne kjøres i tusentall. Over taket: bare videresend.
+  const rl = checkRateLimit(`soppvarsel-klikk:${getClientKey(request, null)}`, 60, 60);
+
+  if (rl.allowed && UUID.test(token)) {
     try {
       const db = createAdminClient();
-      const naa = new Date().toISOString();
-      const { error: sistErr } = await db.from('alert_subscriptions').update({ sist_apnet_at: naa }).eq('unsubscribe_token', token);
-      const { error: forsteErr } = await db
+      const naa = new Date();
+      const naaIso = naa.toISOString();
+      // Skanner eller menneske avgjøres HER, mot varselet klikket hører til —
+      // ikke i rapporten. E-postskannere (Safe Links o.l.) følger lenka innen
+      // sekunder etter levering; et klikk minst ti minutter etter utsendingen
+      // er et menneske. forste_apnet_at settes derfor først ved et slikt klikk,
+      // så et skannerklikk aldri låser raden — verken som «aktivert» ved neste
+      // varsel eller som «ikke aktivert» for alltid.
+      const { data: rad } = await db
         .from('alert_subscriptions')
-        .update({ forste_apnet_at: naa })
+        .select('last_notified_at,forste_apnet_at')
         .eq('unsubscribe_token', token)
-        .is('forste_apnet_at', null);
-      if (sistErr || forsteErr) log.warn('varselklikk.ikke_lagret', { message: (sistErr ?? forsteErr)?.message });
-      else log.info('varselklikk.ok', { region: region?.name ?? null });
+        .maybeSingle();
+      if (rad) {
+        const sendt = rad.last_notified_at ? Date.parse(rad.last_notified_at as string) : null;
+        const menneske = sendt !== null && naa.getTime() - sendt >= AKTIVERING_MIN_MS;
+        const { error } = await db
+          .from('alert_subscriptions')
+          .update({ sist_apnet_at: naaIso, ...(menneske && !rad.forste_apnet_at ? { forste_apnet_at: naaIso } : {}) })
+          .eq('unsubscribe_token', token);
+        if (error) log.warn('varselklikk.ikke_lagret', { message: error.message });
+        else log.info('varselklikk.ok', { region: region?.name ?? null, menneske });
+      }
     } catch (e) {
       log.warn('varselklikk.feilet', { message: e instanceof Error ? e.message : 'ukjent' });
     }
   }
 
-  return NextResponse.redirect(mal, 303);
+  // ?fra=varsel: middleware skal ikke lese Referer (webmail-verten) som kilde
+  // på siden leseren lander på.
+  return NextResponse.redirect(`${mal}?fra=varsel`, 303);
 }

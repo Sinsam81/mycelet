@@ -112,7 +112,9 @@ export function lesKildeCookie(cookieString: string | null | undefined): string 
  * /auth/callback fra accounts.google.com ville ellers blitt «sok:…».
  */
 export function erInngangssti(pathname: string): boolean {
-  if (pathname.startsWith('/api/') || pathname.startsWith('/auth/') || pathname.startsWith('/_next/')) return false;
+  // /auth/login og /auth/register er legitime inngangssider (en partner kan
+  // lenke rett til registrering); bare OAuth-returen er utelatt.
+  if (pathname.startsWith('/api/') || pathname.startsWith('/auth/callback') || pathname.startsWith('/_next/')) return false;
   if (/\.[a-z0-9]{2,5}$/i.test(pathname)) return false;
   return true;
 }
@@ -125,7 +127,15 @@ export function erInngangssti(pathname: string): boolean {
 const IKKE_KILDE_VERTER = [
   'mail.google.',
   'mail.',
+  'mail2.',
+  'webmail.',
   'outlook.',
+  'icloud.',
+  'fastmail.',
+  'proton.',
+  'protonmail.',
+  'epost.',
+  'e-post.',
   'accounts.google.',
   'appleid.apple.',
   'checkout.stripe.',
@@ -156,8 +166,14 @@ export function kildeForForesporsel(args: {
   utmSource: string | null;
   utmCampaign: string | null;
   harGclid: boolean;
+  /**
+   * true når forespørselen er en videresending fra våre egne e-postruter
+   * (?fra=epost / ?fra=varsel): da er Referer webmail-verten, ikke en kilde.
+   */
+  fraEgenEpostrute?: boolean;
 }): string | null {
   if (!erInngangssti(args.pathname)) return null;
+  if (args.fraEgenEpostrute && !args.utmSource && !args.harGclid) return null;
   const utmSource = args.utmSource ?? (args.harGclid ? 'google' : null);
   const utmCampaign = args.utmCampaign ?? (args.harGclid ? 'annonse' : null);
   if (!utmSource && erIkkeKildeVert(args.referer)) return null;

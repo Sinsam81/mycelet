@@ -33,6 +33,8 @@
  */
 
 import { VARSEL_MIN_SCORE } from '@/lib/alerts/decision';
+import { normaliserKilde } from '@/lib/analytics/kilde';
+import { PREDICTION_TILE_REGIONS } from '@/lib/prediction/tile-regions';
 
 export type Betalingskilde = 'stripe' | 'revenuecat' | 'manuell';
 
@@ -129,14 +131,19 @@ const VARSEL_TERSKEL = VARSEL_MIN_SCORE;
 /** Klikk raskere enn dette etter utsending er trolig en e-postskanner, ikke et menneske. */
 export const AKTIVERING_MIN_MS = 10 * 60_000;
 
+/**
+ * Aktivert = klikket varsellenka minst AKTIVERING_MIN_MS etter utsendingen.
+ * Avgjørelsen tas i klikkøyeblikket (/api/soppvarsel/klikk), som bare setter
+ * forste_apnet_at ved et slikt klikk; her leses bare resultatet. Første
+ * utgave sammenlignet mot SISTE varsel i rapporten, og da ble et skannerklikk
+ * på varsel 1 «aktivert» så snart varsel 2 gikk.
+ */
 function erAktivert(rad: VarselAbonnentRad): boolean {
-  if (!rad.forste_apnet_at) return false;
-  if (!rad.last_notified_at) return false;
-  const apnet = new Date(rad.forste_apnet_at).getTime();
-  const sendt = new Date(rad.last_notified_at).getTime();
-  // Åpnet et eldre varsel enn det siste, eller ventet lenger enn skannerne gjør.
-  return apnet < sendt || apnet - sendt >= AKTIVERING_MIN_MS;
+  return rad.forste_apnet_at !== null;
 }
+
+/** Regionen skal være en av våre — kolonnen er fritekst uten CHECK, og eies av brukeren via RLS. */
+const KJENTE_REGIONER = new Set(PREDICTION_TILE_REGIONS.map((r) => r.name));
 
 function kilde(rad: AbonnementRad): Betalingskilde {
   const p = rad.metadata?.provider;
@@ -190,7 +197,14 @@ export function byggDagsrapport(inn: RapportInn): Dagsrapport {
     });
 
   // ── Soppvarselet som trakt ────────────────────────────────────────────────
-  const varselRader = inn.varselabonnenter ?? [];
+  // Radene kommer rått fra en tabell brukeren selv kan skrive i (RLS på egen
+  // rad, ingen CHECK på kilde/region). Rens ved innlesing — verdiene ender i
+  // en HTML-e-post. Kontorader har ingen egen kilde; de arver kontoens.
+  const varselRader = (inn.varselabonnenter ?? []).map((r) => ({
+    ...r,
+    kilde: normaliserKilde(r.kilde) ?? (r.user_id ? (kildeForBruker.get(r.user_id) ?? null) : null),
+    region: KJENTE_REGIONER.has(r.region) ? r.region : 'ukjent område'
+  }));
   const erBekreftet = (r: VarselAbonnentRad) => r.active && (r.confirmed_at !== null || r.user_id !== null);
   const bekreftede = varselRader.filter(erBekreftet);
   const nyBekreftet = (r: VarselAbonnentRad) => nyere(r.confirmed_at ?? r.created_at, dag7);
