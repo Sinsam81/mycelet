@@ -172,7 +172,7 @@
   },
   "AuthLogin": {
     "heading": "Velkommen til Mycelet",
-    "subheading": "Logg inn for å lagre funn, poste i forumet og bruke kart fullt ut.",
+    "subheading": "Logg inn for å få beskjed når soppen kommer, lagre funn og bruke kartet fullt ut.",
     "emailLabel": "E-post",
     "passwordLabel": "Passord",
     "forgotPassword": "Glemt passord?",
@@ -194,7 +194,7 @@
     "errorPasswordShort": "Passordet er for kort. Bruk minst 8 tegn.",
     "errorGeneric": "Kunne ikke registrere konto. Prøv igjen.",
     "title": "Opprett konto",
-    "subtitle": "Lag profil for å lagre funn og bli med i forumet.",
+    "subtitle": "Lag profil for å få beskjed når soppen kommer, lagre funn og bli med i forumet.",
     "usernameLabel": "Brukernavn",
     "displayNameLabel": "Visningsnavn",
     "emailLabel": "E-post",

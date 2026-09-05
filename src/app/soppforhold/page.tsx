@@ -4,7 +4,6 @@ import Link from 'next/link';
 import { ChevronRight, MapPin, CalendarDays } from 'lucide-react';
 import { PageWrapper } from '@/components/layout/PageWrapper';
 import { SoppforholdForbehold } from '@/components/soppforhold/Forbehold';
-import { VarselCta } from '@/components/soppforhold/VarselCta';
 import { regionSlug } from '@/lib/prediction/region-slug';
 import { farge, hentRegioner, norskDato } from './hent-regioner';
 
@@ -173,8 +172,9 @@ export default async function SoppforholdPage() {
           </section>
         ) : null}
 
-        <VarselCta />
-
+        {/* Ingen VarselCta her: siden hadde to «Få beskjed når det snur»-
+            bokser med motsatt budskap («med en konto» / «ingen konto
+            nødvendig»). Den kontoløse seksjonen under er inngangen. */}
         <SoppforholdForbehold />
 
         <section className="rounded-xl border border-forest-700 bg-white p-4">

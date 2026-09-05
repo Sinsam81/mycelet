@@ -172,7 +172,7 @@
   },
   "AuthLogin": {
     "heading": "Välkommen till Mycelet",
-    "subheading": "Logga in för att spara fynd, posta i forumet och använda kartan fullt ut.",
+    "subheading": "Logga in för att få besked när svampen kommer, spara fynd och använda kartan fullt ut.",
     "emailLabel": "E-post",
     "passwordLabel": "Lösenord",
     "forgotPassword": "Glömt lösenord?",
@@ -194,7 +194,7 @@
     "errorPasswordShort": "Lösenordet är för kort. Använd minst 8 tecken.",
     "errorGeneric": "Det gick inte att skapa kontot. Försök igen.",
     "title": "Skapa konto",
-    "subtitle": "Skapa en profil för att spara fynd och gå med i forumet.",
+    "subtitle": "Skapa en profil för att få besked när svampen kommer, spara fynd och gå med i forumet.",
     "usernameLabel": "Användarnamn",
     "displayNameLabel": "Visningsnamn",
     "emailLabel": "E-post",
