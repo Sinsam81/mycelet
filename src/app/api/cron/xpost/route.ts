@@ -3,7 +3,7 @@ import * as Sentry from '@sentry/nextjs';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createRequestLogger } from '@/lib/log/request';
 import { bearerSecretMatches } from '@/lib/security/secret-compare';
-import { beregnFasit, FASIT_MODEN_DAGER } from '@/lib/alerts/fasit';
+import { beregnFasit, FASIT_MODEN_ETTER_VARSEL_DAGER } from '@/lib/alerts/fasit';
 import { byggOmslagsPost, byggUkesPost, finnOmslag, type UkensFasit } from '@/lib/x/innlegg';
 import { manglendeXKonfig, postTilX } from '@/lib/x/klient';
 import { byggPresseVarsel } from '@/lib/alerts/presse';
@@ -125,7 +125,7 @@ export async function GET(request: NextRequest) {
     // Fasit for det nyeste MODNE varselet — best effort, som all annen pynt.
     let fasit: UkensFasit | null = null;
     try {
-      const grense = new Date(naa.getTime() - FASIT_MODEN_DAGER * 86_400_000).toISOString().slice(0, 10);
+      const grense = new Date(naa.getTime() - FASIT_MODEN_ETTER_VARSEL_DAGER * 86_400_000).toISOString().slice(0, 10);
       const { data } = await db
         .from('varsel_hendelser')
         .select('region,dato')

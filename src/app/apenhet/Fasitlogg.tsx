@@ -13,6 +13,10 @@ import { beregnFasit, type FasitTall } from '@/lib/alerts/fasit';
  * rendres seksjonen med tom-tilstanden — åpenhetssiden skal aldri knekke av
  * at loggen er ung.
  */
+/** Hentes og regnes (2 GBIF-kall per rad, cachet en time) — vises færre. */
+const HENT_RADER = 30;
+const VIS_RADER = 12;
+
 export async function Fasitlogg() {
   const t = await getTranslations('Apenhet');
 
@@ -23,7 +27,7 @@ export async function Fasitlogg() {
       .from('varsel_hendelser')
       .select('region,dato,fra_score,til_score')
       .order('dato', { ascending: false })
-      .limit(8);
+      .limit(HENT_RADER);
     const hendelser = data ?? [];
     rader = await Promise.all(
       hendelser.map(async (h) => ({
@@ -31,6 +35,16 @@ export async function Fasitlogg() {
         fasit: await beregnFasit(db, h.region as string, h.dato as string)
       }))
     );
+    // Modne fasiter øverst — de er selve poenget med loggen. Ferske varsler
+    // (alle med «modnes» og nuller) kom først i tur og skjøv de eneste
+    // rader med ekte tall under kuttet, så siden så ut som den ikke hadde
+    // noen fasit i det hele tatt. Innenfor hver gruppe: nyeste først.
+    rader.sort((a, b) => {
+      const ma = a.fasit?.moden ? 1 : 0;
+      const mb = b.fasit?.moden ? 1 : 0;
+      return mb - ma || b.hendelse.dato.localeCompare(a.hendelse.dato);
+    });
+    rader = rader.slice(0, VIS_RADER);
   } catch {
     rader = [];
   }
