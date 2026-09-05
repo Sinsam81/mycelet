@@ -63,6 +63,11 @@ export async function GET(request: NextRequest) {
     log.error('dagsrapport.brukere_feilet', { message: brukerErr.message });
     return NextResponse.json({ error: 'Kunne ikke hente brukere' }, { status: 500 });
   }
+  // Interne kontoer: QA-brukeren og Apples demokonto ligger på @mycelet.com.
+  // Deres App Store-kjøp er testing, ikke salg (se RapportInn.interneBrukere).
+  const interneBrukere = new Set(
+    (brukerData?.users ?? []).filter((u) => u.email?.toLowerCase().endsWith('@mycelet.com')).map((u) => u.id)
+  );
   const brukere = (brukerData?.users ?? []).map((u) => ({
     id: u.id,
     created_at: u.created_at,
@@ -145,6 +150,7 @@ export async function GET(request: NextRequest) {
     varselabonnement: varselAntall,
     varselabonnenter,
     bruksdager,
+    interneBrukere,
     regionerIDag: velg(iDagDato),
     regionerIGar: velg(iGarDato),
     naa
@@ -196,7 +202,7 @@ function byggRapportEpost(r: Dagsrapport, naa: Date) {
   const brukRader: Array<[string, string]> = u.maalt
     ? [
         ['Så forholdene siste 7 dager', `${u.brukereSiste7d} brukere`],
-        ['— forsiden / kartet / områdeside', `${u.perFlate.hjem} / ${u.perFlate.kart} / ${u.perFlate.omrade}`],
+        ['— forsiden / kartet / områdeside / mine steder', `${u.perFlate.hjem} / ${u.perFlate.kart} / ${u.perFlate.omrade} / ${u.perFlate.steder}`],
         ['Nye siste 14 d som kom tilbake', `${u.komTilbake} av ${u.nyeSiste14d}`],
         ...u.perKilde.slice(0, 6).map((k): [string, string] => [`— ${kildeNavn(k.kilde)}`, `${k.komTilbake} av ${k.nye}`]),
         ['Brukt i to ulike uker (28 d)', String(u.gjenbruk28d)]

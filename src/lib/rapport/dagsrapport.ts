@@ -90,6 +90,14 @@ export interface RapportInn {
   varselabonnenter?: VarselAbonnentRad[];
   /** Bruksdager siste 28 dager. undefined = ikke målt (rapporten sier det). */
   bruksdager?: BruksdagRad[];
+  /**
+   * Interne kontoer (QA-brukeren, Apples demokonto): et App Store-kjøp gjort
+   * for å teste kjøpsflyten ser identisk ut med et kundekjøp i tabellen —
+   * provider «revenuecat», miljø PRODUCTION. Målt 6. september 2026: det ene
+   * «betalt via App Store» i rapporten var QA-kontoen. Disse telles som
+   * «gavepass og testkontoer», aldri som salg.
+   */
+  interneBrukere?: Set<string>;
   /** Regionscorer for i dag og i går, til «hva skjedde i skogen». */
   regionerIDag: Array<{ region: string; score: number }>;
   regionerIGar: Array<{ region: string; score: number }>;
@@ -134,6 +142,8 @@ export interface Dagsrapport {
    * forsidekortet vises automatisk rett etter registrering, så samme dag
    * beviser ingenting. «Gjenbruk» = bruksdager i to ulike ISO-uker siste
    * 28 dager. Måles fra 6. september 2026; før det finnes ingen rader.
+   * «steder» (Mine steder) fra migrasjon 066 — tallet vinterplanen trenger
+   * for å avgjøre områdekartoteket.
    */
   bruk: {
     maalt: boolean;
@@ -172,7 +182,8 @@ function erAktivert(rad: VarselAbonnentRad): boolean {
 /** Regionen skal være en av våre — kolonnen er fritekst uten CHECK, og eies av brukeren via RLS. */
 const KJENTE_REGIONER = new Set(PREDICTION_TILE_REGIONS.map((r) => r.name));
 
-function kilde(rad: AbonnementRad): Betalingskilde {
+function kilde(rad: AbonnementRad, interne?: Set<string>): Betalingskilde {
+  if (interne?.has(rad.user_id)) return 'manuell';
   const p = rad.metadata?.provider;
   if (p === 'stripe') return 'stripe';
   if (p === 'revenuecat') return 'revenuecat';
@@ -194,8 +205,9 @@ export function byggDagsrapport(inn: RapportInn): Dagsrapport {
   const nyere = (iso: string, vindu: number) => naa - new Date(iso).getTime() <= vindu;
 
   const aktive = inn.abonnement.filter((a) => erReeltAktiv(a, inn.naa));
+  const kildeAv = (a: AbonnementRad) => kilde(a, inn.interneBrukere);
   const perKilde: Record<Betalingskilde, number> = { stripe: 0, revenuecat: 0, manuell: 0 };
-  for (const a of aktive) perKilde[kilde(a)] += 1;
+  for (const a of aktive) perKilde[kildeAv(a)] += 1;
 
   // ── Kilder ────────────────────────────────────────────────────────────────
   const kildeForBruker = new Map(inn.brukere.map((b) => [b.id, b.kilde ?? UKJENT_KILDE]));
@@ -212,7 +224,7 @@ export function byggDagsrapport(inn: RapportInn): Dagsrapport {
   }
   // Bare ekte kjøp — et gavepass sier ingenting om kanalen.
   for (const a of aktive) {
-    if (kilde(a) === 'manuell') continue;
+    if (kildeAv(a) === 'manuell') continue;
     tall(kildeForBruker.get(a.user_id) ?? UKJENT_KILDE).betalende += 1;
   }
   const kilder = [...perKildeTall.entries()]
@@ -286,7 +298,7 @@ export function byggDagsrapport(inn: RapportInn): Dagsrapport {
       totalt: aktive.length,
       perKilde,
       // Bare ekte kjøp teller som nytt salg. Et gavepass er ikke en kunde.
-      nyeSiste7d: aktive.filter((a) => kilde(a) !== 'manuell' && nyere(a.created_at, dag7)).length
+      nyeSiste7d: aktive.filter((a) => kildeAv(a) !== 'manuell' && nyere(a.created_at, dag7)).length
     },
     utloptMenMarkertAktiv: inn.abonnement.filter(
       (a) => a.status === 'active' && !erReeltAktiv(a, inn.naa)
@@ -301,7 +313,7 @@ export function byggDagsrapport(inn: RapportInn): Dagsrapport {
 }
 
 function byggBruk(inn: RapportInn, naa: number, kildeForBruker: Map<string, string>): Dagsrapport['bruk'] {
-  const tomt: Record<Flate, number> = { hjem: 0, kart: 0, omrade: 0 };
+  const tomt: Record<Flate, number> = { hjem: 0, kart: 0, omrade: 0, steder: 0 };
   const dag14 = 14 * 24 * 3600_000;
   const nye = inn.brukere.filter((b) => naa - new Date(b.created_at).getTime() <= dag14);
   if (!inn.bruksdager) {
@@ -314,7 +326,7 @@ function byggBruk(inn: RapportInn, naa: number, kildeForBruker: Map<string, stri
   const rader = inn.bruksdager.filter((r) => r.dag >= grense28);
 
   const brukereSiste7d = new Set<string>();
-  const perFlateSett: Record<Flate, Set<string>> = { hjem: new Set(), kart: new Set(), omrade: new Set() };
+  const perFlateSett: Record<Flate, Set<string>> = { hjem: new Set(), kart: new Set(), omrade: new Set(), steder: new Set() };
   const ukerPerBruker = new Map<string, Set<string>>();
   const dagerPerBruker = new Map<string, string[]>();
   for (const r of rader) {
@@ -348,7 +360,7 @@ function byggBruk(inn: RapportInn, naa: number, kildeForBruker: Map<string, stri
   return {
     maalt: true,
     brukereSiste7d: brukereSiste7d.size,
-    perFlate: { hjem: perFlateSett.hjem.size, kart: perFlateSett.kart.size, omrade: perFlateSett.omrade.size },
+    perFlate: { hjem: perFlateSett.hjem.size, kart: perFlateSett.kart.size, omrade: perFlateSett.omrade.size, steder: perFlateSett.steder.size },
     nyeSiste14d: nye.length,
     komTilbake: komTilbakeSett.size,
     perKilde: [...perKildeTall.entries()]

@@ -29,6 +29,7 @@ describe('erFlate', () => {
     expect(erFlate('hjem')).toBe(true);
     expect(erFlate('kart')).toBe(true);
     expect(erFlate('omrade')).toBe(true);
+    expect(erFlate('steder')).toBe(true);
     expect(erFlate('profil')).toBe(false);
     expect(erFlate(null)).toBe(false);
   });
