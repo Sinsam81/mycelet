@@ -21,6 +21,8 @@
  */
 import {
   BANDS,
+  FRUITING_MONTH_MAX,
+  FRUITING_MONTH_MIN,
   MIN_SAMPLE_ALL,
   MIN_SAMPLE_BAND,
   curveLookup,
@@ -60,6 +62,17 @@ const NEG_PER_POS = clampInt(Number(process.env.NEG_PER_POS || 4), 1, 50);
 const TEST_FRACTION = clampNumber(Number(process.env.TEST_FRACTION || 0.2), 0.01, 0.9);
 const SPLIT_MODE = process.env.SPLIT_MODE === 'hash' ? 'hash' : 'year';
 const CUTOFF = process.env.CUTOFF || '2021-01-01';
+// Øvre grense for testsettet (eksklusiv). Uten den er «test» alt ≥ CUTOFF —
+// og en dev-splitt med CUTOFF=2020 inneholdt da 85 % av det kanoniske
+// sluttsettet (≥2021). En hill-climb-loop målt på det ville valgt endringer
+// med informasjon fra fasiten. Rader ≥ CUTOFF_END holdes HELT utenfor (ikke
+// i trening heller — framtid i treningen er en annen lekkasje).
+const CUTOFF_END = process.env.CUTOFF_END || null;
+// Trekk negativ-uker fra samme vindu som positivene (april–november) i
+// stedet for hele året. Vinteruker har ~0 i alle kurver og vinnes trivielt,
+// så hel-års-AUC er høyere enn oppgaven brukeren har («hvilken uke i sesong»).
+// Rapporter begge; innen-sesong er det konservative tallet.
+const NEG_IN_SEASON = process.env.NEG_IN_SEASON === '1';
 const JSON_OUTPUT = args.has('--json') || process.env.JSON === '1';
 
 function clampInt(value, min, max) {
@@ -84,9 +97,14 @@ function hash32(n) {
   return (x ^ (x >>> 16)) >>> 0;
 }
 
-function isTestRow(row) {
-  if (SPLIT_MODE === 'year') return row.observed_at >= CUTOFF;
-  return hash32(row.id) % 100 < TEST_FRACTION * 100;
+/** 'train' | 'test' | 'skip' — skip = etter CUTOFF_END, utenfor begge sett. */
+function splitRow(row) {
+  if (SPLIT_MODE === 'year') {
+    if (row.observed_at < CUTOFF) return 'train';
+    if (CUTOFF_END && row.observed_at >= CUTOFF_END) return 'skip';
+    return 'test';
+  }
+  return hash32(row.id) % 100 < TEST_FRACTION * 100 ? 'test' : 'train';
 }
 
 async function rest(path) {
@@ -138,8 +156,9 @@ async function main() {
       const w = weekIndexFromISO(r.observed_at);
       if (w == null) continue;
       const band = latBand(r.latitude);
-      const isTest = isTestRow(r);
-      if (isTest) {
+      const del = splitRow(r);
+      if (del === 'skip') continue;
+      if (del === 'test') {
         test.push({ sid: r.species_id, band, week: w });
       } else {
         const c = ensure(r.species_id);
@@ -172,6 +191,13 @@ async function main() {
     return seed / 0x7fffffff;
   };
 
+  // Uke-vinduet negativene trekkes fra: hele året, eller bare sesongukene
+  // (samme filter som positivene går gjennom i weekIndexFromISO).
+  const sesongFra = weekIndexFromISO(`2024-${String(FRUITING_MONTH_MIN).padStart(2, '0')}-01`) ?? 0;
+  const sesongTil = weekIndexFromISO(`2024-${String(FRUITING_MONTH_MAX).padStart(2, '0')}-30`) ?? 51;
+  const negFra = NEG_IN_SEASON ? sesongFra : 0;
+  const negSpenn = NEG_IN_SEASON ? sesongTil - sesongFra + 1 : 52;
+
   let oldWins = 0;
   let newWins = 0;
   let oldComparisons = 0;
@@ -191,7 +217,7 @@ async function main() {
     const newPos = curve ? curveLookup(curve, t.week) : null;
 
     for (let k = 0; k < NEG_PER_POS; k++) {
-      const negWeek = Math.floor(rng() * 52);
+      const negWeek = negFra + Math.floor(rng() * negSpenn);
       // OLD model comparison
       const oldNeg = oldSeasonScore(negWeek, season);
       oldComparisons++;
@@ -216,6 +242,8 @@ async function main() {
     method: {
       splitMode: SPLIT_MODE,
       cutoff: SPLIT_MODE === 'year' ? CUTOFF : null,
+      cutoffEnd: SPLIT_MODE === 'year' ? CUTOFF_END : null,
+      negativeWeekWindow: NEG_IN_SEASON ? `in-season (weeks ${negFra}-${negFra + negSpenn - 1})` : 'whole-year (weeks 0-51)',
       testFraction: SPLIT_MODE === 'hash' ? TEST_FRACTION : null,
       negativeWeeksPerPositive: NEG_PER_POS,
       totalDatedFruitingRows: total,
