@@ -15,7 +15,7 @@ import { PREDICTION_TILE_REGIONS } from '@/lib/prediction/tile-regions';
  *   · all visning må bære modningsforbeholdet
  *   · e-postkvitteringen venter til etter-uken er minst FASIT_MODEN_DAGER
  *     gammel før den feller dom (se FASIT_MODEN_ETTER_VARSEL_DAGER)
- * Appens egne funn har ikke etterslep og telles separat.
+ * Appens egne funn har ikke etterslep; de telles og vises separat (+N).
  */
 
 export const FASIT_MODEN_DAGER = 14;
@@ -51,6 +51,13 @@ export interface FasitTall {
   moden: boolean;
   /** false når GBIF ikke svarte — da er tallene bare egne funn og skal vises som «–», ikke som 0. */
   gbifOk: boolean;
+  /** false når tellingen av egne funn feilet — samme regel: ingen dom på halvt grunnlag. */
+  egneOk: boolean;
+  /** Per kilde, så visningen kan skille GBIF (etterslep) fra egne funn (umiddelbare). */
+  gbifEtter: number;
+  gbifFor: number;
+  egneEtter: number;
+  egneFor: number;
 }
 
 /**
@@ -109,8 +116,12 @@ async function tellGbif(
   fraIso: string,
   tilIso: string
 ): Promise<number | null> {
+  // Samme filtre som importskriptet (scripts/import-gbif-occurrences.mjs):
+  // bare tilstedeværelse (ikke ABSENT-poster — «fant ingen» er ikke et funn)
+  // og bare observasjoner/belegg (ikke eDNA-/jordprøver som har eventDate).
   const url =
     `https://api.gbif.org/v1/occurrence/search?taxonKey=5&limit=0` +
+    `&occurrenceStatus=PRESENT&basisOfRecord=HUMAN_OBSERVATION&basisOfRecord=PRESERVED_SPECIMEN` +
     `&country=${region.country}` +
     `&decimalLatitude=${region.minLat},${region.maxLat}` +
     `&decimalLongitude=${region.minLng},${region.maxLng}` +
@@ -125,13 +136,18 @@ async function tellGbif(
   }
 }
 
-/** Egne app-funn i regionboksen — umiddelbare, uten publiseringsetterslep. */
+/**
+ * Egne app-funn i regionboksen — umiddelbare, uten publiseringsetterslep.
+ * Negative observasjoner («fant ingen sopp», migrasjon 010) er ikke funn og
+ * telles ikke — alle andre tellesteder i appen filtrerer dem, og fasiten
+ * gjorde det ikke. null ved feil, som tellGbif: en stille 0 er en falsk fasit.
+ */
 async function tellEgneFunn(
   db: { from: (t: string) => any },
   region: (typeof PREDICTION_TILE_REGIONS)[number],
   fraIso: string,
   tilIso: string
-): Promise<number> {
+): Promise<number | null> {
   const { count, error } = await db
     .from('findings')
     .select('*', { count: 'exact', head: true })
@@ -141,8 +157,9 @@ async function tellEgneFunn(
     .lte('longitude', region.maxLng)
     .gte('found_at', osloMidnattIso(fraIso))
     .lt('found_at', osloMidnattIso(tilIso))
+    .eq('is_negative_observation', false)
     .is('deleted_at', null);
-  return error ? 0 : (count ?? 0);
+  return error ? null : (count ?? 0);
 }
 
 /**
@@ -169,12 +186,18 @@ export async function beregnFasit(
   ]);
 
   const gbifOk = gbifEtter !== null && gbifFor !== null;
+  const egneOk = egneEtter !== null && egneFor !== null;
   return {
     region: regionNavn,
     dato: varselDato,
-    ukenEtter: (gbifEtter ?? 0) + egneEtter,
-    ukenFor: (gbifFor ?? 0) + egneFor,
-    moden: gbifOk && erFasitModen(varselDato, naa),
-    gbifOk
+    ukenEtter: (gbifEtter ?? 0) + (egneEtter ?? 0),
+    ukenFor: (gbifFor ?? 0) + (egneFor ?? 0),
+    moden: gbifOk && egneOk && erFasitModen(varselDato, naa),
+    gbifOk,
+    egneOk,
+    gbifEtter: gbifEtter ?? 0,
+    gbifFor: gbifFor ?? 0,
+    egneEtter: egneEtter ?? 0,
+    egneFor: egneFor ?? 0
   };
 }

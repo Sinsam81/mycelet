@@ -1,6 +1,7 @@
 import type { WeekDayScore } from '@/lib/prediction/week-scores';
 import type { Locale } from '@/i18n/config';
 import { getSpeciesDisplayName } from '@/lib/utils/species-name';
+import { pickBestForecastDay } from '@/lib/utils/forecast-best-day';
 
 /**
  * Ekstrainnholdet i varsel-eposten: toppdagen fremover og artene i sesong.
@@ -13,23 +14,39 @@ import { getSpeciesDisplayName } from '@/lib/utils/species-name';
  */
 
 export interface Toppdag {
-  /** Ukedagsetiketten slik uke-stripa selv viser den («tor», «I dag», …). */
+  /** Ukedagsetiketten slik uke-stripa selv viser den («tor», «I dag», …). Ved likhet: den tidligste. */
   dag: string;
   score: number;
   erIDag: boolean;
+  /** Alle dagene som deler toppscoren (tidligste først) — tom når én dag vinner alene. */
+  delteDager: string[];
+  /** true når HELE uka har samme score — da finnes ingen «beste dag» å nevne. */
+  jevn: boolean;
 }
 
 /**
- * Beste dag i uka som kommer — samme tall som 7-dagersstripa på forsiden, så
- * e-posten og appen aldri motsier hverandre. Ved likhet vinner den TIDLIGSTE
- * dagen: «best torsdag (91)» når lørdag også har 91 ville sendt folk senere
- * ut enn nødvendig, og sopp venter ikke.
+ * Beste dag i uka som kommer — samme tall og samme regler som 7-dagersstripa
+ * (pickBestForecastDay), så e-posten og appen aldri motsier hverandre.
+ *
+ * Ved likhet peker `dag` fortsatt på den TIDLIGSTE («best torsdag» når lørdag
+ * også har 91 ville sendt folk senere ut enn nødvendig), men e-posten skal
+ * si at dagene er like gode. Og en helt jevn uke er ikke «i dag er ukas beste
+ * dag» — 63 % av sesongukene har delt toppscore (forecast-bars.ts), så det
+ * ville stått i de fleste varslene. Områdesiden unngår den artefakten alt.
  */
 export function velgToppdag(days: WeekDayScore[]): Toppdag | null {
   if (days.length === 0) return null;
-  let beste = days[0];
-  for (const d of days) if (d.score > beste.score) beste = d;
-  return { dag: beste.label, score: beste.score, erIDag: beste.isToday };
+  const valg = pickBestForecastDay(days);
+  const forsteIndeks = valg.tiedIndexes[0] ?? 0;
+  const beste = days[forsteIndeks];
+  const jevn = days.length > 1 && valg.tiedIndexes.length === days.length;
+  return {
+    dag: beste.label,
+    score: beste.score,
+    erIDag: beste.isToday,
+    delteDager: valg.tiedIndexes.length > 1 ? valg.tiedIndexes.map((i) => days[i].label) : [],
+    jevn
+  };
 }
 
 export interface SesongArt {

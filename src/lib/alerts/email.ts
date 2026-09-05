@@ -38,7 +38,7 @@ interface VarselEpostArgs {
   appUrl: string;
   avmeldingsUrl: string;
   /** Beste dag i 7-dagersutsikten — valgfri: mangler prognosen, mangler linja. */
-  toppdag?: { dag: string; score: number; erIDag: boolean } | null;
+  toppdag?: { dag: string; score: number; erIDag: boolean; delteDager?: string[]; jevn?: boolean } | null;
   /** Ferdig lokaliserte artsnavn i sesong nå — valgfri, samme regel. */
   arter?: string[];
   /** Fasit for FORRIGE varsel i regionen — kun når tallene er modne (fasit.ts). */
@@ -61,6 +61,10 @@ const COPY = {
       `Utsikten fremover: i dag ser ut til å bli ukas beste dag (${score} av 100).`,
     toppdag: (dag: string, score: number) =>
       `Utsikten fremover: best ${dag} (${score} av 100) — samme tall som 7-dagersstripa i appen.`,
+    toppdagDelt: (dager: string, score: number) =>
+      `Utsikten fremover: ${dager} ser like gode ut (${score} av 100) — samme tall som 7-dagersstripa i appen.`,
+    toppdagJevn: (score: number) => `Utsikten fremover: jevnt hele uka (${score} av 100) — ingen dag skiller seg ut.`,
+    og: 'og',
     arter: (liste: string) => `I sesong nå: ${liste}.`,
     knapp: 'Se kartet for området ditt',
     sikkerhet:
@@ -84,6 +88,10 @@ const COPY = {
       `Utsikten framöver: i dag ser ut att bli veckans bästa dag (${score} av 100).`,
     toppdag: (dag: string, score: number) =>
       `Utsikten framöver: bäst ${dag} (${score} av 100) — samma siffra som 7-dagarsremsan i appen.`,
+    toppdagDelt: (dager: string, score: number) =>
+      `Utsikten framöver: ${dager} ser lika bra ut (${score} av 100) — samma siffra som 7-dagarsremsan i appen.`,
+    toppdagJevn: (score: number) => `Utsikten framöver: jämnt hela veckan (${score} av 100) — ingen dag sticker ut.`,
+    og: 'och',
     arter: (liste: string) => `I säsong nu: ${liste}.`,
     knapp: 'Se kartan för ditt område',
     sikkerhet:
@@ -104,6 +112,16 @@ export function fasitDato(iso: string, locale: Locale): string {
   const [, m, d] = iso.split('-').map(Number);
   const navn = (MND[locale] ?? MND.nb)[(m ?? 1) - 1];
   return locale === 'sv' ? `${d} ${navn}` : `${d}. ${navn}`;
+}
+
+function toppdagLinjeFor(t: (typeof COPY)[Locale], toppdag: NonNullable<VarselEpostArgs['toppdag']>): string {
+  if (toppdag.jevn) return t.toppdagJevn(toppdag.score);
+  const delte = toppdag.delteDager ?? [];
+  if (delte.length > 1) {
+    const dager = `${delte.slice(0, -1).join(', ')} ${t.og} ${delte[delte.length - 1]}`;
+    return t.toppdagDelt(dager, toppdag.score);
+  }
+  return toppdag.erIDag ? t.toppdagIDag(toppdag.score) : t.toppdag(toppdag.dag, toppdag.score);
 }
 
 export function byggVarselEpost(args: VarselEpostArgs) {
@@ -128,9 +146,7 @@ ${
     <p style="font-size: 14px; line-height: 1.55; color: #4b5563;">${t.forbehold}</p>
 ${
   args.toppdag
-    ? `\n    <p style="font-size: 14px; line-height: 1.55; font-weight: 600; color: #1A3409;">${
-        args.toppdag.erIDag ? t.toppdagIDag(args.toppdag.score) : t.toppdag(args.toppdag.dag, args.toppdag.score)
-      }</p>`
+    ? `\n    <p style="font-size: 14px; line-height: 1.55; font-weight: 600; color: #1A3409;">${toppdagLinjeFor(t, args.toppdag)}</p>`
     : ''
 }${
   args.arter && args.arter.length
@@ -165,9 +181,7 @@ ${
   const fasitLinje = args.fasit
     ? `\n${t.fasit(fasitDato(args.fasit.dato, args.locale), args.fasit.ukenEtter, args.fasit.ukenFor)}\n`
     : '';
-  const toppdagLinje = args.toppdag
-    ? `\n${args.toppdag.erIDag ? t.toppdagIDag(args.toppdag.score) : t.toppdag(args.toppdag.dag, args.toppdag.score)}\n`
-    : '';
+  const toppdagLinje = args.toppdag ? `\n${toppdagLinjeFor(t, args.toppdag)}\n` : '';
   const arterLinje = args.arter && args.arter.length ? `\n${t.arter(args.arter.join(', '))}\n` : '';
 
   const tekst = `${t.tittel(args.region)}
