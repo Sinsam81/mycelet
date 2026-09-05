@@ -1392,7 +1392,7 @@
     "deletedFindings": "Alla dina svampfynd med koordinater och bilder",
     "deletedForum": "Alla dina foruminlägg och kommentarer",
     "deletedInteractions": "Gillamarkeringar, sparade inlägg, rapporteringar du har skickat",
-    "deletedSubscription": "Prenumerationsstatus (Stripe-data tas bort automatiskt)",
+    "deletedSubscription": "Din Stripe-prenumeration sägs upp direkt. Betalningshistoriken sparas i fem år (bokföringslagen).",
     "backupNote": "Backuprotation kan behålla data i upp till 30 dagar innan permanent borttagning.",
     "confirmInstruction": "För att bekräfta, skriv in exakt:",
     "cancel": "Avbryt",

@@ -102,10 +102,26 @@ Deno.serve(async (req: Request) => {
   if (listError) {
     errors.push(`listUsers: ${listError.message}`);
   } else {
-    const candidates = (usersPage?.users ?? []).filter((u: any) => {
+    const inaktive = (usersPage?.users ?? []).filter((u: any) => {
       const lastSignIn = u.last_sign_in_at ? new Date(u.last_sign_in_at) : null;
       return lastSignIn && lastSignIn < cutoff;
     });
+
+    // Betalende kunder purges ikke. En slettet konto med løpende abonnement
+    // faktureres videre uten eier (cascaden tar billing-raden, Stripe/Apple
+    // får aldri beskjed — se src/lib/billing/avslutt-ved-sletting.ts), og
+    // «inaktiv» er uansett feil mål for noen som betaler hver måned.
+    const inaktiveIder = inaktive.map((u: any) => u.id);
+    const { data: betalende } =
+      inaktiveIder.length > 0
+        ? await supabase
+            .from('billing_subscriptions')
+            .select('user_id,status')
+            .in('user_id', inaktiveIder)
+            .in('status', ['active', 'trialing', 'past_due'])
+        : { data: [] as Array<{ user_id: string }> };
+    const betalendeIder = new Set((betalende ?? []).map((r: any) => r.user_id));
+    const candidates = inaktive.filter((u: any) => !betalendeIder.has(u.id));
 
     if (candidates.length > 0) {
       // Find which of these already have a warning so we don't duplicate.

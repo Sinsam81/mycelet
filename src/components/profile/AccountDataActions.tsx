@@ -27,7 +27,19 @@ import { useIsNative } from '@/lib/hooks/useIsNative';
 
 const CONFIRM_TOKEN = 'DELETE-MY-ACCOUNT';
 
-export function AccountDataActions() {
+export type AbonnementKanal = 'stripe' | 'apple' | null;
+
+export function AccountDataActions({
+  /**
+   * Hvor abonnementet ble kjøpt — fra billing-raden, ikke fra plattformen.
+   * useIsNative sier hvor brukeren STÅR nå; en Apple-kunde som sletter på
+   * nett skal likevel få Apple-advarselen, og en Stripe-kunde i appen skal
+   * få Stripe-linja.
+   */
+  abonnementKanal = null
+}: {
+  abonnementKanal?: AbonnementKanal;
+} = {}) {
   const t = useTranslations('AccountDataActions');
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [confirmInput, setConfirmInput] = useState('');
@@ -196,7 +208,7 @@ export function AccountDataActions() {
                 <li>{t('deletedFindings')}</li>
                 <li>{t('deletedForum')}</li>
                 <li>{t('deletedInteractions')}</li>
-                <li>{native ? t('deletedSubscriptionNative') : t('deletedSubscription')}</li>
+                <li>{abonnementKanal === 'stripe' ? t('deletedSubscription') : t('deletedSubscriptionNative')}</li>
               </ul>
               <p className="pt-1 text-xs">
                 {t('backupNote')}
@@ -209,7 +221,7 @@ export function AccountDataActions() {
                 over sa i stedet «Stripe-data fjernes automatisk», som for en
                 iOS-kjøper er feil selskap og feil konklusjon: pengene ville
                 fortsatt blitt trukket etter at kontoen var borte. */}
-            {native ? (
+            {native || abonnementKanal === 'apple' ? (
               <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
                 <p>{t('appleSubscriptionWarning')}</p>
                 <a

@@ -72,6 +72,19 @@ async function upsertBillingByUserId(payload: {
   }
 }
 
+/** Finnes auth-brukeren fortsatt? Slettede kontoer har ingen rad å skrive til. */
+async function brukerFinnes(userId: string): Promise<boolean> {
+  try {
+    const admin = createAdminClient();
+    const { data, error } = await admin.auth.admin.getUserById(userId);
+    if (error) return false;
+    return Boolean(data?.user);
+  } catch {
+    // Uten admin-klient kan vi ikke vite — la den vanlige stien prøve (og feile høyt).
+    return true;
+  }
+}
+
 async function resolveUserIdFromCustomer(customerId: string) {
   const admin = createAdminClient();
   const { data, error } = await admin
@@ -366,7 +379,22 @@ export async function POST(request: NextRequest) {
       const tier = resolveTierByPriceId(priceId);
 
       const userId = subscription.metadata?.user_id ?? (customerId ? await resolveUserIdFromCustomer(customerId) : null);
-      if (userId) {
+      // Spøkelsesabonnement: brukeren er slettet (cascaden tok raden), men
+      // Stripe fakturerer videre. Før sa opsertet FK-brudd → 400 → Stripe
+      // prøvde på nytt i tre døgn, ved hver fornyelse, uten at noen så det.
+      // Sikkerhetsnett: et løpende abonnement uten eier sies opp her.
+      if (userId && !(await brukerFinnes(userId))) {
+        const lopende = ['active', 'trialing', 'past_due', 'unpaid'].includes(subscription.status);
+        log.warn('stripe.webhook.subscription_for_deleted_user', {
+          eventType: event.type,
+          subscriptionId: subscription.id,
+          status: subscription.status,
+          avsluttes: lopende && event.type !== 'customer.subscription.deleted'
+        });
+        if (lopende && event.type !== 'customer.subscription.deleted') {
+          await stripe.subscriptions.cancel(subscription.id);
+        }
+      } else if (userId) {
         // Her kommer objektet rått fra Stripe, rendret i kontoens
         // API-versjon — ikke i SDK-ens. Det er denne grenen som skrev null.
         const period = readSubscriptionPeriod(subscription, log, {

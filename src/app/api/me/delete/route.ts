@@ -6,6 +6,8 @@ import { checkRateLimit } from '@/lib/rate-limit';
 import { getClientKey, rateLimitResponse } from '@/lib/rate-limit/route';
 import { createRequestLogger } from '@/lib/log/request';
 import { deleteUserStorageObjects, type StorageApi } from '@/lib/storage/delete-user-objects';
+import { avsluttStripeVedSletting } from '@/lib/billing/avslutt-ved-sletting';
+import { getStripeServerClient } from '@/lib/stripe/server';
 import {
   RETAINED_VISIBILITY,
   coarsenRetainedObservations,
@@ -292,6 +294,29 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  // STEP 1d — løpende Stripe-abonnement.
+  //
+  // Manglet helt: cascaden tok billing_subscriptions-raden, Stripe fikk aldri
+  // beskjed, og kunden ble fakturert videre uten innlogging og uten portal.
+  // Sies opp FØR auth-slettingen — feiler Stripe, stopper vi her, og et nytt
+  // forsøk er trygt. Se avslutt-ved-sletting.ts for reglene.
+  const stripeResultat = await avsluttStripeVedSletting({
+    admin: admin as unknown as { from: (table: string) => any },
+    stripe: getStripeServerClient,
+    userId: user.id,
+    log: userLog
+  });
+  if (!stripeResultat.ok) {
+    userLog.error('account.self_delete.stripe_cancel_failed', undefined, { detail: stripeResultat.detalj });
+    return NextResponse.json(
+      {
+        error: 'Kunne ikke si opp abonnementet ditt hos Stripe',
+        details: RETRY_IS_SAFE
+      },
+      { status: 500 }
+    );
+  }
+
   // STEP 2 — delete the auth.users row. Cascades to profiles which
   // SET NULLs user_id on findings (only public/approximate negatives
   // remain), forum_posts, and comments.
@@ -327,7 +352,9 @@ export async function POST(request: NextRequest) {
     identifications: identificationsCount.count ?? 0,
     // Bildene er nå med i kvitteringen. Uten dette kunne brukeren ikke se at
     // de i det hele tatt ble fjernet — og før denne endringen ble de ikke det.
-    uploadedImages: storageResult.removed
+    uploadedImages: storageResult.removed,
+    // Kvitteringen sier om et Stripe-abonnement faktisk ble sagt opp her.
+    stripeSubscriptionCanceled: stripeResultat.avsluttet
   };
 
   // Ingen `request` her, med vilje: da hentes verken IP-adresse eller
