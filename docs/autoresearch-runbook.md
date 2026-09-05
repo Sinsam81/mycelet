@@ -9,15 +9,38 @@ variant retter loopen mot fenologi-scoringen — appens validerte kjernesignal.
 ## Målet (dommeren)
 
 ```bash
-CUTOFF=2020-01-01 npm run backtest:phenology -- --json   # DEV-splitt (loopen)
-npm run backtest:phenology -- --json                      # KANONISK (kun til slutt)
+CUTOFF=2019-01-01 CUTOFF_END=2021-01-01 NEG_IN_SEASON=1 npm run backtest:phenology -- --json   # DEV-splitt (loopen)
+NEG_IN_SEASON=1 npm run backtest:phenology -- --json                                           # KANONISK (kun til slutt)
 ```
 
 Metrikken er `auc.empiricalPhenology`. Kjøretid ~80 s (målt 2026-09-01).
 
-**Basislinje 2026-09-01, kanonisk splitt (tren <2021, test ≥2021):**
-`0.88226` over 456 064 sammenligninger, 72 kurver, 114 016 testfunn.
-Dev-basislinjen (CUTOFF=2020) måles som iterasjon 0 i selve kjøringen.
+**Hvorfor dev-splitten ser slik ut (rettet 2026-09-05 etter ekstern
+gjennomgang):** første utgave brukte `CUTOFF=2020-01-01` alene. Uten øvre
+grense er «test» alt ≥ 2020 — og 85 % av de radene ER det kanoniske
+sluttsettet (≥2021). Loopen ville altså optimalisert på fasiten, og
+sluttkjøringen ville ikke vært uavhengig av noe som helst. Nå: dev = tren
+<2019, test 2019–2020 (`CUTOFF_END` holder 2021+ helt utenfor, også utenfor
+treningen). Kanonisk = tren <2021, test ≥2021, rørt én gang.
+
+`NEG_IN_SEASON=1` trekker negativ-uker fra april–november i stedet for hele
+året. Vinteruker har ~0 i alle kurver og vinnes trivielt; hel-års-tallet
+(0,882) er derfor høyere enn oppgaven brukeren har. Innen-sesong-tallet er
+det konservative, og det loopen skal måles på. Journalfør begge for
+basislinjen så tallene på /apenhet kan oppdateres ærlig.
+
+**Basislinjer (målt 2026-09-05 med skriptet i denne utgaven):**
+
+| Splitt | Negativ-vindu | Testfunn | AUC empirisk | AUC månedsmodell |
+|---|---|---|---|---|
+| Kanonisk (tren <2021, test ≥2021) | hele året | 114 016 | 0,88226 | 0,83328 |
+| Kanonisk | **innen sesong** | 114 016 | **0,83061** | 0,78019 |
+| Dev (tren <2019, test 2019–2020) | innen sesong | 38 966 | 0,83046 | 0,76600 |
+
+Loopen måles på dev/innen-sesong (0,83046 er iterasjon 0). Sluttdommen er
+kanonisk/innen-sesong (0,83061). Hel-års-tallet 0,882 er det som står på
+/apenhet i dag — det er ikke feil, men det måler en lettere oppgave; vurder
+å vise innen-sesong-tallet der (eierbeslutning, det er en offentlig påstand).
 
 ## Mutasjonsflaten (det ENESTE agenten får røre)
 
@@ -26,7 +49,13 @@ Dev-basislinjen (CUTOFF=2020) måles som iterasjon 0 i selve kjøringen.
 vekting, priors. Én liten, begrunnet endring per iterasjon.
 
 Uenerbart: backtest-skriptet selv, splitt-logikken, datainnhenting, alt i
-src/. En «forbedring» som kommer av å endre målingen er juks, ikke funn.
+src/ — OG `FRUITING_MONTH_MIN`/`FRUITING_MONTH_MAX` i phenology-core.mjs.
+De to ligger i fila agenten får røre, men styrer hvilke rader som blir
+positiver i testen (`weekIndexFromISO`): snevres vinduet, forsvinner de
+vanskelige skuldersesong-funnene og devAUC stiger uten at modellen ble
+bedre. En «forbedring» som kommer av å endre målingen er juks, ikke funn.
+Tilsvarende: ingen endring som gjør at `report.method.testRows` endrer seg
+mellom iterasjoner er lovlig — testsettet skal være identisk hele natten.
 
 ## Protokollen
 
@@ -39,8 +68,12 @@ src/. En «forbedring» som kommer av å endre målingen er juks, ikke funn.
    **behold hvis devAUC > beste + 0.0003**, ellers `git checkout` tilbake.
    Terskelen finnes fordi ±0.0002 er støy mellom kjøringer.
 4. Sluttritual, i rekkefølge:
-   a. `npm run test -- scripts/lib` — vaktene på kurvebyggingen skal være grønne
-   b. ÉN kjøring på kanonisk splitt — første og eneste gang under hele løpet
+   a. `npm run test -- src/lib/prediction` — TS-porten av fenologien skal
+      fortsatt være grønn (det finnes ingen egne tester for phenology-core.mjs;
+      båndgrensene der er duplisert i src/lib/prediction/phenology.ts og MÅ
+      holdes like — en BANDS-endring uten src-endring når aldri produksjon)
+   b. ÉN kjøring på kanonisk splitt (med `NEG_IN_SEASON=1`) — første og eneste
+      gang under hele løpet
    c. Rapport i journalen: dev-gevinst vs. kanonisk gevinst, tabell over
       beholdte endringer, forkastede hypoteser verdt å nevne
 5. Push branch + PR med hele journalen. **ALDRI merge selv** — eieren og
@@ -59,6 +92,8 @@ src/. En «forbedring» som kommer av å endre målingen er juks, ikke funn.
 ## Fra funn til produksjon (etter godkjent PR)
 
 Produksjonen leser ferdigbygde kurver, ikke phenology-core direkte. Etter
-merge: regenerer kurvene (`npm run calibrate:season-windows` + tilhørende
-datafiler), kjør full testsuite, og la neste netlige tilegenerering plukke
-opp endringen. Dette steget står eksplisitt i PR-en som eierens sjekkliste.
+merge: regenerer 52-ukers-kurvene med `node --env-file=.env.local
+scripts/generate-phenology.mjs` (IKKE `calibrate:season-windows` — det lager
+månedsvinduene til season-window-data.ts, ikke kurvene), speil eventuelle
+BANDS-endringer i src/lib/prediction/phenology.ts, kjør full testsuite, og la
+neste netlige tilegenerering plukke opp endringen. Dette steget står eksplisitt i PR-en som eierens sjekkliste.
