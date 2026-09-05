@@ -32,8 +32,8 @@ beforeEach(() => {
   process.env.NEXT_PUBLIC_APP_URL = 'https://www.mycelet.com';
 });
 
-async function klikk(r = 'bergen', t = TOKEN) {
-  const res = await GET(new NextRequest(`http://localhost/api/soppvarsel/klikk?t=${t}&r=${r}`));
+async function klikk(r = 'bergen', t = TOKEN, s?: number) {
+  const res = await GET(new NextRequest(`http://localhost/api/soppvarsel/klikk?t=${t}&r=${r}${s ? `&s=${s}` : ''}`));
   return res;
 }
 
@@ -42,7 +42,8 @@ describe('varselklikk', () => {
     rad = { last_notified_at: new Date(NAA - 3 * 3600_000).toISOString(), forste_apnet_at: null };
     const res = await klikk();
     expect(res.status).toBe(303);
-    expect(res.headers.get('location')).toBe('https://www.mycelet.com/soppforhold/bergen?fra=varsel');
+    expect(res.headers.get('location')).toBe('https://www.mycelet.com/soppforhold/bergen');
+    expect(res.headers.get('set-cookie')).toContain('mycelet_hopp=1');
     expect(oppdateringer).toHaveLength(1);
     expect(oppdateringer[0]).toHaveProperty('sist_apnet_at');
     expect(oppdateringer[0]).toHaveProperty('forste_apnet_at');
@@ -63,14 +64,24 @@ describe('varselklikk', () => {
 
   it('ukjent token: samme videresending, ingen skriving', async () => {
     const res = await klikk('oslo', 'ikke-en-uuid');
-    expect(res.headers.get('location')).toBe('https://www.mycelet.com/soppforhold/oslo?fra=varsel');
+    expect(res.headers.get('location')).toBe('https://www.mycelet.com/soppforhold/oslo');
     expect(oppdateringer).toHaveLength(0);
   });
 
   it('ukjent område faller tilbake til oversikten', async () => {
     rad = null;
     const res = await klikk('atlantis');
-    expect(res.headers.get('location')).toBe('https://www.mycelet.com/soppforhold?fra=varsel');
+    expect(res.headers.get('location')).toBe('https://www.mycelet.com/soppforhold');
     expect(oppdateringer).toHaveLength(0);
+  });
+
+  it('utsendingstidspunktet i lenka (&s=) vinner over last_notified_at — som kan være rullet tilbake', async () => {
+    // Raden sier «åtte dager siden» (tilbakerullet etter feilet sending); lenka sier «for 30 sekunder siden».
+    rad = { last_notified_at: new Date(NAA - 8 * 86_400_000).toISOString(), forste_apnet_at: null };
+    await klikk('bergen', TOKEN, Math.floor((NAA - 30_000) / 1000));
+    expect(oppdateringer[0]).not.toHaveProperty('forste_apnet_at');
+    oppdateringer = [];
+    await klikk('bergen', TOKEN, Math.floor((NAA - 3 * 3600_000) / 1000));
+    expect(oppdateringer[0]).toHaveProperty('forste_apnet_at');
   });
 });

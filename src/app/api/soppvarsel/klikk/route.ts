@@ -5,6 +5,7 @@ import { regionFromSlug, regionSlug } from '@/lib/prediction/region-slug';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { getClientKey } from '@/lib/rate-limit/route';
 import { AKTIVERING_MIN_MS } from '@/lib/rapport/dagsrapport';
+import { HOPP_COOKIE, HOPP_COOKIE_MAX_AGE } from '@/lib/analytics/kilde';
 
 /**
  * Klikk fra varsel-e-posten → områdesiden, med ett notat på veien.
@@ -50,7 +51,12 @@ export async function GET(request: NextRequest) {
         .eq('unsubscribe_token', token)
         .maybeSingle();
       if (rad) {
-        const sendt = rad.last_notified_at ? Date.parse(rad.last_notified_at as string) : null;
+        // Utsendingstidspunktet står i selve lenka (&s=, sekunder siden epoke),
+        // skrevet av cronen idet e-posten bygges. last_notified_at er bare
+        // reserve for eldre e-poster: det stempelet rulles tilbake ved feilet
+        // sending, og da ville et skannerklikk sett «åtte dager gammelt» ut.
+        const sParam = Number(request.nextUrl.searchParams.get('s'));
+        const sendt = Number.isFinite(sParam) && sParam > 0 ? sParam * 1000 : rad.last_notified_at ? Date.parse(rad.last_notified_at as string) : null;
         const menneske = sendt !== null && naa.getTime() - sendt >= AKTIVERING_MIN_MS;
         const { error } = await db
           .from('alert_subscriptions')
@@ -64,7 +70,10 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  // ?fra=varsel: middleware skal ikke lese Referer (webmail-verten) som kilde
-  // på siden leseren lander på.
-  return NextResponse.redirect(`${mal}?fra=varsel`, 303);
+  // Hopp-markør: middleware skal ikke lese Referer (webmail-verten) som kilde
+  // på siden leseren lander på. Cookie, ikke URL — adressen leseren ser og
+  // deler videre skal være ren.
+  const svar = NextResponse.redirect(mal, 303);
+  svar.cookies.set(HOPP_COOKIE, '1', { path: '/', maxAge: HOPP_COOKIE_MAX_AGE, sameSite: 'lax' });
+  return svar;
 }

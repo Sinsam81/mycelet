@@ -48,8 +48,12 @@ beforeEach(() => {
 });
 
 describe('bekreft', () => {
-  it('bekrefter en rad som venter', async () => {
+  it('bekrefter en rad som venter — og setter hopp-markøren så webmail-verten ikke blir kilde', async () => {
     rad = { id: 'r1', region: 'Oslo', active: true, confirmed_at: null, user_id: null };
+    const res = await GET(new NextRequest(`http://localhost/api/soppvarsel/bekreft?t=${TOKEN}`));
+    expect(res.headers.get('set-cookie')).toContain('mycelet_hopp=1');
+    rad = { id: 'r1', region: 'Oslo', active: true, confirmed_at: null, user_id: null };
+    oppdateringer = [];
     expect(await klikk()).toBe('bekreftet');
     expect(oppdateringer).toHaveLength(1);
     expect(oppdateringer[0].payload).toMatchObject({ active: true });

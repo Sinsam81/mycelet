@@ -38,6 +38,16 @@ import { classifyTrafficSource, type TrafficSource } from './traffic-source';
 
 export const KILDE_COOKIE = 'mycelet_kilde';
 
+/**
+ * Kortlevd markør satt av våre egne e-postruter (bekreft, klikk) på 303-
+ * svaret: «neste sidevisning er en videresending fra en e-post, Referer er
+ * webmail-verten — ikke en kilde». Middleware leser og sletter den. En URL-
+ * parameter ville blitt hengende i adressefeltet og fulgt med når leseren
+ * deler lenka videre, og da hadde delingskanalen mistet kilden sin.
+ */
+export const HOPP_COOKIE = 'mycelet_hopp';
+export const HOPP_COOKIE_MAX_AGE = 60;
+
 /** 30 dager. Lenge nok til at et besøk i uka og en registrering i helga henger sammen. */
 export const KILDE_COOKIE_MAX_AGE = 30 * 24 * 3600;
 
@@ -168,7 +178,7 @@ export function kildeForForesporsel(args: {
   harGclid: boolean;
   /**
    * true når forespørselen er en videresending fra våre egne e-postruter
-   * (?fra=epost / ?fra=varsel): da er Referer webmail-verten, ikke en kilde.
+   * (HOPP_COOKIE satt): da er Referer webmail-verten, ikke en kilde.
    */
   fraEgenEpostrute?: boolean;
 }): string | null {

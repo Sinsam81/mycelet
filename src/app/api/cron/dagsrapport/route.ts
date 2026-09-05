@@ -189,7 +189,7 @@ function byggRapportEpost(r: Dagsrapport, naa: Date) {
 
   <h2 style="font-size:14px;color:#1A3409;margin:22px 0 6px">Soppvarselet som trakt</h2>
   <table style="width:100%;border-collapse:collapse;font-size:14px">
-    ${rad('Bekreftede abonnenter', String(v.bekreftede))}
+    ${rad('Bekreftede abonnement (per rad)', String(v.bekreftede))}
     ${rad('Nye bekreftede siste 7 dager', String(v.nyeSiste7d))}
     ${rad('Klikket varsel → områdesiden', String(v.aktiverte))}
     ${v.perKilde.slice(0, 6).map((k) => rad(`— ${kildeNavn(k.kilde)}`, `${k.bekreftede} · ${k.siste7d} siste 7 d · ${k.aktiverte} aktivert`)).join('\n    ')}
@@ -231,7 +231,7 @@ I SKOGEN
   soppvarsel-abonnenter ..... ${r.varselabonnement}
 
 SOPPVARSELET SOM TRAKT
-  bekreftede ................ ${v.bekreftede}
+  bekreftede (per rad) ...... ${v.bekreftede}
   nye bekreftede (7 d) ...... ${v.nyeSiste7d}
   klikket varsel → område ... ${v.aktiverte}
 ${v.perKilde.slice(0, 6).map((k) => `  ${kildeNavn(k.kilde).padEnd(26, '.')} ${k.bekreftede} · ${k.siste7d} siste 7 d · ${k.aktiverte} aktivert`).join('\n')}${v.perRegion.length ? `\n  flest ..................... ${v.perRegion.map((r) => `${r.region} ${r.bekreftede}`).join(', ')}` : ''}

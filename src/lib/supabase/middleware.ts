@@ -4,7 +4,7 @@ import { logger } from '@/lib/log';
 import { getOrCreateRequestId } from '@/lib/log/request';
 import { LOCALE_COOKIE, isLocale, type Locale } from '@/i18n/config';
 import { classifyTrafficSource } from '@/lib/analytics/traffic-source';
-import { KILDE_COOKIE, KILDE_COOKIE_MAX_AGE, kildeForForesporsel } from '@/lib/analytics/kilde';
+import { HOPP_COOKIE, KILDE_COOKIE, KILDE_COOKIE_MAX_AGE, kildeForForesporsel } from '@/lib/analytics/kilde';
 
 /**
  * Fasit for hvilke ruter en utlogget besøkende sendes til innlogging fra.
@@ -138,10 +138,14 @@ export async function updateSession(request: NextRequest) {
           utmSource: params.get('utm_source'),
           utmCampaign: params.get('utm_campaign'),
           harGclid: params.has('gclid'),
-          fraEgenEpostrute: params.has('fra') || params.has('status')
+          fraEgenEpostrute: request.cookies.has(HOPP_COOKIE)
         })
       : null;
   const kildeCookie = { path: '/', maxAge: KILDE_COOKIE_MAX_AGE, sameSite: 'lax' as const };
+  // Hopp-markøren er brukt opp nå — slett den, så neste eksterne besøk måles.
+  const slettHopp = (svar: NextResponse) => {
+    if (request.cookies.has(HOPP_COOKIE)) svar.cookies.set(HOPP_COOKIE, '', { path: '/', maxAge: 0 });
+  };
 
   if (isProtectedPath(request.nextUrl.pathname) && !user) {
     log.info('middleware.auth_redirect', { from: request.nextUrl.pathname });
@@ -155,10 +159,12 @@ export async function updateSession(request: NextRequest) {
       headers: { 'x-request-id': reqId }
     });
     if (registreringskilde) redirect.cookies.set(KILDE_COOKIE, registreringskilde, kildeCookie);
+    slettHopp(redirect);
     return redirect;
   }
 
   if (registreringskilde) response.cookies.set(KILDE_COOKIE, registreringskilde, kildeCookie);
+  slettHopp(response);
 
   // Logged-out visitors on the front page get the designed static landing
   // (public/landing/index.html, Swedish: index.sv.html — zero JS, self-hosted

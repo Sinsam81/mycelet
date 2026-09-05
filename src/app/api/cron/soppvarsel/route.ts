@@ -445,7 +445,9 @@ export async function GET(request: NextRequest) {
       fasit: fasit ? { dato: fasit.dato, ukenEtter: fasit.ukenEtter, ukenFor: fasit.ukenFor } : null,
       // Klikket registreres per abonnement (forste_apnet_at/sist_apnet_at) og
       // sender leseren videre til områdesiden. Det er «aktivering» i rapporten.
-      lenkeUrl: `${appUrl}/api/soppvarsel/klikk?t=${ab.unsubscribe_token}&r=${regionSlug(ab.region)}`
+      // &s= er utsendingstidspunktet klikk-ruta måler skanner/menneske mot —
+      // skrevet her, idet e-posten bygges, og aldri rullet tilbake.
+      lenkeUrl: `${appUrl}/api/soppvarsel/klikk?t=${ab.unsubscribe_token}&r=${regionSlug(ab.region)}&s=${Math.floor(Date.now() / 1000)}`
     });
 
     // STEMPLE FØR SENDING — samme husregel som purre-cronen og X-posteren.
@@ -471,8 +473,13 @@ export async function GET(request: NextRequest) {
     }
 
     if (sendteAdresser.has(epost.toLowerCase())) {
-      // Raden er stemplet (begge karantener holder takt), men adressen har
-      // alt fått dagens e-post via en annen rad.
+      // Adressen har alt fått dagens e-post via en annen rad. Gi stempelet
+      // tilbake: raden ble ikke varslet, og et stempel uten e-post ville sett
+      // ut som en utsending som aldri kan aktiveres.
+      await db
+        .from('alert_subscriptions')
+        .update({ last_notified_at: ab.last_notified_at, last_notified_score: ab.last_notified_score })
+        .eq('id', ab.id);
       avslag['duplikat-adresse'] = (avslag['duplikat-adresse'] ?? 0) + 1;
       continue;
     }
