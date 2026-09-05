@@ -61,6 +61,7 @@ interface Abonnement {
   region: string;
   locale: string;
   last_notified_at: string | null;
+  last_notified_score: number | null;
   unsubscribe_token: string;
 }
 
@@ -343,7 +344,7 @@ export async function GET(request: NextRequest) {
     const fra = side * 1000;
     const { data, error: abErr } = await db
       .from('alert_subscriptions')
-      .select('id,user_id,email,confirmed_at,region,locale,last_notified_at,unsubscribe_token')
+      .select('id,user_id,email,confirmed_at,region,locale,last_notified_at,last_notified_score,unsubscribe_token')
       .eq('active', true)
       .order('id', { ascending: true })
       .range(fra, fra + 999);
@@ -357,6 +358,10 @@ export async function GET(request: NextRequest) {
 
   const naa = new Date();
   const loggedeRegioner = new Set<string>();
+  // Én person kan ha både kontorad og kontoløs rad for samme region (to
+  // unikhetsdomener som aldri møtes). Én e-post per adresse per kjøring.
+  const sendteAdresser = new Set<string>();
+  const karanteneGrenseIso = new Date(naa.getTime() - VARSEL_KARANTENE_DAGER * 86_400_000).toISOString();
   let sendt = 0;
   let feilet = 0;
   const avslag: Record<string, number> = {};
@@ -439,7 +444,44 @@ export async function GET(request: NextRequest) {
       fasit: fasit ? { dato: fasit.dato, ukenEtter: fasit.ukenEtter, ukenFor: fasit.ukenFor } : null
     });
 
-    const res = await sendEpost({ til: epost, emne, html, tekst, avmeldingsUrl });
+    // STEMPLE FØR SENDING — samme husregel som purre-cronen og X-posteren.
+    // Før gikk e-posten først og raden ble oppdatert etterpå; to overlappende
+    // kjøringer, eller en sending som lyktes der oppdateringen feilet, ga
+    // dobbel e-post. Nå er kravet på raden selve karantenen (samme regel som
+    // decision.ts, uttrykt i databasen): null rader tilbake = en annen
+    // kjøring tok den, eller karantenen gjelder — hopp over.
+    const { data: krav, error: kravErr } = await db
+      .from('alert_subscriptions')
+      .update({ last_notified_at: naa.toISOString(), last_notified_score: beslutning.til })
+      .eq('id', ab.id)
+      .or(`last_notified_at.is.null,last_notified_at.lt.${karanteneGrenseIso}`)
+      .select('id');
+    if (kravErr) {
+      log.error('soppvarsel.krav_feilet', { abonnement: ab.id, message: kravErr.message });
+      feilet += 1;
+      continue;
+    }
+    if (!krav || krav.length === 0) {
+      avslag['tatt-av-annen-kjoring'] = (avslag['tatt-av-annen-kjoring'] ?? 0) + 1;
+      continue;
+    }
+
+    if (sendteAdresser.has(epost.toLowerCase())) {
+      // Raden er stemplet (begge karantener holder takt), men adressen har
+      // alt fått dagens e-post via en annen rad.
+      avslag['duplikat-adresse'] = (avslag['duplikat-adresse'] ?? 0) + 1;
+      continue;
+    }
+
+    const res = await sendEpost({
+      til: epost,
+      emne,
+      html,
+      tekst,
+      avmeldingsUrl,
+      // Hendelsen, ikke klokka: en gjentatt kjøring samme dag får samme nøkkel.
+      idempotensNokkel: `soppvarsel/${ab.id}/${tileDate}`
+    });
 
     // Resend tillater 2 kall/s. getUserById-rundturen gir litt naturlig avstand,
     // men denne gjør takten eksplisitt i stedet for tilfeldig. Med maxDuration
@@ -448,23 +490,23 @@ export async function GET(request: NextRequest) {
     await new Promise((r) => setTimeout(r, 600));
 
     if (!res.ok) {
-      // Raden oppdateres IKKE ved feil. Da prøver vi igjen i morgen hvis
-      // forholdene fortsatt er gode: decision.ts slipper abonnenten gjennom
-      // «var-allerede-bra» så lenge hen ikke har fått varsel siden siste
-      // omslag — se sisteOmslagIso der.
+      // Sendingen feilet → gi kravet tilbake, så regel 3 i decision.ts kan
+      // hente varselet inn igjen i morgen (den slipper abonnenten gjennom
+      // «var-allerede-bra» så lenge hen ikke har fått varsel siden omslaget).
+      const { error: tilbakeErr } = await db
+        .from('alert_subscriptions')
+        .update({ last_notified_at: ab.last_notified_at, last_notified_score: ab.last_notified_score })
+        .eq('id', ab.id);
+      if (tilbakeErr) {
+        // Raden står stemplet uten at e-posten gikk: én tapt e-post for denne
+        // syklusen. Det motsatte (dobbel e-post) er verre — men logg høyt.
+        log.error('soppvarsel.krav_ikke_tilbakestilt', { abonnement: ab.id, message: tilbakeErr.message });
+      }
       feilet += 1;
       continue;
     }
 
-    const { error: oppdErr } = await db
-      .from('alert_subscriptions')
-      .update({ last_notified_at: naa.toISOString(), last_notified_score: beslutning.til })
-      .eq('id', ab.id);
-    if (oppdErr) {
-      // ⚠️ E-posten ER sendt. Uten oppdatert rad ryker karantenen, og brukeren
-      // kan få samme varsel i morgen. Logges høyt nettopp derfor.
-      log.error('soppvarsel.karantene_ikke_lagret', { abonnement: ab.id, message: oppdErr.message });
-    }
+    sendteAdresser.add(epost.toLowerCase());
     sendt += 1;
   }
 
