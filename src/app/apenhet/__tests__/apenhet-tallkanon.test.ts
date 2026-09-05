@@ -38,6 +38,18 @@ describe('åpenhetssidens tallkanon', () => {
     }
   });
 
+  it('sier hva den romlige AUC-en faktisk måler — ikke «hele modellen»', () => {
+    // backtest-full-pipeline.mjs scorer skog × habitat × sesongkurve og
+    // utelater vær/jord/terreng med vilje. «Den samlede romlige modellen»
+    // lovet mer enn målingen dekker. Forbeholdet skal stå på begge språk.
+    for (const { ns } of catalogs) {
+      const tekst = String((ns as Record<string, unknown>).spatialP1 ?? '');
+      expect(tekst).toMatch(/sesongkurven|säsongskurvan/);
+      expect(tekst).toMatch(/ikke med i denne målingen|inte med i den här mätningen/);
+      expect(tekst).not.toMatch(/samlede romlige|samlade rumsliga/);
+    }
+  });
+
   it('publiserer de romlige tallene som ikke smigrer oss', () => {
     // Signaturgrepet: svakheten er beviset på ærligheten. Fjernes den, er
     // siden bare enda en skrytebrosjyre.
