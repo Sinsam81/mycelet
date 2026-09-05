@@ -122,6 +122,21 @@ arten i nettopp den båsen normlisten holdt den utenfor.
 vårt eget notat sa «noen reagerer selv etter koking». Da skal den ikke bære
 matsoppmerke.
 
+### Rettet i migrasjon 065 (2026-09-05)
+
+| art | før | etter | hvorfor |
+|---|---|---|---|
+| **Krittøsterssopp** | `conditionally_edible` | `inedible` | Merket «Spiselig — giftig rå» lovet at steking hjelper; artens egen tekst sa «Koking eller steking fjerner ikke risikoen» og frarådet den. NSNFs merknad gjelder nyrefunksjon, ikke tilberedning. |
+
+Samme feil som honningsopp og stankmorkel, en måned senere, og av samme
+strukturelle grunn: «Spiselig med merknad» og «Spiselig etter avkoking» er én
+klasse hos oss, og merkets ordlyd antar alltid den siste. Fra nå finnes en
+vaktbikkje: `npm run kontroller:spiselighet` leser hele artslista og sier fra
+når merke og tekst motsier hverandre (regler og tester i
+`src/lib/species/spiselighetskontroll.ts`). Kjør den etter hver artsendring.
+Arten står også i `DELIBERATE_DIVERGENCES` (tabellen under), så neste
+normlistekontroll ikke «retter» den tilbake.
+
 ### Bevisst IKKE fulgt — vi er strengere
 
 | art | vi | normlisten | hvorfor vi blir stående |
@@ -129,6 +144,7 @@ matsoppmerke.
 | **Sandmorkel** | `deadly` | «Giftig» | Gyromitrin har tatt liv. NSNF reserverer «Meget giftig» for amatoksinsoppene, så «Giftig» er ikke et signal om mildhet. |
 | **Giftkremle** | `toxic` | «Ikke matsopp» | Ingen plukker den som mat uansett — for streng koster ingenting, for mild kan koste noe. |
 | **Svovelriske** | `inedible` | «Spiselig etter avkoking» | Ville vært en **oppgradering mot spiselig** — den ene retningen som kan skade noen. |
+| **Krittøsterssopp** | `inedible` | «Spiselig med merknad» | Merknaden gjelder nyrefunksjon, ikke tilberedning — men klassen vises som «giftig rå, må varmes». Koking fjerner ikke risikoen. Migrasjon 065. |
 
 ⚠️ **Ikke «rett» disse senere.** De står i `DELIBERATE_DIVERGENCES` med
 begrunnelse, og en test feiler hvis noen gjør dem mildere.
