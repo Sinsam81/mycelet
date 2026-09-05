@@ -165,7 +165,13 @@ export function MushroomMap({
   const speciesLayerRef = useRef<import('leaflet').LayerGroup | null>(null);
   const popupRootsRef = useRef<Root[]>([]);
   const loadFindingsRef = useRef<() => Promise<void>>(async () => {});
-  const generateTopSpotsRef = useRef<(speciesIdOverride?: number | null) => Promise<void>>(async () => {});
+  const generateTopSpotsRef = useRef<(speciesIdOverride?: number | null, originOverride?: { lat: number; lng: number } | null) => Promise<void>>(
+    async () => {}
+  );
+  // «Let etter denne arten» uten GPS-fiks og uten husket utsnitt: vent med
+  // lovende områder til posisjonen er kjent, ellers regnes de rundt Oslo-
+  // plassholderen og blir liggende der når kartet hopper til brukeren.
+  const ventendeArtRef = useRef<number | null>(null);
   const loadPredictionTilesRef = useRef<() => Promise<void>>(async () => {});
   // Monotonic request id so only the latest prediction-tile RPC may write state.
   const tileReqRef = useRef(0);
@@ -233,7 +239,9 @@ export function MushroomMap({
 
   // Forrige utsnitt (senter, zoom, art, søkt sted) — se husket-utsnitt.ts.
   // Leses én gang. En dyplenke (initialView / initialSpecies) vinner over det.
-  const [husket] = useState<HusketUtsnitt | null>(() => (initialView ? null : lesHusketUtsnitt()));
+  // ?mine=1 (rett etter lagring fra AI-flyten) skal vise funnet som nettopp ble
+  // lagret — ved GPS-posisjonen, uten artsfilter. Da hentes ingenting husket.
+  const [husket] = useState<HusketUtsnitt | null>(() => (initialView || startWithOnlyMine ? null : lesHusketUtsnitt()));
   // Bare utsnittet: brukes av kartinit og som vern mot GPS-sentreringen, på
   // samme måte som searchedPlaceRef verner en dyplenke.
   const husketUtsnittRef = useRef<{ lat: number; lng: number; zoom: number } | null>(
@@ -605,19 +613,20 @@ export function MushroomMap({
     setTopAccess(null);
   }, []);
 
-  const generateTopSpots = useCallback(async (speciesIdOverride?: number | null) => {
+  const generateTopSpots = useCallback(async (speciesIdOverride?: number | null, originOverride?: { lat: number; lng: number } | null) => {
     const map = mapRef.current;
     if (!map) return;
     const sid = speciesIdOverride !== undefined ? speciesIdOverride : filters.speciesId;
     setTopMsg(null);
     setTopLoading(true);
     try {
-      // Origin priority: a searched place beats the GPS fix — otherwise
-      // «steinsopp ved Hamar» computed spots around the user's home instead.
+      // Origin priority: an explicit origin (husket utsnitt ved dyplenke) beats a
+      // searched place, which beats the GPS fix — otherwise «steinsopp ved Hamar»
+      // computed spots around the user's home instead.
       const center = map.getCenter();
       const place = searchedPlaceRef.current;
-      const originLat = place?.lat ?? latitude ?? center.lat;
-      const originLng = place?.lng ?? longitude ?? center.lng;
+      const originLat = originOverride?.lat ?? place?.lat ?? latitude ?? center.lat;
+      const originLng = originOverride?.lng ?? place?.lng ?? longitude ?? center.lng;
 
       type Spot = TopSpot;
 
@@ -805,6 +814,9 @@ export function MushroomMap({
   // kartet har meldt et senter — før det finnes ikke noe utsnitt å huske.
   useEffect(() => {
     if (!viewport) return;
+    // Oslo-plassholderen før GPS-en har svart er ikke et utsnitt noen har valgt.
+    // Lagres den, blokkerer den GPS-sentreringen ved hvert senere besøk.
+    if (Math.abs(viewport.lat - 59.91) < 1e-4 && Math.abs(viewport.lng - 10.75) < 1e-4 && viewport.zoom === 11) return;
     lagreHusketUtsnitt({
       lat: viewport.lat,
       lng: viewport.lng,
@@ -1831,7 +1843,16 @@ export function MushroomMap({
       if (initialSpeciesRef.current) {
         const id = initialSpeciesRef.current.id;
         initialSpeciesRef.current = null;
-        void generateTopSpotsRef.current(id);
+        if (husketUtsnittRef.current) {
+          // Rundt det huskede utsnittet — ikke rundt en varm GPS-fiks som ellers
+          // ville dratt kartet hjem igjen med fitBounds.
+          const c = map.getCenter();
+          void generateTopSpotsRef.current(id, { lat: c.lat, lng: c.lng });
+        } else if (searchedPlaceRef.current || posRef.current) {
+          void generateTopSpotsRef.current(id);
+        } else {
+          ventendeArtRef.current = id;
+        }
       }
     };
 
@@ -1932,8 +1953,22 @@ export function MushroomMap({
       if (mapRef.current) {
         mapRef.current.setView([latitude, longitude], 13);
       }
+      if (ventendeArtRef.current) {
+        const id = ventendeArtRef.current;
+        ventendeArtRef.current = null;
+        void generateTopSpotsRef.current(id, { lat: latitude, lng: longitude });
+      }
     }
   }, [latitude, longitude]);
+
+  // Posisjon avslått: den ventende arten regnes rundt det kartet viser.
+  useEffect(() => {
+    if (!geoError || !ventendeArtRef.current) return;
+    const id = ventendeArtRef.current;
+    ventendeArtRef.current = null;
+    const c = mapRef.current?.getCenter();
+    void generateTopSpotsRef.current(id, c ? { lat: c.lat, lng: c.lng } : null);
+  }, [geoError]);
 
   useEffect(() => {
     if (searchedPlaceRef.current || husketUtsnittRef.current) return;
