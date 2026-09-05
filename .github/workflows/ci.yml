@@ -11,14 +11,16 @@ name: ci
 #
 # Hele denne porten koster under to minutter.
 #
-# 👤 GJENSTÅR MANUELT (kan ikke gjøres herfra):
-#   1. Slå på «Require status checks to pass before merging» på main i GitHub →
-#      Settings → Branches, og huk av «verify». Uten det er dette bare et
-#      rådgivende kryss.
-#   2. `next build` er BEVISST ikke med: det trenger NEXT_PUBLIC_SUPABASE_URL og
-#      NEXT_PUBLIC_SUPABASE_ANON_KEY ved prerender (se «Prerender + Supabase env
-#      vars» i CLAUDE.md). Legg dem inn som repo-secrets, så kan build-steget
-#      under kommenteres inn.
+# Regelsettet «main-porten» krever denne jobben (siden 2026-08-02). Build-steget
+# ligger INNE i samme jobb med vilje: et eget jobbnavn måtte legges til i
+# regelsettet manuelt, og fram til det var gjort ville det ikke stoppet noe.
+#
+# `next build` sto lenge utenfor med begrunnelsen «trenger Supabase-nøkler ved
+# prerender». Det er ikke sant lenger: nesten alle sider er dynamiske (locale-
+# oppslaget leser cookies), så bygget kjører uten env — verifisert 2026-09-05
+# på en ren utsjekking. Det build fanger som tsc/vitest ikke gjør: Turbopack-
+# resolve-feil, `ssr:false` i en Server Component, next.config-/Sentry-feil,
+# kast i modulskop under prerender av de få statiske rutene.
 #
 # `npm run qa` / `qa:prod` hører IKKE hjemme her — de treffer produksjon.
 
@@ -56,8 +58,9 @@ jobs:
       - name: Tests
         run: npm run test -- --run
 
-      # - name: Production build
-      #   run: npm run build
-      #   env:
-      #     NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
-      #     NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+      - name: Production build
+        run: npm run build
+        env:
+          # Ingen kildekart-opplasting fra CI — bare Vercel-bygget skal
+          # registrere en release i Sentry.
+          SENTRY_AUTH_TOKEN: ''

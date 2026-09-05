@@ -78,7 +78,7 @@ MED DEG UT I SKOGEN
 ABONNEMENT
 Mycelet er gratis å bruke. Vil du ha alt, kan du kjøpe et abonnement i appen:
 
-• Premium månedlig — 79 kr per måned. Fornyes hver måned.
+• Premium månedlig — 99 kr per måned. Fornyes hver måned.
 • Sesongpass årlig — 249 kr per år, tilsvarer ca. 21 kr per måned.
   Fornyes hvert år.
 
@@ -266,7 +266,7 @@ Ikke samlet: Usage Data, Browsing History, Contacts, Financial Info
 | Referansenavn | `Premium månedlig` | `Sesongpass årlig` |
 | Produkt-ID | `no.mycelet.premium.monthly` | `no.mycelet.seasonpass.yearly` |
 | Varighet | 1 måned | 1 år |
-| Pris (Norge) | **79 NOK** (velg nærmeste prispunkt) | **249 NOK** (velg nærmeste prispunkt) |
+| Pris (Norge) | **99 NOK** (velg nærmeste prispunkt) | **249 NOK** (velg nærmeste prispunkt) |
 | Visningsnavn (nb-NO) | `Premium` | `Sesongpass` |
 | Beskrivelse (nb-NO) | `Ubegrenset AI-identifikasjon, full prediksjon og offline-kart.` | `Alle Premium-fordeler hele året — fornyes årlig.` |
 
