@@ -118,4 +118,11 @@ Til S1-puljen (fem mottakere) er de fine som de er.
 
 | Dato | Partner | Hva ble sendt | Svar | Plassering live? | Bekreftede etter 14 d |
 |---|---|---|---|---|---|
-| | | | | | |
+| 2026-09-05 | Bergen sopp- og nyttevekstforening | Oppfølging (tall 99, «én linje»-forespørsel, utm bergen-snf) | | | |
+| 2026-09-05 | Häxringen (Göteborg-området) | S1 m/ varsel + fasit (84, utm haxringen) | | | |
+| 2026-09-05 | Puggehatten (Malmö) | S1 (83, utm puggehatten) | | | |
+| 2026-09-05 | Stockholms Svampvänner | S1 (74, utm stockholms-svampvanner) | | | |
+| 2026-09-05 | Södra Vätterbygdens (Jönköping) | S1 (77, utm sodra-vatterbygdens) | | | |
+| 2026-09-05 | Linköpings svampklubb | S1 (76, utm linkopings-svampklubb) | | | |
+
+Oppfølging: én gang, tidligst 15. september, med ferskt tall. Rapport til partner 14 dager etter en plassering går live.
