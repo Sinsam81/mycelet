@@ -142,8 +142,16 @@ skjermbilder), ikke budet, som skal justeres.
    Billing) — uten kort står kampanjen godkjent men bruker ingenting
 5. 🔜 Ukentlig, 5 min: Search terms-rapporten → flytt/negativér (Claude kan
    analysere rapporten hvis du limer den inn eller eksporterer CSV)
-6. 🔜 **13. september: dag 14** — CAC-regnestykket + beslutningsregelen over
-7. ✅ 2026-08-30: Kampanje **SE – Kategori** live (ID 2144564134) — samme
+6. 🔜 **Tirsdag 9. september: sjekkpunkt** (ramme 2 000 kr 5.–19. sep, se
+   `docs/strategi-2026-2027.md` § 5 pkt. 4): levering per ord etter
+   budøkningene 5. sep, kost per NY nedlasting, og «kom tilbake» blant
+   app-registrerte i dagsrapporten (målt fra 6. sep, kilde «app»)
+7. 🔜 **13. september: dag 14** — CAC-regnestykket + beslutningsregelen over
+8. ✅ 2026-09-05: Første budjusteringer etter uke 1 (39 klikk, ~22 inst.):
+   SE «kantarell» (Arter – exact) $0,40 → **$0,90** (11 klikk, 9 inst.),
+   SE Discovery $0,35 → **$0,45** (4 inst. à $0,45). NO uendret i påvente av
+   Keywords-skjermbilde for «Kategori – exact» (+25 % på ordene med inst.).
+9. ✅ 2026-08-30: Kampanje **SE – Kategori** live (ID 2144564134) — samme
    oppsett som NO: $25/dag, 30. aug → 15. nov, 10 negative søkeord (Broad),
    fire annonsegrupper (Kategori $0.60 / Arter $0.40 / Merkevare $0.20, alle
    Search Match AV + Discovery $0.30 med Search Match PÅ). Forutsetningen ble

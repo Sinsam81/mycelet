@@ -4,6 +4,7 @@ import { getTranslations } from 'next-intl/server';
 import { PageWrapper } from '@/components/layout/PageWrapper';
 import { createClient } from '@/lib/supabase/server';
 import { MushroomMap } from '@/components/map/MushroomMapLazy';
+import { RegistrerBruksdag } from '@/components/bruk/RegistrerBruksdag';
 import { logger } from '@/lib/log';
 import { parseMapViewParams } from '@/lib/utils/map-view-params';
 
@@ -62,6 +63,7 @@ export default async function MapPage({
           ) : null}
         </div>
         <MushroomMap startWithOnlyMine={mine === '1'} initialView={initialView} />
+        <RegistrerBruksdag flate="kart" />
       </div>
     </PageWrapper>
   );

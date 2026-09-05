@@ -98,6 +98,10 @@ export default async function PersonvernPage() {
               </dd>
             </div>
             <div>
+              <dt className="font-medium text-gray-900">{t('collectBruksdagerTerm')}</dt>
+              <dd>{t('collectBruksdagerDesc')}</dd>
+            </div>
+            <div>
               <dt className="font-medium text-gray-900">{t('collectAlertTerm')}</dt>
               <dd>{t('collectAlertDesc')}</dd>
             </div>
@@ -287,6 +291,9 @@ export default async function PersonvernPage() {
             </li>
             <li>
               <span className="font-medium">{t('retentionServerLabel')}</span> {t('retentionServerDesc')}
+            </li>
+            <li>
+              <span className="font-medium">{t('retentionUsageLabel')}</span> {t('retentionUsageDesc')}
             </li>
             <li>
               <span className="font-medium">{t('retentionAlertLabel')}</span> {t('retentionAlertDesc')}

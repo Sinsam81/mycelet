@@ -1,5 +1,6 @@
 'use client';
 
+import { RegistrerBruksdag } from '@/components/bruk/RegistrerBruksdag';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { MapPin } from 'lucide-react';
@@ -151,6 +152,8 @@ export function MushroomDayCard() {
 
   return (
     <article className="min-h-[15rem] rounded-xl bg-white p-4 shadow-sm">
+      {/* «Så soppforholdene i dag» — først her, når kortet faktisk viser noe (migrasjon 064). */}
+      <RegistrerBruksdag flate="hjem" />
       <div className="flex items-center gap-4">
         <svg
           viewBox="0 0 110 110"

@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createRequestLogger } from '@/lib/log/request';
 import { bearerSecretMatches } from '@/lib/security/secret-compare';
-import { byggDagsrapport, UKJENT_KILDE, type AbonnementRad, type Dagsrapport, type VarselAbonnentRad } from '@/lib/rapport/dagsrapport';
+import { byggDagsrapport, UKJENT_KILDE, type AbonnementRad, type BruksdagRad, type Dagsrapport, type VarselAbonnentRad } from '@/lib/rapport/dagsrapport';
+import { osloDag } from '@/lib/bruk/bruksdag';
 import { normaliserKilde } from '@/lib/analytics/kilde';
 import { sendEpost } from '@/lib/email/send';
 
@@ -92,6 +93,39 @@ export async function GET(request: NextRequest) {
   }
   const varselAntall = varselabonnenter.filter((r) => r.active).length;
 
+  // ── Bruksdager siste 28 dager ─────────────────────────────────────────────
+  // Mangler tabellen (migrasjonen ikke kjørt), sier rapporten «ikke målt» i
+  // stedet for å vise null — null ser ut som «ingen bruker det».
+  const bruksGrense = osloDag(new Date(naa.getTime() - 27 * 24 * 3600_000));
+  const MAKS_SIDER = 50;
+  const samledeBruksdager: BruksdagRad[] = [];
+  let bruksdagerMaalt = true;
+  for (let side = 0; side < MAKS_SIDER; side += 1) {
+    const fra = side * 1000;
+    const { data: bruksRader, error: bruksErr } = await db
+      .from('bruksdager')
+      .select('user_id,dag,flate')
+      .gte('dag', bruksGrense)
+      .order('dag', { ascending: true })
+      .order('user_id', { ascending: true })
+      .order('flate', { ascending: true })
+      .order('omrade', { ascending: true })
+      .range(fra, fra + 999);
+    if (bruksErr) {
+      log.warn('dagsrapport.bruksdager_feilet', { message: bruksErr.message });
+      bruksdagerMaalt = false;
+      break;
+    }
+    samledeBruksdager.push(...((bruksRader ?? []) as BruksdagRad[]));
+    if ((bruksRader ?? []).length < 1000) break;
+    if (side === MAKS_SIDER - 1) {
+      // Mer enn 50 000 rader på 28 dager: heller «ikke målt» enn et tall som er for lavt.
+      log.warn('dagsrapport.bruksdager_avkortet', { sider: MAKS_SIDER });
+      bruksdagerMaalt = false;
+    }
+  }
+  const bruksdager = bruksdagerMaalt ? samledeBruksdager : undefined;
+
   // ── Regionscorer, i dag og i går ──────────────────────────────────────────
   const { data: scorer } = await db
     .from('region_daily_scores')
@@ -110,6 +144,7 @@ export async function GET(request: NextRequest) {
     abonnement: (abData ?? []) as AbonnementRad[],
     varselabonnement: varselAntall,
     varselabonnenter,
+    bruksdager,
     regionerIDag: velg(iDagDato),
     regionerIGar: velg(iGarDato),
     naa
@@ -157,6 +192,16 @@ function byggRapportEpost(r: Dagsrapport, naa: Date) {
     `${k.totalt} · ${k.siste7d} siste 7 d · ${k.betalende} betaler`;
   const kildeRader = r.kilder.slice(0, 8);
   const v = r.varsel;
+  const u = r.bruk;
+  const brukRader: Array<[string, string]> = u.maalt
+    ? [
+        ['Så forholdene siste 7 dager', `${u.brukereSiste7d} brukere`],
+        ['— forsiden / kartet / områdeside', `${u.perFlate.hjem} / ${u.perFlate.kart} / ${u.perFlate.omrade}`],
+        ['Nye siste 14 d som kom tilbake', `${u.komTilbake} av ${u.nyeSiste14d}`],
+        ...u.perKilde.slice(0, 6).map((k): [string, string] => [`— ${kildeNavn(k.kilde)}`, `${k.komTilbake} av ${k.nye}`]),
+        ['Brukt i to ulike uker (28 d)', String(u.gjenbruk28d)]
+      ]
+    : [['Bruk av soppforholdene', 'ikke målt — tabellen bruksdager svarte ikke']];
 
   const html = `<!doctype html>
 <html lang="nb"><body style="font-family:-apple-system,system-ui,sans-serif;color:#1f2937;max-width:520px;margin:24px auto;padding:0 16px">
@@ -196,6 +241,11 @@ function byggRapportEpost(r: Dagsrapport, naa: Date) {
     ${v.perRegion.length ? rad('Flest abonnenter', v.perRegion.map((r) => `${r.region} ${r.bekreftede}`).join(' · ')) : ''}
   </table>
 
+  <h2 style="font-size:14px;color:#1A3409;margin:22px 0 6px">Bruk av soppforholdene (innloggede)</h2>
+  <table style="width:100%;border-collapse:collapse;font-size:14px">
+    ${brukRader.map(([n, v]) => rad(n, v)).join('\n    ')}
+  </table>
+
   <h2 style="font-size:14px;color:#1A3409;margin:22px 0 6px">Hvor de registrerte kom fra</h2>
   <table style="width:100%;border-collapse:collapse;font-size:14px">
     ${kildeRader.map((k) => rad(kildeNavn(k.kilde), kildeVerdi(k))).join('\n    ') || rad('—', 'ingen registrerte')}
@@ -205,7 +255,10 @@ function byggRapportEpost(r: Dagsrapport, naa: Date) {
     Besøkstall for forsiden er ikke målt — den statiske landingssiden har ingen
     JavaScript, så analyseverktøyet kjører ikke der. Kilde per registrering er
     målt fra september 2026; «direkte / ukjent» er direkte besøk pluss alle som
-    registrerte seg før det. Se kommentaren i <code>api/cron/dagsrapport</code>.
+    registrerte seg før det. «Kom tilbake» = så soppforholdene på en senere dag
+    enn registreringsdagen (forsidekortet vises automatisk samme dag, så det
+    teller ikke); «to ulike uker» = ISO-uker. Bruk måles fra 6. september 2026.
+    Se kommentaren i <code>api/cron/dagsrapport</code>.
   </p>
 </body></html>`;
 
@@ -236,12 +289,16 @@ SOPPVARSELET SOM TRAKT
   klikket varsel → område ... ${v.aktiverte}
 ${v.perKilde.slice(0, 6).map((k) => `  ${kildeNavn(k.kilde).padEnd(26, '.')} ${k.bekreftede} · ${k.siste7d} siste 7 d · ${k.aktiverte} aktivert`).join('\n')}${v.perRegion.length ? `\n  flest ..................... ${v.perRegion.map((r) => `${r.region} ${r.bekreftede}`).join(', ')}` : ''}
 
+BRUK AV SOPPFORHOLDENE (INNLOGGEDE)
+${brukRader.map(([n, v]) => `  ${n.padEnd(34, '.')} ${v}`).join('\n')}
+
 HVOR DE REGISTRERTE KOM FRA
 ${kildeRader.map((k) => `  ${kildeNavn(k.kilde).padEnd(26, '.')} ${kildeVerdi(k)}`).join('\n') || '  ingen registrerte'}
 
 Besøkstall for forsiden er ikke målt — landingssiden har ingen JavaScript.
 Kilde per registrering er målt fra september 2026; «direkte / ukjent» er
-direkte besøk pluss alle fra før det.`;
+direkte besøk pluss alle fra før det. «Kom tilbake» = så forholdene en senere
+dag enn registreringsdagen. Bruk måles fra 6. september 2026.`;
 
   return { emne: `Mycelet ${dato}: ${overskrift.toLowerCase()}`, html, tekst };
 }

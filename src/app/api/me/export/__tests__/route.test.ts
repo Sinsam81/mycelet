@@ -311,7 +311,7 @@ describe('identifiseringshistorikken (art. 15)', () => {
 
   it('schemaVersion er bumpet, så en mottaker ser at fila har fått et datasett', async () => {
     const body = JSON.parse(await (await GET(makeRequest())).text());
-    expect(body.schemaVersion).toBe(5);
+    expect(body.schemaVersion).toBe(6);
   });
 
   it('paginerer: 1 500 funn kommer alle med, og fila er fortsatt komplett', async () => {

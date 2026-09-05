@@ -34,6 +34,7 @@
 
 import { VARSEL_MIN_SCORE } from '@/lib/alerts/decision';
 import { normaliserKilde } from '@/lib/analytics/kilde';
+import { isoUke, osloDag, type Flate } from '@/lib/bruk/bruksdag';
 import { PREDICTION_TILE_REGIONS } from '@/lib/prediction/tile-regions';
 
 export type Betalingskilde = 'stripe' | 'revenuecat' | 'manuell';
@@ -73,12 +74,22 @@ export interface VarselAbonnentRad {
   kilde: string | null;
 }
 
+/** Én rad per bruker, Oslo-dato og flate der soppforholdene ble vist (migrasjon 064). */
+export interface BruksdagRad {
+  user_id: string;
+  /** YYYY-MM-DD */
+  dag: string;
+  flate: string;
+}
+
 export interface RapportInn {
   brukere: BrukerRad[];
   abonnement: AbonnementRad[];
   varselabonnement: number;
   /** Radene bak tallet over — for kilde, region og aktivering. Valgfri for eldre kall. */
   varselabonnenter?: VarselAbonnentRad[];
+  /** Bruksdager siste 28 dager. undefined = ikke målt (rapporten sier det). */
+  bruksdager?: BruksdagRad[];
   /** Regionscorer for i dag og i går, til «hva skjedde i skogen». */
   regionerIDag: Array<{ region: string; score: number }>;
   regionerIGar: Array<{ region: string; score: number }>;
@@ -116,6 +127,22 @@ export interface Dagsrapport {
     aktiverte: number;
     perKilde: Array<{ kilde: string; bekreftede: number; siste7d: number; aktiverte: number }>;
     perRegion: Array<{ region: string; bekreftede: number }>;
+  };
+  /**
+   * Bruk av soppforholdene blant innloggede (docs/strategi-2026-2027.md § 4).
+   * «Kom tilbake» = så forholdene på en SENERE dag enn registreringsdagen —
+   * forsidekortet vises automatisk rett etter registrering, så samme dag
+   * beviser ingenting. «Gjenbruk» = bruksdager i to ulike ISO-uker siste
+   * 28 dager. Måles fra 6. september 2026; før det finnes ingen rader.
+   */
+  bruk: {
+    maalt: boolean;
+    brukereSiste7d: number;
+    perFlate: Record<Flate, number>;
+    nyeSiste14d: number;
+    komTilbake: number;
+    perKilde: Array<{ kilde: string; nye: number; komTilbake: number }>;
+    gjenbruk28d: number;
   };
 }
 
@@ -236,6 +263,9 @@ export function byggDagsrapport(inn: RapportInn): Dagsrapport {
       .slice(0, 5)
   };
 
+  // ── Bruk av soppforholdene ────────────────────────────────────────────────
+  const bruk = byggBruk(inn, naa, kildeForBruker);
+
   const flanker: Array<{ region: string; fra: number; til: number }> = [];
   const igar = new Map(inn.regionerIGar.map((r) => [r.region, r.score]));
   for (const r of inn.regionerIDag) {
@@ -265,6 +295,69 @@ export function byggDagsrapport(inn: RapportInn): Dagsrapport {
     toppRegioner: [...inn.regionerIDag].sort((a, b) => b.score - a.score).slice(0, 3),
     flanker,
     kilder,
-    varsel
+    varsel,
+    bruk
+  };
+}
+
+function byggBruk(inn: RapportInn, naa: number, kildeForBruker: Map<string, string>): Dagsrapport['bruk'] {
+  const tomt: Record<Flate, number> = { hjem: 0, kart: 0, omrade: 0 };
+  const dag14 = 14 * 24 * 3600_000;
+  const nye = inn.brukere.filter((b) => naa - new Date(b.created_at).getTime() <= dag14);
+  if (!inn.bruksdager) {
+    return { maalt: false, brukereSiste7d: 0, perFlate: tomt, nyeSiste14d: nye.length, komTilbake: 0, perKilde: [], gjenbruk28d: 0 };
+  }
+
+  // Dagsgrenser i Oslo-dato, som radene. «Siste 7 dager» = i dag og seks før.
+  const grense7 = osloDag(new Date(naa - 6 * 24 * 3600_000));
+  const grense28 = osloDag(new Date(naa - 27 * 24 * 3600_000));
+  const rader = inn.bruksdager.filter((r) => r.dag >= grense28);
+
+  const brukereSiste7d = new Set<string>();
+  const perFlateSett: Record<Flate, Set<string>> = { hjem: new Set(), kart: new Set(), omrade: new Set() };
+  const ukerPerBruker = new Map<string, Set<string>>();
+  const dagerPerBruker = new Map<string, string[]>();
+  for (const r of rader) {
+    let dager = dagerPerBruker.get(r.user_id);
+    if (!dager) dagerPerBruker.set(r.user_id, (dager = []));
+    dager.push(r.dag);
+    let uker = ukerPerBruker.get(r.user_id);
+    if (!uker) ukerPerBruker.set(r.user_id, (uker = new Set()));
+    uker.add(isoUke(r.dag));
+    if (r.dag >= grense7) {
+      brukereSiste7d.add(r.user_id);
+      if (r.flate in perFlateSett) perFlateSett[r.flate as Flate].add(r.user_id);
+    }
+  }
+
+  // Kom tilbake: en bruksdag ETTER registreringsdagen (Oslo-dato begge).
+  const komTilbakeSett = new Set<string>();
+  for (const b of nye) {
+    const registrert = osloDag(new Date(b.created_at));
+    if ((dagerPerBruker.get(b.id) ?? []).some((d) => d > registrert)) komTilbakeSett.add(b.id);
+  }
+  const perKildeTall = new Map<string, { nye: number; komTilbake: number }>();
+  for (const b of nye) {
+    const k = kildeForBruker.get(b.id) ?? UKJENT_KILDE;
+    let t = perKildeTall.get(k);
+    if (!t) perKildeTall.set(k, (t = { nye: 0, komTilbake: 0 }));
+    t.nye += 1;
+    if (komTilbakeSett.has(b.id)) t.komTilbake += 1;
+  }
+
+  return {
+    maalt: true,
+    brukereSiste7d: brukereSiste7d.size,
+    perFlate: { hjem: perFlateSett.hjem.size, kart: perFlateSett.kart.size, omrade: perFlateSett.omrade.size },
+    nyeSiste14d: nye.length,
+    komTilbake: komTilbakeSett.size,
+    perKilde: [...perKildeTall.entries()]
+      .map(([k, t]) => ({ kilde: k, ...t }))
+      .sort((x, y) => {
+        if (x.kilde === UKJENT_KILDE) return 1;
+        if (y.kilde === UKJENT_KILDE) return -1;
+        return y.nye - x.nye || x.kilde.localeCompare(y.kilde);
+      }),
+    gjenbruk28d: [...ukerPerBruker.values()].filter((u) => u.size >= 2).length
   };
 }
