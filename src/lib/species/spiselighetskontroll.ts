@@ -28,11 +28,22 @@ export interface SpiselighetsRad {
  * «frarådes nybegynnere» er IKKE frarådinger av arten (granmatriske, rødnende
  * fluesopp), derfor unntakene.
  */
-const FRARAADING = /\b(ikke anbefalt|ikke matsopp|frarådes(?! nybegynnere)|anbefales ikke|bør unngås|skal ikke spises(?! rå)|ikke spis(?!es rå)\b)/i;
+const FRARAADING =
+  /\b(ikke anbefalt|ikke matsopp|frarådes(?! nybegynnere)|anbefales ikke|bør unngås|(skal|bør|må) ikke spises(?! rå)|ikke spis(?!es? rå)\b)/i;
 /** Tekst som sier at varmebehandling IKKE hjelper. */
-const VARME_HJELPER_IKKE = /(koking|steking|varmebehandling|avkoking)[^.]{0,60}(fjerner ikke|hjelper ikke|nøytraliserer ikke|ikke nok)|(forsvinner|går) ikke (med|ved) (koking|steking|varme)/i;
-/** Tekst som handler om helsetilstand, ikke tilberedning. */
-const HELSEFORBEHOLD = /\b(nyre|lever|allergi|gravid|dialyse)\w*/i;
+const VARME_HJELPER_IKKE =
+  /(koking|steking|varmebehandling|avkoking)[^.]{0,60}(fjerner ikke|hjelper ikke|nøytraliserer ikke|ikke nok)|(forsvinner|går|brytes) ikke (ned )?(med|ved) (koking|steking|varme)|varmestabil|tåler (koking|steking|varme)/i;
+/**
+ * Tekst som handler om helsetilstand, ikke tilberedning. Organet lever, ikke
+ * verbet: «lever i symbiose med gran» skal ikke treffe.
+ */
+const HELSEFORBEHOLD = /\b(nyre\w*|leveren|leversyk\w*|leverskad\w*|allergi\w*|gravid\w*|dialyse)\b/i;
+/**
+ * Ord som viser at merknaden faktisk handler om tilberedning. Som HELE ord —
+ * «rå» inni «råd», «frarådes» og «grå» telte som tilberedning, og da var
+ * regelen død for nettopp den teksten den ble skrevet for.
+ */
+const TILBEREDNING = /\b(rå|rått|råe|kok\w*|avkok\w*|stek\w*|forvell\w*|varmebehandl\w*)\b/i;
 
 /**
  * null = ingen motsigelse; ellers en kort begrunnelse på norsk.
@@ -44,7 +55,7 @@ export function finnSpiselighetsMotsigelse(rad: SpiselighetsRad): string | null 
   if (rad.edibility === 'conditionally_edible') {
     if (VARME_HJELPER_IKKE.test(tekst)) return 'merket sier «giftig rå», teksten sier at varme ikke fjerner risikoen';
     if (FRARAADING.test(tekst)) return 'merket sier «spiselig etter tilberedning», teksten fraråder arten';
-    if (HELSEFORBEHOLD.test(tekst) && !/(rå|kok|stek|forvell|varmebehandl)/i.test(rad.edibility_notes ?? '')) {
+    if (HELSEFORBEHOLD.test(tekst) && !TILBEREDNING.test(rad.edibility_notes ?? '')) {
       return 'merknaden gjelder helsetilstand, ikke tilberedning — hører ikke under «giftig rå»';
     }
     return null;

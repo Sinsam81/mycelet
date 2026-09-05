@@ -1,6 +1,8 @@
 // Kontrollerer hele artslista for motsigelser mellom spiselighetsmerke og
 // artens egen tekst — se src/lib/species/spiselighetskontroll.ts for reglene.
 // Kjør:  npm run kontroller:spiselighet     (lesing bare; skriver aldri)
+// Importerer en .ts-fil direkte — derfor --experimental-strip-types i npm-
+// skriptet (standard fra Node 22.18/24, men flagget gjør det eksplisitt).
 import { createClient } from '@supabase/supabase-js';
 import { finnSpiselighetsMotsigelse } from '../src/lib/species/spiselighetskontroll.ts';
 

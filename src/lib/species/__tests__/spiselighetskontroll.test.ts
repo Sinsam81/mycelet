@@ -51,4 +51,20 @@ describe('finnSpiselighetsMotsigelse — vaktbikkja for «giftig rå»-merket', 
     const r = rad({ edibility: 'edible', edibility_notes: 'God matsopp i riske-gruppen. Stek godt — riskene skal ikke spises rå.' });
     expect(finnSpiselighetsMotsigelse(r)).toBeNull();
   });
+
+  it('«rå» inni «tilberedningsråd» er ikke et tilberedningsord — nyremerknad uten kokeråd fanges', () => {
+    const r = rad({ edibility_notes: 'Spiselig ifølge normlisten, med merknad om nedsatt nyrefunksjon. Vi gir ingen tilberedningsråd.' });
+    expect(finnSpiselighetsMotsigelse(r)).toMatch(/helsetilstand/);
+  });
+
+  it('verbet «lever» er ikke organet', () => {
+    const r = rad({ edibility: 'edible', edibility_notes: 'God matsopp. Lever i symbiose med gran.' });
+    expect(finnSpiselighetsMotsigelse(r)).toBeNull();
+  });
+
+  it('flere måter å si det på: «bør ikke spises», «varmestabilt», «brytes ikke ned ved koking»', () => {
+    expect(finnSpiselighetsMotsigelse(rad({ edibility: 'edible', edibility_notes: 'Bør ikke spises av barn.' }))).not.toBeNull();
+    expect(finnSpiselighetsMotsigelse(rad({ edibility_notes: 'Giftig rå. Toksinet er varmestabilt.' }))).toMatch(/varme/);
+    expect(finnSpiselighetsMotsigelse(rad({ edibility_notes: 'Må kokes. Giftstoffet brytes ikke ned ved koking.' }))).toMatch(/varme/);
+  });
 });

@@ -96,7 +96,7 @@ export function reconcileWithNormliste(
 }
 
 /**
- * De tre artene der vi bevisst er strengere enn normlisten.
+ * De fire artene der vi bevisst er strengere enn normlisten.
  *
  * ⚠️ IKKE «rett» disse for å matche NSNF. De er vurdert én for én, og hver
  * endring ville svekket en advarsel. Se migrasjon 047 punkt 6.
@@ -136,6 +136,17 @@ export const DELIBERATE_DIVERGENCES: ReadonlyArray<{
     hvorfor:
       'Å følge normlisten her ville vært en OPPGRADERING mot spiselig. Det er den ' +
       'ene retningen som kan skade noen, og ingen har etterspurt arten.'
+  },
+  {
+    latin: 'Pleurocybella porrigens',
+    norsk: 'Krittøsterssopp',
+    normliste: 'Spiselig med merknad',
+    vaar: 'inedible',
+    hvorfor:
+      'NSNFs merknad («bør unngås ved nedsatt nyrefunksjon») handler om helse, ikke ' +
+      'tilberedning — men vår klasse for «med merknad» vises som «giftig rå, må ' +
+      'varmes». Koking fjerner ikke risikoen (17 døde i Japan 2004), og Sverige har ' +
+      'strøket arten som matsopp. Migrasjon 065.'
   }
 ];
 
