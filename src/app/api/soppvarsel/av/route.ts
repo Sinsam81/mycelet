@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { randomUUID } from 'crypto';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createRequestLogger } from '@/lib/log/request';
 import { checkRateLimit } from '@/lib/rate-limit';
@@ -41,9 +42,12 @@ async function meldAv(token: string | null, log: ReturnType<typeof createRequest
   }
 
   const db = createAdminClient();
+  // Roter bekreftelsestokenet samtidig: den gamle lenka i innboksen skal
+  // ikke kunne gjenoppta abonnementet (bekreft-ruta avviser avmeldte rader
+  // uansett — dette er belte og bukseseler).
   const { data, error } = await db
     .from('alert_subscriptions')
-    .update({ active: false })
+    .update({ active: false, confirm_token: randomUUID() })
     .eq('unsubscribe_token', token)
     .select('id,locale');
 

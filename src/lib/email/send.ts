@@ -52,6 +52,12 @@ export interface EpostArgs {
    * «søppelpost» i stedet — som rammer leveringen for alle andre e-poster også.
    */
   avmeldingsUrl?: string;
+  /**
+   * Resends Idempotency-Key (husket 24 t). Samme nøkkel → samme e-post går
+   * aldri to ganger, selv om kjøringen gjentas. Bruk noe som identifiserer
+   * HENDELSEN, ikke klokkeslettet: «soppvarsel/<abonnement-id>/<dato>».
+   */
+  idempotensNokkel?: string;
 }
 
 export interface EpostResultat {
@@ -87,7 +93,11 @@ export async function sendEpost(args: EpostArgs): Promise<EpostResultat> {
   try {
     const res = await fetch(RESEND_URL, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${nokkel}`, 'Content-Type': 'application/json' },
+      headers: {
+        Authorization: `Bearer ${nokkel}`,
+        'Content-Type': 'application/json',
+        ...(args.idempotensNokkel ? { 'Idempotency-Key': args.idempotensNokkel } : {})
+      },
       body: JSON.stringify({
         from: `Mycelet <${fra}>`,
         to: [args.til],
@@ -107,6 +117,14 @@ export async function sendEpost(args: EpostArgs): Promise<EpostResultat> {
 
     if (!res.ok) {
       const tekst = await res.text();
+      // 409 på idempotensnøkkelen betyr «denne er ALLEREDE sendt, med en litt
+      // annen kropp» (toppdag/arter hentes per kjøring). Det er ikke en feil —
+      // det er nettopp det nøkkelen skal fange. Behandles som levert, ellers
+      // ville en retry tilbakestilt karantenen og sendt igjen i morgen.
+      if (res.status === 409 && args.idempotensNokkel) {
+        logger.info('epost.allerede_sendt', { detalj: tekst.slice(0, 120) });
+        return { ok: true, detalj: 'allerede sendt (idempotens)' };
+      }
       // Ikke logg mottakeradressen — loggeren maskerer e-post, men svaret fra
       // Resend kan inneholde den i klartekst.
       logger.warn('epost.avvist', { status: res.status, detalj: tekst.slice(0, 200) });
