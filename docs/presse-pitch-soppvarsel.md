@@ -241,4 +241,11 @@ kjent kostnad, ikke et problem å løse i innboksen.)
 
 | Dato | Redaksjon | Område/tall | Svar |
 |---|---|---|---|
-| | | | |
+| 2026-09-05 | Hamar Arbeiderblad | Innlandet 61 → 85 (omslagsdag) | |
+| 2026-09-05 | NRK Innlandet | Innlandet 61 → 85 (omslagsdag) | |
+| 2026-09-05 | Göteborgs-Posten | Göteborg vendte i veckan, 84 | |
+| 2026-09-05 | SVT Väst | Göteborg vendte i veckan, 84 | |
+| 2026-09-05 | Smålandsposten | Växjö 92 — bäst i Sverige | |
+| 2026-09-05 | SVT Småland | Växjö 92 — bäst i Sverige | |
+
+Oppfølging: én gang, tirsdag 9. september, med ferskt tall — bare der det er stille.

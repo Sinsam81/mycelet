@@ -87,8 +87,8 @@ Siden da er det kontoløse varselet og fasitloggen lansert — det er nyheten.
 ## 2. Göteborg-regionen — Häxringen (S1) og Västgötabergets Svampklubb
 
 **Bakgrunn:** Häxringen (Södra Älvsborg) er én av de fem klubbene i den
-ferdigskrevne svenske puljen S1 (hvelvet: «SMF pulje S1 — ferdige
-e-poster»), aldri sendt. Västgötabergets Svampklubb har adresse i loggen, men
+svenske puljen S1, som ble sendt fra Gmail 13. august (hvelvets logg manglet
+datoene fram til 5. september) — dagens e-post er altså en oppfølging. Västgötabergets Svampklubb har adresse i loggen, men
 er ikke skrevet til. Göteborg-området vendte 4. september (58 → 86) og
 Göteborgs-Posten/SVT Väst fikk pitch 5. september — det er kroken.
 
@@ -119,10 +119,10 @@ Til S1-puljen (fem mottakere) er de fine som de er.
 | Dato | Partner | Hva ble sendt | Svar | Plassering live? | Bekreftede etter 14 d |
 |---|---|---|---|---|---|
 | 2026-09-05 | Bergen sopp- og nyttevekstforening | Oppfølging (tall 99, «én linje»-forespørsel, utm bergen-snf) | | | |
-| 2026-09-05 | Häxringen (Göteborg-området) | S1 m/ varsel + fasit (84, utm haxringen) | | | |
-| 2026-09-05 | Puggehatten (Malmö) | S1 (83, utm puggehatten) | | | |
-| 2026-09-05 | Stockholms Svampvänner | S1 (74, utm stockholms-svampvanner) | | | |
-| 2026-09-05 | Södra Vätterbygdens (Jönköping) | S1 (77, utm sodra-vatterbygdens) | | | |
-| 2026-09-05 | Linköpings svampklubb | S1 (76, utm linkopings-svampklubb) | | | |
+| 2026-09-05 | Häxringen (Göteborg-området) | Oppfølging av S1 (sendt 13.08) m/ varsel + fasit (84, utm haxringen) | | | |
+| 2026-09-05 | Puggehatten (Malmö) | Oppfølging av S1 (83, utm puggehatten) | | | |
+| 2026-09-05 | Stockholms Svampvänner | Oppfølging av S1 (74, utm stockholms-svampvanner) | | | |
+| 2026-09-05 | Södra Vätterbygdens (Jönköping) | Oppfølging av S1 (77, utm sodra-vatterbygdens) | | | |
+| 2026-09-05 | Linköpings svampklubb | Oppfølging av S1 (76, utm linkopings-svampklubb) | | | |
 
 Oppfølging: én gang, tidligst 15. september, med ferskt tall. Rapport til partner 14 dager etter en plassering går live.
