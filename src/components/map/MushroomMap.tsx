@@ -58,6 +58,10 @@ import { readLocal, readLocalJson, removeLocal, writeLocal } from '@/lib/utils/s
 import { PlaceForecastStrip } from './PlaceForecastStrip';
 import { FLAGS } from '@/lib/flags';
 import toast from 'react-hot-toast';
+import { useIsNative } from '@/lib/hooks/useIsNative';
+import { byggLovendeOmraderGpx } from '@/lib/gpx/lovende-omrader';
+import { osloDag } from '@/lib/bruk/bruksdag';
+import { GpxKopierModal } from '@/components/gpx/GpxKopierModal';
 import { foreslaaVurdering } from '@/lib/vurdering/foreslaa';
 
 type LeafletType = typeof import('leaflet');
@@ -97,6 +101,14 @@ const FOREST_LABEL: Record<string, string> = {
  * sender den ferdig formulert på leserens språk. Den er premium-halvdelen av
  * funksjonen, så gratisbrukere får en nål uten rapport.
  */
+/**
+ * Kartverkets turrutebase (merkede fotruter) som valgfritt kartlag. Bare Norge —
+ * Sverige har ingen tilsvarende åpen tjeneste. Valget huskes lokalt. Laget er
+ * ikke med i offline-bufferen (WMS, ikke fliser).
+ */
+const TRAIL_WMS_URL = 'https://wms.geonorge.no/skwms1/wms.friluftsruter2';
+const TRAIL_LAYER_KEY = 'mycelet:kart-turruter-v1';
+
 type TopSpot = {
   lat: number;
   lng: number;
@@ -154,6 +166,9 @@ export function MushroomMap({
 } = {}) {
   const t = useTranslations('MushroomMap');
   const locale = useLocale();
+  const native = useIsNative();
+  // «Lovende områder» som GPX i appskallet vises som tekst (se GpxKopierModal).
+  const [gpxTekst, setGpxTekst] = useState<string | null>(null);
   // Trengs for popup-rotene under: de er løsrevne React-røtter uten tilgang
   // til providerens kontekst, så meldingene må sendes inn eksplisitt.
   const messages = useMessages();
@@ -168,6 +183,9 @@ export function MushroomMap({
   const generateTopSpotsRef = useRef<(speciesIdOverride?: number | null, originOverride?: { lat: number; lng: number } | null) => Promise<void>>(
     async () => {}
   );
+  // Hvilken art de viste lovende områdene faktisk ble regnet for — GPX-navnet
+  // skal ikke låne navnet på en art som er valgt, men ikke ferdig regnet.
+  const topSpotsForSpeciesRef = useRef<number | null>(null);
   // «Let etter denne arten» uten GPS-fiks og uten husket utsnitt: vent med
   // lovende områder til posisjonen er kjent, ellers regnes de rundt Oslo-
   // plassholderen og blir liggende der når kartet hopper til brukeren.
@@ -606,6 +624,36 @@ export function MushroomMap({
     [bindSpotFeedback, t]
   );
 
+  /**
+   * «Lovende områder» som GPX: vi sier hvor, UT.no/Garmin/Organic Maps lager
+   * ruten dit langs stier. Nett: fil. Appskall: tekst med kopier-knapp.
+   */
+  const eksporterTopSpotsGpx = useCallback(() => {
+    if (!topSpots?.length) return;
+    try {
+      const gpx = byggLovendeOmraderGpx(topSpots, {
+        artsnavn: topSpotsForSpeciesRef.current != null && topSpotsForSpeciesRef.current === filters.speciesId ? selectedSpeciesName : null,
+        dato: osloDag(new Date()),
+        locale: locale === 'sv' ? 'sv' : 'nb'
+      });
+      if (native) {
+        setGpxTekst(gpx);
+        return;
+      }
+      const url = URL.createObjectURL(new Blob([gpx], { type: 'application/gpx+xml' }));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'mycelet-lovende-omrader.gpx';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      toast.success(t('gpxTopSpotsDownloaded'), { duration: 4000 });
+    } catch {
+      toast.error(t('gpxTopSpotsFailed'));
+    }
+  }, [topSpots, selectedSpeciesName, filters.speciesId, locale, native, t]);
+
   const clearTopSpots = useCallback(() => {
     topLayerRef.current?.clearLayers();
     setTopSpots(null);
@@ -716,6 +764,7 @@ export function MushroomMap({
 
       setTopAccess(limited ? 'free_limited' : 'premium_full');
       setTopSpots(spots);
+      topSpotsForSpeciesRef.current = sid ?? null;
       await renderTopSpots(
         spots,
         { lat: originLat, lng: originLng },
@@ -1753,10 +1802,34 @@ export function MushroomMap({
       baseLayersRef.current = { terreng: baseTerreng, kart: baseKart, satellitt: baseSatellitt };
 
       L.control.zoom({ position: 'topright' }).addTo(map);
+      // Turruter oppå grunnkartet, under prognosen og markørene (tile-panet).
+      const turruter = L.tileLayer.wms(TRAIL_WMS_URL, {
+        layers: 'Fotrute',
+        format: 'image/png',
+        transparent: true,
+        version: '1.3.0',
+        attribution: 'Turruter &copy; Kartverket',
+        // Tjenesten tegner ingenting over 1:1 000 000 (MaxScaleDenominator i
+        // GetCapabilities) — z8–9 ga tomme fliser og en avkrysning uten effekt.
+        // Kartet går til z20; uten maxZoom arver laget Leaflets 18 og forsvinner
+        // akkurat der stien ved en lovende rute skal leses.
+        minZoom: 10,
+        maxZoom: 20,
+        zIndex: 5,
+        opacity: 0.9
+      });
+      if (readLocal(TRAIL_LAYER_KEY) === '1') turruter.addTo(map);
+      map.on('overlayadd', (e: import('leaflet').LayersControlEvent) => {
+        if (e.layer === turruter) writeLocal(TRAIL_LAYER_KEY, '1');
+      });
+      map.on('overlayremove', (e: import('leaflet').LayersControlEvent) => {
+        if (e.layer === turruter) writeLocal(TRAIL_LAYER_KEY, '0');
+      });
+
       L.control
         .layers(
           { Terreng: baseTerreng, Kart: baseKart, Satellitt: baseSatellitt },
-          {},
+          { 'Turruter (Kartverket, Norge)': turruter },
           { position: 'topright', collapsed: true }
         )
         .addTo(map);
@@ -2236,6 +2309,16 @@ export function MushroomMap({
           >
             {topLoading ? t('searching') : topSpots ? t('hideSpots') : t('promisingSpotsButton')}
           </button>
+          {topSpots?.length && !topLoading ? (
+            <button
+              type="button"
+              onClick={eksporterTopSpotsGpx}
+              aria-label={t('gpxTopSpotsLabel')}
+              className="whitespace-nowrap rounded-full bg-white/95 px-3 py-1.5 text-xs font-medium text-gray-800 shadow-lg backdrop-blur hover:bg-white"
+            >
+              {t('gpxTopSpots')}
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={() => {
@@ -2316,6 +2399,7 @@ export function MushroomMap({
             </div>
           </div>
         ) : null}
+        {gpxTekst ? <GpxKopierModal tittel={t('gpxTopSpotsHeading')} gpx={gpxTekst} onClose={() => setGpxTekst(null)} /> : null}
         {topAccess === 'free_limited' && topSpots ? (
           <NonNativeOnly>
             <Link
