@@ -30,11 +30,27 @@ let signedUrls: { data: { path: string; signedUrl: string }[] | null; error: { m
  * det er nok for denne ruten, som aldri filtrerer på annet enn eier.
  */
 function makeQuery(result: TableResult) {
+  // range() simulerer PostgREST-siden: svaret er utsnittet [fra, til].
+  let fra: number | null = null;
+  let til: number | null = null;
   const builder: Record<string, unknown> = {
     select: () => builder,
     eq: () => builder,
+    or: () => builder,
+    order: () => builder,
+    range: (a: number, b: number) => {
+      fra = a;
+      til = b;
+      return builder;
+    },
     maybeSingle: () => Promise.resolve(result),
-    then: (resolve: (v: TableResult) => unknown) => Promise.resolve(result).then(resolve)
+    then: (resolve: (v: TableResult) => unknown) => {
+      const svar =
+        fra !== null && til !== null && Array.isArray(result.data)
+          ? { ...result, data: result.data.slice(fra, til + 1) }
+          : result;
+      return Promise.resolve(svar).then(resolve);
+    }
   };
   return builder;
 }
@@ -295,6 +311,39 @@ describe('identifiseringshistorikken (art. 15)', () => {
 
   it('schemaVersion er bumpet, så en mottaker ser at fila har fått et datasett', async () => {
     const body = JSON.parse(await (await GET(makeRequest())).text());
-    expect(body.schemaVersion).toBe(4);
+    expect(body.schemaVersion).toBe(5);
+  });
+
+  it('paginerer: 1 500 funn kommer alle med, og fila er fortsatt komplett', async () => {
+    // PostgREST kapper på 1000 rader uten feil. Før ble rad 1 001–1 500 stille
+    // borte i en fil som sa «complete: true».
+    tableResponses = { findings: { data: Array.from({ length: 1500 }, (_, i) => ({ id: i + 1 })), error: null } };
+    const body = JSON.parse(await (await GET(makeRequest())).text());
+    expect(body.findings).toHaveLength(1500);
+    expect(body._manifest.datasets.findings).toBe(1500);
+    expect(body._manifest.complete).toBe(true);
+  });
+
+  it('tar med soppvarsel-abonnementer (også kontoløse på e-post) og egne blokkeringer', async () => {
+    tableResponses = {
+      alert_subscriptions: { data: [{ id: 'a1', user_id: null, email: 'test@example.com', region: 'Oslo' }], error: null },
+      blocked_users: { data: [{ blocker_id: 'meg', blocked_id: 'annen' }], error: null }
+    };
+    const body = JSON.parse(await (await GET(makeRequest())).text());
+    expect(body._manifest.datasets.alertSubscriptions).toBe(1);
+    expect(body._manifest.datasets.blockedUsers).toBe(1);
+    expect(queriedWithAdmin).toContain('alert_subscriptions');
+    expect(queriedWithSession).toContain('blocked_users');
+  });
+
+  it('kontoens metadata (kilde, vilkårssamtykke) og innloggingsidentiteter er med', async () => {
+    currentUser = {
+      ...(currentUser as { id: string; email: string; created_at: string }),
+      user_metadata: { kilde: 'sok:google', terms_version: '2026-08', terms_accepted_at: '2026-08-20T10:00:00Z' },
+      identities: [{ provider: 'email' }, { provider: 'google' }]
+    } as typeof currentUser;
+    const body = JSON.parse(await (await GET(makeRequest())).text());
+    expect(body.account.metadata.kilde).toBe('sok:google');
+    expect(body.account.identities).toEqual(['email', 'google']);
   });
 });

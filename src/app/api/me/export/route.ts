@@ -102,19 +102,43 @@ export async function GET(request: NextRequest) {
   // adding it to the completeness check.
   // `shape` says what an empty result means for this dataset: a table the user
   // has many rows in exports as [], a one-per-user row exports as null.
+  // PostgREST kapper stille på 1000 rader. Uten paginering fikk en bruker
+  // med 1 001 funn en fil merket «komplett» som manglet det siste — og
+  // fail-closed-sjekken under så ingen feil, for avkorting ER ikke en feil.
+  // Hvert flerrads-datasett hentes derfor i sider, sortert på en stabil nøkkel.
+  const SIDE = 1000;
+  const hentAlle = async (
+    bygg: (fra: number, til: number) => PromiseLike<{ data: unknown; error: { message: string } | null }>
+  ): Promise<QueryResult> => {
+    const alle: unknown[] = [];
+    for (let side = 0; side < 100; side += 1) {
+      const fra = side * SIDE;
+      const { data, error } = await bygg(fra, fra + SIDE - 1);
+      if (error) return { data: null, error };
+      const rader = Array.isArray(data) ? data : [];
+      alle.push(...rader);
+      if (rader.length < SIDE) return { data: alle, error: null };
+    }
+    return { data: null, error: { message: 'over 100 000 rader i ett datasett — eksporten må hentes manuelt' } };
+  };
+  const mange = (tabell: string, kolonne: string, verdi: string, sorter: string, klient = supabase) =>
+    hentAlle((fra, til) => klient.from(tabell).select('*').eq(kolonne, verdi).order(sorter).range(fra, til));
+
+  const epost = user.email?.toLowerCase() ?? null;
+
   const datasets = {
     profile: { shape: 'one', query: supabase.from('profiles').select('*').eq('id', user.id).maybeSingle() },
     // Uten deleted_at-filter, med vilje: art. 15 gjelder det vi FAKTISK
     // lagrer om deg. Et funn du har slettet ligger hos oss i inntil 30 dager
     // til (migrasjon 056 + /api/cron/purge-deleted-findings), og da skal det
     // stå i uttrekket — med `deleted_at` synlig, så du ser at det er slettet.
-    findings: { shape: 'many', query: supabase.from('findings').select('*').eq('user_id', user.id) },
-    forumPosts: { shape: 'many', query: supabase.from('forum_posts').select('*').eq('user_id', user.id) },
-    comments: { shape: 'many', query: supabase.from('comments').select('*').eq('user_id', user.id) },
-    postLikes: { shape: 'many', query: supabase.from('post_likes').select('*').eq('user_id', user.id) },
-    commentLikes: { shape: 'many', query: supabase.from('comment_likes').select('*').eq('user_id', user.id) },
-    savedPosts: { shape: 'many', query: supabase.from('saved_posts').select('*').eq('user_id', user.id) },
-    reportsFiled: { shape: 'many', query: supabase.from('reports').select('*').eq('reporter_id', user.id) },
+    findings: { shape: 'many', query: mange('findings', 'user_id', user.id, 'id') },
+    forumPosts: { shape: 'many', query: mange('forum_posts', 'user_id', user.id, 'id') },
+    comments: { shape: 'many', query: mange('comments', 'user_id', user.id, 'id') },
+    postLikes: { shape: 'many', query: mange('post_likes', 'user_id', user.id, 'post_id') },
+    commentLikes: { shape: 'many', query: mange('comment_likes', 'user_id', user.id, 'comment_id') },
+    savedPosts: { shape: 'many', query: mange('saved_posts', 'user_id', user.id, 'post_id') },
+    reportsFiled: { shape: 'many', query: mange('reports', 'reporter_id', user.id, 'id') },
     billing: { shape: 'one', query: supabase.from('billing_subscriptions').select('*').eq('user_id', user.id).maybeSingle() },
     moderatorRole: { shape: 'one', query: supabase.from('moderator_roles').select('*').eq('user_id', user.id).maybeSingle() },
     verifiedForager: { shape: 'one', query: supabase.from('verified_foragers').select('*').eq('user_id', user.id).maybeSingle() },
@@ -123,7 +147,7 @@ export async function GET(request: NextRequest) {
     // longitude med fem desimaler (~1 m), utenfor visibility-modellen og
     // display_location-triggeren som beskytter funn. At nettopp det manglet i
     // en eksport som erklærte seg fullstendig, var det verste hullet.
-    spotFeedback: { shape: 'many', query: supabase.from('spot_feedback').select('*').eq('user_id', user.id) },
+    spotFeedback: { shape: 'many', query: mange('spot_feedback', 'user_id', user.id, 'id') },
     // Varselet om automatisk sletting etter tre år uten innlogging.
     deletionWarning: {
       shape: 'one',
@@ -131,11 +155,29 @@ export async function GET(request: NextRequest) {
     },
     // Tidspunktene for AI-identifiseringene dine (grunnlaget for dagskvoten).
     // Leses med tjenesterollen — se kommentaren over.
-    aiIdentifications: { shape: 'many', query: admin.from('ai_identifications').select('*').eq('user_id', user.id) },
+    aiIdentifications: { shape: 'many', query: mange('ai_identifications', 'user_id', user.id, 'id', admin) },
     // Identifiseringshistorikken (migrasjon 055). I motsetning til
     // ai_identifications har DENNE eier-RLS, så den leses med øktklienten som
     // alt annet — det er tabellen brukeren selv ser på /identifiseringer.
-    identifications: { shape: 'many', query: supabase.from('identifications').select('*').eq('user_id', user.id) }
+    identifications: { shape: 'many', query: mange('identifications', 'user_id', user.id, 'id') },
+    // Soppvarsel-abonnementene: kontorader (user_id) OG kontoløse rader meldt
+    // på med samme e-post via /soppvarsel — de har user_id null og finnes
+    // bare via adressen, derfor tjenesterollen. Tokenene (bekreftelse,
+    // avmelding) er nøkler, ikke opplysninger om brukeren, og utelates.
+    alertSubscriptions: {
+      shape: 'many',
+      query: hentAlle((fra, til) =>
+        admin
+          .from('alert_subscriptions')
+          .select('id,user_id,email,region,locale,active,confirmed_at,last_notified_at,last_notified_score,created_at')
+          .or(epost ? `user_id.eq.${user.id},email.eq."${epost}"` : `user_id.eq.${user.id}`)
+          .order('id')
+          .range(fra, til)
+      )
+    },
+    // Hvem brukeren selv har blokkert (migrasjon 032). Blokkeringer AV
+    // brukeren, gjort av andre, holdes utenfor — de er den andres valg.
+    blockedUsers: { shape: 'many', query: mange('blocked_users', 'blocker_id', user.id, 'blocked_id') }
   };
 
   type DatasetKey = keyof typeof datasets;
@@ -213,12 +255,20 @@ export async function GET(request: NextRequest) {
     exportedAt: generatedAt,
     // 3: la til spotFeedback, deletionWarning og aiIdentifications.
     // 4: la til identifications (AI-historikken) med signerte bilde-URL-er.
-    schemaVersion: 4,
+    // 5: la til alertSubscriptions (også kontoløse på e-post), blockedUsers,
+    //    account.metadata (kilde, vilkårssamtykke, brukernavn) og
+    //    account.identities; flerrads-datasett pagineres nå.
+    schemaVersion: 5,
     account: {
       userId: user.id,
       email: user.email ?? null,
       createdAt: user.created_at,
-      lastSignInAt: user.last_sign_in_at ?? null
+      lastSignInAt: user.last_sign_in_at ?? null,
+      // user_metadata bærer registreringskilden (kilde), vilkårssamtykket
+      // (terms_version/terms_accepted_at — et tidsstemplet samtykkebevis)
+      // og brukernavn. Persondata etter art. 15, og de lå utenfor før.
+      metadata: user.user_metadata ?? {},
+      identities: (user.identities ?? []).map((i) => i.provider)
     },
     ...(Object.fromEntries(
       keys.map((k) => [k, results[k].data ?? (datasets[k].shape === 'many' ? [] : null)])
@@ -237,7 +287,7 @@ export async function GET(request: NextRequest) {
     _notes: {
       gdprArticle: 'GDPR Art. 15 — Right of access.',
       coverage:
-        'This export contains all rows in our database tied to your user_id. Public reference data (species, look-alikes, prediction tiles) is intentionally not included since it is not personal data about you.',
+        'This export contains all rows in our database tied to your user_id, plus mushroom-alert subscriptions registered with your e-mail address without an account. Public reference data (species, look-alikes, prediction tiles) is intentionally not included since it is not personal data about you. Confirmation and unsubscribe tokens for alert subscriptions are omitted: they are keys, not information about you.',
       completeness:
         'Every query behind this file succeeded. If any had failed you would have received an error instead of this file — we never ship a partial export as if it were complete.',
       images: `Bilder i identifiseringshistorikken din ligger i et lukket lager. Hver rad under "identifications" har derfor et felt "imageSignedUrl" med en midlertidig nedlastingslenke som er gyldig i 7 dager fra tidspunktet øverst i fila. Er lenken utløpt eller tom, be om en ny eksport, eller kontakt ${LEGAL_ENTITY.privacyEmail}. Bilder knyttet til lagrede funn ligger på de vanlige URL-ene i "findings".`,
