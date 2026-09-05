@@ -8,6 +8,8 @@ import { PageWrapper } from '@/components/layout/PageWrapper';
 import { SoppforholdForbehold } from '@/components/soppforhold/Forbehold';
 import { UkeStripe } from '@/components/soppforhold/UkeStripe';
 import { VarselCta } from '@/components/soppforhold/VarselCta';
+import { PameldtBanner } from '@/components/soppforhold/PameldtBanner';
+import { DelOmrade } from '@/components/soppforhold/DelOmrade';
 import { alleRegionSlugs, regionFromSlug } from '@/lib/prediction/region-slug';
 import { computeRegionWeek, type RegionWeek } from '@/lib/prediction/region-week';
 import { fetchWeatherSummary } from '@/lib/weather';
@@ -255,7 +257,14 @@ export default async function OmradePage({ params }: SideProps) {
           <h1 className="font-serif text-3xl font-bold tracking-tight text-forest-900 sm:text-4xl">
             {t.h1(regionDef.name)}
           </h1>
+          <div>
+            <DelOmrade navn={regionDef.name} land={land} />
+          </div>
         </header>
+
+        {/* Kvittering etter bekreftet varselpåmelding (?status=bekreftet fra
+            /api/soppvarsel/bekreft). Klientkomponent, så siden forblir cachet. */}
+        <PameldtBanner navn={regionDef.name} land={land} />
 
         {region ? (
           <section className="rounded-xl border border-gray-200 bg-white p-5">
