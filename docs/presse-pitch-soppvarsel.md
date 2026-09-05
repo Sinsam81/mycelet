@@ -54,6 +54,9 @@ akkurat nå»-rammen i stedet.
 - Lenken til områdesiden åpnet og kontrollert (mycelet.com/soppforhold/[slug])
 - Antall funn («428 000») og områder («22») stemmer med det som står på siden
 - Ingen personnavn noe sted i e-posten
+- Områdenavnet er presist: «Innlandet» hos oss er en rute rundt Hamar–Elverum,
+  ikke fylket — skriv «Hamar–Elverum-området (Mycelets «Innlandet»-område)».
+  Presse-varselet gjør dette automatisk (`OMRAADE_PRESIST` i presse.ts).
 
 ---
 

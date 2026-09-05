@@ -44,6 +44,19 @@ const REDAKSJONER: Record<string, Redaksjon> = {
   Örebro: { avis: 'Nerikes Allehanda', kringkasting: 'SVT Örebro' }
 };
 
+/**
+ * Områdenavn som leseren vil tolke videre enn boksen faktisk er. «Innlandet»
+ * er hos oss en rute rundt Hamar–Elverum, ikke fylket — en journalist i HA
+ * leser fylket. Presisjonen er hele troverdigheten i pitchen.
+ */
+const OMRAADE_PRESIST: Record<string, string> = {
+  Innlandet: 'Hamar–Elverum-området (Mycelets «Innlandet»-område)'
+};
+
+function omraadeNavn(region: string): string {
+  return OMRAADE_PRESIST[region] ?? region;
+}
+
 const UKEDAG = ['søndag', 'mandag', 'tirsdag', 'onsdag', 'torsdag', 'fredag', 'lørdag'];
 
 function pitchNb(o: Omslag, url: string): { emne: string; tekst: string } {
@@ -51,7 +64,7 @@ function pitchNb(o: Omslag, url: string): { emne: string; tekst: string } {
     emne: `Soppforholdene i ${o.region} er ${o.til} av 100 i dag — gratis varsel med offentlig fasit`,
     tekst: `Hei redaksjonen,
 
-Kort tips i soppsesongen: forholdene rundt ${o.region} snudde i natt — fra ${o.fra} til ${o.til} av 100 den siste uka, ifølge Mycelets daglige beregning. Tallet er vær, jordfuktighet, temperatur og sesong for området, og det ligger åpent her, uten innlogging:
+Kort tips i soppsesongen: forholdene i ${omraadeNavn(o.region)} snudde i natt — fra ${o.fra} til ${o.til} av 100 den siste uka, ifølge Mycelets daglige beregning. Tallet er vær, jordfuktighet, temperatur og sesong for området, og det ligger åpent her, uten innlogging:
 
 ${url}
 
@@ -72,7 +85,7 @@ function pitchSv(o: Omslag, url: string): { emne: string; tekst: string } {
     emne: `Svampförhållandena i ${o.region} är ${o.til} av 100 i dag — gratis varning med offentligt facit`,
     tekst: `Hej redaktionen,
 
-Ett kort tips mitt i svampsäsongen: förhållandena kring ${o.region} vände i natt — från ${o.fra} till ${o.til} av 100 den senaste veckan, enligt Mycelets dagliga beräkning. Siffran bygger på väder, markfuktighet, temperatur och säsong för området, och ligger öppet här utan inloggning:
+Ett kort tips mitt i svampsäsongen: förhållandena i ${omraadeNavn(o.region)} vände i natt — från ${o.fra} till ${o.til} av 100 den senaste veckan, enligt Mycelets dagliga beräkning. Siffran bygger på väder, markfuktighet, temperatur och säsong för området, och ligger öppet här utan inloggning:
 
 ${url}
 
