@@ -151,6 +151,12 @@ Sentry.init({
     // ── Støy uten handlingsrom ──────────────────────────────────────────
     /^Script error\.?$/,
     'ResizeObserver loop',
+    // Microsofts lenkeskanner (Outlook/Teams «Safe Links») kjører sitt eget
+    // skript på siden når noen åpner en lenke fra en e-post, og krasjer i det.
+    // Ikke vår kode, null brukere rammet — sett første gang 2026-09-05 på
+    // /soppforhold/goteborg, altså en åpnet presse-lenke. Kjent støy i Sentry-
+    // dokumentasjonen.
+    'Object Not Found Matching Id',
     // Offline-kartcachen fyller Cache API på små telefoner.
     'QuotaExceededError'
   ],
