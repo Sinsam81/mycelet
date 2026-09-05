@@ -34,8 +34,8 @@ https://www.mycelet.com/soppforhold/<område>?utm_source=<partner>&utm_medium=pa
 | Häxringen (Södra Älvsborg) | goteborg | `https://www.mycelet.com/soppforhold/goteborg?utm_source=haxringen&utm_medium=partner&utm_campaign=host-2026` |
 | Västgötabergets Svampklubb | goteborg | `https://www.mycelet.com/soppforhold/goteborg?utm_source=vbsk&utm_medium=partner&utm_campaign=host-2026` |
 
-Kilden lagres som `partner/<utm_source>` på påmeldingen (oppgave A) og
-vises i dagsrapporten under «Hvor påmeldingene kom fra».
+Kilden lagres som `<utm_source>/<utm_campaign>` (f.eks. `bergen-snf/host-2026`)
+på påmeldingen og vises i dagsrapporten under «Soppvarselet som trakt».
 
 ## Måleopplegg per plassering
 

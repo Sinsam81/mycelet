@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createRequestLogger } from '@/lib/log/request';
+import { HOPP_COOKIE, HOPP_COOKIE_MAX_AGE } from '@/lib/analytics/kilde';
 
 /**
  * Bekreftelseslenka fra opt-in-eposten. Samme grep som avmeldingsruta
@@ -8,13 +9,20 @@ import { createRequestLogger } from '@/lib/log/request';
  * og mennesket sendes videre til en side som forklarer hva som skjedde.
  * Idempotent — å klikke lenka to ganger er fortsatt bekreftet, ikke en feil.
  */
+/** Videresending med hopp-markør: leseren kommer fra en e-postklient, ikke fra en kilde. */
+function videre(url: string) {
+  const svar = NextResponse.redirect(url, 303);
+  svar.cookies.set(HOPP_COOKIE, '1', { path: '/', maxAge: HOPP_COOKIE_MAX_AGE, sameSite: 'lax' });
+  return svar;
+}
+
 export async function GET(request: NextRequest) {
   const log = createRequestLogger(request);
   const token = request.nextUrl.searchParams.get('t') ?? '';
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? request.nextUrl.origin;
 
   const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  if (!UUID.test(token)) return NextResponse.redirect(`${appUrl}/soppvarsel?status=ugyldig-lenke#status`, 303);
+  if (!UUID.test(token)) return videre(`${appUrl}/soppvarsel?status=ugyldig-lenke#status`);
 
   const db = createAdminClient();
 
@@ -35,15 +43,15 @@ export async function GET(request: NextRequest) {
 
   if (leseErr || !rad || rad.user_id) {
     log.warn('varselbekreftelse.ukjent_token');
-    return NextResponse.redirect(`${appUrl}/soppvarsel?status=ugyldig-lenke#status`, 303);
+    return videre(`${appUrl}/soppvarsel?status=ugyldig-lenke#status`);
   }
   if (rad.confirmed_at && rad.active) {
     log.info('varselbekreftelse.allerede_bekreftet', { region: rad.region });
-    return NextResponse.redirect(`${appUrl}/soppvarsel?status=bekreftet#status`, 303);
+    return videre(`${appUrl}/soppvarsel?status=bekreftet#status`);
   }
   if (rad.confirmed_at && !rad.active) {
     log.info('varselbekreftelse.avmeldt_rad', { region: rad.region });
-    return NextResponse.redirect(`${appUrl}/soppvarsel?status=ugyldig-lenke#status`, 303);
+    return videre(`${appUrl}/soppvarsel?status=ugyldig-lenke#status`);
   }
 
   const { error } = await db
@@ -53,9 +61,9 @@ export async function GET(request: NextRequest) {
     .is('confirmed_at', null);
   if (error) {
     log.error('varselbekreftelse.oppdatering_feilet', { message: error.message });
-    return NextResponse.redirect(`${appUrl}/soppvarsel?status=feil#status`, 303);
+    return videre(`${appUrl}/soppvarsel?status=feil#status`);
   }
 
   log.info('varselbekreftelse.ok', { region: rad.region });
-  return NextResponse.redirect(`${appUrl}/soppvarsel?status=bekreftet#status`, 303);
+  return videre(`${appUrl}/soppvarsel?status=bekreftet#status`);
 }

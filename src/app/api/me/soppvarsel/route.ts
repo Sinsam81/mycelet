@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { normaliserKilde } from '@/lib/analytics/kilde';
 import { createClient } from '@/lib/supabase/server';
 import { createRequestLogger } from '@/lib/log/request';
 import { checkRateLimit } from '@/lib/rate-limit';
@@ -78,6 +79,8 @@ export async function PUT(request: NextRequest) {
   // brukeren bytter område — unique er (user_id, region) — og da hadde hen fått
   // varsler for både Oslo og Bergen etter å ha «byttet» fra det ene til det
   // andre. Ett aktivt område om gangen er det grensesnittet lover.
+  const kontoKilde = normaliserKilde(user.user_metadata?.kilde);
+
   const { error: avErr } = await supabase
     .from('alert_subscriptions')
     .update({ active: false })
@@ -90,7 +93,12 @@ export async function PUT(request: NextRequest) {
 
   const { error } = await supabase
     .from('alert_subscriptions')
-    .upsert({ user_id: user.id, region, locale, active }, { onConflict: 'user_id,region' });
+    // Kilden følger kontoen (user_metadata.kilde, satt ved registrering), så
+    // rapporten kan se konto- og e-postabonnenter i samme trakt.
+    .upsert(
+      { user_id: user.id, region, locale, active, ...(kontoKilde ? { kilde: kontoKilde } : {}) },
+      { onConflict: 'user_id,region' }
+    );
 
   if (error) {
     log.error('soppvarsel.lagring_feilet', { message: error.message });

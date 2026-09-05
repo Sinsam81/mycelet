@@ -97,6 +97,10 @@ export default async function PersonvernPage() {
                 {t('collectImagesDesc')}
               </dd>
             </div>
+            <div>
+              <dt className="font-medium text-gray-900">{t('collectAlertTerm')}</dt>
+              <dd>{t('collectAlertDesc')}</dd>
+            </div>
           </dl>
         </article>
 
@@ -283,6 +287,9 @@ export default async function PersonvernPage() {
             </li>
             <li>
               <span className="font-medium">{t('retentionServerLabel')}</span> {t('retentionServerDesc')}
+            </li>
+            <li>
+              <span className="font-medium">{t('retentionAlertLabel')}</span> {t('retentionAlertDesc')}
             </li>
             <li>
               <span className="font-medium">{t('retentionAnalyticsLabel')}</span> {t('retentionAnalyticsDesc')}

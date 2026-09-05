@@ -4,7 +4,7 @@ import { logger } from '@/lib/log';
 import { getOrCreateRequestId } from '@/lib/log/request';
 import { LOCALE_COOKIE, isLocale, type Locale } from '@/i18n/config';
 import { classifyTrafficSource } from '@/lib/analytics/traffic-source';
-import { KILDE_COOKIE, KILDE_COOKIE_MAX_AGE, kildeFraBesok } from '@/lib/analytics/kilde';
+import { HOPP_COOKIE, KILDE_COOKIE, KILDE_COOKIE_MAX_AGE, kildeForForesporsel } from '@/lib/analytics/kilde';
 
 /**
  * Fasit for hvilke ruter en utlogget besøkende sendes til innlogging fra.
@@ -120,6 +120,33 @@ export async function updateSession(request: NextRequest) {
     data: { user }
   } = await supabase.auth.getUser();
 
+  // Kilde-cookie på første eksterne besøk, uansett hvilken side de landet på.
+  // Før ble den bare satt på forsiden (i grenen under), så alle som kom fra
+  // presse, partnere eller søk rett til en områdeside, /soppvarsel eller en
+  // artikkel telte som «ukjent» i rapporten — akkurat trafikken satsingen
+  // handler om. Første besøk vinner; regelen for HVA som er en kilde ligger
+  // i @/lib/analytics/kilde (e-postklienter og innloggingsretur er det ikke).
+  // Regnes ut FØR innloggingsomdirigeringen under, så en lenke til /map med
+  // utm også får kilden med seg — omdirigeringen bærer cookien.
+  const params = request.nextUrl.searchParams;
+  const registreringskilde =
+    !user && request.method === 'GET' && !request.cookies.has(KILDE_COOKIE)
+      ? kildeForForesporsel({
+          pathname: request.nextUrl.pathname,
+          referer: request.headers.get('referer'),
+          ownHost: request.nextUrl.hostname,
+          utmSource: params.get('utm_source'),
+          utmCampaign: params.get('utm_campaign'),
+          harGclid: params.has('gclid'),
+          fraEgenEpostrute: request.cookies.has(HOPP_COOKIE)
+        })
+      : null;
+  const kildeCookie = { path: '/', maxAge: KILDE_COOKIE_MAX_AGE, sameSite: 'lax' as const };
+  // Hopp-markøren er brukt opp nå — slett den, så neste eksterne besøk måles.
+  const slettHopp = (svar: NextResponse) => {
+    if (request.cookies.has(HOPP_COOKIE)) svar.cookies.set(HOPP_COOKIE, '', { path: '/', maxAge: 0 });
+  };
+
   if (isProtectedPath(request.nextUrl.pathname) && !user) {
     log.info('middleware.auth_redirect', { from: request.nextUrl.pathname });
     const redirectUrl = new URL('/auth/login', request.url);
@@ -128,10 +155,16 @@ export async function updateSession(request: NextRequest) {
     // (#...) når aldri serveren og kan ikke bevares her.) Verdien valideres av
     // readSafeNext på login-siden før den brukes.
     redirectUrl.searchParams.set('redirect', request.nextUrl.pathname + request.nextUrl.search);
-    return NextResponse.redirect(redirectUrl, {
+    const redirect = NextResponse.redirect(redirectUrl, {
       headers: { 'x-request-id': reqId }
     });
+    if (registreringskilde) redirect.cookies.set(KILDE_COOKIE, registreringskilde, kildeCookie);
+    slettHopp(redirect);
+    return redirect;
   }
+
+  if (registreringskilde) response.cookies.set(KILDE_COOKIE, registreringskilde, kildeCookie);
+  slettHopp(response);
 
   // Logged-out visitors on the front page get the designed static landing
   // (public/landing/index.html, Swedish: index.sv.html — zero JS, self-hosted
@@ -151,7 +184,6 @@ export async function updateSession(request: NextRequest) {
     // Google Ads legger på `gclid` automatisk. Mangler utm-merkingen (noen
     // glemte den i annonsen), er gclid alene nok til å vite at det var en
     // annonse.
-    const params = request.nextUrl.searchParams;
     const utmSource = params.get('utm_source') ?? (params.has('gclid') ? 'google' : null);
     const utmCampaign = params.get('utm_campaign') ?? (params.has('gclid') ? 'annonse' : null);
     // hostname, ikke host: `host` tar med portnummer, og da telles et internt
@@ -173,8 +205,9 @@ export async function updateSession(request: NextRequest) {
     });
     // Ta kilden med videre til registreringen — se @/lib/analytics/kilde for
     // hele kjeden. Første besøk vinner, så en eksisterende cookie røres ikke.
-    const registreringskilde = kildeFraBesok(kilde, utmCampaign);
-    if (registreringskilde && !request.cookies.has(KILDE_COOKIE)) {
+    // (Samme regel som den generelle blokken over; forsiden er bare en av
+    // inngangssidene nå, men beholder loggingen sin.)
+    if (registreringskilde) {
       landingResponse.cookies.set(KILDE_COOKIE, registreringskilde, {
         path: '/',
         maxAge: KILDE_COOKIE_MAX_AGE,

@@ -13,6 +13,7 @@ import { NextRequest } from 'next/server';
 
 let eksisterende: Record<string, unknown> | null = null;
 let sisteUpdate: Record<string, unknown> | null = null;
+let sisteInsert: Record<string, unknown> | null = null;
 const filtre: Array<[string, string, unknown]> = [];
 let sendteEposter: Array<{ til: string; tekst: string }> = [];
 
@@ -41,7 +42,10 @@ vi.mock('@/lib/supabase/admin', () => ({
           sisteUpdate = payload;
           return { eq: async () => ({ error: null }) };
         },
-        insert: () => ({ select: () => ({ single: async () => ({ data: { confirm_token: 'ny-rad-token' }, error: null }) }) })
+        insert: (payload: Record<string, unknown>) => {
+          sisteInsert = payload;
+          return { select: () => ({ single: async () => ({ data: { confirm_token: 'ny-rad-token' }, error: null }) }) };
+        }
       };
       return builder;
     }
@@ -50,11 +54,11 @@ vi.mock('@/lib/supabase/admin', () => ({
 
 import { POST } from '../route';
 
-function post(body: Record<string, unknown>) {
+function post(body: Record<string, unknown>, cookie?: string) {
   return POST(
     new NextRequest('http://localhost/api/soppvarsel/pamelding', {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: { 'content-type': 'application/json', ...(cookie ? { cookie } : {}) },
       body: JSON.stringify(body)
     })
   );
@@ -63,6 +67,7 @@ function post(body: Record<string, unknown>) {
 beforeEach(() => {
   eksisterende = null;
   sisteUpdate = null;
+  sisteInsert = null;
   filtre.length = 0;
   sendteEposter = [];
 });
@@ -102,5 +107,24 @@ describe('påmelding — dobbel opt-in holder', () => {
     const res = await post({ email: '%@%.%%', region: 'Oslo' });
     expect((await res.json()).status).toBe('sendt');
     expect(filtre).toContainEqual(['eq', 'email', '%@%.%%']);
+  });
+
+  it('lagrer hvor påmeldingen kom fra — samme cookie som kontoregistreringen', async () => {
+    await post({ email: 'ny@example.com', region: 'Bergen' }, 'mycelet_kilde=bergen-snf/host-2026');
+    expect(sisteInsert).toMatchObject({ kilde: 'bergen-snf/host-2026', region: 'Bergen' });
+  });
+
+  it('uten cookie er kilden null — «ukjent», ikke gjettet', async () => {
+    await post({ email: 'ny@example.com', region: 'Bergen' });
+    expect(sisteInsert).toMatchObject({ kilde: null });
+  });
+
+  it('reaktivering beholder første kilde, fyller bare inn når den mangler', async () => {
+    eksisterende = { id: 'rad-1', confirmed_at: null, active: false, kilde: 'sok:google.no' };
+    await post({ email: 'noen@example.com', region: 'Oslo' }, 'mycelet_kilde=partner-x');
+    expect(sisteUpdate).not.toHaveProperty('kilde');
+    eksisterende = { id: 'rad-2', confirmed_at: null, active: false, kilde: null };
+    await post({ email: 'noen@example.com', region: 'Oslo' }, 'mycelet_kilde=partner-x');
+    expect(sisteUpdate).toMatchObject({ kilde: 'partner-x' });
   });
 });

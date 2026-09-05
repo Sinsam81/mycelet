@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'crypto';
+import { KILDE_COOKIE, normaliserKilde } from '@/lib/analytics/kilde';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createRequestLogger } from '@/lib/log/request';
 import { checkRateLimit } from '@/lib/rate-limit';
@@ -70,6 +71,11 @@ export async function POST(request: NextRequest) {
 
   const db = createAdminClient();
 
+  // Hvor kom påmeldingen fra? Samme cookie som kontoregistreringen leser —
+  // uten dette telte partnerlenker og presse som «ukjent», og plasseringene
+  // kunne ikke vurderes. Normalisert: kort tekst, aldri noe annet.
+  const kilde = normaliserKilde(request.cookies.get(KILDE_COOKIE)?.value);
+
   // Finnes raden fra før? Bekreftet → stille suksess (ingen ny e-post, ingen
   // lekkasje). Ubekreftet → send bekreftelsen på nytt (folk mister e-poster).
   //
@@ -83,7 +89,7 @@ export async function POST(request: NextRequest) {
   // er både riktig og billigere.
   const { data: eksisterende } = await db
     .from('alert_subscriptions')
-    .select('id,confirmed_at,active')
+    .select('id,confirmed_at,active,kilde')
     .is('user_id', null)
     .eq('email', email.toLowerCase())
     .eq('region', region)
@@ -104,7 +110,8 @@ export async function POST(request: NextRequest) {
     confirmToken = randomUUID();
     const { error: reaktiverErr } = await db
       .from('alert_subscriptions')
-      .update({ active: true, confirmed_at: null, confirm_token: confirmToken, locale })
+      // Første kilde vinner — som for cookien.
+      .update({ active: true, confirmed_at: null, confirm_token: confirmToken, locale, ...(eksisterende.kilde ? {} : { kilde }) })
       .eq('id', eksisterende.id);
     if (reaktiverErr) {
       log.error('varselpamelding.reaktivering_feilet', { message: reaktiverErr.message });
@@ -113,7 +120,7 @@ export async function POST(request: NextRequest) {
   } else {
     const { data: ny, error } = await db
       .from('alert_subscriptions')
-      .insert({ user_id: null, email: email.toLowerCase(), region, locale, active: true, confirmed_at: null })
+      .insert({ user_id: null, email: email.toLowerCase(), region, locale, active: true, confirmed_at: null, kilde })
       .select('confirm_token')
       .single();
     if (error || !ny) {

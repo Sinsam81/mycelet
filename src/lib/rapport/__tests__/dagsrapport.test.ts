@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { byggDagsrapport, type AbonnementRad, type BrukerRad, type RapportInn } from '../dagsrapport';
+import { byggDagsrapport, type AbonnementRad, type BrukerRad, type RapportInn, type VarselAbonnentRad } from '../dagsrapport';
 
 /**
  * Testene her er skrevet mot ÉN feil: at rapporten oppgir flere kunder enn
@@ -207,5 +207,66 @@ describe('flanker — samme regel som varselet', () => {
   it('tier når gårsdagen mangler for regionen', () => {
     const r = byggDagsrapport(inn({ regionerIGar: [], regionerIDag: [{ region: 'Oslo', score: 90 }] }));
     expect(r.flanker).toEqual([]);
+  });
+});
+
+describe('soppvarselet som trakt', () => {
+  function va(over: Partial<VarselAbonnentRad> = {}): VarselAbonnentRad {
+    return {
+      user_id: null,
+      region: 'Bergen',
+      active: true,
+      confirmed_at: dagerSiden(3),
+      created_at: dagerSiden(3),
+      last_notified_at: null,
+      forste_apnet_at: null,
+      kilde: null,
+      ...over
+    };
+  }
+  function bygg(varselabonnenter: VarselAbonnentRad[]) {
+    const inn: RapportInn = { brukere: [], abonnement: [], varselabonnement: 0, varselabonnenter, regionerIDag: [], regionerIGar: [], naa: NAA };
+    return byggDagsrapport(inn).varsel;
+  }
+
+  it('teller bare bekreftede, aktive rader — og kontorader er bekreftet i kraft av kontoen', () => {
+    const v = bygg([va(), va({ confirmed_at: null }), va({ active: false }), va({ user_id: 'u1', confirmed_at: null })]);
+    expect(v.bekreftede).toBe(2);
+  });
+
+  it('grupperer på kilde med «ukjent» sist, og på region', () => {
+    const v = bygg([va({ kilde: 'bergen-snf/host-2026' }), va({ kilde: 'bergen-snf/host-2026', region: 'Oslo' }), va()]);
+    expect(v.perKilde.map((k) => k.kilde)).toEqual(['bergen-snf/host-2026', 'ukjent']);
+    expect(v.perKilde[0].bekreftede).toBe(2);
+    expect(v.perRegion).toEqual([
+      { region: 'Bergen', bekreftede: 2 },
+      { region: 'Oslo', bekreftede: 1 }
+    ]);
+  });
+
+  it('aktivert = forste_apnet_at satt (avgjort i klikkøyeblikket, ikke her)', () => {
+    const v = bygg([va({ forste_apnet_at: dagerSiden(1) }), va({ forste_apnet_at: null }), va({ forste_apnet_at: dagerSiden(2), active: false })]);
+    expect(v.aktiverte).toBe(1);
+  });
+
+  it('renser kilde og region ved innlesing — tabellen eies av brukeren via RLS og havner i en HTML-e-post', () => {
+    const v = bygg([va({ kilde: '<a href="x">Åpne</a>', region: '<img src=x>' }), va({ kilde: 'bergen-snf/host-2026' })]);
+    const kilder = v.perKilde.map((k) => k.kilde);
+    expect(kilder).toContain('bergen-snf/host-2026');
+    expect(kilder.some((k) => /[<>"]/.test(k))).toBe(false);
+    expect(v.perRegion.map((r) => r.region).sort()).toEqual(['Bergen', 'ukjent område']);
+  });
+
+  it('kontorader arver kontoens kilde', () => {
+    const inn: RapportInn = {
+      brukere: [br({ id: 'u1', kilde: 'bergen-snf/host-2026' })],
+      abonnement: [],
+      varselabonnement: 0,
+      varselabonnenter: [va({ user_id: 'u1', confirmed_at: null, kilde: null })],
+      regionerIDag: [],
+      regionerIGar: [],
+      naa: NAA
+    };
+    expect(byggDagsrapport(inn).varsel.perKilde[0].kilde).toBe('bergen-snf/host-2026');
   });
 });

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createRequestLogger } from '@/lib/log/request';
 import { bearerSecretMatches } from '@/lib/security/secret-compare';
-import { byggDagsrapport, UKJENT_KILDE, type AbonnementRad, type Dagsrapport } from '@/lib/rapport/dagsrapport';
+import { byggDagsrapport, UKJENT_KILDE, type AbonnementRad, type Dagsrapport, type VarselAbonnentRad } from '@/lib/rapport/dagsrapport';
 import { normaliserKilde } from '@/lib/analytics/kilde';
 import { sendEpost } from '@/lib/email/send';
 
@@ -75,10 +75,22 @@ export async function GET(request: NextRequest) {
     .select('user_id,tier,status,current_period_end,created_at,metadata');
 
   // ── Varselabonnement ──────────────────────────────────────────────────────
-  const { count: varselAntall } = await db
-    .from('alert_subscriptions')
-    .select('id', { count: 'exact', head: true })
-    .eq('active', true);
+  // Radene, ikke bare tallet: kilde, region og aktivering er det strategien
+  // måler på. Ingen e-postadresser hentes.
+  // PostgREST kapper på 1000 rader uansett range — paginert som i
+  // soppvarsel-cronen, ellers forsvinner de nyeste påmeldingene stille.
+  const varselabonnenter: VarselAbonnentRad[] = [];
+  for (let side = 0; side < 20; side += 1) {
+    const fra = side * 1000;
+    const { data: varselRader } = await db
+      .from('alert_subscriptions')
+      .select('user_id,region,active,confirmed_at,created_at,last_notified_at,forste_apnet_at,kilde')
+      .order('id', { ascending: true })
+      .range(fra, fra + 999);
+    varselabonnenter.push(...((varselRader ?? []) as VarselAbonnentRad[]));
+    if ((varselRader ?? []).length < 1000) break;
+  }
+  const varselAntall = varselabonnenter.filter((r) => r.active).length;
 
   // ── Regionscorer, i dag og i går ──────────────────────────────────────────
   const { data: scorer } = await db
@@ -96,7 +108,8 @@ export async function GET(request: NextRequest) {
   const rapport = byggDagsrapport({
     brukere,
     abonnement: (abData ?? []) as AbonnementRad[],
-    varselabonnement: varselAntall ?? 0,
+    varselabonnement: varselAntall,
+    varselabonnenter,
     regionerIDag: velg(iDagDato),
     regionerIGar: velg(iGarDato),
     naa
@@ -128,8 +141,11 @@ function byggRapportEpost(r: Dagsrapport, naa: Date) {
       ? `${r.nyeBrukere.siste24t} ny${r.nyeBrukere.siste24t === 1 ? '' : 'e'} bruker${r.nyeBrukere.siste24t === 1 ? '' : 'e'} i går`
       : 'Ingen nye brukere i går';
 
+  // Alt som havner i tabellen er tekst fra databasen (kilder, regioner) —
+  // aldri markup. Rensingen i byggDagsrapport er første lag; dette er andre.
+  const esc = (v: string) => v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   const rad = (navn: string, verdi: string) =>
-    `<tr><td style="padding:6px 0;color:#4b5563">${navn}</td><td style="padding:6px 0;text-align:right;font-weight:600;color:#1A3409">${verdi}</td></tr>`;
+    `<tr><td style="padding:6px 0;color:#4b5563">${esc(navn)}</td><td style="padding:6px 0;text-align:right;font-weight:600;color:#1A3409">${esc(verdi)}</td></tr>`;
 
   const flankeTekst = r.flanker.length
     ? r.flanker.map((f) => `${f.region} ${f.fra} → ${f.til}`).join(', ')
@@ -140,6 +156,7 @@ function byggRapportEpost(r: Dagsrapport, naa: Date) {
   const kildeVerdi = (k: Dagsrapport['kilder'][number]) =>
     `${k.totalt} · ${k.siste7d} siste 7 d · ${k.betalende} betaler`;
   const kildeRader = r.kilder.slice(0, 8);
+  const v = r.varsel;
 
   const html = `<!doctype html>
 <html lang="nb"><body style="font-family:-apple-system,system-ui,sans-serif;color:#1f2937;max-width:520px;margin:24px auto;padding:0 16px">
@@ -168,6 +185,15 @@ function byggRapportEpost(r: Dagsrapport, naa: Date) {
     ${rad('Best i dag', r.toppRegioner.map((t) => `${t.region} ${t.score}`).join(' · ') || '—')}
     ${rad('Snudde i natt', flankeTekst)}
     ${rad('Abonnerer på soppvarsel', String(r.varselabonnement))}
+  </table>
+
+  <h2 style="font-size:14px;color:#1A3409;margin:22px 0 6px">Soppvarselet som trakt</h2>
+  <table style="width:100%;border-collapse:collapse;font-size:14px">
+    ${rad('Bekreftede abonnement (per rad)', String(v.bekreftede))}
+    ${rad('Nye bekreftede siste 7 dager', String(v.nyeSiste7d))}
+    ${rad('Klikket varsel → områdesiden', String(v.aktiverte))}
+    ${v.perKilde.slice(0, 6).map((k) => rad(`— ${kildeNavn(k.kilde)}`, `${k.bekreftede} · ${k.siste7d} siste 7 d · ${k.aktiverte} aktivert`)).join('\n    ')}
+    ${v.perRegion.length ? rad('Flest abonnenter', v.perRegion.map((r) => `${r.region} ${r.bekreftede}`).join(' · ')) : ''}
   </table>
 
   <h2 style="font-size:14px;color:#1A3409;margin:22px 0 6px">Hvor de registrerte kom fra</h2>
@@ -203,6 +229,12 @@ I SKOGEN
   best i dag ................ ${r.toppRegioner.map((t) => `${t.region} ${t.score}`).join(', ') || '—'}
   snudde i natt ............. ${flankeTekst}
   soppvarsel-abonnenter ..... ${r.varselabonnement}
+
+SOPPVARSELET SOM TRAKT
+  bekreftede (per rad) ...... ${v.bekreftede}
+  nye bekreftede (7 d) ...... ${v.nyeSiste7d}
+  klikket varsel → område ... ${v.aktiverte}
+${v.perKilde.slice(0, 6).map((k) => `  ${kildeNavn(k.kilde).padEnd(26, '.')} ${k.bekreftede} · ${k.siste7d} siste 7 d · ${k.aktiverte} aktivert`).join('\n')}${v.perRegion.length ? `\n  flest ..................... ${v.perRegion.map((r) => `${r.region} ${r.bekreftede}`).join(', ')}` : ''}
 
 HVOR DE REGISTRERTE KOM FRA
 ${kildeRader.map((k) => `  ${kildeNavn(k.kilde).padEnd(26, '.')} ${kildeVerdi(k)}`).join('\n') || '  ingen registrerte'}
