@@ -60,6 +60,7 @@ import { FLAGS } from '@/lib/flags';
 import toast from 'react-hot-toast';
 import { useIsNative } from '@/lib/hooks/useIsNative';
 import { byggLovendeOmraderGpx } from '@/lib/gpx/lovende-omrader';
+import { osloDag } from '@/lib/bruk/bruksdag';
 import { GpxKopierModal } from '@/components/gpx/GpxKopierModal';
 import { foreslaaVurdering } from '@/lib/vurdering/foreslaa';
 
@@ -182,6 +183,9 @@ export function MushroomMap({
   const generateTopSpotsRef = useRef<(speciesIdOverride?: number | null, originOverride?: { lat: number; lng: number } | null) => Promise<void>>(
     async () => {}
   );
+  // Hvilken art de viste lovende områdene faktisk ble regnet for — GPX-navnet
+  // skal ikke låne navnet på en art som er valgt, men ikke ferdig regnet.
+  const topSpotsForSpeciesRef = useRef<number | null>(null);
   // «Let etter denne arten» uten GPS-fiks og uten husket utsnitt: vent med
   // lovende områder til posisjonen er kjent, ellers regnes de rundt Oslo-
   // plassholderen og blir liggende der når kartet hopper til brukeren.
@@ -628,8 +632,8 @@ export function MushroomMap({
     if (!topSpots?.length) return;
     try {
       const gpx = byggLovendeOmraderGpx(topSpots, {
-        artsnavn: selectedSpeciesName,
-        dato: new Date().toISOString().slice(0, 10),
+        artsnavn: topSpotsForSpeciesRef.current != null && topSpotsForSpeciesRef.current === filters.speciesId ? selectedSpeciesName : null,
+        dato: osloDag(new Date()),
         locale: locale === 'sv' ? 'sv' : 'nb'
       });
       if (native) {
@@ -648,7 +652,7 @@ export function MushroomMap({
     } catch {
       toast.error(t('gpxTopSpotsFailed'));
     }
-  }, [topSpots, selectedSpeciesName, locale, native, t]);
+  }, [topSpots, selectedSpeciesName, filters.speciesId, locale, native, t]);
 
   const clearTopSpots = useCallback(() => {
     topLayerRef.current?.clearLayers();
@@ -760,6 +764,7 @@ export function MushroomMap({
 
       setTopAccess(limited ? 'free_limited' : 'premium_full');
       setTopSpots(spots);
+      topSpotsForSpeciesRef.current = sid ?? null;
       await renderTopSpots(
         spots,
         { lat: originLat, lng: originLng },
@@ -1804,7 +1809,12 @@ export function MushroomMap({
         transparent: true,
         version: '1.3.0',
         attribution: 'Turruter &copy; Kartverket',
-        minZoom: 8,
+        // Tjenesten tegner ingenting over 1:1 000 000 (MaxScaleDenominator i
+        // GetCapabilities) — z8–9 ga tomme fliser og en avkrysning uten effekt.
+        // Kartet går til z20; uten maxZoom arver laget Leaflets 18 og forsvinner
+        // akkurat der stien ved en lovende rute skal leses.
+        minZoom: 10,
+        maxZoom: 20,
         zIndex: 5,
         opacity: 0.9
       });
@@ -2299,7 +2309,7 @@ export function MushroomMap({
           >
             {topLoading ? t('searching') : topSpots ? t('hideSpots') : t('promisingSpotsButton')}
           </button>
-          {topSpots?.length ? (
+          {topSpots?.length && !topLoading ? (
             <button
               type="button"
               onClick={eksporterTopSpotsGpx}

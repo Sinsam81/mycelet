@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { byggLovendeOmraderGpx } from '../lovende-omrader';
 
 const omrader = [
-  { lat: 60.39, lng: 5.32, score: 87.4, verdict: 'Gode forhold', reasons: ['Fuktig nok', 'Granskog'], forestType: 'granskog' },
+  { lat: 60.39, lng: 5.32, score: 87.4, verdict: 'Gode forhold', reasons: ['Fuktig nok', 'Granskog'] },
   { lat: 60.41, lng: 5.35, score: 72, reasons: [] }
 ];
 
@@ -10,7 +10,7 @@ describe('byggLovendeOmraderGpx', () => {
   it('ett veipunkt per område, nummerert, med art og score i navnet og begrunnelsen i beskrivelsen', () => {
     const gpx = byggLovendeOmraderGpx(omrader, { artsnavn: 'Kantarell', dato: '2026-09-06' });
     expect(gpx).toContain('<name>Kantarell – Lovende område 1 (87 av 100)</name>');
-    expect(gpx).toContain('<desc>Gode forhold · Fuktig nok · Granskog · Skog: granskog · Mycelet-vurdering 2026-09-06</desc>');
+    expect(gpx).toContain('<desc>Gode forhold · Fuktig nok · Granskog · Mycelet-vurdering 2026-09-06</desc>');
     expect(gpx).toContain('<name>Kantarell – Lovende område 2 (72 av 100)</name>');
     expect(gpx).toContain('lat="60.390000" lon="5.320000"');
     expect((gpx.match(/<wpt /g) ?? []).length).toBe(2);

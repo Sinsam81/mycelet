@@ -16,8 +16,8 @@ export interface LovendeOmrade {
   lng: number;
   score: number;
   verdict?: string;
+  /** Begrunnelsen slik den vises i popupen (allerede på leserens språk). */
   reasons?: string[];
-  forestType?: string;
 }
 
 export interface LovendeOmraderGpxValg {
@@ -29,8 +29,8 @@ export interface LovendeOmraderGpxValg {
 }
 
 const COPY = {
-  nb: { omrade: 'Lovende område', avHundre: 'av 100', dato: 'Mycelet-vurdering', skog: 'Skog' },
-  sv: { omrade: 'Lovande område', avHundre: 'av 100', dato: 'Mycelet-bedömning', skog: 'Skog' }
+  nb: { omrade: 'Lovende område', avHundre: 'av 100', dato: 'Mycelet-vurdering' },
+  sv: { omrade: 'Lovande område', avHundre: 'av 100', dato: 'Mycelet-bedömning' }
 } as const;
 
 export function byggLovendeOmraderGpx(omrader: LovendeOmrade[], valg: LovendeOmraderGpxValg): string {
@@ -42,8 +42,9 @@ export function byggLovendeOmraderGpx(omrader: LovendeOmrade[], valg: LovendeOmr
     name: `${art ? `${art} – ` : ''}${c.omrade} ${i + 1} (${Math.round(o.score)} ${c.avHundre})`,
     desc: [
       o.verdict?.trim() || null,
+      // Skogtypen fra ruta er en kode («gran», «lauv», «apent»), ikke en etikett —
+      // begrunnelsen over sier det samme på leserens språk.
       ...(o.reasons ?? []).map((r) => r.trim()).filter(Boolean),
-      o.forestType?.trim() ? `${c.skog}: ${o.forestType.trim()}` : null,
       `${c.dato} ${valg.dato}`
     ]
       .filter((d): d is string => Boolean(d))

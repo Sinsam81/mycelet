@@ -1,5 +1,6 @@
 'use client';
 
+import { createPortal } from 'react-dom';
 import toast from 'react-hot-toast';
 import { useTranslations } from 'next-intl';
 import { Copy, X } from 'lucide-react';
@@ -7,8 +8,12 @@ import { Copy, X } from 'lucide-react';
 /**
  * GPX i appskallet: WKWebView uten nedlastingsdelegat avbryter nedlastinger i
  * stillhet (se GpxEksportKnapp), så der vises innholdet med en kopier-knapp.
- * Delt mellom Mine steder og «Lovende områder» på kartet — samme tekster
- * (MineSteder-navnerommet), egen overskrift per kallsted.
+ * Brukes av «Lovende områder» på kartet (samme tekster som Mine steder,
+ * MineSteder-navnerommet; egen overskrift per kallsted).
+ *
+ * Rendres i en portal til <body>: kartets verktøyrad har en CSS-transform, og
+ * en position:fixed inni en transformert forelder får forelderen som ramme —
+ * bakteppet dekket bare verktøyraden, ikke skjermen.
  */
 export function GpxKopierModal({ tittel, gpx, onClose }: { tittel: string; gpx: string; onClose: () => void }) {
   const t = useTranslations('MineSteder');
@@ -22,7 +27,8 @@ export function GpxKopierModal({ tittel, gpx, onClose }: { tittel: string; gpx: 
     }
   };
 
-  return (
+  if (typeof document === 'undefined') return null;
+  return createPortal(
     <div
       role="dialog"
       aria-modal="true"
@@ -50,6 +56,7 @@ export function GpxKopierModal({ tittel, gpx, onClose }: { tittel: string; gpx: 
           {t('gpxCopy')}
         </button>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
