@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import * as Sentry from '@sentry/nextjs';
 import { createAdminClient } from '@/lib/supabase/admin';
 import {
   RevenueCatWebhookBody,
@@ -50,6 +51,113 @@ function authorized(request: NextRequest): boolean {
   // Konstant tid, felles hjelper — samme sjekk som cron-rutene bruker.
   // Se src/lib/security/secret-compare.ts.
   return secretsMatch(request.headers.get('authorization'), process.env.REVENUECAT_WEBHOOK_AUTH);
+}
+
+const RC_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * TRANSFER: flytt en RevenueCat-eid, betalt rad fra én Supabase-bruker til en
+ * annen — bare når det er entydig og trygt:
+ *   · nøyaktig én UUID på hver side (anonyme $RCAnonymousID-er går til Sentry)
+ *   · kilderaden finnes, eies av RevenueCat og er betalt
+ *   · målraden er ikke betalt via Stripe og har ikke et aktivt manuelt pass
+ * Kilden settes til canceled (med mindre den bærer et manuelt pass — det
+ * følger ikke butikken). Alt annet: Sentry-varsel med nok til å gjøre det
+ * for hånd. Vanligste tilfelle er «slett konto → kjøp/gjenopprett på ny»:
+ * da er kilderaden alt borte (cascade), og eieren må tildele manuelt til
+ * neste RENEWAL kommer med app_user_id. Returverdien er ack-grunnen.
+ */
+async function haandterTransfer(
+  event: NonNullable<RevenueCatWebhookBody['event']>,
+  admin: ReturnType<typeof createAdminClient>,
+  log: ReturnType<typeof createRequestLogger>,
+  eventId: string | null
+): Promise<string> {
+  const fra = (event.transferred_from ?? []).filter((id) => RC_UUID.test(id));
+  const til = (event.transferred_to ?? []).filter((id) => RC_UUID.test(id));
+  const varsle = async (grunn: string, ekstra: Record<string, unknown> = {}) => {
+    log.warn('revenuecat.webhook.transfer_needs_review', { eventId, grunn, ...ekstra });
+    Sentry.captureMessage(`revenuecat: TRANSFER trenger oppfølging — ${grunn}`, {
+      level: 'warning',
+      tags: { omraade: 'iap' },
+      extra: { eventId, grunn, antallFra: (event.transferred_from ?? []).length, antallTil: (event.transferred_to ?? []).length, ...ekstra }
+    });
+    await Sentry.flush(2000);
+  };
+
+  if (fra.length !== 1 || til.length !== 1 || fra[0] === til[0]) {
+    await varsle('ikke én UUID på hver side');
+    return 'transfer_needs_review';
+  }
+
+  const les = async (userId: string) => {
+    const { data, error } = await admin
+      .from('billing_subscriptions')
+      .select('user_id,tier,status,current_period_start,current_period_end,cancel_at_period_end,metadata')
+      .eq('user_id', userId)
+      .maybeSingle<ExistingBillingRow>();
+    if (error) throw new Error(error.message);
+    return data;
+  };
+  const kilde = await les(fra[0]);
+  const mal = await les(til[0]);
+
+  if (!kilde) {
+    await varsle('kilderaden finnes ikke (slettet konto?) — tildel manuelt til neste RENEWAL', { til: til[0] });
+    return 'transfer_no_source_row';
+  }
+  if (kilde.metadata?.provider !== 'revenuecat') {
+    await varsle('kilderaden eies ikke av RevenueCat');
+    return 'transfer_source_not_revenuecat';
+  }
+  if (!hasPaidAccess(kilde.status as BillingStatus, kilde.tier as BillingTier, kilde.current_period_end)) {
+    await varsle('kilderaden er ikke betalt');
+    return 'transfer_source_unpaid';
+  }
+  const malBeskyttet =
+    Boolean(mal) &&
+    ((hasPaidAccess(mal!.status as BillingStatus, mal!.tier as BillingTier, mal!.current_period_end) &&
+      mal!.metadata?.provider !== 'revenuecat') ||
+      isManualGrantActive(readManualGrant(mal)));
+  if (malBeskyttet) {
+    await varsle('målraden er betalt via annen leverandør eller har manuelt pass');
+    return 'transfer_dest_protected';
+  }
+
+  const eventTs = typeof event.event_timestamp_ms === 'number' ? event.event_timestamp_ms : null;
+  const { error: skrivErr } = await admin.from('billing_subscriptions').upsert(
+    {
+      user_id: til[0],
+      tier: kilde.tier,
+      status: kilde.status,
+      current_period_start: kilde.current_period_start,
+      current_period_end: kilde.current_period_end,
+      cancel_at_period_end: kilde.cancel_at_period_end ?? false,
+      metadata: {
+        ...(kilde.metadata ?? {}),
+        provider: 'revenuecat',
+        rc_event_type: 'TRANSFER',
+        rc_event_timestamp_ms: eventTs,
+        transferred_from: fra[0]
+      }
+    },
+    { onConflict: 'user_id' }
+  );
+  if (skrivErr) throw new Error(skrivErr.message);
+
+  const kildeManuell = isManualGrantActive(readManualGrant(kilde));
+  if (!kildeManuell) {
+    const { error: kildeErr } = await admin
+      .from('billing_subscriptions')
+      .update({
+        status: 'canceled',
+        metadata: { ...(kilde.metadata ?? {}), rc_event_type: 'TRANSFER', rc_event_timestamp_ms: eventTs, transferred_to: til[0] }
+      })
+      .eq('user_id', fra[0]);
+    if (kildeErr) throw new Error(kildeErr.message);
+  }
+  log.info('revenuecat.webhook.transfer_applied', { eventId, tier: kilde.tier, kildeManuell });
+  return kildeManuell ? 'transfer_applied_source_kept_manual_grant' : 'transfer_applied';
 }
 
 interface ExistingBillingRow {
@@ -119,7 +227,16 @@ export async function POST(request: NextRequest) {
             event_id: eventId,
             event_type: `revenuecat.${eventType}`,
             status: 'received',
-            payload: { store: event.store, environment: event.environment, product_id: event.product_id },
+            payload: {
+              store: event.store,
+              environment: event.environment,
+              product_id: event.product_id,
+              // TRANSFER bærer verken app_user_id eller product_id — uten
+              // disse to kunne oppfølgingen ikke gjøres fra egen database.
+              ...(eventType === 'TRANSFER'
+                ? { transferred_from: event.transferred_from ?? null, transferred_to: event.transferred_to ?? null }
+                : {})
+            },
             error_message: null
           },
           { onConflict: 'event_id' }
@@ -154,9 +271,11 @@ export async function POST(request: NextRequest) {
 
     if (decision.action === 'ack') {
       if (eventType === 'TRANSFER') {
-        // Cross-account entitlement move — rare; needs manual follow-up so
-        // the ORIGIN account doesn't keep a stale paid row.
-        log.warn('revenuecat.webhook.transfer_needs_review', { eventId });
+        // Kjøp flyttet mellom app-bruker-IDer (gjenoppretting eller nytt kjøp
+        // på en ny konto med samme Apple-ID). Før: bare en loggadvarsel —
+        // opphavskontoen beholdt en betalt rad, den nye fikk ingenting før
+        // neste RENEWAL. Nå flyttes raden når det er trygt; ellers Sentry.
+        return await ackIgnored(await haandterTransfer(event, admin, log, eventId));
       }
       return await ackIgnored(decision.reason);
     }

@@ -49,6 +49,12 @@ export interface RevenueCatEvent {
   environment?: string | null;
   cancel_reason?: string | null;
   expiration_reason?: string | null;
+  /**
+   * TRANSFER: app_user_id-ene kjøpene flyttes FRA og TIL (kun i den
+   * hendelsen — den mangler app_user_id, product_id og utløp). Se ruta.
+   */
+  transferred_from?: string[] | null;
+  transferred_to?: string[] | null;
 }
 
 export interface RevenueCatWebhookBody {
