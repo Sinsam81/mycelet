@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { classifyTrafficSource } from '../traffic-source';
-import { kildeFraBesok, lesKildeCookie, normaliserKilde } from '../kilde';
+import { erInngangssti, kildeForForesporsel, kildeFraBesok, lesKildeCookie, normaliserKilde } from '../kilde';
 
 const OSS = 'www.mycelet.com';
 
@@ -53,5 +53,48 @@ describe('normaliserKilde', () => {
     expect(normaliserKilde(42)).toBeNull();
     expect(normaliserKilde({ kilde: 'x' })).toBeNull();
     expect(normaliserKilde('   ')).toBeNull();
+  });
+});
+
+describe('kildeForForesporsel — cookien på alle inngangssider', () => {
+  const basis = { ownHost: OSS, utmSource: null, utmCampaign: null, harGclid: false };
+
+  it('setter kilde på en områdeside, ikke bare forsiden', () => {
+    expect(kildeForForesporsel({ ...basis, pathname: '/soppforhold/bergen', referer: 'https://www.google.no/' })).toBe('sok:google.no');
+    expect(kildeForForesporsel({ ...basis, pathname: '/sanketips/sopp-etter-regn', referer: 'https://soppognyttevekster.no/' })).toBe(
+      'henvisning:soppognyttevekster.no'
+    );
+  });
+
+  it('partnerlenke med utm gir partnerens kilde — også når den åpnes i Gmail', () => {
+    expect(
+      kildeForForesporsel({
+        ...basis,
+        pathname: '/soppforhold/bergen',
+        referer: 'https://mail.google.com/',
+        utmSource: 'bergen-snf',
+        utmCampaign: 'host-2026'
+      })
+    ).toBe('bergen-snf/host-2026');
+  });
+
+  it('e-postklienter og innloggingsretur er ikke kilder', () => {
+    // Bekreftelseslenka fra Gmail og OAuth-returen fra Google ville ellers
+    // blitt «sok:mail.google.com» — falske Google-kilder i rapporten.
+    expect(kildeForForesporsel({ ...basis, pathname: '/soppvarsel', referer: 'https://mail.google.com/mail/u/0/' })).toBeNull();
+    expect(kildeForForesporsel({ ...basis, pathname: '/', referer: 'https://accounts.google.com/o/oauth2/' })).toBeNull();
+    expect(kildeForForesporsel({ ...basis, pathname: '/pricing', referer: 'https://checkout.stripe.com/c/pay' })).toBeNull();
+  });
+
+  it('API, innloggingsflyt og filer er aldri inngangen', () => {
+    expect(erInngangssti('/api/soppvarsel/bekreft')).toBe(false);
+    expect(erInngangssti('/auth/callback')).toBe(false);
+    expect(erInngangssti('/landing/soppforhold.webp')).toBe(false);
+    expect(erInngangssti('/soppforhold/oslo')).toBe(true);
+    expect(kildeForForesporsel({ ...basis, pathname: '/auth/callback', referer: 'https://www.google.com/' })).toBeNull();
+  });
+
+  it('gclid uten utm teller som Google-annonse', () => {
+    expect(kildeForForesporsel({ ...basis, pathname: '/', referer: null, harGclid: true })).toBe('google/annonse');
   });
 });

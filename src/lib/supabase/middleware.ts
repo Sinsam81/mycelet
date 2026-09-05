@@ -4,7 +4,7 @@ import { logger } from '@/lib/log';
 import { getOrCreateRequestId } from '@/lib/log/request';
 import { LOCALE_COOKIE, isLocale, type Locale } from '@/i18n/config';
 import { classifyTrafficSource } from '@/lib/analytics/traffic-source';
-import { KILDE_COOKIE, KILDE_COOKIE_MAX_AGE, kildeFraBesok } from '@/lib/analytics/kilde';
+import { KILDE_COOKIE, KILDE_COOKIE_MAX_AGE, kildeForForesporsel } from '@/lib/analytics/kilde';
 
 /**
  * Fasit for hvilke ruter en utlogget besøkende sendes til innlogging fra.
@@ -133,6 +133,31 @@ export async function updateSession(request: NextRequest) {
     });
   }
 
+  // Kilde-cookie på første eksterne besøk, uansett hvilken side de landet på.
+  // Før ble den bare satt på forsiden (i grenen under), så alle som kom fra
+  // presse, partnere eller søk rett til en områdeside, /soppvarsel eller en
+  // artikkel telte som «ukjent» i rapporten — akkurat trafikken satsingen
+  // handler om. Første besøk vinner; regelen for HVA som er en kilde ligger
+  // i @/lib/analytics/kilde (e-postklienter og innloggingsretur er det ikke).
+  if (!user && request.method === 'GET' && !request.cookies.has(KILDE_COOKIE)) {
+    const params = request.nextUrl.searchParams;
+    const registreringskilde = kildeForForesporsel({
+      pathname: request.nextUrl.pathname,
+      referer: request.headers.get('referer'),
+      ownHost: request.nextUrl.hostname,
+      utmSource: params.get('utm_source'),
+      utmCampaign: params.get('utm_campaign'),
+      harGclid: params.has('gclid')
+    });
+    if (registreringskilde) {
+      response.cookies.set(KILDE_COOKIE, registreringskilde, {
+        path: '/',
+        maxAge: KILDE_COOKIE_MAX_AGE,
+        sameSite: 'lax'
+      });
+    }
+  }
+
   // Logged-out visitors on the front page get the designed static landing
   // (public/landing/index.html, Swedish: index.sv.html — zero JS, self-hosted
   // fonts). Logged-in users fall through to the app home. NB: Turbopack dev
@@ -173,7 +198,16 @@ export async function updateSession(request: NextRequest) {
     });
     // Ta kilden med videre til registreringen — se @/lib/analytics/kilde for
     // hele kjeden. Første besøk vinner, så en eksisterende cookie røres ikke.
-    const registreringskilde = kildeFraBesok(kilde, utmCampaign);
+    // (Samme regel som den generelle blokken over; forsiden er bare en av
+    // inngangssidene nå, men beholder loggingen sin.)
+    const registreringskilde = kildeForForesporsel({
+      pathname: '/',
+      referer: request.headers.get('referer'),
+      ownHost: request.nextUrl.hostname,
+      utmSource: params.get('utm_source'),
+      utmCampaign: params.get('utm_campaign'),
+      harGclid: params.has('gclid')
+    });
     if (registreringskilde && !request.cookies.has(KILDE_COOKIE)) {
       landingResponse.cookies.set(KILDE_COOKIE, registreringskilde, {
         path: '/',

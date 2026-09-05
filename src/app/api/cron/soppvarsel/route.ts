@@ -14,6 +14,7 @@ import { manglendeEpostKonfig, sendEpost } from '@/lib/email/send';
 import * as Sentry from '@sentry/nextjs';
 import type { Locale } from '@/i18n/config';
 import { regionScore } from '@/lib/prediction/region-score';
+import { regionSlug } from '@/lib/prediction/region-slug';
 
 /**
  * Soppvarselet — kjører hver morgen etter at nattens fliser er generert.
@@ -441,7 +442,10 @@ export async function GET(request: NextRequest) {
       avmeldingsUrl,
       toppdag: ekstra.toppdag,
       arter: ekstra.arter,
-      fasit: fasit ? { dato: fasit.dato, ukenEtter: fasit.ukenEtter, ukenFor: fasit.ukenFor } : null
+      fasit: fasit ? { dato: fasit.dato, ukenEtter: fasit.ukenEtter, ukenFor: fasit.ukenFor } : null,
+      // Klikket registreres per abonnement (forste_apnet_at/sist_apnet_at) og
+      // sender leseren videre til områdesiden. Det er «aktivering» i rapporten.
+      lenkeUrl: `${appUrl}/api/soppvarsel/klikk?t=${ab.unsubscribe_token}&r=${regionSlug(ab.region)}`
     });
 
     // STEMPLE FØR SENDING — samme husregel som purre-cronen og X-posteren.

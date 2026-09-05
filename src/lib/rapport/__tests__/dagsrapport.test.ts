@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { byggDagsrapport, type AbonnementRad, type BrukerRad, type RapportInn } from '../dagsrapport';
+import { byggDagsrapport, type AbonnementRad, type BrukerRad, type RapportInn, type VarselAbonnentRad } from '../dagsrapport';
 
 /**
  * Testene her er skrevet mot ÉN feil: at rapporten oppgir flere kunder enn
@@ -207,5 +207,53 @@ describe('flanker — samme regel som varselet', () => {
   it('tier når gårsdagen mangler for regionen', () => {
     const r = byggDagsrapport(inn({ regionerIGar: [], regionerIDag: [{ region: 'Oslo', score: 90 }] }));
     expect(r.flanker).toEqual([]);
+  });
+});
+
+describe('soppvarselet som trakt', () => {
+  function va(over: Partial<VarselAbonnentRad> = {}): VarselAbonnentRad {
+    return {
+      user_id: null,
+      region: 'Bergen',
+      active: true,
+      confirmed_at: dagerSiden(3),
+      created_at: dagerSiden(3),
+      last_notified_at: null,
+      forste_apnet_at: null,
+      kilde: null,
+      ...over
+    };
+  }
+  function bygg(varselabonnenter: VarselAbonnentRad[]) {
+    const inn: RapportInn = { brukere: [], abonnement: [], varselabonnement: 0, varselabonnenter, regionerIDag: [], regionerIGar: [], naa: NAA };
+    return byggDagsrapport(inn).varsel;
+  }
+
+  it('teller bare bekreftede, aktive rader — og kontorader er bekreftet i kraft av kontoen', () => {
+    const v = bygg([va(), va({ confirmed_at: null }), va({ active: false }), va({ user_id: 'u1', confirmed_at: null })]);
+    expect(v.bekreftede).toBe(2);
+  });
+
+  it('grupperer på kilde med «ukjent» sist, og på region', () => {
+    const v = bygg([va({ kilde: 'bergen-snf/host-2026' }), va({ kilde: 'bergen-snf/host-2026', region: 'Oslo' }), va()]);
+    expect(v.perKilde.map((k) => k.kilde)).toEqual(['bergen-snf/host-2026', 'ukjent']);
+    expect(v.perKilde[0].bekreftede).toBe(2);
+    expect(v.perRegion).toEqual([
+      { region: 'Bergen', bekreftede: 2 },
+      { region: 'Oslo', bekreftede: 1 }
+    ]);
+  });
+
+  it('aktivering krever et klikk som ikke bare er e-postskanneren', () => {
+    const sendt = dagerSiden(1);
+    const rettEtter = new Date(new Date(sendt).getTime() + 2 * 60_000).toISOString();
+    const senere = new Date(new Date(sendt).getTime() + 3 * 3600_000).toISOString();
+    const v = bygg([
+      va({ last_notified_at: sendt, forste_apnet_at: rettEtter }), // skanner
+      va({ last_notified_at: sendt, forste_apnet_at: senere }), // menneske
+      va({ last_notified_at: sendt, forste_apnet_at: null }),
+      va({ last_notified_at: null, forste_apnet_at: senere }) // klikk uten varsel finnes ikke
+    ]);
+    expect(v.aktiverte).toBe(1);
   });
 });

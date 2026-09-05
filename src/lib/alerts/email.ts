@@ -43,6 +43,12 @@ interface VarselEpostArgs {
   arter?: string[];
   /** Fasit for FORRIGE varsel i regionen — kun når tallene er modne (fasit.ts). */
   fasit?: { dato: string; ukenEtter: number; ukenFor: number } | null;
+  /**
+   * Knappens mål. Standard er kartet; cronen sender den sporbare lenka til
+   * områdesiden (/api/soppvarsel/klikk → /soppforhold/<område>), som er det
+   * som teller som aktivering i rapporten.
+   */
+  lenkeUrl?: string;
 }
 
 const COPY = {
@@ -66,7 +72,7 @@ const COPY = {
     toppdagJevn: (score: number) => `Utsikten fremover: jevnt hele uka (${score} av 100) — ingen dag skiller seg ut.`,
     og: 'og',
     arter: (liste: string) => `I sesong nå: ${liste}.`,
-    knapp: 'Se kartet for området ditt',
+    knapp: 'Se forholdene for området ditt',
     sikkerhet:
       'Spis aldri en sopp du ikke har fått bestemt. Ingen app kan si at en sopp er trygg. Er du i tvil, la den stå — eller få den kontrollert.',
     avmeld: 'Vil du ikke ha flere varsler? Meld deg av her.',
@@ -93,7 +99,7 @@ const COPY = {
     toppdagJevn: (score: number) => `Utsikten framöver: jämnt hela veckan (${score} av 100) — ingen dag sticker ut.`,
     og: 'och',
     arter: (liste: string) => `I säsong nu: ${liste}.`,
-    knapp: 'Se kartan för ditt område',
+    knapp: 'Se läget för ditt område',
     sikkerhet:
       'Ät aldrig en svamp du inte fått bestämd. Ingen app kan säga att en svamp är säker. Är du osäker, låt den stå — eller få den kontrollerad.',
     avmeld: 'Vill du inte ha fler varningar? Avregistrera dig här.',
@@ -126,7 +132,7 @@ function toppdagLinjeFor(t: (typeof COPY)[Locale], toppdag: NonNullable<VarselEp
 
 export function byggVarselEpost(args: VarselEpostArgs) {
   const t = COPY[args.locale] ?? COPY.nb;
-  const kartUrl = `${args.appUrl}/map`;
+  const kartUrl = args.lenkeUrl ?? `${args.appUrl}/map`;
 
   const html = `<!doctype html>
 <html lang="${args.locale}">

@@ -32,6 +32,8 @@
  * inn for hånd — et gavepass, ikke et salg.
  */
 
+import { VARSEL_MIN_SCORE } from '@/lib/alerts/decision';
+
 export type Betalingskilde = 'stripe' | 'revenuecat' | 'manuell';
 
 export interface AbonnementRad {
@@ -55,10 +57,26 @@ export interface BrukerRad {
   kilde: string | null;
 }
 
+/** Én rad per varselabonnement — konto- og e-postrader om hverandre. */
+export interface VarselAbonnentRad {
+  user_id: string | null;
+  region: string;
+  active: boolean;
+  confirmed_at: string | null;
+  created_at: string;
+  last_notified_at: string | null;
+  /** Første klikk fra et varsel til områdesiden (/api/soppvarsel/klikk). */
+  forste_apnet_at: string | null;
+  /** Samme format som BrukerRad.kilde. null = direkte/ukjent. */
+  kilde: string | null;
+}
+
 export interface RapportInn {
   brukere: BrukerRad[];
   abonnement: AbonnementRad[];
   varselabonnement: number;
+  /** Radene bak tallet over — for kilde, region og aktivering. Valgfri for eldre kall. */
+  varselabonnenter?: VarselAbonnentRad[];
   /** Regionscorer for i dag og i går, til «hva skjedde i skogen». */
   regionerIDag: Array<{ region: string; score: number }>;
   regionerIGar: Array<{ region: string; score: number }>;
@@ -83,12 +101,42 @@ export interface Dagsrapport {
    * fra før målingen startet, og skal ikke skygge for de navngitte.
    */
   kilder: Array<{ kilde: string; totalt: number; siste7d: number; betalende: number }>;
+  /**
+   * Soppvarselet som trakt (docs/strategi-2026-2027.md § 4): bekreftede
+   * abonnenter, nye siste uke, og hvor mange som faktisk åpnet områdets
+   * prognose etter et varsel — per kilde og per region. Et klikk under ti
+   * minutter etter utsendingen regnes ikke som aktivering: e-postskannere
+   * følger GET-lenker ved levering.
+   */
+  varsel: {
+    bekreftede: number;
+    nyeSiste7d: number;
+    aktiverte: number;
+    perKilde: Array<{ kilde: string; bekreftede: number; siste7d: number; aktiverte: number }>;
+    perRegion: Array<{ region: string; bekreftede: number }>;
+  };
 }
 
 export const UKJENT_KILDE = 'ukjent';
 
-/** Terskelen varselet bruker. Importeres ikke, for å holde modulen fri for UI-kode. */
-const VARSEL_TERSKEL = 85;
+/**
+ * Terskelen varselet bruker. Sto hardkodet som 85 og gikk ut av takt da
+ * varselet ble bundet til regionskalaen (81, PR #242) — rapportens «snudde i
+ * natt» ville da vist andre regioner enn de som faktisk fikk varsel.
+ */
+const VARSEL_TERSKEL = VARSEL_MIN_SCORE;
+
+/** Klikk raskere enn dette etter utsending er trolig en e-postskanner, ikke et menneske. */
+export const AKTIVERING_MIN_MS = 10 * 60_000;
+
+function erAktivert(rad: VarselAbonnentRad): boolean {
+  if (!rad.forste_apnet_at) return false;
+  if (!rad.last_notified_at) return false;
+  const apnet = new Date(rad.forste_apnet_at).getTime();
+  const sendt = new Date(rad.last_notified_at).getTime();
+  // Åpnet et eldre varsel enn det siste, eller ventet lenger enn skannerne gjør.
+  return apnet < sendt || apnet - sendt >= AKTIVERING_MIN_MS;
+}
 
 function kilde(rad: AbonnementRad): Betalingskilde {
   const p = rad.metadata?.provider;
@@ -141,6 +189,39 @@ export function byggDagsrapport(inn: RapportInn): Dagsrapport {
       return y.totalt - x.totalt || x.kilde.localeCompare(y.kilde);
     });
 
+  // ── Soppvarselet som trakt ────────────────────────────────────────────────
+  const varselRader = inn.varselabonnenter ?? [];
+  const erBekreftet = (r: VarselAbonnentRad) => r.active && (r.confirmed_at !== null || r.user_id !== null);
+  const bekreftede = varselRader.filter(erBekreftet);
+  const nyBekreftet = (r: VarselAbonnentRad) => nyere(r.confirmed_at ?? r.created_at, dag7);
+  const varselPerKilde = new Map<string, { bekreftede: number; siste7d: number; aktiverte: number }>();
+  for (const r of bekreftede) {
+    const k = r.kilde ?? UKJENT_KILDE;
+    let t = varselPerKilde.get(k);
+    if (!t) varselPerKilde.set(k, (t = { bekreftede: 0, siste7d: 0, aktiverte: 0 }));
+    t.bekreftede += 1;
+    if (nyBekreftet(r)) t.siste7d += 1;
+    if (erAktivert(r)) t.aktiverte += 1;
+  }
+  const varselPerRegion = new Map<string, number>();
+  for (const r of bekreftede) varselPerRegion.set(r.region, (varselPerRegion.get(r.region) ?? 0) + 1);
+  const varsel = {
+    bekreftede: bekreftede.length,
+    nyeSiste7d: bekreftede.filter(nyBekreftet).length,
+    aktiverte: bekreftede.filter(erAktivert).length,
+    perKilde: [...varselPerKilde.entries()]
+      .map(([k, t]) => ({ kilde: k, ...t }))
+      .sort((x, y) => {
+        if (x.kilde === UKJENT_KILDE) return 1;
+        if (y.kilde === UKJENT_KILDE) return -1;
+        return y.bekreftede - x.bekreftede || x.kilde.localeCompare(y.kilde);
+      }),
+    perRegion: [...varselPerRegion.entries()]
+      .map(([region, n]) => ({ region, bekreftede: n }))
+      .sort((a, b) => b.bekreftede - a.bekreftede || a.region.localeCompare(b.region))
+      .slice(0, 5)
+  };
+
   const flanker: Array<{ region: string; fra: number; til: number }> = [];
   const igar = new Map(inn.regionerIGar.map((r) => [r.region, r.score]));
   for (const r of inn.regionerIDag) {
@@ -169,6 +250,7 @@ export function byggDagsrapport(inn: RapportInn): Dagsrapport {
     varselabonnement: inn.varselabonnement,
     toppRegioner: [...inn.regionerIDag].sort((a, b) => b.score - a.score).slice(0, 3),
     flanker,
-    kilder
+    kilder,
+    varsel
   };
 }

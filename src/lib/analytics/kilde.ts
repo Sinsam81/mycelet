@@ -24,12 +24,17 @@
  * kom via en annonse og senere finner tilbake via Google-søk, telles på
  * annonsen. Det er det annonsetesten skal svare på.
  *
- * Cookien settes kun på forsiden (`/`) — samme sted som besøket logges.
- * Direkte besøk og interne klikk setter ingen cookie: de er «ukjent», og
- * rapporten sier det.
+ * Cookien settes på FØRSTE eksterne besøk uansett inngangsside (fra
+ * september 2026 — før bare på forsiden). Områdesidene, /soppvarsel og
+ * artiklene er det presse, partnere og søk sender folk til; med cookien
+ * bare på `/` telte alt det som «ukjent». Direkte besøk og interne klikk
+ * setter fortsatt ingen cookie: de er «ukjent», og rapporten sier det.
+ *
+ * Kilden bæres videre til BÅDE kontoregistrering (user_metadata.kilde) og
+ * kontoløs varselpåmelding (alert_subscriptions.kilde, migrasjon 063).
  */
 
-import type { TrafficSource } from './traffic-source';
+import { classifyTrafficSource, type TrafficSource } from './traffic-source';
 
 export const KILDE_COOKIE = 'mycelet_kilde';
 
@@ -99,4 +104,63 @@ export function lesKildeCookie(cookieString: string | null | undefined): string 
     if (navn?.trim() === KILDE_COOKIE) return normaliserKilde(rest.join('='));
   }
   return null;
+}
+
+/**
+ * Stier der et første besøk kan fortelle hvor noen kom fra. API-kall,
+ * innloggingsflyt og filer er aldri «inngangen» — en OAuth-retur til
+ * /auth/callback fra accounts.google.com ville ellers blitt «sok:…».
+ */
+export function erInngangssti(pathname: string): boolean {
+  if (pathname.startsWith('/api/') || pathname.startsWith('/auth/') || pathname.startsWith('/_next/')) return false;
+  if (/\.[a-z0-9]{2,5}$/i.test(pathname)) return false;
+  return true;
+}
+
+/**
+ * Verter som sender folk TILBAKE til oss uten å være en kilde: e-postklienter
+ * (bekreftelseslenka i Gmail), innloggingsleverandører og betalingsretur.
+ * classifyTrafficSource ville kalt mail.google.com et søk.
+ */
+const IKKE_KILDE_VERTER = [
+  'mail.google.',
+  'mail.',
+  'outlook.',
+  'accounts.google.',
+  'appleid.apple.',
+  'checkout.stripe.',
+  'billing.stripe.',
+  'login.',
+  'auth.'
+];
+
+function erIkkeKildeVert(referer: string | null | undefined): boolean {
+  if (!referer) return false;
+  try {
+    const host = new URL(referer).hostname.toLowerCase();
+    return IKKE_KILDE_VERTER.some((v) => host === v.replace(/\.$/, '') || host.startsWith(v) || host.includes(`.${v}`));
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Hva cookien skal inneholde for denne forespørselen, eller null. Kampanje-
+ * merking i lenka (utm/gclid) vinner alltid — en partnerlenke åpnet i Gmail er
+ * fortsatt partnerens. Uten merking teller bare ekte eksterne henvisninger.
+ */
+export function kildeForForesporsel(args: {
+  pathname: string;
+  referer: string | null | undefined;
+  ownHost: string;
+  utmSource: string | null;
+  utmCampaign: string | null;
+  harGclid: boolean;
+}): string | null {
+  if (!erInngangssti(args.pathname)) return null;
+  const utmSource = args.utmSource ?? (args.harGclid ? 'google' : null);
+  const utmCampaign = args.utmCampaign ?? (args.harGclid ? 'annonse' : null);
+  if (!utmSource && erIkkeKildeVert(args.referer)) return null;
+  const besok = classifyTrafficSource(args.referer, args.ownHost, utmSource);
+  return kildeFraBesok(besok, utmCampaign);
 }
