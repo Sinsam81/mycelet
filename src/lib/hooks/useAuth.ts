@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { lesKildeCookie } from '@/lib/analytics/kilde';
+import { registreringsKilde } from '@/lib/analytics/kilde';
+import { isNativePlatform, plattform } from '@/lib/native/platform';
 import type { Session, User } from '@supabase/supabase-js';
 import { createClient } from '@/lib/supabase/client';
 import { nullstillDelingsnivaStandard } from '@/lib/findings/delingsniva';
@@ -80,8 +81,10 @@ export function useAuth() {
 
   const signUp = async ({ email, password, username, displayName }: SignUpPayload) => {
     // Hvor kom de fra? Satt av middleware ved forsidebesøket; mangler den, var
-    // besøket direkte og rapporten sier «ukjent». Se @/lib/analytics/kilde.
-    const kilde = lesKildeCookie(typeof document === 'undefined' ? null : document.cookie);
+    // besøket direkte og rapporten sier «ukjent». Inne i appen er svaret alltid
+    // «app» — App Store er inngangen. Se @/lib/analytics/kilde.
+    const nativ = isNativePlatform();
+    const kilde = registreringsKilde(typeof document === 'undefined' ? null : document.cookie, nativ);
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
@@ -90,6 +93,7 @@ export function useAuth() {
           username,
           display_name: displayName,
           ...(kilde ? { kilde } : {}),
+          ...(nativ ? { plattform: plattform() } : {}),
           // Provable consent: the signup form requires accepting the Terms +
           // age (18+/guardian) before this runs, so record the version + time
           // on the auth user. No DB migration needed.

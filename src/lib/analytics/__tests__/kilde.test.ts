@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { classifyTrafficSource } from '../traffic-source';
-import { erInngangssti, kildeForForesporsel, kildeFraBesok, lesKildeCookie, normaliserKilde } from '../kilde';
+import { erInngangssti, kildeForForesporsel, kildeFraBesok, lesKildeCookie, normaliserKilde, registreringsKilde } from '../kilde';
 
 const OSS = 'www.mycelet.com';
 
@@ -110,5 +110,17 @@ describe('kildeForForesporsel — cookien på alle inngangssider', () => {
 
   it('gclid uten utm teller som Google-annonse', () => {
     expect(kildeForForesporsel({ ...basis, pathname: '/', referer: null, harGclid: true })).toBe('google/annonse');
+  });
+});
+
+describe('registreringsKilde', () => {
+  it('inne i appen er kilden «app», uansett cookie — App Store er inngangen', () => {
+    expect(registreringsKilde('mycelet_kilde=google%2Fsoppkart-test', true)).toBe('app');
+    expect(registreringsKilde(null, true)).toBe('app');
+  });
+
+  it('på nettet er det cookien som gjelder, og ingenting uten', () => {
+    expect(registreringsKilde('mycelet_kilde=google%2Fsoppkart-test', false)).toBe('google/soppkart-test');
+    expect(registreringsKilde(null, false)).toBeNull();
   });
 });

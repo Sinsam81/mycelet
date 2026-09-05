@@ -9,6 +9,7 @@ import { SoppforholdForbehold } from '@/components/soppforhold/Forbehold';
 import { UkeStripe } from '@/components/soppforhold/UkeStripe';
 import { VarselCta } from '@/components/soppforhold/VarselCta';
 import { DelOmrade } from '@/components/soppforhold/DelOmrade';
+import { RegistrerBruksdag } from '@/components/bruk/RegistrerBruksdag';
 import { alleRegionSlugs, regionFromSlug } from '@/lib/prediction/region-slug';
 import { computeRegionWeek, type RegionWeek } from '@/lib/prediction/region-week';
 import { fetchWeatherSummary } from '@/lib/weather';
@@ -261,6 +262,8 @@ export default async function OmradePage({ params, searchParams }: SideProps) {
     <PageWrapper>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
       <article className="space-y-8 py-6">
+        {/* Innloggede: «så området i dag» (migrasjon 064). Klientkomponent, så siden forblir statisk. */}
+        <RegistrerBruksdag flate="omrade" omrade={omrade} />
         <header className="space-y-3">
           <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-forest-700">
             <CalendarDays className="h-4 w-4" aria-hidden="true" />

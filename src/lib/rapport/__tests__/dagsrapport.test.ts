@@ -270,3 +270,59 @@ describe('soppvarselet som trakt', () => {
     expect(byggDagsrapport(inn).varsel.perKilde[0].kilde).toBe('bergen-snf/host-2026');
   });
 });
+
+describe('bruk av soppforholdene — aktivering og gjenbruk', () => {
+  const dagIso = (n: number) => dagerSiden(n).slice(0, 10);
+
+  it('«ikke målt» når radene mangler — null skal aldri se ut som «ingen bruker det»', () => {
+    const r = byggDagsrapport(inn({ brukere: [br({ created_at: dagerSiden(2) })] }));
+    expect(r.bruk.maalt).toBe(false);
+    expect(r.bruk.nyeSiste14d).toBe(1);
+    expect(r.bruk.komTilbake).toBe(0);
+  });
+
+  it('kom tilbake = en bruksdag ETTER registreringsdagen; samme dag teller ikke', () => {
+    const sammeDag = br({ id: 'same', created_at: dagerSiden(3), kilde: 'app' });
+    const senere = br({ id: 'later', created_at: dagerSiden(3), kilde: 'app' });
+    const gammel = br({ id: 'old', created_at: dagerSiden(40) });
+    const r = byggDagsrapport(
+      inn({
+        brukere: [sammeDag, senere, gammel],
+        bruksdager: [
+          { user_id: 'same', dag: dagIso(3), flate: 'hjem' },
+          { user_id: 'later', dag: dagIso(3), flate: 'hjem' },
+          { user_id: 'later', dag: dagIso(1), flate: 'kart' },
+          { user_id: 'old', dag: dagIso(0), flate: 'omrade' }
+        ]
+      })
+    );
+    expect(r.bruk.maalt).toBe(true);
+    expect(r.bruk.nyeSiste14d).toBe(2);
+    expect(r.bruk.komTilbake).toBe(1);
+    expect(r.bruk.perKilde).toEqual([{ kilde: 'app', nye: 2, komTilbake: 1 }]);
+    expect(r.bruk.brukereSiste7d).toBe(3);
+    expect(r.bruk.perFlate).toEqual({ hjem: 2, kart: 1, omrade: 1 });
+  });
+
+  it('gjenbruk = bruksdager i to ulike ISO-uker siste 28 dager', () => {
+    const r = byggDagsrapport(
+      inn({
+        bruksdager: [
+          { user_id: 'a', dag: '2026-08-03', flate: 'kart' }, // man uke 32
+          { user_id: 'a', dag: '2026-08-09', flate: 'kart' }, // søn uke 32 — samme uke
+          { user_id: 'b', dag: '2026-08-09', flate: 'hjem' }, // uke 32
+          { user_id: 'b', dag: '2026-08-10', flate: 'hjem' }, // man uke 33
+          { user_id: 'c', dag: '2026-07-01', flate: 'hjem' }, // utenfor 28 dager
+          { user_id: 'c', dag: '2026-08-12', flate: 'hjem' }
+        ]
+      })
+    );
+    expect(r.bruk.gjenbruk28d).toBe(1);
+  });
+
+  it('ukjente flater teller i brukere, men ikke i flatefordelingen', () => {
+    const r = byggDagsrapport(inn({ bruksdager: [{ user_id: 'x', dag: dagIso(0), flate: 'profil' }] }));
+    expect(r.bruk.brukereSiste7d).toBe(1);
+    expect(r.bruk.perFlate).toEqual({ hjem: 0, kart: 0, omrade: 0 });
+  });
+});

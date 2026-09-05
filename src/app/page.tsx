@@ -5,6 +5,7 @@ import { AlertTriangle, Calendar, Camera, Check, Crown, Database, FileText, Lock
 import { PageWrapper } from '@/components/layout/PageWrapper';
 import { LandingPage } from '@/components/landing/LandingPage';
 import { EdibilityBadge } from '@/components/ui/EdibilityBadge';
+import { RegistrerBruksdag } from '@/components/bruk/RegistrerBruksdag';
 import { MushroomDayCard } from '@/components/home/MushroomDayCard';
 import { BestRegionsCard } from '@/components/home/BestRegionsCard';
 import { VarselCta } from '@/components/soppforhold/VarselCta';
@@ -221,6 +222,7 @@ export default async function HomePage() {
         </header>
 
         <MushroomDayCard />
+        <RegistrerBruksdag flate="hjem" />
 
         {/* Rett under «hvordan er det her i dag» kommer «hvor er det best i
             landet». Det er den ene romlige sammenligningen modellen bærer —

@@ -177,7 +177,9 @@ export async function GET(request: NextRequest) {
     },
     // Hvem brukeren selv har blokkert (migrasjon 032). Blokkeringer AV
     // brukeren, gjort av andre, holdes utenfor — de er den andres valg.
-    blockedUsers: { shape: 'many', query: mange('blocked_users', 'blocker_id', user.id, 'blocked_id') }
+    blockedUsers: { shape: 'many', query: mange('blocked_users', 'blocker_id', user.id, 'blocked_id') },
+    // Bruksdager (migrasjon 064): dag + flate der soppforholdene ble vist. Egne rader via RLS.
+    usageDays: { shape: 'many', query: mange('bruksdager', 'user_id', user.id, 'dag') }
   };
 
   type DatasetKey = keyof typeof datasets;
@@ -258,7 +260,8 @@ export async function GET(request: NextRequest) {
     // 5: la til alertSubscriptions (også kontoløse på e-post), blockedUsers,
     //    account.metadata (kilde, vilkårssamtykke, brukernavn) og
     //    account.identities; flerrads-datasett pagineres nå.
-    schemaVersion: 5,
+    // 6: la til usageDays (bruksdager — dag og flate der soppforholdene ble vist).
+    schemaVersion: 6,
     account: {
       userId: user.id,
       email: user.email ?? null,
