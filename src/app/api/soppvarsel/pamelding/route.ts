@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { randomUUID } from 'crypto';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createRequestLogger } from '@/lib/log/request';
 import { checkRateLimit } from '@/lib/rate-limit';
@@ -71,23 +72,44 @@ export async function POST(request: NextRequest) {
 
   // Finnes raden fra før? Bekreftet → stille suksess (ingen ny e-post, ingen
   // lekkasje). Ubekreftet → send bekreftelsen på nytt (folk mister e-poster).
+  //
+  // ⚠️ eq, ikke ilike. Oppslaget brukte ilike med brukerinput, og
+  // e-postmønsteret over slipper gjennom «%» og «_» — strengen «%@%.%%»
+  // matchet da HVILKEN SOM HELST rad i regionen. Traff den én avmeldt rad,
+  // ble offerets abonnement reaktivert (uten at offeret fikk noen e-post,
+  // for bekreftelsen gikk til jokertegnstrengen), og svaret røpet om det
+  // fantes nøyaktig én aktiv abonnent som matchet. Innsettingen lagrer alltid
+  // lowercase, og den unike indeksen er på lower(email), så eq på lowercase
+  // er både riktig og billigere.
   const { data: eksisterende } = await db
     .from('alert_subscriptions')
-    .select('id,confirm_token,confirmed_at,active')
+    .select('id,confirmed_at,active')
     .is('user_id', null)
-    .ilike('email', email)
+    .eq('email', email.toLowerCase())
     .eq('region', region)
     .maybeSingle();
 
   let confirmToken: string | null = null;
   if (eksisterende) {
     if (eksisterende.confirmed_at && eksisterende.active) return tilbake('sendt');
-    // Avmeldt eller ubekreftet: reaktiver via nytt samtykke.
-    confirmToken = eksisterende.confirm_token as string;
-    await db
+    // Avmeldt eller ubekreftet: reaktivering er et NYTT samtykke, fullt ut.
+    //
+    // Raden beholdt gammel confirmed_at her før. Cron-filteret ser bare på
+    // (!user_id && !confirmed_at), så i det øyeblikket active ble true var en
+    // avmeldt adresse «bekreftet» igjen — og fikk varsel uten å ha klikket
+    // noe som helst. Hvem som helst kunne utløse det ved å sende inn
+    // adressen. Bekreftelsen nullstilles og tokenet roteres, så raden er
+    // usynlig for utsendingen til den NYESTE lenka er klikket; gamle lenker i
+    // innboksen (eller e-postskannere som følger dem) reaktiverer ingenting.
+    confirmToken = randomUUID();
+    const { error: reaktiverErr } = await db
       .from('alert_subscriptions')
-      .update({ active: true })
+      .update({ active: true, confirmed_at: null, confirm_token: confirmToken, locale })
       .eq('id', eksisterende.id);
+    if (reaktiverErr) {
+      log.error('varselpamelding.reaktivering_feilet', { message: reaktiverErr.message });
+      return tilbake('feil');
+    }
   } else {
     const { data: ny, error } = await db
       .from('alert_subscriptions')
