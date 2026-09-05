@@ -8,6 +8,7 @@ import { createClient } from '@/lib/supabase/server';
 import { intlLocale } from '@/lib/utils/intl-locale';
 import { MyPlacesFilter } from '@/components/places/MyPlacesFilter';
 import { GpxEksportKnapp } from '@/components/places/GpxEksportKnapp';
+import { RegistrerBruksdag } from '@/components/bruk/RegistrerBruksdag';
 
 export async function generateMetadata() {
   const t = await getTranslations('MineSteder');
@@ -126,6 +127,8 @@ export default async function MineStederPage() {
 
   return (
     <PageWrapper>
+      {/* «Kommer de tilbake til skogen sin?» — bruksflate «steder» (migrasjon 066). */}
+      <RegistrerBruksdag flate="steder" />
       <section className="space-y-4">
         <header>
           <p className="text-xs font-semibold uppercase tracking-widest text-forest-700">{t('onlyVisibleToYou')}</p>

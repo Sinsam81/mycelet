@@ -12,7 +12,8 @@
  * ikke et presisjonsmål.
  */
 
-export const FLATER = ['hjem', 'kart', 'omrade'] as const;
+/** hjem = forsidekortet · kart = /map · omrade = områdeside · steder = Mine steder (migrasjon 066). */
+export const FLATER = ['hjem', 'kart', 'omrade', 'steder'] as const;
 export type Flate = (typeof FLATER)[number];
 
 export function erFlate(v: unknown): v is Flate {

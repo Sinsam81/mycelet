@@ -301,7 +301,7 @@ describe('bruk av soppforholdene — aktivering og gjenbruk', () => {
     expect(r.bruk.komTilbake).toBe(1);
     expect(r.bruk.perKilde).toEqual([{ kilde: 'app', nye: 2, komTilbake: 1 }]);
     expect(r.bruk.brukereSiste7d).toBe(3);
-    expect(r.bruk.perFlate).toEqual({ hjem: 2, kart: 1, omrade: 1 });
+    expect(r.bruk.perFlate).toEqual({ hjem: 2, kart: 1, omrade: 1, steder: 0 });
   });
 
   it('registreringsdagen er Oslo-dato: registrert 23:30Z (= 01:30 neste dag i Oslo), sett samme Oslo-dag → ikke tilbake', () => {
@@ -331,6 +331,6 @@ describe('bruk av soppforholdene — aktivering og gjenbruk', () => {
   it('ukjente flater teller i brukere, men ikke i flatefordelingen', () => {
     const r = byggDagsrapport(inn({ bruksdager: [{ user_id: 'x', dag: dagIso(0), flate: 'profil' }] }));
     expect(r.bruk.brukereSiste7d).toBe(1);
-    expect(r.bruk.perFlate).toEqual({ hjem: 0, kart: 0, omrade: 0 });
+    expect(r.bruk.perFlate).toEqual({ hjem: 0, kart: 0, omrade: 0, steder: 0 });
   });
 });

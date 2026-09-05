@@ -196,7 +196,7 @@ function byggRapportEpost(r: Dagsrapport, naa: Date) {
   const brukRader: Array<[string, string]> = u.maalt
     ? [
         ['Så forholdene siste 7 dager', `${u.brukereSiste7d} brukere`],
-        ['— forsiden / kartet / områdeside', `${u.perFlate.hjem} / ${u.perFlate.kart} / ${u.perFlate.omrade}`],
+        ['— forsiden / kartet / områdeside / mine steder', `${u.perFlate.hjem} / ${u.perFlate.kart} / ${u.perFlate.omrade} / ${u.perFlate.steder}`],
         ['Nye siste 14 d som kom tilbake', `${u.komTilbake} av ${u.nyeSiste14d}`],
         ...u.perKilde.slice(0, 6).map((k): [string, string] => [`— ${kildeNavn(k.kilde)}`, `${k.komTilbake} av ${k.nye}`]),
         ['Brukt i to ulike uker (28 d)', String(u.gjenbruk28d)]
