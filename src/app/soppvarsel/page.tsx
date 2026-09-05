@@ -90,11 +90,14 @@ const STATUSFARGE: Record<string, string> = {
 export default async function SoppvarselSide({
   searchParams
 }: {
-  searchParams: Promise<{ status?: string }>;
+  searchParams: Promise<{ status?: string; region?: string }>;
 }) {
   const locale = await getUserLocale();
   const t = COPY[locale === 'sv' ? 'sv' : 'nb'];
-  const { status } = await searchParams;
+  const { status, region } = await searchParams;
+  // Områdesidene lenker hit med ?region=… så leseren slipper å velge på nytt.
+  // Ukjent verdi → tomt valg, som før.
+  const forhandsvalgt = region && PREDICTION_TILE_REGIONS.some((r) => r.name === region) ? region : '';
 
   const statusTekst =
     status === 'sendt'
@@ -157,7 +160,12 @@ export default async function SoppvarselSide({
           </label>
           <label className="mt-3 block text-sm font-medium text-gray-700">
             {t.omrade}
-            <select name="region" required className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" defaultValue="">
+            <select
+              name="region"
+              required
+              className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              defaultValue={forhandsvalgt}
+            >
               <option value="" disabled />
               <optgroup label={t.norge}>
                 {norske.map((r) => (
