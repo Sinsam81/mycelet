@@ -203,6 +203,7 @@ function byggRapportEpost(r: Dagsrapport, naa: Date) {
     ? [
         ['Så forholdene siste 7 dager', `${u.brukereSiste7d} brukere`],
         ['— forsiden / kartet / områdeside / mine steder', `${u.perFlate.hjem} / ${u.perFlate.kart} / ${u.perFlate.omrade} / ${u.perFlate.steder}`],
+        ['Så prissiden (7 d)', String(u.perFlate.pris)],
         ['Nye siste 14 d som kom tilbake', `${u.komTilbake} av ${u.nyeSiste14d}`],
         ...u.perKilde.slice(0, 6).map((k): [string, string] => [`— ${kildeNavn(k.kilde)}`, `${k.komTilbake} av ${k.nye}`]),
         ['Brukt i to ulike uker (28 d)', String(u.gjenbruk28d)]

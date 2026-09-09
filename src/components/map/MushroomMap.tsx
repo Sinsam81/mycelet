@@ -4,7 +4,6 @@ import Link from 'next/link';
 import type { MapSpeciesParam, MapViewParams } from '@/lib/utils/map-view-params';
 import { lagreHusketUtsnitt, lesHusketUtsnitt, type HusketUtsnitt } from '@/lib/map/husket-utsnitt';
 import { useLocale, useMessages, useTranslations } from 'next-intl';
-import { NonNativeOnly } from '@/components/native/NonNativeOnly';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Download, Filter, MoreHorizontal, Navigation, Trash2, X } from 'lucide-react';
 import { createRoot, Root } from 'react-dom/client';
@@ -62,6 +61,17 @@ import { useIsNative } from '@/lib/hooks/useIsNative';
 import { byggLovendeOmraderGpx } from '@/lib/gpx/lovende-omrader';
 import { osloDag } from '@/lib/bruk/bruksdag';
 import { GpxKopierModal } from '@/components/gpx/GpxKopierModal';
+import { ProvGratisArk } from '@/components/billing/ProvGratisArk';
+import {
+  KARTDAGER_NOKKEL,
+  PROVETILBUD_NOKKEL,
+  leggTilKartdag,
+  registrerVisning,
+  skalViseProvetilbud,
+  tolkProvetilbud,
+  kanFaaProveperiode,
+  type ProvetilbudUtloser
+} from '@/lib/billing/provetilbud';
 import { foreslaaVurdering } from '@/lib/vurdering/foreslaa';
 
 type LeafletType = typeof import('leaflet');
@@ -373,6 +383,38 @@ export function MushroomMap({
 
   const billing = useBillingStatus(true);
   const hasOfflineAccess = billing.data?.capabilities.paid ?? false;
+  // Gratisuka finnes bare for nye abonnenter — tekstene og arket skal ikke love
+  // den til en som har hatt abonnement før (se kanFaaProveperiode).
+  const kanFaaProve = kanFaaProveperiode(billing.data);
+  // Prøvetilbudet (src/lib/billing/provetilbud.ts): «andre dag» avgjøres ved
+  // mount fra lokalt lagrede kartdager; «begrenset» når lovende områder viser
+  // 3 av 12. Arket vises maks to ganger, aldri to ganger samme døgn.
+  const [visProvetilbud, setVisProvetilbud] = useState(false);
+  const provetilbudUtloserRef = useRef<ProvetilbudUtloser | null>(null);
+  useEffect(() => {
+    const dager = leggTilKartdag(readLocal(KARTDAGER_NOKKEL), osloDag(new Date()));
+    writeLocal(KARTDAGER_NOKKEL, JSON.stringify(dager));
+    if (dager.length >= 2) provetilbudUtloserRef.current = 'andre-dag';
+  }, []);
+  useEffect(() => {
+    const utloser: ProvetilbudUtloser | null = topAccess === 'free_limited' ? 'begrenset' : provetilbudUtloserRef.current;
+    const tilstand = tolkProvetilbud(readLocal(PROVETILBUD_NOKKEL));
+    const naaMs = Date.now();
+    if (
+      !skalViseProvetilbud({
+        betaler: hasOfflineAccess,
+        betalingKjent: !billing.isLoading && Boolean(billing.data),
+        kanFaaProve,
+        tilstand,
+        utloser,
+        naaMs
+      })
+    ) {
+      return;
+    }
+    writeLocal(PROVETILBUD_NOKKEL, JSON.stringify(registrerVisning(tilstand, naaMs)));
+    setVisProvetilbud(true);
+  }, [topAccess, billing.isLoading, billing.data, hasOfflineAccess, kanFaaProve]);
   const showOfflineUpsell = !billing.isLoading && !hasOfflineAccess;
 
   const prediction = usePrediction({
@@ -2368,11 +2410,9 @@ export function MushroomMap({
                   {speciesLoading ? t('loading') : speciesSpots ? `📸 ${t('hidePhotos')}` : t('photosButton')}
                 </button>
               ) : (
-                <NonNativeOnly>
-                  <Link href="/pricing" className="rounded-lg px-2 py-2 text-xs font-medium text-forest-900 hover:bg-gray-100">
-                    ⭐ {t('premiumTools')}
+                <Link href="/pricing" className="rounded-lg px-2 py-2 text-xs font-medium text-forest-900 hover:bg-gray-100">
+                    ⭐ {t(kanFaaProve ? 'premiumTools' : 'premiumToolsUtenProve')}
                   </Link>
-                </NonNativeOnly>
               )}
               <button
                 type="button"
@@ -2400,15 +2440,16 @@ export function MushroomMap({
           </div>
         ) : null}
         {gpxTekst ? <GpxKopierModal tittel={t('gpxTopSpotsHeading')} gpx={gpxTekst} onClose={() => setGpxTekst(null)} /> : null}
+        {visProvetilbud ? <ProvGratisArk onIkkeNaa={() => setVisProvetilbud(false)} onStart={() => setVisProvetilbud(false)} /> : null}
+        {/* Synlig også i appen — prissiden selger via App Store der. Bak
+            NonNativeOnly så ingen app-bruker dette (null prøveperioder, 9. sep 2026). */}
         {topAccess === 'free_limited' && topSpots ? (
-          <NonNativeOnly>
-            <Link
-              href="/pricing"
-              className="flex items-center gap-1.5 rounded-full bg-amber-500 px-3 py-1.5 text-xs font-semibold text-white shadow-lg hover:bg-amber-600"
-            >
-              🔒 {t('seeAll12Premium')}
-            </Link>
-          </NonNativeOnly>
+          <Link
+            href="/pricing"
+            className="flex items-center gap-1.5 rounded-full bg-amber-500 px-3 py-1.5 text-xs font-semibold text-white shadow-lg hover:bg-amber-600"
+          >
+            🔒 {t(kanFaaProve ? 'seeAll12Premium' : 'seeAll12PremiumUtenProve')}
+          </Link>
         ) : null}
         {FLAGS.tripMode && tripActive ? (
           <div className="flex items-center gap-2 rounded-full bg-amber-700 px-3 py-1.5 text-xs font-medium text-white shadow-lg">
@@ -2531,11 +2572,9 @@ export function MushroomMap({
         {showOfflineUpsell ? (
           <div className="mt-2 rounded border border-amber-300 bg-amber-50 px-2 py-2">
             <p className="text-xs text-amber-800">{t('offlineSaveRequiresPremium')}</p>
-            <NonNativeOnly>
-              <Link href="/pricing" className="text-xs font-medium text-amber-900 underline">
-                {t('upgradePlan')}
-              </Link>
-            </NonNativeOnly>
+            <Link href="/pricing" className="text-xs font-medium text-amber-900 underline">
+              {t(kanFaaProve ? 'upgradePlan' : 'upgradePlanUtenProve')}
+            </Link>
           </div>
         ) : null}
 
@@ -2696,6 +2735,7 @@ export function MushroomMap({
 
       <HotspotPanel
         speciesId={filters.speciesId}
+        kanFaaProve={kanFaaProve}
         data={panelData}
         explanations={explanationLines}
         isLoading={(prediction.isLoading || prediction.isFetching) && tileHotspots.length === 0}

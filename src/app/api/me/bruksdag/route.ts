@@ -8,8 +8,8 @@ import { erFlate, osloDag } from '@/lib/bruk/bruksdag';
 
 /**
  * «Jeg så soppforholdene i dag» — én rad per bruker, dag og flate
- * (migrasjon 064). Kalles av <RegistrerBruksdag> når et prognosekort,
- * kartet eller en områdeside vises for en innlogget bruker.
+ * (migrasjon 064). Kalles av <RegistrerBruksdag> når et prognosekort, kartet,
+ * en områdeside, Mine steder eller prissiden vises for en innlogget bruker.
  *
  * Skriver med SESJONSKLIENTEN: RLS lar en bruker bare sette inn sin egen rad,
  * så ruta trenger verken user_id fra klienten eller service role. Dagen

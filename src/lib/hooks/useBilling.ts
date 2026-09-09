@@ -9,6 +9,8 @@ export interface BillingStatusResult {
     paid: boolean;
     aiDailyLimit: number | null;
   };
+  /** Raden fra billing_subscriptions, eller null. En rad uten `paid` = tidligere abonnent (ingen ny prøveperiode). */
+  subscription?: { stripe_customer_id?: string | null; status?: string } | null;
 }
 
 /**

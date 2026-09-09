@@ -301,7 +301,7 @@ describe('bruk av soppforholdene — aktivering og gjenbruk', () => {
     expect(r.bruk.komTilbake).toBe(1);
     expect(r.bruk.perKilde).toEqual([{ kilde: 'app', nye: 2, komTilbake: 1 }]);
     expect(r.bruk.brukereSiste7d).toBe(3);
-    expect(r.bruk.perFlate).toEqual({ hjem: 2, kart: 1, omrade: 1, steder: 0 });
+    expect(r.bruk.perFlate).toEqual({ hjem: 2, kart: 1, omrade: 1, steder: 0, pris: 0 });
   });
 
   it('registreringsdagen er Oslo-dato: registrert 23:30Z (= 01:30 neste dag i Oslo), sett samme Oslo-dag → ikke tilbake', () => {
@@ -331,7 +331,7 @@ describe('bruk av soppforholdene — aktivering og gjenbruk', () => {
   it('ukjente flater teller i brukere, men ikke i flatefordelingen', () => {
     const r = byggDagsrapport(inn({ bruksdager: [{ user_id: 'x', dag: dagIso(0), flate: 'profil' }] }));
     expect(r.bruk.brukereSiste7d).toBe(1);
-    expect(r.bruk.perFlate).toEqual({ hjem: 0, kart: 0, omrade: 0, steder: 0 });
+    expect(r.bruk.perFlate).toEqual({ hjem: 0, kart: 0, omrade: 0, steder: 0, pris: 0 });
   });
 
   it('interne kontoer (QA, Apples demo) telles som testkontoer selv med ekte App Store-kjøp', () => {
@@ -345,5 +345,14 @@ describe('bruk av soppforholdene — aktivering og gjenbruk', () => {
     expect(r.betalende.perKilde.revenuecat).toBe(0);
     expect(r.betalende.perKilde.manuell).toBe(1);
     expect(r.betalende.nyeSiste7d).toBe(0);
+  });
+
+  it('prissiden teller i trakten, aldri som bruk av forholdene', () => {
+    const b = br({ id: 'p', created_at: dagerSiden(3) });
+    const r = byggDagsrapport(inn({ brukere: [b], bruksdager: [{ user_id: 'p', dag: dagIso(1), flate: 'pris' }, { user_id: 'p', dag: dagIso(0), flate: 'pris' }] }));
+    expect(r.bruk.perFlate.pris).toBe(1);
+    expect(r.bruk.brukereSiste7d).toBe(0);
+    expect(r.bruk.komTilbake).toBe(0);
+    expect(r.bruk.gjenbruk28d).toBe(0);
   });
 });

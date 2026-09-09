@@ -5,6 +5,7 @@ import { AlertTriangle, Calendar, Camera, Check, Crown, Database, FileText, Lock
 import { PageWrapper } from '@/components/layout/PageWrapper';
 import { LandingPage } from '@/components/landing/LandingPage';
 import { EdibilityBadge } from '@/components/ui/EdibilityBadge';
+import { getBillingCapabilities, getUserBillingSubscription } from '@/lib/billing/subscription';
 import { MushroomDayCard } from '@/components/home/MushroomDayCard';
 import { BestRegionsCard } from '@/components/home/BestRegionsCard';
 import { VarselCta } from '@/components/soppforhold/VarselCta';
@@ -92,6 +93,12 @@ export default async function HomePage() {
   if (!user) {
     return <LandingPage />;
   }
+
+  // Premium-kortet: aldri til betalende (de kan ikke løse inn noe), nøytral
+  // knapp til tidligere abonnenter (ingen ny gratisuke), «prøv gratis» til nye.
+  const abonnement = await getUserBillingSubscription(supabase, user.id);
+  const betaler = getBillingCapabilities(abonnement).paid;
+  const kanFaaProve = !betaler && abonnement == null;
 
   const [{ data }, { data: recentFindings }] = await Promise.all([
     supabase
@@ -454,11 +461,16 @@ export default async function HomePage() {
           </div>
         </Link>
 
-        <NonNativeOnly>
-          <Link
-            href="/pricing"
-            className="block rounded-2xl bg-gradient-to-br from-forest-900 to-forest-800 p-5 text-white shadow-card transition hover:-translate-y-0.5 hover:shadow-lg"
-          >
+        {/* Kortet vises også i appen: prissiden selger via App Store der (PR #91).
+            Det sto bak NonNativeOnly fra før kjøp i app fantes, og da så ingen
+            app-bruker tilbudet — null prøveperioder på 76 brukere (9. sep 2026).
+            Bare kroneprisen holdes utenfor appen: den er Stripe-prisen, og butikkens
+            pris vises på prissiden. */}
+        {betaler ? null : (
+        <Link
+          href="/pricing"
+          className="block rounded-2xl bg-gradient-to-br from-forest-900 to-forest-800 p-5 text-white shadow-card transition hover:-translate-y-0.5 hover:shadow-lg"
+        >
             <div className="flex items-center gap-2">
               <Crown className="h-5 w-5 text-amber-400" />
               <h2 className="font-serif text-xl font-semibold">{t('premiumTitle')}</h2>
@@ -475,17 +487,21 @@ export default async function HomePage() {
               </li>
             </ul>
             <div className="mt-4 flex items-center justify-between gap-3">
-              <p className="text-sm text-white/80">
-                {t('premiumPriceFrom')}{' '}
-                <span className="font-serif text-lg font-bold text-amber-300">
-                  {t('premiumPricePerMonth', { price: Math.round((BILLING_PLANS.season_pass.yearlyNok ?? 249) / 12) })}
-                </span>{' '}
-                {t('premiumPriceWithPass')}
-              </p>
-              <span className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-forest-900">{t('premiumSeePlans')}</span>
+              <NonNativeOnly>
+                <p className="text-sm text-white/80">
+                  {t('premiumPriceFrom')}{' '}
+                  <span className="font-serif text-lg font-bold text-amber-300">
+                    {t('premiumPricePerMonth', { price: Math.round((BILLING_PLANS.season_pass.yearlyNok ?? 249) / 12) })}
+                  </span>{' '}
+                  {t('premiumPriceWithPass')}
+                </p>
+              </NonNativeOnly>
+              <span className="ml-auto rounded-full bg-white px-4 py-2 text-sm font-semibold text-forest-900">
+                {kanFaaProve ? t('premiumSeePlans') : t('premiumSeePlansNeutral')}
+              </span>
             </div>
           </Link>
-        </NonNativeOnly>
+        )}
 
         <div className="grid grid-cols-2 gap-3">
           <Link
