@@ -14,6 +14,7 @@ import { canPurchasePlan, getBlockingPaidPlan, getPlanViewState } from '@/lib/bi
 import { seasonPriceComesFromStore, showsStorePrices } from '@/lib/billing/store-pricing';
 import { statusLabel, tierLabel } from '@/lib/billing/labels';
 import { useIsNative } from '@/lib/hooks/useIsNative';
+import { RegistrerBruksdag } from '@/components/bruk/RegistrerBruksdag';
 import { trackEvent } from '@/lib/analytics';
 import { createClient } from '@/lib/supabase/client';
 import {
@@ -422,6 +423,8 @@ function PricingInner() {
 
   return (
     <PageWrapper>
+      {/* Trakten kart → prisside → prøveperiode (migrasjon 067). */}
+      <RegistrerBruksdag flate="pris" />
       <section className="space-y-5">
         <header className="pt-2 text-center">
           <p className="text-xs font-medium uppercase tracking-widest text-forest-700">{t('eyebrow')}</p>

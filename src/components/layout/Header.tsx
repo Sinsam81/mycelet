@@ -55,7 +55,7 @@ export function Header() {
                 tier === 'free' ? 'bg-white/15 text-white' : 'bg-amber-400 text-forest-900'
               }`}
             >
-              {getTierLabel(tier, t)}
+              {tier === 'free' ? t('tryFree') : getTierLabel(tier, t)}
             </Link>
           ) : null}
 

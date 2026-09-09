@@ -313,7 +313,7 @@ export function byggDagsrapport(inn: RapportInn): Dagsrapport {
 }
 
 function byggBruk(inn: RapportInn, naa: number, kildeForBruker: Map<string, string>): Dagsrapport['bruk'] {
-  const tomt: Record<Flate, number> = { hjem: 0, kart: 0, omrade: 0, steder: 0 };
+  const tomt: Record<Flate, number> = { hjem: 0, kart: 0, omrade: 0, steder: 0, pris: 0 };
   const dag14 = 14 * 24 * 3600_000;
   const nye = inn.brukere.filter((b) => naa - new Date(b.created_at).getTime() <= dag14);
   if (!inn.bruksdager) {
@@ -326,7 +326,7 @@ function byggBruk(inn: RapportInn, naa: number, kildeForBruker: Map<string, stri
   const rader = inn.bruksdager.filter((r) => r.dag >= grense28);
 
   const brukereSiste7d = new Set<string>();
-  const perFlateSett: Record<Flate, Set<string>> = { hjem: new Set(), kart: new Set(), omrade: new Set(), steder: new Set() };
+  const perFlateSett: Record<Flate, Set<string>> = { hjem: new Set(), kart: new Set(), omrade: new Set(), steder: new Set(), pris: new Set() };
   const ukerPerBruker = new Map<string, Set<string>>();
   const dagerPerBruker = new Map<string, string[]>();
   for (const r of rader) {
@@ -360,7 +360,13 @@ function byggBruk(inn: RapportInn, naa: number, kildeForBruker: Map<string, stri
   return {
     maalt: true,
     brukereSiste7d: brukereSiste7d.size,
-    perFlate: { hjem: perFlateSett.hjem.size, kart: perFlateSett.kart.size, omrade: perFlateSett.omrade.size, steder: perFlateSett.steder.size },
+    perFlate: {
+      hjem: perFlateSett.hjem.size,
+      kart: perFlateSett.kart.size,
+      omrade: perFlateSett.omrade.size,
+      steder: perFlateSett.steder.size,
+      pris: perFlateSett.pris.size
+    },
     nyeSiste14d: nye.length,
     komTilbake: komTilbakeSett.size,
     perKilde: [...perKildeTall.entries()]
