@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { User } from 'lucide-react';
 import { useTranslations } from 'next-intl';
+import { kanFaaProveperiode } from '@/lib/billing/provetilbud';
 import { getPlanViewState } from '@/lib/billing/plan-state';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { useBillingStatus } from '@/lib/hooks/useBilling';
@@ -48,14 +49,16 @@ export function Header() {
           {/* The badge links to /pricing on BOTH web and native. It used to be
               a dead span in the shell (App Store 3.1.1-era gating, when pricing
               only offered Stripe) — with IAP live, natives need the path too. */}
-          {!loading && user ? (
+          {/* Merket venter til betalingsstatusen er kjent: før svaret er tier «free»,
+              og et «Prøv gratis» som blinker for en betalende kunde er feil løfte. */}
+          {!loading && user && !billingQuery.isLoading ? (
             <Link
               href="/pricing"
               className={`rounded-full px-2.5 py-1 text-[11px] font-semibold transition-opacity hover:opacity-90 ${
                 tier === 'free' ? 'bg-white/15 text-white' : 'bg-amber-400 text-forest-900'
               }`}
             >
-              {tier === 'free' ? t('tryFree') : getTierLabel(tier, t)}
+              {tier === 'free' && kanFaaProveperiode(billingQuery.data) ? t('tryFree') : getTierLabel(tier, t)}
             </Link>
           ) : null}
 

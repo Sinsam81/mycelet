@@ -49,14 +49,28 @@ export function leggTilKartdag(raw: string | null | undefined, dag: string): str
   return dager.slice(-60);
 }
 
+/**
+ * Gratisuka finnes bare for nye abonnenter: Stripe gir ingen prøveperiode til
+ * en som har hatt abonnement før (harHattTilgangFor i checkout), og Apples
+ * introduksjonstilbud gjelder bare Apple-ID-er uten tidligere abonnement i
+ * gruppen. En rad i billing_subscriptions uten betaling = tidligere abonnent.
+ */
+export function kanFaaProveperiode(status: { capabilities?: { paid?: boolean }; subscription?: unknown } | null | undefined): boolean {
+  if (!status) return false;
+  if (status.capabilities?.paid) return false;
+  return status.subscription == null;
+}
+
 export function skalViseProvetilbud(args: {
   betaler: boolean;
   betalingKjent: boolean;
+  /** Se kanFaaProveperiode — arket lover en gratis uke og skal ikke vises til dem som ikke får den. */
+  kanFaaProve: boolean;
   tilstand: ProvetilbudTilstand;
   utloser: ProvetilbudUtloser | null;
   naaMs: number;
 }): boolean {
-  if (!args.betalingKjent || args.betaler) return false;
+  if (!args.betalingKjent || args.betaler || !args.kanFaaProve) return false;
   if (!args.utloser) return false;
   if (args.tilstand.visninger >= PROVETILBUD_MAKS_VISNINGER) return false;
   if (args.tilstand.sistVistMs !== null && args.naaMs - args.tilstand.sistVistMs < PROVETILBUD_MIN_MELLOMROM_MS) return false;

@@ -69,6 +69,7 @@ import {
   registrerVisning,
   skalViseProvetilbud,
   tolkProvetilbud,
+  kanFaaProveperiode,
   type ProvetilbudUtloser
 } from '@/lib/billing/provetilbud';
 import { foreslaaVurdering } from '@/lib/vurdering/foreslaa';
@@ -382,6 +383,9 @@ export function MushroomMap({
 
   const billing = useBillingStatus(true);
   const hasOfflineAccess = billing.data?.capabilities.paid ?? false;
+  // Gratisuka finnes bare for nye abonnenter — tekstene og arket skal ikke love
+  // den til en som har hatt abonnement før (se kanFaaProveperiode).
+  const kanFaaProve = kanFaaProveperiode(billing.data);
   // Prøvetilbudet (src/lib/billing/provetilbud.ts): «andre dag» avgjøres ved
   // mount fra lokalt lagrede kartdager; «begrenset» når lovende områder viser
   // 3 av 12. Arket vises maks to ganger, aldri to ganger samme døgn.
@@ -400,6 +404,7 @@ export function MushroomMap({
       !skalViseProvetilbud({
         betaler: hasOfflineAccess,
         betalingKjent: !billing.isLoading && Boolean(billing.data),
+        kanFaaProve,
         tilstand,
         utloser,
         naaMs
@@ -409,7 +414,7 @@ export function MushroomMap({
     }
     writeLocal(PROVETILBUD_NOKKEL, JSON.stringify(registrerVisning(tilstand, naaMs)));
     setVisProvetilbud(true);
-  }, [topAccess, billing.isLoading, billing.data, hasOfflineAccess]);
+  }, [topAccess, billing.isLoading, billing.data, hasOfflineAccess, kanFaaProve]);
   const showOfflineUpsell = !billing.isLoading && !hasOfflineAccess;
 
   const prediction = usePrediction({
@@ -2406,7 +2411,7 @@ export function MushroomMap({
                 </button>
               ) : (
                 <Link href="/pricing" className="rounded-lg px-2 py-2 text-xs font-medium text-forest-900 hover:bg-gray-100">
-                    ⭐ {t('premiumTools')}
+                    ⭐ {t(kanFaaProve ? 'premiumTools' : 'premiumToolsUtenProve')}
                   </Link>
               )}
               <button
@@ -2443,7 +2448,7 @@ export function MushroomMap({
             href="/pricing"
             className="flex items-center gap-1.5 rounded-full bg-amber-500 px-3 py-1.5 text-xs font-semibold text-white shadow-lg hover:bg-amber-600"
           >
-            🔒 {t('seeAll12Premium')}
+            🔒 {t(kanFaaProve ? 'seeAll12Premium' : 'seeAll12PremiumUtenProve')}
           </Link>
         ) : null}
         {FLAGS.tripMode && tripActive ? (
@@ -2568,7 +2573,7 @@ export function MushroomMap({
           <div className="mt-2 rounded border border-amber-300 bg-amber-50 px-2 py-2">
             <p className="text-xs text-amber-800">{t('offlineSaveRequiresPremium')}</p>
             <Link href="/pricing" className="text-xs font-medium text-amber-900 underline">
-              {t('upgradePlan')}
+              {t(kanFaaProve ? 'upgradePlan' : 'upgradePlanUtenProve')}
             </Link>
           </div>
         ) : null}
@@ -2730,6 +2735,7 @@ export function MushroomMap({
 
       <HotspotPanel
         speciesId={filters.speciesId}
+        kanFaaProve={kanFaaProve}
         data={panelData}
         explanations={explanationLines}
         isLoading={(prediction.isLoading || prediction.isFetching) && tileHotspots.length === 0}

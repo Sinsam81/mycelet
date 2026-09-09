@@ -15,6 +15,8 @@ import { seasonPriceComesFromStore, showsStorePrices } from '@/lib/billing/store
 import { statusLabel, tierLabel } from '@/lib/billing/labels';
 import { useIsNative } from '@/lib/hooks/useIsNative';
 import { RegistrerBruksdag } from '@/components/bruk/RegistrerBruksdag';
+import { NonNativeOnly } from '@/components/native/NonNativeOnly';
+import { NativeOnly } from '@/components/native/NativeOnly';
 import { trackEvent } from '@/lib/analytics';
 import { createClient } from '@/lib/supabase/client';
 import {
@@ -442,10 +444,15 @@ function PricingInner() {
           <div className="mt-3 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs text-gray-600">
             {/* "Sikker betaling med Stripe" må ikke vises i den native appen —
                 der går kjøp via Apple (3.1.1), og Stripe-omtale kan flagges i review. */}
+            {/* NonNativeOnly i tillegg til !native: useIsNative er false ved første
+                render, så uten data-web-only ble Stripe-teksten malt i skallet til
+                hydreringen var ferdig. */}
             {!native ? (
-              <span className="inline-flex items-center gap-1">
-                <ShieldCheck className="h-3.5 w-3.5 text-forest-700" /> {t('securePayment')}
-              </span>
+              <NonNativeOnly>
+                <span className="inline-flex items-center gap-1">
+                  <ShieldCheck className="h-3.5 w-3.5 text-forest-700" /> {t('securePayment')}
+                </span>
+              </NonNativeOnly>
             ) : null}
             <span className="inline-flex items-center gap-1">
               <Undo2 className="h-3.5 w-3.5 text-forest-700" /> {t('cancelAnytimeBadge')}
@@ -520,6 +527,7 @@ function PricingInner() {
         )}
 
         {!native ? (
+          <NonNativeOnly>
           <label className="flex items-start gap-2 rounded-lg border border-gray-200 bg-white p-3 text-sm text-gray-700">
             <input
               type="checkbox"
@@ -532,6 +540,7 @@ function PricingInner() {
               <Link href="/kjopsvilkar" className="font-medium text-forest-800 underline">{t('purchaseTermsLink')}</Link>.
             </span>
           </label>
+          </NonNativeOnly>
         ) : null}
 
         <div className="grid gap-3 md:grid-cols-3">
@@ -573,9 +582,17 @@ function PricingInner() {
                   {plan.id === 'season_pass' ? <Leaf className="h-4 w-4 text-forest-800" /> : null}
                 </div>
                 <p className="text-xs text-gray-600">{plan.tagline}</p>
+                {/* Nett: Stripe-prisen (skjult før maling i skallet). Skall: butikkens
+                    pris når tilbudet er lastet — aldri Stripe-kroner i App Store. */}
                 <p className="mt-3 text-3xl font-bold tracking-tight text-forest-900">
-                  {displayPrice}
-                  <span className="text-sm font-medium text-gray-600">{displayPeriod}</span>
+                  <NonNativeOnly>
+                    {plan.price}
+                    <span className="text-sm font-medium text-gray-600">{plan.period}</span>
+                  </NonNativeOnly>
+                  <NativeOnly>
+                    {planOffer ? displayPrice : plan.id === 'free' ? plan.price : '…'}
+                    <span className="text-sm font-medium text-gray-600">{planOffer || plan.id === 'free' ? displayPeriod : ''}</span>
+                  </NativeOnly>
                 </p>
                 {plan.id !== 'free' ? (
                   <p className="mt-1 text-xs font-semibold text-forest-800">{t('trialNote')}</p>

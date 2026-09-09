@@ -346,4 +346,13 @@ describe('bruk av soppforholdene — aktivering og gjenbruk', () => {
     expect(r.betalende.perKilde.manuell).toBe(1);
     expect(r.betalende.nyeSiste7d).toBe(0);
   });
+
+  it('prissiden teller i trakten, aldri som bruk av forholdene', () => {
+    const b = br({ id: 'p', created_at: dagerSiden(3) });
+    const r = byggDagsrapport(inn({ brukere: [b], bruksdager: [{ user_id: 'p', dag: dagIso(1), flate: 'pris' }, { user_id: 'p', dag: dagIso(0), flate: 'pris' }] }));
+    expect(r.bruk.perFlate.pris).toBe(1);
+    expect(r.bruk.brukereSiste7d).toBe(0);
+    expect(r.bruk.komTilbake).toBe(0);
+    expect(r.bruk.gjenbruk28d).toBe(0);
+  });
 });

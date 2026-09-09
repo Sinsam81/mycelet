@@ -12,6 +12,8 @@ import { COMPONENT_MAX } from '@/lib/utils/prediction';
 
 interface HotspotPanelProps {
   speciesId: number | null;
+  /** Bare nye abonnenter får gratisuka — styrer ordlyden på oppsalget. */
+  kanFaaProve?: boolean;
   data: PredictionResponse | undefined;
   explanations?: Explanation[] | null;
   isLoading: boolean;
@@ -65,7 +67,7 @@ function sourceCredit(
   return parts.length ? parts.join(' · ') : null;
 }
 
-export function HotspotPanel({ speciesId, data, explanations, isLoading, error }: HotspotPanelProps) {
+export function HotspotPanel({ speciesId, kanFaaProve = false, data, explanations, isLoading, error }: HotspotPanelProps) {
   const t = useTranslations('HotspotPanel');
   const locale = useLocale();
   const [open, setOpen] = useState(false);
@@ -193,7 +195,7 @@ export function HotspotPanel({ speciesId, data, explanations, isLoading, error }
             <div className="mt-2 rounded border border-amber-300 bg-amber-50 px-2 py-1.5">
               <p className="text-xs text-amber-800">{data.upsellMessage ?? t('freeLimited')}</p>
               <Link href="/pricing" className="text-xs font-medium text-amber-900 underline">
-                {t('upgradeVegetation')}
+                {t(kanFaaProve ? 'upgradeVegetation' : 'upgradeVegetationUtenProve')}
               </Link>
             </div>
           ) : null}

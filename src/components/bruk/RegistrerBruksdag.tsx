@@ -5,9 +5,9 @@ import { createClient } from "@/lib/supabase/client";
 import { bruksdagNokkel, osloDag, type Flate } from "@/lib/bruk/bruksdag";
 
 /**
- * Usynlig: melder «denne brukeren så soppforholdene i dag» til
- * /api/me/bruksdag (migrasjon 064). Monteres der prognosen faktisk vises —
- * forsidekortet, kartet og områdesidene.
+ * Usynlig: melder «denne brukeren brukte appen i dag» til /api/me/bruksdag
+ * (migrasjon 064). Monteres der prognosen vises — forsidekortet, kartet og
+ * områdesidene — og på Mine steder (066) og prissiden (067, traktflate).
  *
  * Hvorfor en klientkomponent og ikke en skriving i API-rutene: forsidekortet
  * og områdesidene henter prognosen anonymt (ingen bruker i ruta), kartet går
