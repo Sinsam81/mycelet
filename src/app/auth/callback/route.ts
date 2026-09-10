@@ -46,6 +46,17 @@ export async function GET(request: NextRequest) {
   // so ensure it here from the metadata signUp stored. ignoreDuplicates keeps
   // this from overwriting an existing profile; failures must not block login.
   const user = exchanged?.user ?? null;
+  if (!user) {
+    // PKCE-koden kan bare løses inn i nettleseren som startet flyten. En
+    // bekreftelseslenke fra en app-registrering åpnes i Safari (annen
+    // kakekrukke enn appens webview), og på nett åpner folk lenka i en annen
+    // nettleser enn de registrerte seg i. E-posten ER bekreftet hos Supabase
+    // før omdirigeringen hit — det som mangler er innloggingen. Før landet de
+    // på forsiden, utlogget og uten beskjed.
+    const til = NextResponse.redirect(new URL('/auth/login?otherBrowser=1', requestUrl.origin));
+    for (const c of response.cookies.getAll()) til.cookies.set(c);
+    return til;
+  }
   if (user) {
     // Samme funksjon som brukes ved passordinnlogging og registrering, slik at
     // det finnes ÉN regel for hvordan en profil sikres — inkludert utveien når

@@ -27,6 +27,7 @@ function LoginForm() {
     if (searchParams.get('confirm') === '1') return searchParams.get('app') === '1' ? 'noticeConfirmApp' : 'noticeConfirm';
     if (searchParams.get('verified') === '1') return 'noticeVerified';
     if (searchParams.get('linkExpired') === '1') return 'noticeLinkExpired';
+    if (searchParams.get('otherBrowser') === '1') return 'noticeOtherBrowser';
     return null;
   }, [searchParams]);
 

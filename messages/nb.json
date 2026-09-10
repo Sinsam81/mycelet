@@ -187,7 +187,8 @@
     "noticeConfirmApp": "Kontoen er opprettet. Vi har sendt deg en e-post: trykk lenka i den, og kom så tilbake hit i appen og logg inn.",
     "noticeRecover": "Kontoen din ble opprettet, men vi fikk ikke satt opp profilen. Logg inn her, så ordner vi resten automatisk.",
     "noticeVerified": "E-postadressen din er bekreftet! Logg inn under, så er du i gang.",
-    "noticeLinkExpired": "Bekreftelseslenken er brukt eller utløpt. Bruk «Glemt passord?» under — den lenken bekrefter også adressen din."
+    "noticeLinkExpired": "Bekreftelseslenken er brukt eller utløpt. Bruk «Glemt passord?» under — den lenken bekrefter også adressen din.",
+    "noticeOtherBrowser": "E-posten er bekreftet. Lenka ble åpnet i en annen nettleser enn den du registrerte deg i, så logg inn her — eller åpne Mycelet-appen og logg inn der, hvis du registrerte deg i appen."
   },
   "AuthRegister": {
     "errorUsernameTaken": "Brukernavnet er allerede i bruk. Velg et annet.",

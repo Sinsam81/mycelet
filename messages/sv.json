@@ -187,7 +187,8 @@
     "noticeConfirmApp": "Kontot är skapat. Vi har skickat ett e-postmeddelande: tryck på länken i det, och kom sedan tillbaka hit i appen och logga in.",
     "noticeRecover": "Ditt konto skapades, men vi fick inte satt upp profilen. Logga in här, så ordnar vi resten automatiskt.",
     "noticeVerified": "Din e-postadress är bekräftad! Logga in nedan, så är du igång.",
-    "noticeLinkExpired": "Bekräftelselänken är använd eller har gått ut. Använd ”Glömt lösenord?” nedan — den länken bekräftar också din adress."
+    "noticeLinkExpired": "Bekräftelselänken är använd eller har gått ut. Använd ”Glömt lösenord?” nedan — den länken bekräftar också din adress.",
+    "noticeOtherBrowser": "E-posten är bekräftad. Länken öppnades i en annan webbläsare än den du registrerade dig i, så logga in här — eller öppna Mycelet-appen och logga in där, om du registrerade dig i appen."
   },
   "AuthRegister": {
     "errorUsernameTaken": "Användarnamnet är redan upptaget. Välj ett annat.",
