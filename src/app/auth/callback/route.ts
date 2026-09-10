@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
     requestUrl.searchParams.get('redirect');
   const next = getSafeNext(nextOrRedirect);
 
-  const response = NextResponse.redirect(new URL(next, requestUrl.origin));
+  let response = NextResponse.redirect(new URL(next, requestUrl.origin));
   if (!code) return response;
 
   // Next 15+: cookies() is async. Resolve once and reuse the store inside
@@ -60,6 +60,18 @@ export async function GET(request: NextRequest) {
     const fersk = Date.now() - new Date(user.created_at).getTime() < 15 * 60_000;
     if (kilde && fersk && !normaliserKilde(user.user_metadata?.kilde)) {
       await supabase.auth.updateUser({ data: { kilde } });
+    }
+    // Bekreftelses-e-posten for en konto opprettet I APPEN lander her (uten
+    // eget mål). Brukeren står nå innlogget i Safari, men skal videre til
+    // appen — nettsidens forside ville sagt ingenting om det. Bare når
+    // bekreftelsen er fersk; en senere OAuth-innlogging skal gå dit den ba om.
+    const plattform = user.user_metadata?.plattform;
+    const bekreftetNaa =
+      typeof user.email_confirmed_at === 'string' && Date.now() - new Date(user.email_confirmed_at).getTime() < 10 * 60_000;
+    if (!nextOrRedirect && (plattform === 'ios' || plattform === 'android') && bekreftetNaa) {
+      const til = NextResponse.redirect(new URL('/auth/bekreftet-app', requestUrl.origin));
+      for (const c of response.cookies.getAll()) til.cookies.set(c);
+      response = til;
     }
   }
 

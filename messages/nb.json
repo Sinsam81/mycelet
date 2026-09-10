@@ -184,6 +184,7 @@
     "googleSignInFailed": "Google-innlogging feilet",
     "loading": "Laster...",
     "noticeConfirm": "Kontoen er opprettet. Vi har sendt deg en e-post — bekreft adressen din, og logg inn her etterpå.",
+    "noticeConfirmApp": "Kontoen er opprettet. Vi har sendt deg en e-post: trykk lenka i den, og kom så tilbake hit i appen og logg inn.",
     "noticeRecover": "Kontoen din ble opprettet, men vi fikk ikke satt opp profilen. Logg inn her, så ordner vi resten automatisk.",
     "noticeVerified": "E-postadressen din er bekreftet! Logg inn under, så er du i gang.",
     "noticeLinkExpired": "Bekreftelseslenken er brukt eller utløpt. Bruk «Glemt passord?» under — den lenken bekrefter også adressen din."
@@ -207,6 +208,13 @@
     "acceptTerms": "vilkårene",
     "acceptAnd": "og",
     "acceptPrivacy": "personvernerklæringen"
+  },
+  "AuthBekreftetApp": {
+    "title": "E-posten er bekreftet",
+    "body": "Kontoen din ble laget i Mycelet-appen. Innloggingen skjer der, ikke her på nettsiden.",
+    "steps": "Åpne Mycelet-appen på telefonen, trykk «Logg inn», og bruk samme e-post og passord som du registrerte deg med.",
+    "webInstead": "Vil du heller bruke nettsiden?",
+    "webLink": "Logg inn her"
   },
   "AuthReset": {
     "errorTooShort": "Passordet må være minst 8 tegn.",

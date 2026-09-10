@@ -24,7 +24,7 @@ function LoginForm() {
   // /auth/confirm, som lander purremail-lenkene her med tydelig utfall.
   const notice = useMemo(() => {
     if (searchParams.get('recover') === '1') return 'noticeRecover';
-    if (searchParams.get('confirm') === '1') return 'noticeConfirm';
+    if (searchParams.get('confirm') === '1') return searchParams.get('app') === '1' ? 'noticeConfirmApp' : 'noticeConfirm';
     if (searchParams.get('verified') === '1') return 'noticeVerified';
     if (searchParams.get('linkExpired') === '1') return 'noticeLinkExpired';
     return null;

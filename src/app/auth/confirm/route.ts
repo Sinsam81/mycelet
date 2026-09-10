@@ -46,7 +46,14 @@ export async function GET(request: NextRequest) {
   const supabase = createClient(base, anon, {
     auth: { persistSession: false, autoRefreshToken: false }
   });
-  const { error } = await supabase.auth.verifyOtp({ token_hash: tokenHash, type: 'magiclink' });
+  const { data, error } = await supabase.auth.verifyOtp({ token_hash: tokenHash, type: 'magiclink' });
+  if (error) return tilLogin('linkExpired');
 
-  return tilLogin(error ? 'linkExpired' : 'verified');
+  // Kontoer opprettet i appen: lenka åpnet i Safari, men innloggingen skal
+  // skje i appen. Nettsidens innlogging ville sendt dem feil vei.
+  const plattform = data.user?.user_metadata?.plattform;
+  if (plattform === 'ios' || plattform === 'android') {
+    return NextResponse.redirect(new URL('/auth/bekreftet-app', url.origin));
+  }
+  return tilLogin('verified');
 }
