@@ -24,9 +24,21 @@ import { createClient } from '@supabase/supabase-js';
  */
 export const runtime = 'nodejs';
 
+/**
+ * Hvilke lenketyper ruten løser inn. `magiclink` er purremailen vår;
+ * `signup`/`email` er Supabases egen bekreftelses-e-post når malen peker hit
+ * ({{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=signup) i
+ * stedet for PKCE-lenken — den kan bare løses inn i nettleseren som startet
+ * registreringen, og for appen er det aldri Safari.
+ */
+const TYPER = new Set(['magiclink', 'signup', 'email'] as const);
+type Type = 'magiclink' | 'signup' | 'email';
+
 export async function GET(request: NextRequest) {
   const url = new URL(request.url);
   const tokenHash = url.searchParams.get('token_hash');
+  const typeParam = url.searchParams.get('type') ?? 'magiclink';
+  const type: Type = (TYPER as Set<string>).has(typeParam) ? (typeParam as Type) : 'magiclink';
 
   const tilLogin = (parameter: string) =>
     NextResponse.redirect(new URL(`/auth/login?${parameter}=1`, url.origin));
@@ -46,7 +58,7 @@ export async function GET(request: NextRequest) {
   const supabase = createClient(base, anon, {
     auth: { persistSession: false, autoRefreshToken: false }
   });
-  const { data, error } = await supabase.auth.verifyOtp({ token_hash: tokenHash, type: 'magiclink' });
+  const { data, error } = await supabase.auth.verifyOtp({ token_hash: tokenHash, type });
   if (error) return tilLogin('linkExpired');
 
   // Kontoer opprettet i appen: lenka åpnet i Safari, men innloggingen skal
