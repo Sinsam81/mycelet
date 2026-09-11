@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
     requestUrl.searchParams.get('redirect');
   const next = getSafeNext(nextOrRedirect);
 
-  const response = NextResponse.redirect(new URL(next, requestUrl.origin));
+  let response = NextResponse.redirect(new URL(next, requestUrl.origin));
   if (!code) return response;
 
   // Next 15+: cookies() is async. Resolve once and reuse the store inside
@@ -46,6 +46,17 @@ export async function GET(request: NextRequest) {
   // so ensure it here from the metadata signUp stored. ignoreDuplicates keeps
   // this from overwriting an existing profile; failures must not block login.
   const user = exchanged?.user ?? null;
+  if (!user) {
+    // PKCE-koden kan bare løses inn i nettleseren som startet flyten. En
+    // bekreftelseslenke fra en app-registrering åpnes i Safari (annen
+    // kakekrukke enn appens webview), og på nett åpner folk lenka i en annen
+    // nettleser enn de registrerte seg i. E-posten ER bekreftet hos Supabase
+    // før omdirigeringen hit — det som mangler er innloggingen. Før landet de
+    // på forsiden, utlogget og uten beskjed.
+    const til = NextResponse.redirect(new URL('/auth/login?otherBrowser=1', requestUrl.origin));
+    for (const c of response.cookies.getAll()) til.cookies.set(c);
+    return til;
+  }
   if (user) {
     // Samme funksjon som brukes ved passordinnlogging og registrering, slik at
     // det finnes ÉN regel for hvordan en profil sikres — inkludert utveien når
@@ -60,6 +71,18 @@ export async function GET(request: NextRequest) {
     const fersk = Date.now() - new Date(user.created_at).getTime() < 15 * 60_000;
     if (kilde && fersk && !normaliserKilde(user.user_metadata?.kilde)) {
       await supabase.auth.updateUser({ data: { kilde } });
+    }
+    // Bekreftelses-e-posten for en konto opprettet I APPEN lander her (uten
+    // eget mål). Brukeren står nå innlogget i Safari, men skal videre til
+    // appen — nettsidens forside ville sagt ingenting om det. Bare når
+    // bekreftelsen er fersk; en senere OAuth-innlogging skal gå dit den ba om.
+    const plattform = user.user_metadata?.plattform;
+    const bekreftetNaa =
+      typeof user.email_confirmed_at === 'string' && Date.now() - new Date(user.email_confirmed_at).getTime() < 10 * 60_000;
+    if (!nextOrRedirect && (plattform === 'ios' || plattform === 'android') && bekreftetNaa) {
+      const til = NextResponse.redirect(new URL('/auth/bekreftet-app', requestUrl.origin));
+      for (const c of response.cookies.getAll()) til.cookies.set(c);
+      response = til;
     }
   }
 

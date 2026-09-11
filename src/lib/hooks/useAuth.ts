@@ -89,6 +89,10 @@ export function useAuth() {
       email,
       password,
       options: {
+        // I appen skal bekreftelseslenka lande i /auth/callback (samme sti som
+        // OAuth bruker, så den er alt godkjent hos Supabase); derfra sendes
+        // app-kontoer til «åpne appen»-siden i stedet for nettsidens forside.
+        ...(nativ && typeof window !== 'undefined' ? { emailRedirectTo: `${window.location.origin}/auth/callback` } : {}),
         data: {
           username,
           display_name: displayName,

@@ -6,6 +6,7 @@ import { FormEvent, Suspense, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Button } from '@/components/ui/Button';
 import { useAuth } from '@/lib/hooks/useAuth';
+import { useIsNative } from '@/lib/hooks/useIsNative';
 import { trackEvent } from '@/lib/analytics';
 import { readSafeNext } from '@/lib/auth/safe-redirect';
 import { ensureProfile } from '@/lib/auth/ensure-profile';
@@ -46,6 +47,7 @@ function RegisterForm() {
   // Validert mot åpen redirect — se src/lib/auth/safe-redirect.ts.
   const redirectPath = useMemo(() => readSafeNext(searchParams), [searchParams]);
   const { signUp, supabase } = useAuth();
+  const native = useIsNative();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -90,7 +92,7 @@ function RegisterForm() {
 
         router.push(redirectPath);
       } else {
-        router.push(`/auth/login?next=${encodeURIComponent(redirectPath)}&confirm=1`);
+        router.push(`/auth/login?next=${encodeURIComponent(redirectPath)}&confirm=1${native ? '&app=1' : ''}`);
       }
     } catch (err) {
       setError(toRegisterErrorMessage(err, t));

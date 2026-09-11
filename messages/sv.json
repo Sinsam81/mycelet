@@ -184,9 +184,11 @@
     "googleSignInFailed": "Google-inloggning misslyckades",
     "loading": "Laddar...",
     "noticeConfirm": "Kontot är skapat. Vi har skickat ett e-postmeddelande — bekräfta din adress och logga in här efteråt.",
+    "noticeConfirmApp": "Kontot är skapat. Vi har skickat ett e-postmeddelande: tryck på länken i det, och kom sedan tillbaka hit i appen och logga in.",
     "noticeRecover": "Ditt konto skapades, men vi fick inte satt upp profilen. Logga in här, så ordnar vi resten automatiskt.",
     "noticeVerified": "Din e-postadress är bekräftad! Logga in nedan, så är du igång.",
-    "noticeLinkExpired": "Bekräftelselänken är använd eller har gått ut. Använd ”Glömt lösenord?” nedan — den länken bekräftar också din adress."
+    "noticeLinkExpired": "Bekräftelselänken är använd eller har gått ut. Använd ”Glömt lösenord?” nedan — den länken bekräftar också din adress.",
+    "noticeOtherBrowser": "E-posten är bekräftad. Länken öppnades i en annan webbläsare än den du registrerade dig i, så logga in här — eller öppna Mycelet-appen och logga in där, om du registrerade dig i appen."
   },
   "AuthRegister": {
     "errorUsernameTaken": "Användarnamnet är redan upptaget. Välj ett annat.",
@@ -207,6 +209,13 @@
     "acceptTerms": "användarvillkoren",
     "acceptAnd": "och",
     "acceptPrivacy": "integritetspolicyn"
+  },
+  "AuthBekreftetApp": {
+    "title": "E-posten är bekräftad",
+    "body": "Ditt konto skapades i Mycelet-appen. Inloggningen sker där, inte här på webbplatsen.",
+    "steps": "Öppna Mycelet-appen på telefonen, tryck på «Logga in» och använd samma e-post och lösenord som du registrerade dig med.",
+    "webInstead": "Vill du hellre använda webbplatsen?",
+    "webLink": "Logga in här"
   },
   "AuthReset": {
     "errorTooShort": "Lösenordet måste vara minst 8 tecken.",
