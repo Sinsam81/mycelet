@@ -1479,7 +1479,10 @@
     "tittel": "Se alle 12 lovende områdene",
     "tekst": "Gratis viser 3. Premium viser alle 12 med begrunnelse, pluss offline-kart og AI-soppkjenner.",
     "vilkaar": "7 dager gratis for nye abonnenter. Avslutt når du vil.",
+    "tittelStart": "Prøv Premium gratis i 7 dager",
+    "tekstStart": "Alle 12 lovende områder nær deg med begrunnelse, offline-kart for skogsturen og ubegrenset AI-soppkjenner. Gratis i sju dager, avslutt når du vil — soppforholdene og varselet er gratis uansett.",
     "start": "Start gratis uke",
+    "fortsettGratis": "Fortsett gratis",
     "ikkeNaa": "Ikke nå",
     "lukk": "Lukk"
   },

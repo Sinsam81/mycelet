@@ -31,6 +31,7 @@ describe('erFlate', () => {
     expect(erFlate('omrade')).toBe(true);
     expect(erFlate('steder')).toBe(true);
     expect(erFlate('pris')).toBe(true);
+    expect(erFlate('tilbud')).toBe(true);
     expect(erFlate('profil')).toBe(false);
     expect(erFlate(null)).toBe(false);
   });
