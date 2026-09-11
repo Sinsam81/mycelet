@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
@@ -14,8 +15,28 @@ import { X } from 'lucide-react';
  * Portal til <body>: kartets verktøyrad har en CSS-transform, og position:fixed
  * inni en transformert forelder får forelderen som ramme.
  */
-export function ProvGratisArk({ onIkkeNaa, onStart }: { onIkkeNaa: () => void; onStart: () => void }) {
+export function ProvGratisArk({
+  onIkkeNaa,
+  onStart,
+  variant = 'kart'
+}: {
+  onIkkeNaa: () => void;
+  onStart: () => void;
+  /** 'kart' = de 12 områdene (i kartet); 'start' = hele tilbudet, ved første innlogging. */
+  variant?: 'kart' | 'start';
+}) {
   const t = useTranslations('ProvGratisArk');
+  // Måling: at tilbudet ble vist (bruksflate «tilbud», migrasjon 068). Uten
+  // dette vet vi ikke om null prøveperioder betyr «nei takk» eller «aldri sett».
+  useEffect(() => {
+    if (typeof navigator !== 'undefined' && navigator.webdriver) return;
+    fetch('/api/me/bruksdag', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ flate: 'tilbud' }),
+      keepalive: true
+    }).catch(() => {});
+  }, []);
   if (typeof document === 'undefined') return null;
   return createPortal(
     <div
@@ -28,13 +49,13 @@ export function ProvGratisArk({ onIkkeNaa, onStart }: { onIkkeNaa: () => void; o
       <div onClick={(e) => e.stopPropagation()} className="w-full max-w-md rounded-2xl bg-white p-5 shadow-xl">
         <div className="flex items-start justify-between gap-3">
           <h2 id="provetilbud-tittel" className="font-serif text-xl font-semibold text-forest-900">
-            {t('tittel')}
+            {t(variant === 'start' ? 'tittelStart' : 'tittel')}
           </h2>
           <button type="button" aria-label={t('lukk')} onClick={onIkkeNaa} className="rounded-full p-1 text-gray-500 hover:bg-gray-100">
             <X className="h-5 w-5" />
           </button>
         </div>
-        <p className="mt-2 text-sm leading-relaxed text-gray-700">{t('tekst')}</p>
+        <p className="mt-2 text-sm leading-relaxed text-gray-700">{t(variant === 'start' ? 'tekstStart' : 'tekst')}</p>
         <p className="mt-1 text-xs text-gray-500">{t('vilkaar')}</p>
         <div className="mt-4 flex flex-col gap-2">
           <Link
@@ -45,7 +66,7 @@ export function ProvGratisArk({ onIkkeNaa, onStart }: { onIkkeNaa: () => void; o
             {t('start')}
           </Link>
           <button type="button" onClick={onIkkeNaa} className="rounded-xl px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100">
-            {t('ikkeNaa')}
+            {t(variant === 'start' ? 'fortsettGratis' : 'ikkeNaa')}
           </button>
         </div>
       </div>

@@ -48,4 +48,8 @@ describe('kanFaaProveperiode', () => {
     expect(kanFaaProveperiode({ capabilities: { paid: false }, subscription: { status: 'canceled' } })).toBe(false);
     expect(kanFaaProveperiode(undefined)).toBe(false);
   });
+
+  it('første kartøkt er en gyldig utløser', () => {
+    expect(skalViseProvetilbud({ betaler: false, betalingKjent: true, kanFaaProve: true, tilstand: { visninger: 0, sistVistMs: null }, utloser: 'forste-okt', naaMs: NAA })).toBe(true);
+  });
 });

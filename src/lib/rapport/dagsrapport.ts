@@ -313,7 +313,7 @@ export function byggDagsrapport(inn: RapportInn): Dagsrapport {
 }
 
 function byggBruk(inn: RapportInn, naa: number, kildeForBruker: Map<string, string>): Dagsrapport['bruk'] {
-  const tomt: Record<Flate, number> = { hjem: 0, kart: 0, omrade: 0, steder: 0, pris: 0 };
+  const tomt: Record<Flate, number> = { hjem: 0, kart: 0, omrade: 0, steder: 0, pris: 0, tilbud: 0 };
   const dag14 = 14 * 24 * 3600_000;
   const nye = inn.brukere.filter((b) => naa - new Date(b.created_at).getTime() <= dag14);
   if (!inn.bruksdager) {
@@ -324,17 +324,17 @@ function byggBruk(inn: RapportInn, naa: number, kildeForBruker: Map<string, stri
   const grense7 = osloDag(new Date(naa - 6 * 24 * 3600_000));
   const grense28 = osloDag(new Date(naa - 27 * 24 * 3600_000));
   const rader = inn.bruksdager.filter((r) => r.dag >= grense28);
-  // Prissiden er en traktflate, ikke bruk av soppforholdene: den teller i
-  // perFlate.pris (sløyfa under), men aldri i «så forholdene», «kom tilbake»
-  // eller gjenbruk.
+  // Prissiden og tilbudet er traktflater, ikke bruk av soppforholdene: de
+  // teller i perFlate (sløyfa under), men aldri i «så forholdene», «kom
+  // tilbake» eller gjenbruk.
 
   const brukereSiste7d = new Set<string>();
-  const perFlateSett: Record<Flate, Set<string>> = { hjem: new Set(), kart: new Set(), omrade: new Set(), steder: new Set(), pris: new Set() };
+  const perFlateSett: Record<Flate, Set<string>> = { hjem: new Set(), kart: new Set(), omrade: new Set(), steder: new Set(), pris: new Set(), tilbud: new Set() };
   const ukerPerBruker = new Map<string, Set<string>>();
   const dagerPerBruker = new Map<string, string[]>();
   for (const r of rader) {
-    if (r.flate === 'pris') {
-      if (r.dag >= grense7) perFlateSett.pris.add(r.user_id);
+    if (r.flate === 'pris' || r.flate === 'tilbud') {
+      if (r.dag >= grense7) perFlateSett[r.flate].add(r.user_id);
       continue;
     }
     let dager = dagerPerBruker.get(r.user_id);
@@ -372,7 +372,8 @@ function byggBruk(inn: RapportInn, naa: number, kildeForBruker: Map<string, stri
       kart: perFlateSett.kart.size,
       omrade: perFlateSett.omrade.size,
       steder: perFlateSett.steder.size,
-      pris: perFlateSett.pris.size
+      pris: perFlateSett.pris.size,
+      tilbud: perFlateSett.tilbud.size
     },
     nyeSiste14d: nye.length,
     komTilbake: komTilbakeSett.size,

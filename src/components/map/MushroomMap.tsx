@@ -63,6 +63,7 @@ import { osloDag } from '@/lib/bruk/bruksdag';
 import { GpxKopierModal } from '@/components/gpx/GpxKopierModal';
 import { ProvGratisArk } from '@/components/billing/ProvGratisArk';
 import {
+  FORSTE_OKT_MS,
   KARTDAGER_NOKKEL,
   PROVETILBUD_NOKKEL,
   leggTilKartdag,
@@ -391,6 +392,15 @@ export function MushroomMap({
   // 3 av 12. Arket vises maks to ganger, aldri to ganger samme døgn.
   const [visProvetilbud, setVisProvetilbud] = useState(false);
   const provetilbudUtloserRef = useRef<ProvetilbudUtloser | null>(null);
+  // Første kartøkt: etter et halvt minutt har brukeren sett hva kartet er.
+  const [provetilbudTikk, setProvetilbudTikk] = useState(0);
+  useEffect(() => {
+    const id = setTimeout(() => {
+      if (!provetilbudUtloserRef.current) provetilbudUtloserRef.current = 'forste-okt';
+      setProvetilbudTikk((n) => n + 1);
+    }, FORSTE_OKT_MS);
+    return () => clearTimeout(id);
+  }, []);
   useEffect(() => {
     const dager = leggTilKartdag(readLocal(KARTDAGER_NOKKEL), osloDag(new Date()));
     writeLocal(KARTDAGER_NOKKEL, JSON.stringify(dager));
@@ -414,7 +424,7 @@ export function MushroomMap({
     }
     writeLocal(PROVETILBUD_NOKKEL, JSON.stringify(registrerVisning(tilstand, naaMs)));
     setVisProvetilbud(true);
-  }, [topAccess, billing.isLoading, billing.data, hasOfflineAccess, kanFaaProve]);
+  }, [topAccess, billing.isLoading, billing.data, hasOfflineAccess, kanFaaProve, provetilbudTikk]);
   const showOfflineUpsell = !billing.isLoading && !hasOfflineAccess;
 
   const prediction = usePrediction({
