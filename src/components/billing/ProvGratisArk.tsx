@@ -29,6 +29,7 @@ export function ProvGratisArk({
   // Måling: at tilbudet ble vist (bruksflate «tilbud», migrasjon 068). Uten
   // dette vet vi ikke om null prøveperioder betyr «nei takk» eller «aldri sett».
   useEffect(() => {
+    if (typeof navigator !== 'undefined' && navigator.webdriver) return;
     fetch('/api/me/bruksdag', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

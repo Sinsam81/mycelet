@@ -2,7 +2,13 @@
 
 import { useEffect, useState } from 'react';
 import { readLocal, writeLocal } from '@/lib/utils/safe-storage';
-import { PROVETILBUD_NOKKEL, PROVETILBUD_START_NOKKEL, registrerVisning, tolkProvetilbud } from '@/lib/billing/provetilbud';
+import {
+  PROVETILBUD_MIN_MELLOMROM_MS,
+  PROVETILBUD_NOKKEL,
+  PROVETILBUD_START_NOKKEL,
+  registrerVisning,
+  tolkProvetilbud
+} from '@/lib/billing/provetilbud';
 import { ProvGratisArk } from './ProvGratisArk';
 
 /**
@@ -18,6 +24,11 @@ export function ProvGratisVedStart() {
   useEffect(() => {
     if (readLocal(PROVETILBUD_START_NOKKEL)) return;
     if (typeof navigator !== 'undefined' && navigator.webdriver) return;
+    // Samme døgnregel som kartarket: har brukeren nettopp fått tilbudet der,
+    // venter forsiden til neste besøk etter et døgn (start-nøkkelen settes
+    // først når arket faktisk vises).
+    const delt = tolkProvetilbud(readLocal(PROVETILBUD_NOKKEL));
+    if (delt.sistVistMs !== null && Date.now() - delt.sistVistMs < PROVETILBUD_MIN_MELLOMROM_MS) return;
     // Neste tick, ikke synkront i effekten: lokal lagring finnes ikke på
     // serveren, så første klientrender må matche HTML-en (ikke noe ark).
     const id = setTimeout(() => {
