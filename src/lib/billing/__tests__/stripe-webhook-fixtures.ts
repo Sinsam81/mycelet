@@ -24,7 +24,8 @@ export const TEST_PRICE_PREMIUM = 'price_1PremiumMonthlyTest';
 type SubscriptionEventType =
   | 'customer.subscription.created'
   | 'customer.subscription.updated'
-  | 'customer.subscription.deleted';
+  | 'customer.subscription.deleted'
+  | 'customer.subscription.trial_will_end';
 
 interface FixtureOptions {
   type?: SubscriptionEventType;
@@ -33,6 +34,14 @@ interface FixtureOptions {
   /** Sett null for å etterligne et abonnement uten user_id i metadata. */
   userId?: string | null;
   priceId?: string;
+  /** subscription.trial_end (unix-sekunder); null utenfor prøveperiode. */
+  trialEnd?: number | null;
+  /**
+   * subscription.discounts slik hendelsen bærer dem: i kontoens rendring
+   * bare id-er («di_…»), utvidede objekter bare når noen har bedt om
+   * expand=discounts.
+   */
+  discounts?: Array<string | Record<string, unknown>>;
 }
 
 function subscriptionItem(extra: Record<string, unknown>) {
@@ -74,7 +83,9 @@ export function dahliaSubscriptionEvent(options: FixtureOptions = {}) {
     status = 'active',
     cancelAtPeriodEnd = false,
     userId = TEST_USER_ID,
-    priceId = TEST_PRICE_PREMIUM
+    priceId = TEST_PRICE_PREMIUM,
+    trialEnd = null,
+    discounts = []
   } = options;
 
   return wrapEvent('2026-05-27.dahlia', type, {
@@ -88,9 +99,12 @@ export function dahliaSubscriptionEvent(options: FixtureOptions = {}) {
     current_period_end: null,
     current_period_start: null,
     customer: TEST_CUSTOMER_ID,
+    // dahlia har ikke lenger `discount`; bare listen.
+    discounts,
     livemode: true,
     metadata: userId ? { user_id: userId, tier: 'premium' } : {},
     status,
+    trial_end: trialEnd,
     items: {
       object: 'list',
       has_more: false,
@@ -114,7 +128,9 @@ export function legacySubscriptionEvent(options: FixtureOptions = {}) {
     status = 'active',
     cancelAtPeriodEnd = false,
     userId = TEST_USER_ID,
-    priceId = TEST_PRICE_PREMIUM
+    priceId = TEST_PRICE_PREMIUM,
+    trialEnd = null,
+    discounts = []
   } = options;
 
   return wrapEvent('2024-06-20', type, {
@@ -128,9 +144,12 @@ export function legacySubscriptionEvent(options: FixtureOptions = {}) {
     current_period_start: PERIOD_START_UNIX,
     current_period_end: PERIOD_END_UNIX,
     customer: TEST_CUSTOMER_ID,
+    discount: null,
+    discounts,
     livemode: true,
     metadata: userId ? { user_id: userId, tier: 'premium' } : {},
     status,
+    trial_end: trialEnd,
     items: {
       object: 'list',
       has_more: false,

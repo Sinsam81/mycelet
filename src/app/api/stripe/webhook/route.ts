@@ -4,7 +4,13 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { BillingTier, isPaidTier, resolveTierByPriceId } from '@/lib/billing/plans';
 import { billingTierLabel } from '@/lib/billing/copy';
 import { manglendeEpostKonfig, sendEpost } from '@/lib/email/send';
-import { bestemProvePaaminnelse, byggProvePaaminnelseEpost, sprakFraMetadata } from '@/lib/billing/prove-paaminnelse';
+import {
+  bestemProvePaaminnelse,
+  byggProvePaaminnelseEpost,
+  lesRabatt,
+  rabattStorrelseUkjent,
+  sprakFraMetadata
+} from '@/lib/billing/prove-paaminnelse';
 import { getStripeServerClient } from '@/lib/stripe/server';
 import { createRequestLogger } from '@/lib/log/request';
 import { resolveSubscriptionPeriod, type SubscriptionPeriod } from '@/lib/billing/subscription-period';
@@ -230,8 +236,17 @@ function readSubscriptionPeriod(
  * regnes som behandlet: et 4xx hadde fått Stripe til å prøve i tre døgn, og
  * da er prøveperioden over. Resends idempotensnøkkel stopper dobbeltsending
  * hvis Stripe likevel leverer hendelsen to ganger.
+ *
+ * Rabatt: checkout tillater kampanjekoder, og hendelsen (kontoens rendring)
+ * bærer da bare rabattens id. Vi henter abonnementet én gang med
+ * expand=discounts for å få kupongen; går det galt, sendes e-posten uten
+ * tall heller enn med listeprisen.
  */
-async function sendProvePaaminnelse(subscription: Stripe.Subscription, log: ReturnType<typeof createRequestLogger>) {
+async function sendProvePaaminnelse(
+  subscription: Stripe.Subscription,
+  stripe: Stripe,
+  log: ReturnType<typeof createRequestLogger>
+) {
   const mangler = manglendeEpostKonfig();
   if (mangler.length > 0) {
     log.warn('stripe.prove_paaminnelse.epost_ikke_konfigurert', { mangler, subscriptionId: subscription.id });
@@ -246,12 +261,24 @@ async function sendProvePaaminnelse(subscription: Stripe.Subscription, log: Retu
   }
 
   const price = subscription.items.data[0]?.price;
+  let rabatt = lesRabatt(subscription);
+  if (rabatt && rabattStorrelseUkjent(rabatt)) {
+    try {
+      rabatt = lesRabatt(await stripe.subscriptions.retrieve(subscription.id, { expand: ['discounts'] }));
+    } catch (err) {
+      log.warn('stripe.prove_paaminnelse.rabatt_ukjent', {
+        subscriptionId: subscription.id,
+        detalj: err instanceof Error ? err.message : 'ukjent'
+      });
+    }
+  }
   const beslutning = bestemProvePaaminnelse({
     status: subscription.status,
     trialEndSek: subscription.trial_end,
     cancelAtPeriodEnd: subscription.cancel_at_period_end,
     unitAmount: price?.unit_amount ?? null,
     currency: price?.currency ?? null,
+    rabatt,
     naaMs: Date.now()
   });
   if (!beslutning.send) {
@@ -275,15 +302,22 @@ async function sendProvePaaminnelse(subscription: Stripe.Subscription, log: Retu
     plan: isPaidTier(tier) ? billingTierLabel(tier, locale) : 'Premium',
     dagerIgjen: beslutning.dagerIgjen,
     sluttIso: beslutning.sluttIso,
-    unitAmount: beslutning.unitAmount,
-    currency: beslutning.currency,
-    profilUrl: `${appUrl}/profile`
+    belop: beslutning.belop,
+    // Prissiden har «Administrer abonnement» (Stripe-portalen); profilsiden
+    // viser bare plan og status og har ingen oppsigelse.
+    oppsigelseUrl: `${appUrl}/pricing`
   });
 
   try {
     const res = await sendEpost({ til: email, ...epost, idempotensNokkel: `stripe/prove-slutt/${subscription.id}` });
     if (res.ok) {
-      log.info('stripe.prove_paaminnelse.sendt', { userId, subscriptionId: subscription.id, dagerIgjen: beslutning.dagerIgjen, locale });
+      log.info('stripe.prove_paaminnelse.sendt', {
+        userId,
+        subscriptionId: subscription.id,
+        dagerIgjen: beslutning.dagerIgjen,
+        locale,
+        medBelop: beslutning.belop !== null
+      });
     } else {
       log.warn('stripe.prove_paaminnelse.sending_feilet', { userId, subscriptionId: subscription.id, detalj: res.detalj });
     }
@@ -501,7 +535,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (event.type === 'customer.subscription.trial_will_end') {
-      await sendProvePaaminnelse(event.data.object as Stripe.Subscription, log);
+      await sendProvePaaminnelse(event.data.object as Stripe.Subscription, stripe, log);
     }
 
     if (canLogEvents) {

@@ -62,6 +62,7 @@ import { byggLovendeOmraderGpx } from '@/lib/gpx/lovende-omrader';
 import { osloDag } from '@/lib/bruk/bruksdag';
 import { GpxKopierModal } from '@/components/gpx/GpxKopierModal';
 import { ProvGratisArk } from '@/components/billing/ProvGratisArk';
+import { ProveLofteTekst } from '@/components/billing/ProveLofteTekst';
 import { hentProveLofte } from '@/lib/hooks/useProveLofte';
 import {
   FORSTE_OKT_MS,
@@ -2430,7 +2431,7 @@ export function MushroomMap({
                 </button>
               ) : (
                 <Link href="/pricing" className="rounded-lg px-2 py-2 text-xs font-medium text-forest-900 hover:bg-gray-100">
-                    ⭐ {t(kanFaaProve ? 'premiumTools' : 'premiumToolsUtenProve')}
+                    ⭐ {kanFaaProve ? <ProveLofteTekst med={t('premiumTools')} utenProve={t('premiumToolsUtenProve')} /> : t('premiumToolsUtenProve')}
                   </Link>
               )}
               <button
@@ -2463,13 +2464,15 @@ export function MushroomMap({
           <ProvGratisArk utloser={visProvetilbud} onIkkeNaa={() => setVisProvetilbud(null)} onStart={() => setVisProvetilbud(null)} />
         ) : null}
         {/* Synlig også i appen — prissiden selger via App Store der. Bak
-            NonNativeOnly så ingen app-bruker dette (null prøveperioder, 9. sep 2026). */}
+            NonNativeOnly så ingen app-bruker dette (null prøveperioder, 9. sep 2026).
+            Gratisuka loves bare når butikken har sagt den finnes (ProveLofteTekst),
+            ellers motsier knappen arket rett over. */}
         {topAccess === 'free_limited' && topSpots ? (
           <Link
             href="/pricing"
             className="flex items-center gap-1.5 rounded-full bg-amber-500 px-3 py-1.5 text-xs font-semibold text-white shadow-lg hover:bg-amber-600"
           >
-            🔒 {t(kanFaaProve ? 'seeAll12Premium' : 'seeAll12PremiumUtenProve')}
+            🔒 {kanFaaProve ? <ProveLofteTekst med={t('seeAll12Premium')} utenProve={t('seeAll12PremiumUtenProve')} /> : t('seeAll12PremiumUtenProve')}
           </Link>
         ) : null}
         {FLAGS.tripMode && tripActive ? (
@@ -2594,7 +2597,7 @@ export function MushroomMap({
           <div className="mt-2 rounded border border-amber-300 bg-amber-50 px-2 py-2">
             <p className="text-xs text-amber-800">{t('offlineSaveRequiresPremium')}</p>
             <Link href="/pricing" className="text-xs font-medium text-amber-900 underline">
-              {t(kanFaaProve ? 'upgradePlan' : 'upgradePlanUtenProve')}
+              {kanFaaProve ? <ProveLofteTekst med={t('upgradePlan')} utenProve={t('upgradePlanUtenProve')} /> : t('upgradePlanUtenProve')}
             </Link>
           </div>
         ) : null}
