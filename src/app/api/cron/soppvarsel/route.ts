@@ -4,6 +4,7 @@ import { createRequestLogger } from '@/lib/log/request';
 import { bearerSecretMatches } from '@/lib/security/secret-compare';
 import { skalVarsle, VARSEL_KARANTENE_DAGER, VARSEL_MIN_SCORE } from '@/lib/alerts/decision';
 import { byggVarselEpost } from '@/lib/alerts/email';
+import { beregnPuls, type Puls } from '@/lib/rapportpuls/puls';
 import { arterISesong, velgToppdag, type SesongArt, type Toppdag } from '@/lib/alerts/ekstra';
 import { beregnFasit, FASIT_MODEN_ETTER_VARSEL_DAGER, type FasitTall } from '@/lib/alerts/fasit';
 import { PREDICTION_TILE_REGIONS } from '@/lib/prediction/tile-regions';
@@ -74,6 +75,29 @@ interface Abonnement {
  * abonnent.
  */
 const fasitCache = new Map<string, FasitTall | null>();
+
+/**
+ * Dagens rapportpuls per område (migrasjon 069, skrevet av cron 04:40). Én
+ * lesing per kjøring. Mangler raden (Sverige, eller feilet henting), mangler
+ * linja i e-posten — puls er forklaring, aldri en forutsetning.
+ */
+async function hentPuls(db: ReturnType<typeof createAdminClient>, dagIso: string): Promise<Map<string, Puls>> {
+  const kart = new Map<string, Puls>();
+  const { data } = await db.from('rapportpuls').select('region,fra,til,siste7,baseline,aar_brukt,forrige_uke').eq('dag', dagIso);
+  for (const r of data ?? []) {
+    // Gjenskap nivået fra de lagrede inngangene med samme regel som cronen brukte.
+    const baseline = r.baseline === null ? null : Number(r.baseline);
+    const p = beregnPuls({
+      fra: String(r.fra),
+      til: String(r.til),
+      siste7: Number(r.siste7),
+      tidligereAar: baseline === null ? [] : [baseline],
+      forrigeUke: r.forrige_uke === null ? null : Number(r.forrige_uke)
+    });
+    kart.set(String(r.region), { ...p, aarBrukt: Number(r.aar_brukt ?? p.aarBrukt) });
+  }
+  return kart;
+}
 
 /**
  * Fasit for FORRIGE varsel i regionen — kvitteringskulturen fra strategien
@@ -237,6 +261,8 @@ export async function GET(request: NextRequest) {
     log.warn('soppvarsel.fliser_utdatert', { tileDate, rasterAlderDager });
     return NextResponse.json({ ok: true, grunn: 'fliser-utdatert', tileDate });
   }
+  // Rapportpuls for i dag (skrevet 04:40 av /api/cron/rapportpuls) — forklaring i e-posten.
+  const pulsKart = await hentPuls(db, iDagIso);
 
   // PostgREST kapper på 1000 rader uansett limit — må pagineres. Samme felle som
   // i regionsruta, der en delvis lest side så ut som at halve landet manglet.
@@ -443,6 +469,7 @@ export async function GET(request: NextRequest) {
       toppdag: ekstra.toppdag,
       arter: ekstra.arter,
       fasit: fasit ? { dato: fasit.dato, ukenEtter: fasit.ukenEtter, ukenFor: fasit.ukenFor } : null,
+      puls: pulsKart.get(ab.region) ?? null,
       // Klikket registreres per abonnement (forste_apnet_at/sist_apnet_at) og
       // sender leseren videre til områdesiden. Det er «aktivering» i rapporten.
       // &s= er utsendingstidspunktet klikk-ruta måler skanner/menneske mot —

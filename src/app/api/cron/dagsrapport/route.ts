@@ -131,6 +131,10 @@ export async function GET(request: NextRequest) {
   }
   const bruksdager = bruksdagerMaalt ? samledeBruksdager : undefined;
 
+  // ── Rapportpuls i dag ─────────────────────────────────────────────────────
+  const { data: pulsRader } = await db.from('rapportpuls').select('region,siste7,avvik_pst').eq('dag', osloDag(naa));
+  const rapportpuls = (pulsRader ?? []).map((r) => ({ region: String(r.region), siste7: Number(r.siste7), avvikPst: r.avvik_pst === null ? null : Number(r.avvik_pst) }));
+
   // ── Regionscorer, i dag og i går ──────────────────────────────────────────
   const { data: scorer } = await db
     .from('region_daily_scores')
@@ -150,6 +154,7 @@ export async function GET(request: NextRequest) {
     varselabonnement: varselAntall,
     varselabonnenter,
     bruksdager,
+    rapportpuls,
     interneBrukere,
     regionerIDag: velg(iDagDato),
     regionerIGar: velg(iGarDato),
@@ -238,6 +243,7 @@ function byggRapportEpost(r: Dagsrapport, naa: Date) {
     ${rad('Best i dag', r.toppRegioner.map((t) => `${t.region} ${t.score}`).join(' · ') || '—')}
     ${rad('Snudde i natt', flankeTekst)}
     ${rad('Abonnerer på soppvarsel', String(r.varselabonnement))}
+    ${r.puls.length ? rad('Rapportpuls (GBIF, uka som gikk)', r.puls.map((p) => `${p.region} ${p.siste7} (${p.avvikPst > 0 ? '+' : ''}${p.avvikPst} %)`).join(' · ')) : ''}
   </table>
 
   <h2 style="font-size:14px;color:#1A3409;margin:22px 0 6px">Soppvarselet som trakt</h2>
@@ -289,7 +295,7 @@ ABONNEMENT
 I SKOGEN
   best i dag ................ ${r.toppRegioner.map((t) => `${t.region} ${t.score}`).join(', ') || '—'}
   snudde i natt ............. ${flankeTekst}
-  soppvarsel-abonnenter ..... ${r.varselabonnement}
+  soppvarsel-abonnenter ..... ${r.varselabonnement}${r.puls.length ? `\n  rapportpuls (uka som gikk) . ${r.puls.map((p) => `${p.region} ${p.siste7} (${p.avvikPst > 0 ? '+' : ''}${p.avvikPst} %)`).join(', ')}` : ''}
 
 SOPPVARSELET SOM TRAKT
   bekreftede (per rad) ...... ${v.bekreftede}

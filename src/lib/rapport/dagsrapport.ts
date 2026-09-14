@@ -82,6 +82,13 @@ export interface BruksdagRad {
   flate: string;
 }
 
+/** Dagens rapportpuls per område (migrasjon 069). */
+export interface PulsRad {
+  region: string;
+  siste7: number;
+  avvikPst: number | null;
+}
+
 export interface RapportInn {
   brukere: BrukerRad[];
   abonnement: AbonnementRad[];
@@ -90,6 +97,8 @@ export interface RapportInn {
   varselabonnenter?: VarselAbonnentRad[];
   /** Bruksdager siste 28 dager. undefined = ikke målt (rapporten sier det). */
   bruksdager?: BruksdagRad[];
+  /** Rapportpuls i dag (norske områder). Tom = ikke hentet. */
+  rapportpuls?: PulsRad[];
   /**
    * Interne kontoer (QA-brukeren, Apples demokonto): et App Store-kjøp gjort
    * for å teste kjøpsflyten ser identisk ut med et kundekjøp i tabellen —
@@ -145,6 +154,8 @@ export interface Dagsrapport {
    * «steder» (Mine steder) fra migrasjon 066 — tallet vinterplanen trenger
    * for å avgjøre områdekartoteket.
    */
+  /** De tre områdene med størst avvik oppover (kan være negative i en stille uke — etiketten er nøytral). */
+  puls: Array<{ region: string; siste7: number; avvikPst: number }>;
   bruk: {
     maalt: boolean;
     brukereSiste7d: number;
@@ -308,7 +319,11 @@ export function byggDagsrapport(inn: RapportInn): Dagsrapport {
     flanker,
     kilder,
     varsel,
-    bruk
+    bruk,
+    puls: (inn.rapportpuls ?? [])
+      .filter((p): p is PulsRad & { avvikPst: number } => p.avvikPst !== null)
+      .sort((a, b) => b.avvikPst - a.avvikPst)
+      .slice(0, 3)
   };
 }
 
