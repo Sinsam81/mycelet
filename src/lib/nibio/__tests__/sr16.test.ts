@@ -6,7 +6,12 @@ import { getForestProperties, isWithinNorway, parseSr16Html } from '../sr16';
  * response (2026-05-23). Each queried layer comes back as its own
  * concatenated HTML doc, and the value sits inside a JS `if (X == 9999)`
  * guard. The VOLMB doc header is mislabelled "SSRVOLMB" in NIBIO's own
- * template — kept here so the positional parser stays honest.
+ * template — kept here so the header-keyed parser normalises it.
+ *
+ * Live behaviour found in the 2026-09-14 review (ten independent
+ * reproductions): when a layer is nodata at the pixel, NIBIO omits that
+ * layer's sub-document entirely — it does NOT return -9999. The fixture
+ * OMITTED_BONITET_HTML below reproduces that shape.
  */
 function layerDoc(header: string, value: number): string {
   return `<!doctype html>
@@ -35,6 +40,13 @@ const WATER_HTML =
 const PARTIAL_HTML =
   layerDoc('SRRTRESLAG', 1) + layerDoc('SRRBONITET', -9999) + layerDoc('SSRVOLMB', -9999);
 
+// The real NIBIO shape for a nodata layer: the bonitet block is simply absent.
+// A positional parser reads 65 m³/ha as «bonitet 65» here.
+const OMITTED_BONITET_HTML = layerDoc('SRRTRESLAG', 2) + layerDoc('SSRVOLMB', 65);
+
+// Treslag nodata but the stand exists (live at 60.2602, 5.2623: bonitet 23, 732 m³/ha).
+const NO_TRESLAG_HTML = layerDoc('SRRBONITET', 23) + layerDoc('SSRVOLMB', 732);
+
 function mockFetch(html: string, ok = true) {
   return vi.fn().mockResolvedValue({ ok, text: async () => html } as Response);
 }
@@ -62,7 +74,7 @@ describe('isWithinNorway', () => {
 });
 
 describe('parseSr16Html', () => {
-  it('parses all three layer values positionally', () => {
+  it('parses all three layer values keyed on the block headers', () => {
     expect(parseSr16Html(NORDMARKA_HTML)).toEqual({
       SRRTRESLAG: 2,
       SRRBONITET: 8,
@@ -93,6 +105,27 @@ describe('parseSr16Html', () => {
       SRRVOLMB: null
     });
   });
+
+  it('does not shift values when NIBIO omits a nodata layer — the bug that read volume as bonitet', () => {
+    expect(parseSr16Html(OMITTED_BONITET_HTML)).toEqual({
+      SRRTRESLAG: 2,
+      SRRBONITET: null,
+      SRRVOLMB: 65
+    });
+  });
+
+  it('is independent of block order', () => {
+    expect(parseSr16Html(layerDoc('SSRVOLMB', 65) + layerDoc('SRRTRESLAG', 2) + layerDoc('SRRBONITET', 8))).toEqual({
+      SRRTRESLAG: 2,
+      SRRBONITET: 8,
+      SRRVOLMB: 65
+    });
+  });
+
+  it('falls back to positional reading when no headers exist', () => {
+    const uten = '<script>if (1 == 9999) {}</script><script>if (11 == 9999) {}</script><script>if (120 == 9999) {}</script>';
+    expect(parseSr16Html(uten)).toEqual({ SRRTRESLAG: 1, SRRBONITET: 11, SRRVOLMB: 120 });
+  });
 });
 
 describe('getForestProperties', () => {
@@ -120,6 +153,12 @@ describe('getForestProperties', () => {
     vi.stubGlobal('fetch', mockFetch(WATER_HTML));
     const result = await getForestProperties({ lat: 59.967, lon: 10.728 });
     expect(result).toBeNull();
+  });
+
+  it('keeps a stand whose treslag is nodata but bonitet/volume exist (forestType ukjent)', async () => {
+    vi.stubGlobal('fetch', mockFetch(NO_TRESLAG_HTML));
+    const result = await getForestProperties({ lat: 60.2602, lon: 5.2623 });
+    expect(result).toMatchObject({ forestType: 'ukjent', productivity: 23, volumePerHa: 732, source: 'sr16' });
   });
 
   it('returns forest props with null secondary fields when only treslag is present', async () => {
