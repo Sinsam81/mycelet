@@ -4,6 +4,13 @@ export type IapPlan = Exclude<BillingTier, 'free'>;
 export type BillingStatus = 'inactive' | 'trialing' | 'active' | 'past_due' | 'canceled' | 'unpaid' | 'incomplete' | 'incomplete_expired';
 
 export const FREE_DAILY_AI_LIMIT = 5;
+/**
+ * Stripes prøveperiode for førstegangskjøpere på nett (trial_period_days i
+ * /api/billing/checkout). Én kilde: arket og prissiden lover tallet, og et
+ * løfte som ikke stemmer med det Stripe faktisk gir, er en refusjon i vente.
+ * I appen kommer tallet fra App Store (IapOffer.proveDager), aldri herfra.
+ */
+export const STRIPE_PROVEDAGER = 7;
 
 export const BILLING_PLANS: Record<
   Exclude<BillingTier, 'free'>,

@@ -62,6 +62,7 @@ import { byggLovendeOmraderGpx } from '@/lib/gpx/lovende-omrader';
 import { osloDag } from '@/lib/bruk/bruksdag';
 import { GpxKopierModal } from '@/components/gpx/GpxKopierModal';
 import { ProvGratisArk } from '@/components/billing/ProvGratisArk';
+import { hentProveLofte } from '@/lib/hooks/useProveLofte';
 import {
   FORSTE_OKT_MS,
   KARTDAGER_NOKKEL,
@@ -390,7 +391,9 @@ export function MushroomMap({
   // Prøvetilbudet (src/lib/billing/provetilbud.ts): «andre dag» avgjøres ved
   // mount fra lokalt lagrede kartdager; «begrenset» når lovende områder viser
   // 3 av 12. Arket vises maks to ganger, aldri to ganger samme døgn.
-  const [visProvetilbud, setVisProvetilbud] = useState(false);
+  // Utløseren som fyrte følger med arket til bruksdag-raden («tilbud»/utløser),
+  // så trakten ark → pris kan leses per utløser. Null = ikke vist.
+  const [visProvetilbud, setVisProvetilbud] = useState<ProvetilbudUtloser | null>(null);
   const provetilbudUtloserRef = useRef<ProvetilbudUtloser | null>(null);
   // Første kartøkt: etter et halvt minutt har brukeren sett hva kartet er.
   const [provetilbudTikk, setProvetilbudTikk] = useState(0);
@@ -423,8 +426,14 @@ export function MushroomMap({
       return;
     }
     writeLocal(PROVETILBUD_NOKKEL, JSON.stringify(registrerVisning(tilstand, naaMs)));
-    setVisProvetilbud(true);
+    setVisProvetilbud(utloser);
   }, [topAccess, billing.isLoading, billing.data, hasOfflineAccess, kanFaaProve, provetilbudTikk]);
+  // Butikkens svar på om gratisuka finnes hentes tidlig, så arket ikke lover
+  // «7 dager gratis» før det vet (hentProveLofte husker svaret; nett svarer straks).
+  useEffect(() => {
+    if (billing.isLoading || hasOfflineAccess || !kanFaaProve) return;
+    void hentProveLofte();
+  }, [billing.isLoading, hasOfflineAccess, kanFaaProve]);
   const showOfflineUpsell = !billing.isLoading && !hasOfflineAccess;
 
   const prediction = usePrediction({
@@ -2450,7 +2459,9 @@ export function MushroomMap({
           </div>
         ) : null}
         {gpxTekst ? <GpxKopierModal tittel={t('gpxTopSpotsHeading')} gpx={gpxTekst} onClose={() => setGpxTekst(null)} /> : null}
-        {visProvetilbud ? <ProvGratisArk onIkkeNaa={() => setVisProvetilbud(false)} onStart={() => setVisProvetilbud(false)} /> : null}
+        {visProvetilbud ? (
+          <ProvGratisArk utloser={visProvetilbud} onIkkeNaa={() => setVisProvetilbud(null)} onStart={() => setVisProvetilbud(null)} />
+        ) : null}
         {/* Synlig også i appen — prissiden selger via App Store der. Bak
             NonNativeOnly så ingen app-bruker dette (null prøveperioder, 9. sep 2026). */}
         {topAccess === 'free_limited' && topSpots ? (

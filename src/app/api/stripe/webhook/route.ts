@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Stripe from 'stripe';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { BillingTier, resolveTierByPriceId } from '@/lib/billing/plans';
+import { BillingTier, isPaidTier, resolveTierByPriceId } from '@/lib/billing/plans';
+import { billingTierLabel } from '@/lib/billing/copy';
+import { manglendeEpostKonfig, sendEpost } from '@/lib/email/send';
+import { bestemProvePaaminnelse, byggProvePaaminnelseEpost, sprakFraMetadata } from '@/lib/billing/prove-paaminnelse';
 import { getStripeServerClient } from '@/lib/stripe/server';
 import { createRequestLogger } from '@/lib/log/request';
 import { resolveSubscriptionPeriod, type SubscriptionPeriod } from '@/lib/billing/subscription-period';
@@ -216,6 +219,83 @@ function readSubscriptionPeriod(
   return period;
 }
 
+/**
+ * Tre dager før gratisuka på nett blir til et trekk (customer.subscription.
+ * trial_will_end): én e-post i kundens språk med beløpet fra Stripe-prisen og
+ * lenke til der man sier opp. Reglene og teksten ligger i
+ * src/lib/billing/prove-paaminnelse.ts (rene, testet); her er bare I/O-en.
+ *
+ * Skriver ingenting til billing_subscriptions — raden oppdateres av
+ * subscription.updated som før. Feiler sendingen, logges det og hendelsen
+ * regnes som behandlet: et 4xx hadde fått Stripe til å prøve i tre døgn, og
+ * da er prøveperioden over. Resends idempotensnøkkel stopper dobbeltsending
+ * hvis Stripe likevel leverer hendelsen to ganger.
+ */
+async function sendProvePaaminnelse(subscription: Stripe.Subscription, log: ReturnType<typeof createRequestLogger>) {
+  const mangler = manglendeEpostKonfig();
+  if (mangler.length > 0) {
+    log.warn('stripe.prove_paaminnelse.epost_ikke_konfigurert', { mangler, subscriptionId: subscription.id });
+    return;
+  }
+
+  const customerId = typeof subscription.customer === 'string' ? subscription.customer : null;
+  const userId = subscription.metadata?.user_id ?? (customerId ? await resolveUserIdFromCustomer(customerId) : null);
+  if (!userId) {
+    log.warn('stripe.prove_paaminnelse.ingen_bruker', { subscriptionId: subscription.id });
+    return;
+  }
+
+  const price = subscription.items.data[0]?.price;
+  const beslutning = bestemProvePaaminnelse({
+    status: subscription.status,
+    trialEndSek: subscription.trial_end,
+    cancelAtPeriodEnd: subscription.cancel_at_period_end,
+    unitAmount: price?.unit_amount ?? null,
+    currency: price?.currency ?? null,
+    naaMs: Date.now()
+  });
+  if (!beslutning.send) {
+    log.info('stripe.prove_paaminnelse.hoppet_over', { grunn: beslutning.grunn, subscriptionId: subscription.id });
+    return;
+  }
+
+  const admin = createAdminClient();
+  const { data, error } = await admin.auth.admin.getUserById(userId);
+  const email = data?.user?.email;
+  if (error || !email) {
+    log.warn('stripe.prove_paaminnelse.ingen_epostadresse', { userId, subscriptionId: subscription.id, message: error?.message });
+    return;
+  }
+
+  const locale = sprakFraMetadata(data.user.user_metadata);
+  const tier = resolveTierByPriceId(price?.id);
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://www.mycelet.com';
+  const epost = byggProvePaaminnelseEpost({
+    locale,
+    plan: isPaidTier(tier) ? billingTierLabel(tier, locale) : 'Premium',
+    dagerIgjen: beslutning.dagerIgjen,
+    sluttIso: beslutning.sluttIso,
+    unitAmount: beslutning.unitAmount,
+    currency: beslutning.currency,
+    profilUrl: `${appUrl}/profile`
+  });
+
+  try {
+    const res = await sendEpost({ til: email, ...epost, idempotensNokkel: `stripe/prove-slutt/${subscription.id}` });
+    if (res.ok) {
+      log.info('stripe.prove_paaminnelse.sendt', { userId, subscriptionId: subscription.id, dagerIgjen: beslutning.dagerIgjen, locale });
+    } else {
+      log.warn('stripe.prove_paaminnelse.sending_feilet', { userId, subscriptionId: subscription.id, detalj: res.detalj });
+    }
+  } catch (err) {
+    log.warn('stripe.prove_paaminnelse.sending_feilet', {
+      userId,
+      subscriptionId: subscription.id,
+      detalj: err instanceof Error ? err.message : 'ukjent'
+    });
+  }
+}
+
 export async function POST(request: NextRequest) {
   const log = createRequestLogger(request);
   log.info('stripe.webhook.received');
@@ -418,6 +498,10 @@ export async function POST(request: NextRequest) {
           log
         );
       }
+    }
+
+    if (event.type === 'customer.subscription.trial_will_end') {
+      await sendProvePaaminnelse(event.data.object as Stripe.Subscription, log);
     }
 
     if (canLogEvents) {

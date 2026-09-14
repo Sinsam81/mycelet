@@ -835,7 +835,8 @@
     "termsLink": "användarvillkoren",
     "privacyLink": "integritetspolicy",
     "legalLinksLabel": "Juridiska länkar",
-    "trialNote": "7 dagars gratis provperiod för nya prenumeranter",
+    "trialNote": "{dager} dagars gratis provperiod för nya prenumeranter",
+    "trialNoteUkjentLengde": "Gratis provperiod för nya prenumeranter",
     "seasonUrgency": "🍂 Högsäsongen pågår — september och oktober är årets bästa svampmånader."
   },
   "Profile": {
@@ -1477,11 +1478,18 @@
   },
   "ProvGratisArk": {
     "tittel": "Se alla 12 lovande områden",
-    "tekst": "Gratis visar 3. Premium visar alla 12 med motivering, plus offlinekarta och AI-svampkännare.",
-    "vilkaar": "7 dagar gratis för nya prenumeranter. Avsluta när du vill.",
-    "tittelStart": "Prova Premium gratis i 7 dagar",
-    "tekstStart": "Alla 12 lovande områden nära dig med motivering, offlinekarta för skogsturen och obegränsad AI-svampkännare. Gratis i sju dagar, avsluta när du vill — svampläget och varningen är gratis oavsett.",
+    "tekst": "Gratis visar 3. Premium visar alla 12, med motiveringen bakom varje siffra — plus offlinekarta och AI-svampkännare.",
+    "tittelStart": "Prova Premium gratis i {dager} dagar",
+    "tittelStartUkjentLengde": "Prova Premium gratis",
+    "tittelStartUtenProve": "Hela prognosen med Premium",
+    "tekstStart": "Alla 12 lovande områden nära dig, med motiveringen bakom varje siffra: nederbörd, markfukt, säsong och skogstyp. Offlinekarta för skogsturen. Och AI-svampkännare utan daglig gräns. Svampläget och varningen är gratis oavsett.",
+    "vilkaar": "{dager} dagar gratis för nya prenumeranter. Avsluta när du vill.",
+    "vilkaarUkjentLengde": "Gratis provperiod för nya prenumeranter. Avsluta när du vill.",
+    "vilkaarPris": "{pris} per månad. Avsluta när du vill.",
+    "vilkaarUtenProve": "Avsluta när du vill.",
     "start": "Starta gratisveckan",
+    "startProve": "Starta gratis provperiod",
+    "startUtenProve": "Se Premium",
     "fortsettGratis": "Fortsätt gratis",
     "ikkeNaa": "Inte nu",
     "lukk": "Stäng"

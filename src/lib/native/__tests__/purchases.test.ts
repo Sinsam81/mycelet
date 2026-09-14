@@ -55,6 +55,8 @@ const seasonPassOffer: IapOffer = {
   productId: 'no.mycelet.app.seasonpass.yearly',
   priceString: 'kr 249,00',
   packageIdentifier: '$rc_annual',
+  harProve: true,
+  proveDager: 7,
   rcPackage: {
     identifier: '$rc_annual',
     packageType: 'ANNUAL',

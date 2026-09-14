@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { BILLING_PLANS } from '@/lib/billing/plans';
+import { BILLING_PLANS, STRIPE_PROVEDAGER } from '@/lib/billing/plans';
 import { planCheckoutWrite } from '@/lib/billing/checkout-write';
 import { alreadyOnPlanMessage, billingCopy } from '@/lib/billing/copy';
 import { reusableCheckoutUrl } from '@/lib/billing/checkout-reuse';
@@ -235,7 +235,7 @@ export async function POST(request: NextRequest) {
           // IAP-leverandør, har brukeren hatt tilgangen før — og har
           // e-posten hatt et Stripe-abonnement under en SLETTET konto
           // (raden forsvinner med cascaden), teller det også.
-          ...(harHattTilgangFor ? {} : { trial_period_days: 7 }),
+          ...(harHattTilgangFor ? {} : { trial_period_days: STRIPE_PROVEDAGER }),
           metadata: {
             user_id: user.id,
             tier: plan,

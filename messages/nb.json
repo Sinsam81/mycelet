@@ -835,7 +835,8 @@
     "termsLink": "vilkårene",
     "privacyLink": "personvern",
     "legalLinksLabel": "Juridiske lenker",
-    "trialNote": "7 dager gratis prøveperiode for nye abonnenter",
+    "trialNote": "{dager} dager gratis prøveperiode for nye abonnenter",
+    "trialNoteUkjentLengde": "Gratis prøveperiode for nye abonnenter",
     "seasonUrgency": "🍂 Høysesongen er i gang — september og oktober er årets beste soppmåneder."
   },
   "Profile": {
@@ -1477,11 +1478,18 @@
   },
   "ProvGratisArk": {
     "tittel": "Se alle 12 lovende områdene",
-    "tekst": "Gratis viser 3. Premium viser alle 12 med begrunnelse, pluss offline-kart og AI-soppkjenner.",
-    "vilkaar": "7 dager gratis for nye abonnenter. Avslutt når du vil.",
-    "tittelStart": "Prøv Premium gratis i 7 dager",
-    "tekstStart": "Alle 12 lovende områder nær deg med begrunnelse, offline-kart for skogsturen og ubegrenset AI-soppkjenner. Gratis i sju dager, avslutt når du vil — soppforholdene og varselet er gratis uansett.",
+    "tekst": "Gratis viser 3. Premium viser alle 12, med begrunnelsen bak hvert tall — pluss offline-kart og AI-soppkjenner.",
+    "tittelStart": "Prøv Premium gratis i {dager} dager",
+    "tittelStartUkjentLengde": "Prøv Premium gratis",
+    "tittelStartUtenProve": "Hele prognosen med Premium",
+    "tekstStart": "Alle 12 lovende områder nær deg, med begrunnelsen bak hvert tall: nedbør, jordfuktighet, sesong og skogtype. Offline-kart for skogsturen. Og AI-soppkjenner uten daglig grense. Soppforholdene og varselet er gratis uansett.",
+    "vilkaar": "{dager} dager gratis for nye abonnenter. Avslutt når du vil.",
+    "vilkaarUkjentLengde": "Gratis prøveperiode for nye abonnenter. Avslutt når du vil.",
+    "vilkaarPris": "{pris} per måned. Avslutt når du vil.",
+    "vilkaarUtenProve": "Avslutt når du vil.",
     "start": "Start gratis uke",
+    "startProve": "Start gratis prøveperiode",
+    "startUtenProve": "Se Premium",
     "fortsettGratis": "Fortsett gratis",
     "ikkeNaa": "Ikke nå",
     "lukk": "Lukk"

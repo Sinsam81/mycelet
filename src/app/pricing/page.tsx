@@ -9,7 +9,7 @@ import { useSearchParams } from 'next/navigation';
 import { useLocale, useTranslations } from 'next-intl';
 import { Check, Crown, Leaf, Loader2, ShieldCheck, Undo2 } from 'lucide-react';
 import { PageWrapper } from '@/components/layout/PageWrapper';
-import { BILLING_PLANS, FREE_DAILY_AI_LIMIT } from '@/lib/billing/plans';
+import { BILLING_PLANS, FREE_DAILY_AI_LIMIT, STRIPE_PROVEDAGER } from '@/lib/billing/plans';
 import { canPurchasePlan, getBlockingPaidPlan, getPlanViewState } from '@/lib/billing/plan-state';
 import { seasonPriceComesFromStore, showsStorePrices } from '@/lib/billing/store-pricing';
 import { statusLabel, tierLabel } from '@/lib/billing/labels';
@@ -594,8 +594,21 @@ function PricingInner() {
                     <span className="text-sm font-medium text-gray-600">{planOffer || plan.id === 'free' ? displayPeriod : ''}</span>
                   </NativeOnly>
                 </p>
+                {/* Løftet om gratis prøveperiode bare når det er sant: nett = Stripe
+                    gir STRIPE_PROVEDAGER til nye abonnenter (checkout-ruta); skall =
+                    bare når App Store gir den på AKKURAT dette produktet
+                    (IapOffer.harProve). Ellers står prisen alene, uten løfte. */}
                 {plan.id !== 'free' ? (
-                  <p className="mt-1 text-xs font-semibold text-forest-800">{t('trialNote')}</p>
+                  <NonNativeOnly>
+                    <p className="mt-1 text-xs font-semibold text-forest-800">{t('trialNote', { dager: STRIPE_PROVEDAGER })}</p>
+                  </NonNativeOnly>
+                ) : null}
+                {plan.id !== 'free' && planOffer?.harProve ? (
+                  <NativeOnly>
+                    <p className="mt-1 text-xs font-semibold text-forest-800">
+                      {planOffer.proveDager === null ? t('trialNoteUkjentLengde') : t('trialNote', { dager: planOffer.proveDager })}
+                    </p>
+                  </NativeOnly>
                 ) : null}
                 {plan.lead ? <p className="mt-3 text-xs font-semibold uppercase tracking-wide text-gray-500">{plan.lead}</p> : null}
                 <ul className={`${plan.lead ? 'mt-1.5' : 'mt-3'} flex-1 space-y-1.5 text-sm text-gray-700`}>

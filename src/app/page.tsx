@@ -229,12 +229,14 @@ export default async function HomePage() {
           ) : null}
         </header>
 
+        {/* Før kortet i treet: arket lytter etter «kortet har data» (og introen),
+            og lytteren må stå klar før kortets egen mount-effekt kan sende. */}
+        {kanFaaProve ? <ProvGratisVedStart /> : null}
         <MushroomDayCard />
 
         {/* Tilbudet rett under forholdene, og én gang som ark ved første innlogging —
             gratisbrukere vi betaler for å hente inn, så aldri prissiden (1 av 12 kartbrukere,
             11. sep 2026). Betalende ser ingenting av dette. */}
-        {kanFaaProve ? <ProvGratisVedStart /> : null}
         {betaler ? null : (
         <Link
           href="/pricing"
