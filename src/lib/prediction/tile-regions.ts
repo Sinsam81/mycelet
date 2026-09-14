@@ -1,3 +1,5 @@
+import { haversineKm } from '@/lib/utils/geo-distance';
+
 export interface PredictionTileRegion {
   name: string;
   /**
@@ -101,4 +103,40 @@ export function predictionTileGridCells(
     }
   }
   return cells;
+}
+
+export interface NearestRegionMatch {
+  region: PredictionTileRegion;
+  /** 0 når punktet ligger inne i boksen; ellers storsirkelavstand til boksens senter, hele km. */
+  distanceKm: number;
+  inside: boolean;
+}
+
+/** Lenger unna enn dette har «nærmeste område» ingen mening — da får kortet den generelle etiketten. */
+export const NEAREST_REGION_MAX_KM = 60;
+
+/**
+ * Hvilket område et punkt hører til, til etiketten på forsidekortet.
+ *
+ * Inne i en boks: den regionen, avstand 0. Utenfor alle: den regionen hvis
+ * senter ligger nærmest, med avstanden i km — men bare innen 60 km. Lenger
+ * unna er svaret null, og kortet faller tilbake på den generelle etiketten
+ * («din posisjon» / standardområdet). Grensen er romslig med vilje: en bruker
+ * i Drammen skal se «nærmeste område: Oslo, 35 km», ikke «Sør-Norge».
+ */
+export function nearestRegion(lat: number, lng: number): NearestRegionMatch | null {
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  const inne = PREDICTION_TILE_REGIONS.find(
+    (r) => lat >= r.minLat && lat <= r.maxLat && lng >= r.minLng && lng <= r.maxLng
+  );
+  if (inne) return { region: inne, distanceKm: 0, inside: true };
+
+  let beste: NearestRegionMatch | null = null;
+  for (const r of PREDICTION_TILE_REGIONS) {
+    const km = haversineKm(lat, lng, (r.minLat + r.maxLat) / 2, (r.minLng + r.maxLng) / 2);
+    if (km <= NEAREST_REGION_MAX_KM && (!beste || km < beste.distanceKm)) {
+      beste = { region: r, distanceKm: km, inside: false };
+    }
+  }
+  return beste ? { ...beste, distanceKm: Math.round(beste.distanceKm) } : null;
 }

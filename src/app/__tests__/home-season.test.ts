@@ -51,7 +51,19 @@ describe('the card explains what sharing a position buys', () => {
     expect(card(locale).approximate).toBeTruthy();
   });
 
-  it.each(['nb', 'sv'])('%s admits the default is regional', (locale) => {
-    expect(card(locale).sharePositionBody).toMatch(/Sør-Norge|södra Norge/);
+  it.each(['nb', 'sv'])('%s admits which area the default forecast is for', (locale) => {
+    // The default follows the language (Oslo / Stockholm) and the card names the
+    // area it actually shows — never a hard-coded «Sør-Norge» on a Swedish screen.
+    expect(card(locale).sharePositionBody).toContain('{area}');
+    expect(card(locale).sharePositionBody).not.toMatch(/Sør-Norge|södra Norge/);
+  });
+
+  it.each(['nb', 'sv'])('%s can label a position just outside the covered areas', (locale) => {
+    expect(card(locale).nearestArea).toContain('{name}');
+    expect(card(locale).nearestArea).toContain('{km}');
+  });
+
+  it('the Swedish fallback label is not a Norwegian region', () => {
+    expect(card('sv').defaultRegion).not.toMatch(/Norge/);
   });
 });

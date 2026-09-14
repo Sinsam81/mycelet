@@ -20,6 +20,17 @@ export function erFlate(v: unknown): v is Flate {
   return typeof v === 'string' && (FLATER as readonly string[]).includes(v);
 }
 
+/**
+ * `omrade`-kolonnen bærer én ekstra opplysning per flate (bølge 1, sep 2026):
+ * - omrade: områdeslug (som før)
+ * - hjem: «egen» når forsidekortet viste brukerens eget område, «standard» når
+ *   det falt tilbake på standardområdet — så vi ser om kortet viser rett sted
+ * - tilbud: utløseren arket ble vist for, så trakten «ark → pris» kan leses
+ *   per utløser. Alt annet lagres som tom streng.
+ */
+export const HJEM_OMRADER = ['egen', 'standard'] as const;
+export const TILBUD_UTLOSERE = ['start', 'begrenset', 'andre-dag', 'forste-okt', 'omslag'] as const;
+
 const OSLO = new Intl.DateTimeFormat('sv-SE', {
   timeZone: 'Europe/Oslo',
   year: 'numeric',
@@ -45,6 +56,13 @@ export function isoUke(dagIso: string): string {
   const forsteJan = Date.UTC(aar, 0, 1);
   const uke = Math.ceil(((d.getTime() - forsteJan) / 86_400_000 + 1) / 7);
   return `${aar}-W${String(uke).padStart(2, '0')}`;
+}
+
+/** Dagen etter en YYYY-MM-DD-dato, ren UTC-regning som isoUke — «samme dag eller neste» i trakten ark → pris. */
+export function dagenEtter(dagIso: string): string {
+  const d = new Date(`${dagIso}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + 1);
+  return d.toISOString().slice(0, 10);
 }
 
 /** Nøkkel for «har vi alt meldt denne i dag?» i sessionStorage — sparer ett kall per sidevisning. */

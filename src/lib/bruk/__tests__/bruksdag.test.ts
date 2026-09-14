@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { bruksdagNokkel, erFlate, isoUke, osloDag } from '../bruksdag';
+import { bruksdagNokkel, dagenEtter, erFlate, isoUke, osloDag } from '../bruksdag';
+
+describe('dagenEtter', () => {
+  it('gir neste dag, også over måneds- og årsskifte', () => {
+    expect(dagenEtter('2026-09-14')).toBe('2026-09-15');
+    expect(dagenEtter('2026-09-30')).toBe('2026-10-01');
+    expect(dagenEtter('2026-12-31')).toBe('2027-01-01');
+    expect(dagenEtter('2028-02-28')).toBe('2028-02-29');
+  });
+});
 
 describe('osloDag', () => {
   it('bruker Oslo-dato, ikke UTC — 23:30Z i september er neste dag i Norge', () => {

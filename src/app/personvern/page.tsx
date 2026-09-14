@@ -100,6 +100,10 @@ export default async function PersonvernPage() {
             <div>
               <dt className="font-medium text-gray-900">{t('collectBruksdagerTerm')}</dt>
               <dd>{t('collectBruksdagerDesc')}</dd>
+              {/* Anonym dagsteller før konto i appen (migrasjon 070): bare et
+                  tall per dag og språk, ingen identifikator — derfor ikke
+                  persondata, men den skal likevel stå her. */}
+              <dd className="mt-1">{t('collectTellingerDesc')}</dd>
             </div>
             <div>
               <dt className="font-medium text-gray-900">{t('collectAlertTerm')}</dt>

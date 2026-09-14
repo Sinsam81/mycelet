@@ -4,7 +4,7 @@ import { createRequestLogger } from '@/lib/log/request';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { getClientKey, rateLimitResponse } from '@/lib/rate-limit/route';
 import { alleRegionSlugs } from '@/lib/prediction/region-slug';
-import { erFlate, osloDag } from '@/lib/bruk/bruksdag';
+import { HJEM_OMRADER, TILBUD_UTLOSERE, erFlate, osloDag } from '@/lib/bruk/bruksdag';
 
 /**
  * «Jeg så soppforholdene i dag» — én rad per bruker, dag og flate
@@ -41,14 +41,18 @@ export async function POST(request: NextRequest) {
   const flate = body.flate;
   if (!erFlate(flate)) return NextResponse.json({ error: 'Ugyldig flate' }, { status: 400 });
 
-  // Området er bare meningsfullt for områdesidene, og må være ett av våre —
-  // kolonnen er fritekst, og den ender i dagsrapporten.
+  // Kolonnen er fritekst og ender i dagsrapporten, så bare kjente verdier
+  // slipper inn: områdeslug for områdesidene (påkrevd), «egen»/«standard» for
+  // forsidekortet og utløseren for tilbudsarket (begge valgfrie, se bruksdag.ts).
   let omrade = '';
+  const onsket = typeof body.omrade === 'string' ? body.omrade : '';
   if (flate === 'omrade') {
-    if (typeof body.omrade !== 'string' || !GYLDIGE_OMRADER.has(body.omrade)) {
-      return NextResponse.json({ error: 'Ugyldig område' }, { status: 400 });
-    }
-    omrade = body.omrade;
+    if (!GYLDIGE_OMRADER.has(onsket)) return NextResponse.json({ error: 'Ugyldig område' }, { status: 400 });
+    omrade = onsket;
+  } else if (flate === 'hjem' && (HJEM_OMRADER as readonly string[]).includes(onsket)) {
+    omrade = onsket;
+  } else if (flate === 'tilbud' && (TILBUD_UTLOSERE as readonly string[]).includes(onsket)) {
+    omrade = onsket;
   }
 
   const { error } = await supabase

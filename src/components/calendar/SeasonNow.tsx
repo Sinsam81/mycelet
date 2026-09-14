@@ -15,6 +15,12 @@ import {
 } from '@/lib/utils/season-region';
 import type { Edibility } from '@/types/species';
 import { getSpeciesDisplayName } from '@/lib/utils/species-name';
+import {
+  getCurrentPositionIfGranted,
+  getCurrentPositionOnce,
+  isGeolocationAvailable
+} from '@/lib/hooks/useGeolocation';
+import { lagreHusketPosisjon, lesHusketPosisjon } from '@/lib/map/husket-posisjon';
 
 export interface CalendarSpecies {
   id: number;
@@ -73,45 +79,52 @@ export function SeasonNow({ species }: { species: CalendarSpecies[] }) {
   const [band, setBand] = useState<LatitudeBand | null>(null);
   const [personalized, setPersonalized] = useState(false);
   const [canRequest, setCanRequest] = useState(false);
-
-  const applyPosition = (lat: number) => {
-    setBand(latitudeBand(lat));
-    setPersonalized(true);
-  };
+  /** Kom båndet fra en fersk måling i denne åpningen? En husket posisjon kan være ei uke gammel. */
+  const [bekreftet, setBekreftet] = useState(false);
 
   // Vi spør aldri om posisjon bare for å bla i kalenderen. Vi tilpasser stille
-  // KUN hvis brukeren allerede har gitt tilgang; ellers står det en frivillig
-  // knapp (samme mønster som MushroomDayCard på forsiden). navigator.geolocation
-  // finnes ikke i iOS-WKWebView, så native blir stående på hele-Norden-vinduet —
-  // som er det videste vinduet, ikke et snevrere «Sør-Norge»-vindu.
+  // KUN hvis brukeren allerede har gitt tilgang (kartet er den som spør) —
+  // gjennom Capacitor-laget, så det virker i skallet også: iOS-WKWebView har
+  // ikke navigator.geolocation, og da sto alle app-brukere på hele-Norden-
+  // vinduet uten noen knapp. En husket posisjon fra kartet (husket-posisjon.ts)
+  // brukes med én gang. Den frivillige knappen står så lenge ingen fersk måling
+  // fra denne åpningen har bekreftet båndet — også med husket posisjon: den kan
+  // være ei uke gammel, og på Safari (ingen Permissions API) eller etter trukket
+  // tilgang kommer det aldri en fersk av seg selv (samme regel som forsidekortet).
   useEffect(() => {
-    if (typeof navigator === 'undefined' || !navigator.geolocation) return;
-    setCanRequest(true);
     let cancelled = false;
-    (async () => {
-      try {
-        const perm = await navigator.permissions?.query({ name: 'geolocation' as PermissionName });
-        if (perm?.state === 'granted') {
-          navigator.geolocation.getCurrentPosition(
-            (pos) => { if (!cancelled) applyPosition(pos.coords.latitude); },
-            () => {},
-            { timeout: 6000, maximumAge: 600000 }
-          );
-        }
-      } catch {
-        // permissions API unavailable — leave the opt-in button as the only path
+    const bruk = (lat: number, fersk: boolean) => {
+      setBand(latitudeBand(lat));
+      setPersonalized(true);
+      setBekreftet(fersk);
+    };
+    const start = async () => {
+      const husket = lesHusketPosisjon();
+      if (husket) bruk(husket.lat, false);
+      const fersk = await getCurrentPositionIfGranted();
+      if (cancelled) return;
+      if (fersk) {
+        lagreHusketPosisjon(fersk.latitude, fersk.longitude);
+        bruk(fersk.latitude, true);
+      } else {
+        setCanRequest(isGeolocationAvailable());
       }
-    })();
+    };
+    void start();
     return () => { cancelled = true; };
   }, []);
 
-  const requestPosition = () => {
-    if (!navigator.geolocation) return;
-    navigator.geolocation.getCurrentPosition(
-      (pos) => applyPosition(pos.coords.latitude),
-      () => {},
-      { timeout: 8000, maximumAge: 600000 }
-    );
+  // Brukerens eget trykk — da får vi be om tillatelse, via samme lag.
+  const requestPosition = async () => {
+    try {
+      const pos = await getCurrentPositionOnce();
+      lagreHusketPosisjon(pos.latitude, pos.longitude);
+      setBand(latitudeBand(pos.latitude));
+      setPersonalized(true);
+      setBekreftet(true);
+    } catch {
+      // Avslått eller utilgjengelig — knappen blir stående.
+    }
   };
 
   const now = new Date();
@@ -131,18 +144,24 @@ export function SeasonNow({ species }: { species: CalendarSpecies[] }) {
       <article className="space-y-3 rounded-2xl bg-white p-4 shadow-card">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="font-serif text-xl font-bold text-forest-900">{t('inSeasonNowHeading', { month: t(MONTH_KEYS[now.getMonth()]) })}</h2>
-          {personalized && label ? (
-            <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-900">
-              <MapPin className="h-3 w-3" /> {t('personalizedToPosition', { label })}
-            </span>
-          ) : canRequest ? (
-            <button
-              type="button"
-              onClick={requestPosition}
-              className="inline-flex items-center gap-1 rounded-full border border-gray-300 px-2.5 py-0.5 text-xs font-medium text-gray-700 transition hover:border-forest-400 hover:text-forest-800"
-            >
-              <MapPin className="h-3 w-3" /> {t('adaptToPosition')}
-            </button>
+          {(personalized && label) || (canRequest && !bekreftet) ? (
+            <div className="flex flex-wrap items-center gap-2">
+              {personalized && label ? (
+                <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-900">
+                  <MapPin className="h-3 w-3" /> {t('personalizedToPosition', { label })}
+                </span>
+              ) : null}
+              {/* Står ved siden av merket når båndet kom fra en husket posisjon. */}
+              {canRequest && !bekreftet ? (
+                <button
+                  type="button"
+                  onClick={() => void requestPosition()}
+                  className="inline-flex items-center gap-1 rounded-full border border-gray-300 px-2.5 py-0.5 text-xs font-medium text-gray-700 transition hover:border-forest-400 hover:text-forest-800"
+                >
+                  <MapPin className="h-3 w-3" /> {t('adaptToPosition')}
+                </button>
+              ) : null}
+            </div>
           ) : null}
         </div>
         {inSeason.length === 0 ? (

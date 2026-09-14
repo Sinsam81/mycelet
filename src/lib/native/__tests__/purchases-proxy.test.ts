@@ -46,18 +46,37 @@ const EKTE_METODER = new Set([
   'logIn',
   'getOfferings',
   'purchasePackage',
-  'restorePurchases'
+  'restorePurchases',
+  'checkTrialOrIntroductoryPriceEligibility'
 ]);
+
+/** Gratisuka slik App Store leverer den via RevenueCat: introPrice med pris 0, én uke. */
+const GRATIS_UKE = { price: 0, priceString: 'kr 0,00', cycles: 1, period: 'P1W', periodUnit: 'WEEK', periodNumberOfUnits: 1 };
 
 const getOfferings = vi.fn(async () => ({
   current: {
     identifier: 'default',
     availablePackages: [
-      { identifier: '$rc_monthly', packageType: 'MONTHLY', product: { identifier: 'no.mycelet.premium.monthly', priceString: 'kr 79,00' } },
-      { identifier: '$rc_annual', packageType: 'ANNUAL', product: { identifier: 'no.mycelet.seasonpass.yearly', priceString: 'kr 249,00' } }
+      {
+        identifier: '$rc_monthly',
+        packageType: 'MONTHLY',
+        product: { identifier: 'no.mycelet.premium.monthly', priceString: 'kr 79,00', introPrice: GRATIS_UKE }
+      },
+      {
+        identifier: '$rc_annual',
+        packageType: 'ANNUAL',
+        product: { identifier: 'no.mycelet.seasonpass.yearly', priceString: 'kr 249,00', introPrice: null }
+      }
     ]
   }
 }));
+
+/** Styres per test: hva Apple sier om Apple-ID-ens rett til introtilbudet, eller at kallet kaster (gammelt skall). */
+let kvalifisering: Record<string, { status: number }> | 'kaster' = {};
+const checkTrialOrIntroductoryPriceEligibility = vi.fn(async () => {
+  if (kvalifisering === 'kaster') throw new Error('"Purchases.checkTrialOrIntroductoryPriceEligibility()" is not implemented on ios');
+  return kvalifisering;
+});
 
 const ekte: Record<string, unknown> = {
   configure: vi.fn(async () => undefined),
@@ -65,7 +84,8 @@ const ekte: Record<string, unknown> = {
   logIn: vi.fn(async () => ({})),
   getOfferings,
   purchasePackage: vi.fn(),
-  restorePurchases: vi.fn()
+  restorePurchases: vi.fn(),
+  checkTrialOrIntroductoryPriceEligibility
 };
 
 /** Oppfører seg som Capacitors plugin-proxy: alt er kallbart, ukjent kaster. */
@@ -87,7 +107,10 @@ vi.mock('@revenuecat/purchases-capacitor', () => ({ Purchases: PurchasesProxy })
 vi.mock('../platform', () => ({ isNativePlatform: () => true }));
 vi.mock('@sentry/nextjs', () => ({ captureMessage: vi.fn(), captureException: vi.fn() }));
 
-afterEach(() => vi.unstubAllEnvs());
+afterEach(() => {
+  vi.unstubAllEnvs();
+  kvalifisering = {};
+});
 
 describe('plugin-en tåler å bli hentet gjennom en async-funksjon', () => {
   it('kaster ikke «Purchases.then() is not implemented» når tilbudene hentes', async () => {
@@ -108,6 +131,35 @@ describe('plugin-en tåler å bli hentet gjennom en async-funksjon', () => {
     const { getIapOffers } = await import('../purchases');
     const offers = await getIapOffers();
     expect(offers.find((o) => o.plan === 'season_pass')?.priceString).toBe('kr 249,00');
+  });
+
+  it('lover gratisuka bare på produktet som faktisk har den i butikken', async () => {
+    vi.stubEnv('NEXT_PUBLIC_REVENUECAT_APPLE_KEY', 'appl_test');
+    const { getIapOffers } = await import('../purchases');
+    const offers = await getIapOffers();
+    const premium = offers.find((o) => o.plan === 'premium');
+    const sesong = offers.find((o) => o.plan === 'season_pass');
+    expect(premium?.harProve).toBe(true);
+    expect(premium?.proveDager).toBe(7);
+    expect(sesong?.harProve).toBe(false);
+    expect(sesong?.proveDager).toBeNull();
+  });
+
+  it('trekker løftet når Apple sier at Apple-ID-en ikke kvalifiserer', async () => {
+    vi.stubEnv('NEXT_PUBLIC_REVENUECAT_APPLE_KEY', 'appl_test');
+    kvalifisering = { 'no.mycelet.premium.monthly': { status: 1 } }; // INTRO_ELIGIBILITY_STATUS_INELIGIBLE
+    const { getIapOffers } = await import('../purchases');
+    const offers = await getIapOffers();
+    expect(offers.find((o) => o.plan === 'premium')?.harProve).toBe(false);
+  });
+
+  it('et skall uten kvalifiseringsmetoden (kallet kaster) mister ikke tilbudene — løftet dømmes etter introPrice', async () => {
+    vi.stubEnv('NEXT_PUBLIC_REVENUECAT_APPLE_KEY', 'appl_test');
+    kvalifisering = 'kaster';
+    const { getIapOffers } = await import('../purchases');
+    const offers = await getIapOffers();
+    expect(offers).toHaveLength(2);
+    expect(offers.find((o) => o.plan === 'premium')?.harProve).toBe(true);
   });
 
   it('mocken etterligner faktisk Capacitor — ellers beviser testen ingenting', () => {

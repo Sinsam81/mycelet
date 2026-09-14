@@ -177,13 +177,15 @@ export function mapRevenueCatEvent(event: RevenueCatEvent): RevenueCatDecision {
       };
     }
     // Auto-renew off: access continues until expiration (Stripe-paritet:
-    // status stays active + cancel_at_period_end).
+    // status stays active + cancel_at_period_end). En oppsagt PRØVE forblir
+    // trialing — ellers så en avbrutt gratisuke ut som en betalende kunde i
+    // dagsrapporten (Stripe holder også trialing til prøven er ute).
     return {
       action: 'apply',
       kind: 'modify',
       update: {
         tier,
-        status: 'active',
+        status: event.period_type === 'TRIAL' ? 'trialing' : 'active',
         currentPeriodStart: periodStart,
         currentPeriodEnd: periodEnd,
         cancelAtPeriodEnd: true

@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import type { MapSpeciesParam, MapViewParams } from '@/lib/utils/map-view-params';
 import { lagreHusketUtsnitt, lesHusketUtsnitt, type HusketUtsnitt } from '@/lib/map/husket-utsnitt';
+import { lagreHusketPosisjon } from '@/lib/map/husket-posisjon';
 import { useLocale, useMessages, useTranslations } from 'next-intl';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Download, Filter, MoreHorizontal, Navigation, Trash2, X } from 'lucide-react';
@@ -62,6 +63,8 @@ import { byggLovendeOmraderGpx } from '@/lib/gpx/lovende-omrader';
 import { osloDag } from '@/lib/bruk/bruksdag';
 import { GpxKopierModal } from '@/components/gpx/GpxKopierModal';
 import { ProvGratisArk } from '@/components/billing/ProvGratisArk';
+import { ProveLofteTekst } from '@/components/billing/ProveLofteTekst';
+import { hentProveLofte } from '@/lib/hooks/useProveLofte';
 import {
   FORSTE_OKT_MS,
   KARTDAGER_NOKKEL,
@@ -390,7 +393,9 @@ export function MushroomMap({
   // Prøvetilbudet (src/lib/billing/provetilbud.ts): «andre dag» avgjøres ved
   // mount fra lokalt lagrede kartdager; «begrenset» når lovende områder viser
   // 3 av 12. Arket vises maks to ganger, aldri to ganger samme døgn.
-  const [visProvetilbud, setVisProvetilbud] = useState(false);
+  // Utløseren som fyrte følger med arket til bruksdag-raden («tilbud»/utløser),
+  // så trakten ark → pris kan leses per utløser. Null = ikke vist.
+  const [visProvetilbud, setVisProvetilbud] = useState<ProvetilbudUtloser | null>(null);
   const provetilbudUtloserRef = useRef<ProvetilbudUtloser | null>(null);
   // Første kartøkt: etter et halvt minutt har brukeren sett hva kartet er.
   const [provetilbudTikk, setProvetilbudTikk] = useState(0);
@@ -423,8 +428,14 @@ export function MushroomMap({
       return;
     }
     writeLocal(PROVETILBUD_NOKKEL, JSON.stringify(registrerVisning(tilstand, naaMs)));
-    setVisProvetilbud(true);
+    setVisProvetilbud(utloser);
   }, [topAccess, billing.isLoading, billing.data, hasOfflineAccess, kanFaaProve, provetilbudTikk]);
+  // Butikkens svar på om gratisuka finnes hentes tidlig, så arket ikke lover
+  // «7 dager gratis» før det vet (hentProveLofte husker svaret; nett svarer straks).
+  useEffect(() => {
+    if (billing.isLoading || hasOfflineAccess || !kanFaaProve) return;
+    void hentProveLofte();
+  }, [billing.isLoading, hasOfflineAccess, kanFaaProve]);
   const showOfflineUpsell = !billing.isLoading && !hasOfflineAccess;
 
   const prediction = usePrediction({
@@ -2074,6 +2085,7 @@ export function MushroomMap({
       // posRef oppdateres alltid — «Finn meg» og funnskjemaet trenger den —
       // men et husket utsnitt eller et søkt sted skal ikke yankes bort.
       posRef.current = { lat: latitude, lng: longitude };
+      lagreHusketPosisjon(latitude, longitude); // forsidekortet starter her neste gang (husket-posisjon.ts)
       if (searchedPlaceRef.current || husketUtsnittRef.current) return;
       if (mapRef.current) {
         mapRef.current.setView([latitude, longitude], 13);
@@ -2421,7 +2433,7 @@ export function MushroomMap({
                 </button>
               ) : (
                 <Link href="/pricing" className="rounded-lg px-2 py-2 text-xs font-medium text-forest-900 hover:bg-gray-100">
-                    ⭐ {t(kanFaaProve ? 'premiumTools' : 'premiumToolsUtenProve')}
+                    ⭐ {kanFaaProve ? <ProveLofteTekst med={t('premiumTools')} utenProve={t('premiumToolsUtenProve')} /> : t('premiumToolsUtenProve')}
                   </Link>
               )}
               <button
@@ -2450,15 +2462,19 @@ export function MushroomMap({
           </div>
         ) : null}
         {gpxTekst ? <GpxKopierModal tittel={t('gpxTopSpotsHeading')} gpx={gpxTekst} onClose={() => setGpxTekst(null)} /> : null}
-        {visProvetilbud ? <ProvGratisArk onIkkeNaa={() => setVisProvetilbud(false)} onStart={() => setVisProvetilbud(false)} /> : null}
+        {visProvetilbud ? (
+          <ProvGratisArk utloser={visProvetilbud} onIkkeNaa={() => setVisProvetilbud(null)} onStart={() => setVisProvetilbud(null)} />
+        ) : null}
         {/* Synlig også i appen — prissiden selger via App Store der. Bak
-            NonNativeOnly så ingen app-bruker dette (null prøveperioder, 9. sep 2026). */}
+            NonNativeOnly så ingen app-bruker dette (null prøveperioder, 9. sep 2026).
+            Gratisuka loves bare når butikken har sagt den finnes (ProveLofteTekst),
+            ellers motsier knappen arket rett over. */}
         {topAccess === 'free_limited' && topSpots ? (
           <Link
             href="/pricing"
             className="flex items-center gap-1.5 rounded-full bg-amber-500 px-3 py-1.5 text-xs font-semibold text-white shadow-lg hover:bg-amber-600"
           >
-            🔒 {t(kanFaaProve ? 'seeAll12Premium' : 'seeAll12PremiumUtenProve')}
+            🔒 {kanFaaProve ? <ProveLofteTekst med={t('seeAll12Premium')} utenProve={t('seeAll12PremiumUtenProve')} /> : t('seeAll12PremiumUtenProve')}
           </Link>
         ) : null}
         {FLAGS.tripMode && tripActive ? (
@@ -2583,7 +2599,7 @@ export function MushroomMap({
           <div className="mt-2 rounded border border-amber-300 bg-amber-50 px-2 py-2">
             <p className="text-xs text-amber-800">{t('offlineSaveRequiresPremium')}</p>
             <Link href="/pricing" className="text-xs font-medium text-amber-900 underline">
-              {t(kanFaaProve ? 'upgradePlan' : 'upgradePlanUtenProve')}
+              {kanFaaProve ? <ProveLofteTekst med={t('upgradePlan')} utenProve={t('upgradePlanUtenProve')} /> : t('upgradePlanUtenProve')}
             </Link>
           </div>
         ) : null}
