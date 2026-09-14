@@ -18,7 +18,7 @@ import { PULS_AAR_TILBAKE, beregnPuls, pulsVindu } from '@/lib/rapportpuls/puls'
  * prøves én gang til; feiler dagens tall, hoppes området over (ingen rad).
  */
 
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 async function tellMedRetry(region: (typeof PREDICTION_TILE_REGIONS)[number], fra: string, til: string): Promise<number | null> {
   const forste = await tellGbif(region, fra, til);

@@ -154,7 +154,7 @@ export interface Dagsrapport {
    * «steder» (Mine steder) fra migrasjon 066 — tallet vinterplanen trenger
    * for å avgjøre områdekartoteket.
    */
-  /** De tre områdene der folk registrerer mest over vanlig (bare med avvik). */
+  /** De tre områdene med størst avvik oppover (kan være negative i en stille uke — etiketten er nøytral). */
   puls: Array<{ region: string; siste7: number; avvikPst: number }>;
   bruk: {
     maalt: boolean;

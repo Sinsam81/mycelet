@@ -243,7 +243,7 @@ function byggRapportEpost(r: Dagsrapport, naa: Date) {
     ${rad('Best i dag', r.toppRegioner.map((t) => `${t.region} ${t.score}`).join(' · ') || '—')}
     ${rad('Snudde i natt', flankeTekst)}
     ${rad('Abonnerer på soppvarsel', String(r.varselabonnement))}
-    ${r.puls.length ? rad('Flest rapporter over vanlig (GBIF, uka som gikk)', r.puls.map((p) => `${p.region} ${p.siste7} (${p.avvikPst > 0 ? '+' : ''}${p.avvikPst} %)`).join(' · ')) : ''}
+    ${r.puls.length ? rad('Rapportpuls (GBIF, uka som gikk)', r.puls.map((p) => `${p.region} ${p.siste7} (${p.avvikPst > 0 ? '+' : ''}${p.avvikPst} %)`).join(' · ')) : ''}
   </table>
 
   <h2 style="font-size:14px;color:#1A3409;margin:22px 0 6px">Soppvarselet som trakt</h2>

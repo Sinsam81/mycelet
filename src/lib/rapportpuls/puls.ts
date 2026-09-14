@@ -1,5 +1,6 @@
 /**
- * Rapportpuls: rapportaktivitet i Artsobservasjoner/GBIF per område i uka som
+ * Rapportpuls: rapportaktivitet i GBIF (Artsobservasjoner og de andre norske
+ * datasettene der) per område i uka som
  * gikk, mot samme uke de foregående årene og mot uka før.
  *
  * Hva det ER: et tegn på at det skjer noe i skogen — folk som registrerer,
@@ -102,20 +103,20 @@ function trendDel(p: Puls, locale: 'nb' | 'sv'): string {
 const COPY = {
   nb: {
     over: (p: Puls, per: string) =>
-      `Uka ${per}: ${p.siste7} soppfunn registrert i Artsobservasjoner her, ${p.avvikPst} % over det vanlige for uka${trendDel(p, 'nb')}.`,
+      `Uka ${per}: ${p.siste7} soppfunn registrert i Artsobservasjoner/GBIF her, ${p.avvikPst} % over det vanlige for uka${trendDel(p, 'nb')}.`,
     under: (p: Puls, per: string) =>
-      `Uka ${per}: ${p.siste7} soppfunn registrert i Artsobservasjoner her, ${Math.abs(p.avvikPst ?? 0)} % under det vanlige for uka${trendDel(p, 'nb')}.`,
+      `Uka ${per}: ${p.siste7} soppfunn registrert i Artsobservasjoner/GBIF her, ${Math.abs(p.avvikPst ?? 0)} % under det vanlige for uka${trendDel(p, 'nb')}.`,
     vanlig: (p: Puls, per: string) =>
-      `Uka ${per}: ${p.siste7} soppfunn registrert i Artsobservasjoner her, omtrent som vanlig for uka${trendDel(p, 'nb')}.`,
+      `Uka ${per}: ${p.siste7} soppfunn registrert i Artsobservasjoner/GBIF her, omtrent som vanlig for uka${trendDel(p, 'nb')}.`,
     kilde: 'Rapporter fra folk som registrerer, alle arter, med en ukes etterslep — et tegn på aktivitet, ikke et kart over soppen.'
   },
   sv: {
     over: (p: Puls, per: string) =>
-      `Veckan ${per}: ${p.siste7} svampfynd registrerade i Artsobservasjoner här, ${p.avvikPst} % över det vanliga för veckan${trendDel(p, 'sv')}.`,
+      `Veckan ${per}: ${p.siste7} svampfynd registrerade i Artsobservasjoner/GBIF här, ${p.avvikPst} % över det vanliga för veckan${trendDel(p, 'sv')}.`,
     under: (p: Puls, per: string) =>
-      `Veckan ${per}: ${p.siste7} svampfynd registrerade i Artsobservasjoner här, ${Math.abs(p.avvikPst ?? 0)} % under det vanliga för veckan${trendDel(p, 'sv')}.`,
+      `Veckan ${per}: ${p.siste7} svampfynd registrerade i Artsobservasjoner/GBIF här, ${Math.abs(p.avvikPst ?? 0)} % under det vanliga för veckan${trendDel(p, 'sv')}.`,
     vanlig: (p: Puls, per: string) =>
-      `Veckan ${per}: ${p.siste7} svampfynd registrerade i Artsobservasjoner här, ungefär som vanligt för veckan${trendDel(p, 'sv')}.`,
+      `Veckan ${per}: ${p.siste7} svampfynd registrerade i Artsobservasjoner/GBIF här, ungefär som vanligt för veckan${trendDel(p, 'sv')}.`,
     kilde: 'Rapporter från folk som registrerar, alla arter, med en veckas eftersläpning — ett tecken på aktivitet, inte en karta över svampen.'
   }
 } as const;
@@ -133,5 +134,5 @@ export function pulsKilde(locale: 'nb' | 'sv' = 'nb'): string {
 /** Kort variant til X (280 tegn er trangt): bare når det er over vanlig. */
 export function pulsKortLinje(region: string, p: Puls | null | undefined): string | null {
   if (!p || p.nivaa !== 'over' || p.avvikPst === null) return null;
-  return `Artsobservasjoner uka ${pulsPeriode(p.fra, p.til)}: ${p.siste7} soppfunn i ${region}, ${p.avvikPst} % over vanlig.`;
+  return `Artsobservasjoner/GBIF uka ${pulsPeriode(p.fra, p.til)}: ${p.siste7} soppfunn i ${region}, ${p.avvikPst} % over vanlig.`;
 }
