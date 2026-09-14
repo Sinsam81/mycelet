@@ -7,6 +7,7 @@ import { ChevronDown, ChevronUp, X } from 'lucide-react';
 import { PredictionResponse } from '@/types/prediction';
 import type { Explanation } from '@/lib/utils/prediction-explanation';
 import { PredictionExplanation } from '@/components/prediction/PredictionExplanation';
+import { ProveLofteTekst } from '@/components/billing/ProveLofteTekst';
 import { getSpeciesDisplayName } from '@/lib/utils/species-name';
 import { COMPONENT_MAX } from '@/lib/utils/prediction';
 
@@ -195,7 +196,7 @@ export function HotspotPanel({ speciesId, kanFaaProve = false, data, explanation
             <div className="mt-2 rounded border border-amber-300 bg-amber-50 px-2 py-1.5">
               <p className="text-xs text-amber-800">{data.upsellMessage ?? t('freeLimited')}</p>
               <Link href="/pricing" className="text-xs font-medium text-amber-900 underline">
-                {t(kanFaaProve ? 'upgradeVegetation' : 'upgradeVegetationUtenProve')}
+                {kanFaaProve ? <ProveLofteTekst med={t('upgradeVegetation')} utenProve={t('upgradeVegetationUtenProve')} /> : t('upgradeVegetationUtenProve')}
               </Link>
             </div>
           ) : null}

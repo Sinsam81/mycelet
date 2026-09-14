@@ -29,10 +29,24 @@ interface UpsertCall {
 }
 
 let upserts: UpsertCall[] = [];
+let updates: UpsertCall[] = [];
 let existingBillingRow: Record<string, unknown> | null = null;
 let retrievedSubscription: unknown = null;
+let retrieveFeiler = false;
+/** Det auth.admin.getUserById svarer — brukeren bak abonnementet. */
+let adminUser: { data: { user: Record<string, unknown> | null }; error: { message: string } | null } = {
+  data: { user: { id: TEST_USER_ID, email: 'kunde@example.com', user_metadata: {} } },
+  error: null
+};
 
 const warnings: Array<{ msg: string; ctx?: Record<string, unknown> }> = [];
+const infos: Array<{ msg: string; ctx?: Record<string, unknown> }> = [];
+
+const epost = vi.hoisted(() => ({
+  sendEpost: vi.fn(async () => ({ ok: true, detalj: 'sendt' })),
+  manglendeEpostKonfig: vi.fn((): string[] => [])
+}));
+vi.mock('@/lib/email/send', () => epost);
 
 /**
  * Minimal Supabase-etterligning. Nok til at ruta kommer gjennom
@@ -49,14 +63,18 @@ function makeAdminClient() {
           return { data: existingBillingRow, error: null };
         },
         insert: async () => ({ error: null }),
-        update: () => ({ eq: async () => ({ error: null }) }),
+        update: (values: Record<string, unknown>) => {
+          updates.push({ table, values });
+          return { eq: async () => ({ error: null }) };
+        },
         upsert: async (values: Record<string, unknown>) => {
           upserts.push({ table, values });
           return { error: null };
         }
       };
       return builder;
-    }
+    },
+    auth: { admin: { getUserById: async () => adminUser } }
   };
 }
 
@@ -67,13 +85,20 @@ vi.mock('@/lib/stripe/server', () => ({
     // Signaturen verifiseres ikke her — den er testet av Stripe selv. Etter
     // verifisering er det nettopp dette constructEvent gjør: parser kroppen.
     webhooks: { constructEvent: (rawBody: string) => JSON.parse(rawBody) },
-    subscriptions: { retrieve: async () => retrievedSubscription }
+    subscriptions: {
+      retrieve: async () => {
+        if (retrieveFeiler) throw new Error('Stripe nede');
+        return retrievedSubscription;
+      }
+    }
   })
 }));
 
 vi.mock('@/lib/log/request', () => {
   const logger = {
-    info: vi.fn(),
+    info: (msg: string, ctx?: Record<string, unknown>) => {
+      infos.push({ msg, ctx });
+    },
     debug: vi.fn(),
     trace: vi.fn(),
     error: vi.fn(),
@@ -105,9 +130,18 @@ function billingUpsert() {
 
 beforeEach(() => {
   upserts = [];
+  updates = [];
   warnings.length = 0;
+  infos.length = 0;
   existingBillingRow = null;
   retrievedSubscription = null;
+  retrieveFeiler = false;
+  adminUser = { data: { user: { id: TEST_USER_ID, email: 'kunde@example.com', user_metadata: {} } }, error: null };
+  epost.sendEpost.mockReset();
+  epost.sendEpost.mockResolvedValue({ ok: true, detalj: 'sendt' });
+  epost.manglendeEpostKonfig.mockReset();
+  epost.manglendeEpostKonfig.mockReturnValue([]);
+  process.env.NEXT_PUBLIC_APP_URL = 'https://www.mycelet.com';
   process.env.STRIPE_WEBHOOK_SECRET = 'whsec_test';
   process.env.STRIPE_PRICE_PREMIUM_MONTHLY = TEST_PRICE_PREMIUM;
   process.env.STRIPE_PRICE_SEASON_PASS = 'price_1SeasonPassTest';
@@ -215,5 +249,122 @@ describe('vernet mot å overkjøre et aktivt Apple-abonnement står', () => {
 
     await postEvent(dahliaSubscriptionEvent({ type: 'customer.subscription.deleted', status: 'canceled' }));
     expect(upserts.find((u) => u.table === 'billing_subscriptions')).toBeUndefined();
+  });
+});
+
+/**
+ * Tre dager før gratisuka blir til et trekk: én e-post, i kundens språk, med
+ * beløpet fra prisobjektet og lenke til der man sier opp. Og uansett hva som
+ * går galt med sendingen: 200 og «processed». Et 4xx hadde fått Stripe til å
+ * prøve på nytt i tre døgn — og da er prøveperioden over.
+ */
+describe('customer.subscription.trial_will_end', () => {
+  const OM_TRE_DAGER = () => Math.floor(Date.now() / 1000) + 3 * 86_400;
+
+  function trialEvent(extra: Parameters<typeof dahliaSubscriptionEvent>[0] = {}) {
+    return dahliaSubscriptionEvent({ type: 'customer.subscription.trial_will_end', status: 'trialing', trialEnd: OM_TRE_DAGER(), ...extra });
+  }
+
+  function sisteHendelsesStatus(): unknown {
+    const rader = updates.filter((u) => u.table === 'billing_webhook_events');
+    return rader[rader.length - 1]?.values.status;
+  }
+
+  function sendtEpost() {
+    expect(epost.sendEpost).toHaveBeenCalledTimes(1);
+    const [args] = epost.sendEpost.mock.calls[0] as unknown as [
+      { til: string; emne: string; html: string; tekst: string; idempotensNokkel?: string }
+    ];
+    return args;
+  }
+
+  it('sender én e-post med beløp fra prisen, plannavn fra pris-id, lenke til prissiden og idempotensnøkkel per abonnement', async () => {
+    const res = await postEvent(trialEvent());
+    expect(res.status).toBe(200);
+
+    const e = sendtEpost();
+    expect(e.til).toBe('kunde@example.com');
+    expect(e.emne).toMatch(/3 dager/);
+    expect(e.tekst).toContain('Premium');
+    expect(e.tekst).toContain('Da trekkes 79 kr');
+    expect(e.tekst).toContain('https://www.mycelet.com/pricing');
+    expect(e.tekst).not.toContain('/profile');
+    expect(e.idempotensNokkel).toBe(`stripe/prove-slutt/${TEST_SUBSCRIPTION_ID}`);
+
+    expect(sisteHendelsesStatus()).toBe('processed');
+    // Raden i billing_subscriptions rører den ikke — det gjør subscription.updated.
+    expect(upserts.find((u) => u.table === 'billing_subscriptions')).toBeUndefined();
+  });
+
+  it('språket kommer fra user_metadata.sprak', async () => {
+    adminUser = { data: { user: { id: TEST_USER_ID, email: 'kund@example.com', user_metadata: { sprak: 'sv' } } }, error: null };
+    await postEvent(trialEvent());
+    const e = sendtEpost();
+    expect(e.emne).toContain('provperiod');
+    expect(e.tekst).toContain('säger upp');
+  });
+
+  it('uten Resend-oppsett: advarsel, ingen sending, hendelsen likevel behandlet', async () => {
+    epost.manglendeEpostKonfig.mockReturnValue(['RESEND_API_KEY']);
+    const res = await postEvent(trialEvent());
+    expect(res.status).toBe(200);
+    expect(epost.sendEpost).not.toHaveBeenCalled();
+    expect(warnings.map((w) => w.msg)).toContain('stripe.prove_paaminnelse.epost_ikke_konfigurert');
+    expect(sisteHendelsesStatus()).toBe('processed');
+  });
+
+  it('sendEpost svarer ok:false → 200 og «processed», med advarsel', async () => {
+    epost.sendEpost.mockResolvedValue({ ok: false, detalj: 'Resend 500' });
+    const res = await postEvent(trialEvent());
+    expect(res.status).toBe(200);
+    expect(warnings.map((w) => w.msg)).toContain('stripe.prove_paaminnelse.sending_feilet');
+    expect(sisteHendelsesStatus()).toBe('processed');
+  });
+
+  it('sendEpost kaster → fortsatt 200 og «processed», aldri en retry-utløsende feil', async () => {
+    epost.sendEpost.mockRejectedValue(new Error('nettverk'));
+    const res = await postEvent(trialEvent());
+    expect(res.status).toBe(200);
+    expect(warnings.find((w) => w.msg === 'stripe.prove_paaminnelse.sending_feilet')?.ctx).toMatchObject({ detalj: 'nettverk' });
+    expect(sisteHendelsesStatus()).toBe('processed');
+  });
+
+  it('har kunden alt sagt opp, sendes ingenting — men hendelsen er behandlet', async () => {
+    await postEvent(trialEvent({ cancelAtPeriodEnd: true }));
+    expect(epost.sendEpost).not.toHaveBeenCalled();
+    expect(infos.find((i) => i.msg === 'stripe.prove_paaminnelse.hoppet_over')?.ctx).toMatchObject({ grunn: 'allerede-sagt-opp' });
+    expect(sisteHendelsesStatus()).toBe('processed');
+  });
+
+  it('kampanjekode: hendelsen bærer bare rabattens id, så kupongen hentes og trekkes fra beløpet', async () => {
+    retrievedSubscription = {
+      ...(trialEvent().data.object as Record<string, unknown>),
+      discounts: [{ id: 'di_1Abc', object: 'discount', coupon: { percent_off: 50, amount_off: null, currency: null } }]
+    };
+    await postEvent(trialEvent({ discounts: ['di_1Abc'] }));
+    const e = sendtEpost();
+    expect(e.tekst).toContain('Da trekkes 39,50 kr');
+    expect(e.tekst).not.toContain('79 kr');
+  });
+
+  it('kan rabatten ikke hentes, sendes e-posten uten tall — aldri med listeprisen', async () => {
+    retrieveFeiler = true;
+    const res = await postEvent(trialEvent({ discounts: ['di_1Abc'] }));
+    expect(res.status).toBe(200);
+    const e = sendtEpost();
+    expect(e.tekst).not.toContain('79 kr');
+    expect(e.tekst).toMatch(/rabatt/i);
+    expect(e.tekst).toContain('https://www.mycelet.com/pricing');
+    expect(warnings.map((w) => w.msg)).toContain('stripe.prove_paaminnelse.rabatt_ukjent');
+    expect(sisteHendelsesStatus()).toBe('processed');
+  });
+
+  it('uten e-postadresse på kontoen sendes ingenting, hendelsen er behandlet', async () => {
+    adminUser = { data: { user: null }, error: { message: 'User not found' } };
+    const res = await postEvent(trialEvent());
+    expect(res.status).toBe(200);
+    expect(epost.sendEpost).not.toHaveBeenCalled();
+    expect(warnings.map((w) => w.msg)).toContain('stripe.prove_paaminnelse.ingen_epostadresse');
+    expect(sisteHendelsesStatus()).toBe('processed');
   });
 });

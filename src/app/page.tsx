@@ -7,6 +7,7 @@ import { LandingPage } from '@/components/landing/LandingPage';
 import { EdibilityBadge } from '@/components/ui/EdibilityBadge';
 import { getBillingCapabilities, getUserBillingSubscription } from '@/lib/billing/subscription';
 import { ProvGratisVedStart } from '@/components/billing/ProvGratisVedStart';
+import { ProveLofteTekst } from '@/components/billing/ProveLofteTekst';
 import { MushroomDayCard } from '@/components/home/MushroomDayCard';
 import { BestRegionsCard } from '@/components/home/BestRegionsCard';
 import { VarselCta } from '@/components/soppforhold/VarselCta';
@@ -229,12 +230,14 @@ export default async function HomePage() {
           ) : null}
         </header>
 
+        {/* Før kortet i treet: arket lytter etter «kortet har data» (og introen),
+            og lytteren må stå klar før kortets egen mount-effekt kan sende. */}
+        {kanFaaProve ? <ProvGratisVedStart /> : null}
         <MushroomDayCard />
 
         {/* Tilbudet rett under forholdene, og én gang som ark ved første innlogging —
             gratisbrukere vi betaler for å hente inn, så aldri prissiden (1 av 12 kartbrukere,
             11. sep 2026). Betalende ser ingenting av dette. */}
-        {kanFaaProve ? <ProvGratisVedStart /> : null}
         {betaler ? null : (
         <Link
           href="/pricing"
@@ -266,7 +269,9 @@ export default async function HomePage() {
                 </p>
               </NonNativeOnly>
               <span className="ml-auto rounded-full bg-white px-4 py-2 text-sm font-semibold text-forest-900">
-                {kanFaaProve ? t('premiumSeePlans') : t('premiumSeePlansNeutral')}
+                {/* «Prøv gratis» bare når butikken faktisk gir gratisuka — i appen
+                    avgjør App Store det, og knappen skal ikke love mer enn arket. */}
+                {kanFaaProve ? <ProveLofteTekst med={t('premiumSeePlans')} utenProve={t('premiumSeePlansNeutral')} /> : t('premiumSeePlansNeutral')}
               </span>
             </div>
           </Link>

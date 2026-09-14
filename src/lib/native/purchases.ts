@@ -2,6 +2,7 @@ import * as Sentry from '@sentry/nextjs';
 import { isNativePlatform } from './platform';
 import { IapPlan, guessTierFromProductId } from '@/lib/billing/plans';
 import { PlanViewState, getBlockingPaidPlan } from '@/lib/billing/plan-state';
+import { lesProve, type IntroPrisLike } from '@/lib/billing/iap-prove';
 
 /**
  * RevenueCat IAP wrapper for the native shells (Apple App Store rule 3.1.1
@@ -27,6 +28,14 @@ export interface IapOffer {
    * the App Store price tier can differ from the Stripe NOK price. */
   priceString: string;
   packageIdentifier: string;
+  /**
+   * Butikken gir en gratis prøveperiode på dette produktet (introPrice med
+   * pris 0, og Apple-ID-en er ikke meldt ukvalifisert). BARE da får UI-et
+   * love «7 dager gratis» — se src/lib/billing/iap-prove.ts.
+   */
+  harProve: boolean;
+  /** Prøveperiodens lengde i dager når den er kjent (Apple: som regel 7). */
+  proveDager: number | null;
   /** The raw RevenueCat package, passed back on purchase. */
   rcPackage: PurchasesPackageLike;
 }
@@ -37,7 +46,7 @@ export type IapPurchaseOutcome = 'success' | 'cancelled' | 'blocked-active-plan'
 export interface PurchasesPackageLike {
   identifier: string;
   packageType: string;
-  product: { identifier: string; priceString: string };
+  product: { identifier: string; priceString: string; introPrice?: IntroPrisLike | null };
 }
 interface CustomerInfoLike {
   entitlements: { active: Record<string, unknown> };
@@ -51,6 +60,8 @@ interface PurchasesPluginLike {
   }>;
   purchasePackage(options: { aPackage: PurchasesPackageLike }): Promise<{ customerInfo: CustomerInfoLike }>;
   restorePurchases(): Promise<{ customerInfo: CustomerInfoLike }>;
+  /** iOS: om Apple-ID-en kan få introtilbudet (INTRO_ELIGIBILITY_STATUS). Valgfri — eldre skall kan mangle den. */
+  checkTrialOrIntroductoryPriceEligibility?(options: { productIdentifiers: string[] }): Promise<Record<string, { status: number }>>;
 }
 
 let configuredForUser: string | null = null;
@@ -165,15 +176,20 @@ export async function getIapOffers(): Promise<IapOffer[]> {
     return [];
   }
 
+  const kvalifisering = await hentKvalifisering(purchases, packages);
+
   const offers: IapOffer[] = [];
   for (const pkg of packages) {
     const plan = packageToPlan(pkg);
     if (!plan) continue;
+    const prove = lesProve(pkg.product.introPrice, kvalifisering[pkg.product.identifier]);
     offers.push({
       plan,
       productId: pkg.product.identifier,
       priceString: pkg.product.priceString,
       packageIdentifier: pkg.identifier,
+      harProve: prove.harProve,
+      proveDager: prove.proveDager,
       rcPackage: pkg
     });
   }
@@ -185,6 +201,29 @@ export async function getIapOffers(): Promise<IapOffer[]> {
     });
   }
   return offers;
+}
+
+/**
+ * Kan denne Apple-ID-en få introtilbudet? Best mulig svar, aldri en feil:
+ * mangler metoden i skallet, eller kaster den, vet vi ingenting (tom map),
+ * og lesProve dømmer da etter introPrice alene. Sentry får en linje, for
+ * uten den hadde et løfte som ikke holder vært usynlig.
+ */
+async function hentKvalifisering(purchases: PurchasesPluginLike, packages: PurchasesPackageLike[]): Promise<Record<string, number>> {
+  if (typeof purchases.checkTrialOrIntroductoryPriceEligibility !== 'function') return {};
+  try {
+    const svar = await purchases.checkTrialOrIntroductoryPriceEligibility({
+      productIdentifiers: packages.map((p) => p.product.identifier)
+    });
+    const ut: Record<string, number> = {};
+    for (const [id, v] of Object.entries(svar ?? {})) {
+      if (v && typeof v.status === 'number') ut[id] = v.status;
+    }
+    return ut;
+  } catch (error) {
+    Sentry.captureException(error, { tags: { område: 'iap', grunn: 'kvalifisering-kastet' } });
+    return {};
+  }
 }
 
 /**

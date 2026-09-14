@@ -10,7 +10,9 @@ import { useAuth } from '@/lib/hooks/useAuth';
  * `mycelet:onboarding-done` window event so the cookie notice can wait its
  * turn instead of being the first thing a new user ever sees.
  */
-const STORAGE_KEY = 'mycelet:onboarding-v1';
+/** Lagringsnøkkelen «introen er sett» — delt med cookie-notisen og tilbudsarket, som begge venter på introen. */
+export const ONBOARDING_STORAGE_KEY = 'mycelet:onboarding-v1';
+const STORAGE_KEY = ONBOARDING_STORAGE_KEY;
 export const ONBOARDING_DONE_EVENT = 'mycelet:onboarding-done';
 
 const STEPS = [
