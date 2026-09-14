@@ -23,10 +23,9 @@ import type { ForestProperties, ForestType, HabitatQuery } from './types';
 const SR16_WMS_URL = 'https://wms.nibio.no/cgi-bin/sr16';
 
 /**
- * Layers queried per point, in a FIXED order. Parsing is positional (see
- * parseSr16Html), so the order here is the contract — don't reorder without
- * updating the parser. We only request the three layers that map onto
- * ForestProperties fields.
+ * Layers queried per point. Parsing is keyed on each response block's
+ * header (see parseSr16Html), so the order here no longer matters. We only
+ * request the three layers that map onto ForestProperties fields.
  */
 const SR16_LAYERS = ['SRRTRESLAG', 'SRRBONITET', 'SRRVOLMB'] as const;
 type Sr16Layer = (typeof SR16_LAYERS)[number];
@@ -54,29 +53,65 @@ export function isWithinNorway(query: HabitatQuery): boolean {
  * GetFeatureInfo HTML.
  *
  * NIBIO quirks this works around:
- *   - The response is one concatenated HTML document per layer, in query
- *     order (not a single multi-table doc).
+ *   - The response is one concatenated HTML document per layer (not a single
+ *     multi-table doc), each headed «Skogressurskart (<LAYER> raster)».
  *   - The value isn't in a clean attribute — it sits inside a JS guard
  *     `if (<value> == 9999) { ... } else { ... }`, where <value> is the raw
  *     pixel. We read it from there.
- *   - Layer-name headers are unreliable (NIBIO's own template mislabels
- *     SRRVOLMB as "SSRVOLMB"), so we map values positionally by query order
- *     rather than by header text.
+ *   - NIBIO's own template mislabels SRRVOLMB as "SSRVOLMB" in the header;
+ *     normalised below.
+ *   - ⚠️ When a layer is nodata at the pixel, NIBIO OMITS that layer's whole
+ *     sub-document instead of returning -9999. The first version of this
+ *     parser mapped values positionally by query order, so a missing
+ *     SRRBONITET block made the standing volume be read as the site index
+ *     (a 65 m³/ha stand became «bonitet 65», which clears the ≥ 14 rich-soil
+ *     bonus in habitat.ts and corrupts the soil factor in the nightly tiles).
+ *     Measured 0–14 % of forest cells per region (review 2026-09-14, ten
+ *     independent live reproductions — docs/mikro-prediksjon-gjennomgang.md).
+ *     Values are therefore keyed on the header; the positional reading is
+ *     kept only as a fallback for a response without headers.
  *   - nodata is -9999 (and any negative); real values for these layers are
  *     always >= 0.
  */
+const SR16_HEADER = /Skogressurskart \((S[SR]R[A-Z]+) raster\)/g;
+const SR16_VALUE = /\((-?\d+) == 9999\)/;
+
+function normaliserLagnavn(navn: string): Sr16Layer | null {
+  const n = navn === 'SSRVOLMB' ? 'SRRVOLMB' : navn;
+  return (SR16_LAYERS as readonly string[]).includes(n) ? (n as Sr16Layer) : null;
+}
+
+function lesVerdi(segment: string): number | null {
+  const m = segment.match(SR16_VALUE);
+  if (!m) return null;
+  const value = Number(m[1]);
+  return Number.isFinite(value) && value >= 0 ? value : null;
+}
+
 export function parseSr16Html(html: string): Record<Sr16Layer, number | null> {
   const result: Record<Sr16Layer, number | null> = {
     SRRTRESLAG: null,
     SRRBONITET: null,
     SRRVOLMB: null
   };
-  const matches = [...html.matchAll(/\((-?\d+) == 9999\)/g)];
-  SR16_LAYERS.forEach((layer, idx) => {
-    const match = matches[idx];
-    if (!match) return;
-    const value = Number(match[1]);
-    result[layer] = Number.isFinite(value) && value >= 0 ? value : null;
+  const headers = [...html.matchAll(SR16_HEADER)];
+  if (headers.length === 0) {
+    // Ingen overskrifter: gammel posisjonell lesing, i spørrerekkefølge.
+    const matches = [...html.matchAll(new RegExp(SR16_VALUE.source, 'g'))];
+    SR16_LAYERS.forEach((layer, idx) => {
+      const match = matches[idx];
+      if (!match) return;
+      const value = Number(match[1]);
+      result[layer] = Number.isFinite(value) && value >= 0 ? value : null;
+    });
+    return result;
+  }
+  headers.forEach((h, i) => {
+    const layer = normaliserLagnavn(h[1]);
+    if (!layer) return;
+    const start = h.index ?? 0;
+    const end = headers[i + 1]?.index ?? html.length;
+    result[layer] = lesVerdi(html.slice(start, end));
   });
   return result;
 }
@@ -141,14 +176,17 @@ export async function getForestProperties(query: HabitatQuery): Promise<ForestPr
 
   const values = parseSr16Html(html);
 
-  // No treslag = no forest cell here. Return null rather than a neutral
-  // 'apent' guess — we genuinely don't know what the cell is.
-  if (values.SRRTRESLAG === null) {
+  // Nothing at all = no forest cell here (water, urban, bare rock). Return
+  // null rather than a neutral guess — we genuinely don't know what it is.
+  // A cell with treslag missing but bonitet/volume present IS forest (seen
+  // live at 60.2602, 5.2623: treslag −9999, bonitet 23, 732 m³/ha); the
+  // first version threw the whole cell away in that case.
+  if (values.SRRTRESLAG === null && values.SRRBONITET === null && values.SRRVOLMB === null) {
     return null;
   }
 
   return {
-    forestType: TRESLAG_TO_FOREST_TYPE[values.SRRTRESLAG] ?? 'ukjent',
+    forestType: values.SRRTRESLAG === null ? 'ukjent' : (TRESLAG_TO_FOREST_TYPE[values.SRRTRESLAG] ?? 'ukjent'),
     // SR16's public WMS exposes no stand-age layer; height/volume are
     // maturity proxies we can fold in later. Null here makes habitat
     // scoring skip the age term rather than guess.
