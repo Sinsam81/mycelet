@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import type { MapSpeciesParam, MapViewParams } from '@/lib/utils/map-view-params';
 import { lagreHusketUtsnitt, lesHusketUtsnitt, type HusketUtsnitt } from '@/lib/map/husket-utsnitt';
+import { lagreHusketPosisjon } from '@/lib/map/husket-posisjon';
 import { useLocale, useMessages, useTranslations } from 'next-intl';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Download, Filter, MoreHorizontal, Navigation, Trash2, X } from 'lucide-react';
@@ -2074,6 +2075,7 @@ export function MushroomMap({
       // posRef oppdateres alltid — «Finn meg» og funnskjemaet trenger den —
       // men et husket utsnitt eller et søkt sted skal ikke yankes bort.
       posRef.current = { lat: latitude, lng: longitude };
+      lagreHusketPosisjon(latitude, longitude); // forsidekortet starter her neste gang (husket-posisjon.ts)
       if (searchedPlaceRef.current || husketUtsnittRef.current) return;
       if (mapRef.current) {
         mapRef.current.setView([latitude, longitude], 13);

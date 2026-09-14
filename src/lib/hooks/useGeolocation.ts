@@ -17,20 +17,26 @@ const POSITION_OPTIONS = {
 };
 
 /**
- * One-shot current position that works in BOTH the browser and the native
- * (Capacitor) shell. iOS WKWebView does not implement `navigator.geolocation`,
- * so the native shell must go through the Capacitor Geolocation plugin. Use this
- * everywhere instead of calling `navigator.geolocation` directly (which silently
- * does nothing in the iOS app).
+ * Grov, rask og stille — til forsidekortet og kalenderen. Prognosen der er
+ * regional, så ~1 km holder, og en ti minutter gammel posisjon er like god som
+ * en fersk. Fire sekunder: kortet skal ikke stå og vente på en kald GPS.
  */
-export async function getCurrentPositionOnce(): Promise<{ latitude: number; longitude: number }> {
+const SILENT_POSITION_OPTIONS = {
+  enableHighAccuracy: false,
+  timeout: 4_000,
+  maximumAge: 600_000
+};
+
+export interface Fix {
+  latitude: number;
+  longitude: number;
+}
+
+/** Selve oppslaget, uten tillatelsesspørsmål — kalleren har avklart tillatelsen først. */
+async function readCurrentPosition(options: typeof POSITION_OPTIONS): Promise<Fix> {
   if (isNativePlatform()) {
     const { Geolocation } = await import('@capacitor/geolocation');
-    const permission = await Geolocation.requestPermissions();
-    if (permission.location === 'denied') {
-      throw new Error('Posisjonstilgang er avslått. Slå den på i Innstillinger for å bruke kartet.');
-    }
-    const position = await Geolocation.getCurrentPosition(POSITION_OPTIONS);
+    const position = await Geolocation.getCurrentPosition(options);
     return { latitude: position.coords.latitude, longitude: position.coords.longitude };
   }
 
@@ -42,9 +48,72 @@ export async function getCurrentPositionOnce(): Promise<{ latitude: number; long
     navigator.geolocation.getCurrentPosition(
       (position) => resolve({ latitude: position.coords.latitude, longitude: position.coords.longitude }),
       (error) => reject(new Error(error.message)),
-      POSITION_OPTIONS
+      options
     );
   });
+}
+
+/**
+ * One-shot current position that works in BOTH the browser and the native
+ * (Capacitor) shell. iOS WKWebView does not implement `navigator.geolocation`,
+ * so the native shell must go through the Capacitor Geolocation plugin. Use this
+ * everywhere instead of calling `navigator.geolocation` directly (which silently
+ * does nothing in the iOS app).
+ *
+ * PROMPTS for permission when it has not been decided yet — right for the map
+ * and for an explicit «Min posisjon» tap. Surfaces that must never prompt on
+ * their own (the home card, the calendar) use `getCurrentPositionIfGranted`.
+ */
+export async function getCurrentPositionOnce(): Promise<Fix> {
+  if (isNativePlatform()) {
+    const { Geolocation } = await import('@capacitor/geolocation');
+    const permission = await Geolocation.requestPermissions();
+    if (permission.location === 'denied') {
+      throw new Error('Posisjonstilgang er avslått. Slå den på i Innstillinger for å bruke kartet.');
+    }
+  }
+  return readCurrentPosition(POSITION_OPTIONS);
+}
+
+/** Finnes det en posisjonskilde å be om i det hele tatt? I skallet alltid (Capacitor), på nett bare med navigator.geolocation. */
+export function isGeolocationAvailable(): boolean {
+  return isNativePlatform() || (typeof navigator !== 'undefined' && !!navigator.geolocation);
+}
+
+/**
+ * Er posisjonstilgang ALLEREDE gitt? Spør aldri. I skallet via Capacitors
+ * checkPermissions (iOS: «while using»/«always» = granted); på nett via
+ * Permissions API. Safari mangler den for geolocation og kaster — det teller
+ * som «vet ikke», altså false, og da står den huskede posisjonen for tur.
+ */
+export async function hasGeolocationPermission(): Promise<boolean> {
+  try {
+    if (isNativePlatform()) {
+      const { Geolocation } = await import('@capacitor/geolocation');
+      const status = await Geolocation.checkPermissions();
+      return status.location === 'granted' || status.coarseLocation === 'granted';
+    }
+    if (typeof navigator === 'undefined' || !navigator.permissions?.query) return false;
+    const perm = await navigator.permissions.query({ name: 'geolocation' as PermissionName });
+    return perm.state === 'granted';
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Posisjon uten å spørre: null hvis tilgangen ikke alt er gitt, hvis oppslaget
+ * feiler, eller hvis det tar mer enn fire sekunder. Grov nøyaktighet — den som
+ * kaller, regner regionalt. Dette er stien forsidekortet og kalenderen bruker
+ * ved hver åpning; de får aldri vise en tillatelsesdialog selv.
+ */
+export async function getCurrentPositionIfGranted(): Promise<Fix | null> {
+  if (!(await hasGeolocationPermission())) return null;
+  try {
+    return await readCurrentPosition(SILENT_POSITION_OPTIONS);
+  } catch {
+    return null;
+  }
 }
 
 export interface AccurateFix {

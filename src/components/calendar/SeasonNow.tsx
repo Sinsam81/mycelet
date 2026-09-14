@@ -15,6 +15,12 @@ import {
 } from '@/lib/utils/season-region';
 import type { Edibility } from '@/types/species';
 import { getSpeciesDisplayName } from '@/lib/utils/species-name';
+import {
+  getCurrentPositionIfGranted,
+  getCurrentPositionOnce,
+  isGeolocationAvailable
+} from '@/lib/hooks/useGeolocation';
+import { lagreHusketPosisjon, lesHusketPosisjon } from '@/lib/map/husket-posisjon';
 
 export interface CalendarSpecies {
   id: number;
@@ -74,44 +80,45 @@ export function SeasonNow({ species }: { species: CalendarSpecies[] }) {
   const [personalized, setPersonalized] = useState(false);
   const [canRequest, setCanRequest] = useState(false);
 
-  const applyPosition = (lat: number) => {
-    setBand(latitudeBand(lat));
-    setPersonalized(true);
-  };
-
   // Vi spør aldri om posisjon bare for å bla i kalenderen. Vi tilpasser stille
-  // KUN hvis brukeren allerede har gitt tilgang; ellers står det en frivillig
-  // knapp (samme mønster som MushroomDayCard på forsiden). navigator.geolocation
-  // finnes ikke i iOS-WKWebView, så native blir stående på hele-Norden-vinduet —
-  // som er det videste vinduet, ikke et snevrere «Sør-Norge»-vindu.
+  // KUN hvis brukeren allerede har gitt tilgang (kartet er den som spør) —
+  // gjennom Capacitor-laget, så det virker i skallet også: iOS-WKWebView har
+  // ikke navigator.geolocation, og da sto alle app-brukere på hele-Norden-
+  // vinduet uten noen knapp. En husket posisjon fra kartet (husket-posisjon.ts)
+  // brukes med én gang; ellers står det en frivillig knapp (samme mønster som
+  // MushroomDayCard på forsiden).
   useEffect(() => {
-    if (typeof navigator === 'undefined' || !navigator.geolocation) return;
-    setCanRequest(true);
     let cancelled = false;
-    (async () => {
-      try {
-        const perm = await navigator.permissions?.query({ name: 'geolocation' as PermissionName });
-        if (perm?.state === 'granted') {
-          navigator.geolocation.getCurrentPosition(
-            (pos) => { if (!cancelled) applyPosition(pos.coords.latitude); },
-            () => {},
-            { timeout: 6000, maximumAge: 600000 }
-          );
-        }
-      } catch {
-        // permissions API unavailable — leave the opt-in button as the only path
+    const bruk = (lat: number) => {
+      setBand(latitudeBand(lat));
+      setPersonalized(true);
+    };
+    const start = async () => {
+      const husket = lesHusketPosisjon();
+      if (husket) bruk(husket.lat);
+      const fersk = await getCurrentPositionIfGranted();
+      if (cancelled) return;
+      if (fersk) {
+        lagreHusketPosisjon(fersk.latitude, fersk.longitude);
+        bruk(fersk.latitude);
+      } else if (!husket) {
+        setCanRequest(isGeolocationAvailable());
       }
-    })();
+    };
+    void start();
     return () => { cancelled = true; };
   }, []);
 
-  const requestPosition = () => {
-    if (!navigator.geolocation) return;
-    navigator.geolocation.getCurrentPosition(
-      (pos) => applyPosition(pos.coords.latitude),
-      () => {},
-      { timeout: 8000, maximumAge: 600000 }
-    );
+  // Brukerens eget trykk — da får vi be om tillatelse, via samme lag.
+  const requestPosition = async () => {
+    try {
+      const pos = await getCurrentPositionOnce();
+      lagreHusketPosisjon(pos.latitude, pos.longitude);
+      setBand(latitudeBand(pos.latitude));
+      setPersonalized(true);
+    } catch {
+      // Avslått eller utilgjengelig — knappen blir stående.
+    }
   };
 
   const now = new Date();
@@ -138,7 +145,7 @@ export function SeasonNow({ species }: { species: CalendarSpecies[] }) {
           ) : canRequest ? (
             <button
               type="button"
-              onClick={requestPosition}
+              onClick={() => void requestPosition()}
               className="inline-flex items-center gap-1 rounded-full border border-gray-300 px-2.5 py-0.5 text-xs font-medium text-gray-700 transition hover:border-forest-400 hover:text-forest-800"
             >
               <MapPin className="h-3 w-3" /> {t('adaptToPosition')}

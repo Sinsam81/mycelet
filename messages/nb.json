@@ -1076,7 +1076,8 @@
     "ringLabel": "Vær og sesong i dag: {score} av 100",
     "scaleNote": "Tallet er vær og sesong for området. Markfukt er en egen sperre og er ikke med i tallet — derfor kan det stå høyt selv når marka er for tørr. Kartet regner på en annen måte, så tallene kan ikke sammenlignes direkte.",
     "sharePositionTitle": "Del posisjon for bedre råd.",
-    "sharePositionBody": "Nå viser vi været for Sør-Norge generelt. Med posisjonen din regner vi på været der du faktisk er — og kartet kan foreslå steder i nærheten.",
+    "sharePositionBody": "Nå viser vi været for {area}. Med posisjonen din regner vi på været der du faktisk er — og kartet kan foreslå steder i nærheten.",
+    "nearestArea": "nærmeste område: {name}, {km} km",
     "approximate": "omtrentlig"
   },
   "LookAlikeCheck": {
