@@ -49,7 +49,9 @@ interface Posisjon {
 }
 
 /** Sendes på window én gang, når kortet først har data — andre flater (tilbudsarket) kan vente på den. */
-export const FORSIDEKORT_KLAR_EVENT = 'mycelet:forsidekort-klar';
+// Én kilde for hendelsesnavnet: tilbudsarket lytter på det samme (provetilbud-venting.ts).
+import { FORSIDEKORT_KLAR_EVENT } from '@/lib/billing/provetilbud-venting';
+export { FORSIDEKORT_KLAR_EVENT };
 
 // Tint the flush banner by status — green when ripe, amber when on the way,
 // muted when dry/dormant. The flush title already carries its own emoji.
