@@ -1,6 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { classifyTrafficSource } from '../traffic-source';
-import { erInngangssti, kildeForForesporsel, kildeFraBesok, lesKildeCookie, normaliserKilde, registreringsKilde } from '../kilde';
+import {
+  erInngangssti,
+  kildeForForesporsel,
+  kildeFraBesok,
+  lesKildeCookie,
+  lesSprakCookie,
+  normaliserKilde,
+  registreringsKilde,
+  registreringsSprak,
+  vaskTidssone
+} from '../kilde';
 
 const OSS = 'www.mycelet.com';
 
@@ -119,8 +129,43 @@ describe('registreringsKilde', () => {
     expect(registreringsKilde(null, true)).toBe('app');
   });
 
-  it('på nettet er det cookien som gjelder, og ingenting uten', () => {
+  it('på nettet er det cookien som gjelder — og uten cookie er det «web:direkte», ikke ingenting', () => {
+    // Før ble nettregistreringer uten cookie stående uten kilde og gikk i
+    // samme «ukjent»-rad som alle fra før målingen. Nå kan de skilles.
     expect(registreringsKilde('mycelet_kilde=google%2Fsoppkart-test', false)).toBe('google/soppkart-test');
-    expect(registreringsKilde(null, false)).toBeNull();
+    expect(registreringsKilde(null, false)).toBe('web:direkte');
+    expect(registreringsKilde('MYCELET_LOCALE=sv', false)).toBe('web:direkte');
+  });
+
+  it('«web:direkte» overlever normaliseringen rapporten gjør ved innlesing', () => {
+    expect(normaliserKilde(registreringsKilde(null, false))).toBe('web:direkte');
+  });
+});
+
+describe('registreringsSprak og lesSprakCookie', () => {
+  it('cookien vinner, deretter <html lang>, til slutt norsk', () => {
+    expect(registreringsSprak('MYCELET_LOCALE=sv; mycelet_kilde=x', 'nb')).toBe('sv');
+    expect(registreringsSprak('mycelet_kilde=x', 'sv')).toBe('sv');
+    expect(registreringsSprak(null, null)).toBe('nb');
+    expect(registreringsSprak('MYCELET_LOCALE=de', 'en')).toBe('nb');
+  });
+
+  it('lesSprakCookie slipper bare kjente språk gjennom', () => {
+    expect(lesSprakCookie('MYCELET_LOCALE=sv')).toBe('sv');
+    expect(lesSprakCookie('MYCELET_LOCALE=<script>')).toBeNull();
+    expect(lesSprakCookie('')).toBeNull();
+  });
+});
+
+describe('vaskTidssone', () => {
+  it('tar IANA-navn og avviser alt annet — verdien ender i en e-post', () => {
+    expect(vaskTidssone('Europe/Oslo')).toBe('Europe/Oslo');
+    expect(vaskTidssone('Europe/Stockholm')).toBe('Europe/Stockholm');
+    expect(vaskTidssone('America/Argentina/Buenos_Aires')).toBe('America/Argentina/Buenos_Aires');
+    expect(vaskTidssone('Etc/GMT+2')).toBe('Etc/GMT+2');
+    expect(vaskTidssone('<img src=x>')).toBeNull();
+    expect(vaskTidssone('')).toBeNull();
+    expect(vaskTidssone(42)).toBeNull();
+    expect(vaskTidssone('a'.repeat(80))).toBeNull();
   });
 });

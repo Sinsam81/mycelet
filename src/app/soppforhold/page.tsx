@@ -4,6 +4,8 @@ import Link from 'next/link';
 import { ChevronRight, MapPin, CalendarDays } from 'lucide-react';
 import { PageWrapper } from '@/components/layout/PageWrapper';
 import { SoppforholdForbehold } from '@/components/soppforhold/Forbehold';
+import { NativeOnly } from '@/components/native/NativeOnly';
+import { TellFlate } from '@/components/bruk/TellFlate';
 import { regionSlug } from '@/lib/prediction/region-slug';
 import { farge, hentRegioner, norskDato } from './hent-regioner';
 
@@ -85,6 +87,10 @@ export default async function SoppforholdPage() {
   return (
     <PageWrapper>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+      {/* Første skjerm i skallet: anonym telling (migrasjon 070), bare i appen. */}
+      <NativeOnly>
+        <TellFlate flate="soppforhold" />
+      </NativeOnly>
       <article className="space-y-8 py-6">
         <header className="space-y-3">
           <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-forest-700">

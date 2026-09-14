@@ -1,5 +1,6 @@
 import { BillingStatus, BillingTier, hasPaidAccess, isPaidTier } from './plans';
 import { MANUAL_GRANT_SOURCE, readManualGrant, serializeManualGrant, type ManualGrant } from './revenuecat';
+import { oppdaterProveMerker } from './prove-merke';
 
 /**
  * Hva Stripe-webhooken skal skrive til `billing_subscriptions` — ren logikk,
@@ -191,9 +192,21 @@ export function decideStripeWrite(
   const nextWatermark =
     facts.eventCreated !== null ? Math.max(facts.eventCreated, watermark ?? facts.eventCreated) : watermark;
 
+  // Prøvemerker (prove_start / forste_belastning) bæres videre og settes ut
+  // fra BUTIKKENS status — ikke det som skrives etter et manuelt gulv. Et
+  // Stripe-abonnement er bare «active» etter en vellykket belastning, så
+  // active fra abonnementet selv er et kjøp. Se prove-merke.ts.
+  const proveMerker = oppdaterProveMerker(existing, {
+    status: facts.status,
+    periodeStart: facts.currentPeriodStart,
+    naa: facts.eventCreated !== null ? new Date(facts.eventCreated * 1000).toISOString() : new Date().toISOString(),
+    kjop: facts.status === 'active'
+  });
+
   write.metadata = {
     provider: manualGrantFloor ? MANUAL_GRANT_SOURCE : 'stripe',
     source: manualGrantFloor ? MANUAL_GRANT_SOURCE : facts.eventType,
+    ...proveMerker,
     ...(manualGrantFloor && grant?.note ? { note: grant.note } : {}),
     // Passet følger raden også når et kjøp overtar den, slik at det kan leses
     // tilbake når kjøpet utløper eller refunderes.

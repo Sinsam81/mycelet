@@ -30,11 +30,22 @@
  * `metadata.provider` er det eneste som skiller dem: `stripe` eller
  * `revenuecat` betyr at penger har flyttet seg. Mangler feltet, er raden satt
  * inn for hånd — et gavepass, ikke et salg.
+ *
+ * ── OG PRØVEN ER IKKE ET SALG ───────────────────────────────────────────────
+ *
+ * Fram til september 2026 telte status `trialing` som betalende. Sju dager
+ * gratis så ut som en kunde, og «prøve → første belastning» — det ene tallet
+ * prøvetilbudet skal dømmes på — fantes ikke. Nå er «betalende» bare `active`
+ * med løpende periode, og prøvene har sin egen blokk, lest fra
+ * `metadata.prove_start` / `metadata.forste_belastning` som webhookene
+ * skriver (src/lib/billing/prove-merke.ts).
  */
 
 import { VARSEL_MIN_SCORE } from '@/lib/alerts/decision';
 import { normaliserKilde } from '@/lib/analytics/kilde';
-import { isoUke, osloDag, type Flate } from '@/lib/bruk/bruksdag';
+import { lesProveMerke } from '@/lib/billing/prove-merke';
+import { TILBUD_UTLOSERE, dagenEtter, isoUke, osloDag, type Flate } from '@/lib/bruk/bruksdag';
+import { summerTellinger, tomTellinger, type Tellinger, type TellingRad } from '@/lib/bruk/tell';
 import { PREDICTION_TILE_REGIONS } from '@/lib/prediction/tile-regions';
 
 export type Betalingskilde = 'stripe' | 'revenuecat' | 'manuell';
@@ -46,6 +57,8 @@ export interface AbonnementRad {
   current_period_end: string | null;
   created_at: string;
   metadata: Record<string, unknown> | null;
+  /** Oppsagt, men løper ut perioden. Valgfri for eldre kall. */
+  cancel_at_period_end?: boolean | null;
 }
 
 export interface BrukerRad {
@@ -58,6 +71,12 @@ export interface BrukerRad {
    * startet (september 2026).
    */
   kilde: string | null;
+  /**
+   * Enhetens tidssone ved registrering (user_metadata.tidssone, fra
+   * september 2026) — «Europe/Oslo» mot «Europe/Stockholm» er det eneste
+   * landsignalet vi har. null/undefined = ukjent (eldre kontoer, OAuth).
+   */
+  tidssone?: string | null;
 }
 
 /** Én rad per varselabonnement — konto- og e-postrader om hverandre. */
@@ -80,6 +99,8 @@ export interface BruksdagRad {
   /** YYYY-MM-DD */
   dag: string;
   flate: string;
+  /** Områdeslug, «egen»/«standard» på hjem, utløseren på tilbud — tom ellers. Valgfri for eldre kall. */
+  omrade?: string;
 }
 
 /** Dagens rapportpuls per område (migrasjon 069). */
@@ -100,6 +121,12 @@ export interface RapportInn {
   /** Rapportpuls i dag (norske områder). Tom = ikke hentet. */
   rapportpuls?: PulsRad[];
   /**
+   * Anonyme flatetellinger siste 7 dager (migrasjon 070): første skjerm i
+   * appen utlogget og registreringsskjemaet, per dag og språk. undefined =
+   * ikke målt (rapporten sier det).
+   */
+  flatetellinger?: TellingRad[];
+  /**
    * Interne kontoer (QA-brukeren, Apples demokonto): et App Store-kjøp gjort
    * for å teste kjøpsflyten ser identisk ut med et kundekjøp i tabellen —
    * provider «revenuecat», miljø PRODUCTION. Målt 6. september 2026: det ene
@@ -114,11 +141,31 @@ export interface RapportInn {
 }
 
 export interface Dagsrapport {
-  nyeBrukere: { siste24t: number; siste7d: number; totalt: number };
+  nyeBrukere: {
+    siste24t: number;
+    siste7d: number;
+    totalt: number;
+    /** Nye siste 7 dager per tidssone — landsignalet. «ukjent» alltid sist. */
+    perTidssone7d: Array<{ tidssone: string; antall: number }>;
+  };
   /** Registrerte som aldri kom tilbake. Den mest ærlige enkeltmålingen vi har. */
   aldriInnloggetIgjen: number;
+  /** Bare status `active` med løpende periode — prøver telles under `prover`. */
   betalende: { totalt: number; perKilde: Record<Betalingskilde, number>; nyeSiste7d: number };
-  /** Rader som SIER aktiv, men der perioden er ute. Overses de, blåses tallet opp. */
+  /**
+   * Prøveperioder (ekte butikkrader, aldri gavepass eller interne kontoer).
+   * «gikk til betaling» leses av metadata.forste_belastning etter
+   * metadata.prove_start; rader fra før merkingen (september 2026) kan ikke
+   * telles der, og står som prøve bare så lenge status er trialing.
+   */
+  prover: {
+    lopende: number;
+    startetSiste7d: number;
+    gikkTilBetaling: number;
+    gikkTilBetalingSiste7d: number;
+    avbrutt: number;
+  };
+  /** Rader som SIER aktiv eller prøve, men der perioden er ute. Overses de, blåses tallet opp. */
   utloptMenMarkertAktiv: number;
   varselabonnement: number;
   toppRegioner: Array<{ region: string; score: number }>;
@@ -164,7 +211,19 @@ export interface Dagsrapport {
     komTilbake: number;
     perKilde: Array<{ kilde: string; nye: number; komTilbake: number }>;
     gjenbruk28d: number;
+    /**
+     * Prøvetilbudet som trakt, siste 7 dager: brukere som fikk arket vist per
+     * utløser (omrade-kolonnen på tilbud-raden), og hvor mange av dem som så
+     * prissiden samme dag eller dagen etter. «ukjent» = rader uten utløser
+     * (fra før bølge 1), alltid sist.
+     */
+    tilbud: Array<{ utloser: string; vist: number; tilPris: number }>;
   };
+  /**
+   * Anonyme tellinger før konto i appen, siste 7 dager per språk
+   * (migrasjon 070). maalt=false når tabellen ikke svarte.
+   */
+  tellinger: { maalt: boolean; siste7d: Tellinger };
 }
 
 export const UKJENT_KILDE = 'ukjent';
@@ -201,11 +260,24 @@ function kilde(rad: AbonnementRad, interne?: Set<string>): Betalingskilde {
   return 'manuell';
 }
 
-function erReeltAktiv(rad: AbonnementRad, naa: Date): boolean {
-  if (rad.status !== 'active' && rad.status !== 'trialing') return false;
+function periodeLoper(rad: AbonnementRad, naa: Date): boolean {
   // Ingen sluttdato = løper til noe annet sier stopp. Sjeldent, men gyldig.
   if (!rad.current_period_end) return true;
   return new Date(rad.current_period_end).getTime() > naa.getTime();
+}
+
+/** Betalende = status active OG perioden løper. `trialing` er en prøve, ikke en kunde. */
+function erBetalende(rad: AbonnementRad, naa: Date): boolean {
+  return rad.status === 'active' && periodeLoper(rad, naa);
+}
+
+function erProvende(rad: AbonnementRad, naa: Date): boolean {
+  return rad.status === 'trialing' && periodeLoper(rad, naa);
+}
+
+/** Dagen pengene faktisk flyttet seg: første belastning etter prøve, ellers radens opprettelse. */
+function kjopsdato(rad: AbonnementRad): string {
+  return lesProveMerke(rad.metadata, 'forste_belastning') ?? rad.created_at;
 }
 
 export function byggDagsrapport(inn: RapportInn): Dagsrapport {
@@ -215,10 +287,55 @@ export function byggDagsrapport(inn: RapportInn): Dagsrapport {
 
   const nyere = (iso: string, vindu: number) => naa - new Date(iso).getTime() <= vindu;
 
-  const aktive = inn.abonnement.filter((a) => erReeltAktiv(a, inn.naa));
+  const aktive = inn.abonnement.filter((a) => erBetalende(a, inn.naa));
   const kildeAv = (a: AbonnementRad) => kilde(a, inn.interneBrukere);
   const perKilde: Record<Betalingskilde, number> = { stripe: 0, revenuecat: 0, manuell: 0 };
   for (const a of aktive) perKilde[kildeAv(a)] += 1;
+
+  // ── Prøver ────────────────────────────────────────────────────────────────
+  // Bare butikkrader: et gavepass med status trialing er ikke en prøve, og
+  // QA-kontoens sandkasseprøve er ikke en kunde på vei inn.
+  const butikkRader = inn.abonnement.filter((a) => kildeAv(a) !== 'manuell');
+  const proveStart = (a: AbonnementRad) => lesProveMerke(a.metadata, 'prove_start') ?? (a.status === 'trialing' ? a.created_at : null);
+  const forsteBelastning = (a: AbonnementRad) => {
+    const b = lesProveMerke(a.metadata, 'forste_belastning');
+    const s = lesProveMerke(a.metadata, 'prove_start');
+    return b && s && new Date(b).getTime() > new Date(s).getTime() ? b : null;
+  };
+  const prover = {
+    lopende: butikkRader.filter((a) => erProvende(a, inn.naa)).length,
+    startetSiste7d: butikkRader.filter((a) => {
+      const s = proveStart(a);
+      return s !== null && nyere(s, dag7);
+    }).length,
+    gikkTilBetaling: butikkRader.filter((a) => forsteBelastning(a) !== null).length,
+    gikkTilBetalingSiste7d: butikkRader.filter((a) => {
+      const b = forsteBelastning(a);
+      return b !== null && nyere(b, dag7);
+    }).length,
+    // Avbrutt: sagt opp midt i prøven (løper ut), eller en merket prøve som
+    // endte uten belastning (canceled, unpaid, incomplete_expired …).
+    avbrutt: butikkRader.filter((a) => {
+      if (a.status === 'trialing') return a.cancel_at_period_end === true;
+      if (a.status === 'active') return false;
+      return lesProveMerke(a.metadata, 'prove_start') !== null && forsteBelastning(a) === null;
+    }).length
+  };
+
+  // ── Land: tidssone ved registrering ───────────────────────────────────────
+  const perTidssone = new Map<string, number>();
+  for (const b of inn.brukere) {
+    if (!nyere(b.created_at, dag7)) continue;
+    const t = b.tidssone ?? UKJENT_KILDE;
+    perTidssone.set(t, (perTidssone.get(t) ?? 0) + 1);
+  }
+  const perTidssone7d = [...perTidssone.entries()]
+    .map(([tidssone, antall]) => ({ tidssone, antall }))
+    .sort((x, y) => {
+      if (x.tidssone === UKJENT_KILDE) return 1;
+      if (y.tidssone === UKJENT_KILDE) return -1;
+      return y.antall - x.antall || x.tidssone.localeCompare(y.tidssone);
+    });
 
   // ── Kilder ────────────────────────────────────────────────────────────────
   const kildeForBruker = new Map(inn.brukere.map((b) => [b.id, b.kilde ?? UKJENT_KILDE]));
@@ -298,21 +415,31 @@ export function byggDagsrapport(inn: RapportInn): Dagsrapport {
     }
   }
 
+  // Tellingene før konto: siste 7 dager i Oslo-dato, som bruksdagene.
+  const tellingsGrense = osloDag(new Date(naa - 6 * 24 * 3600_000));
+  const tellinger = inn.flatetellinger
+    ? { maalt: true, siste7d: summerTellinger(inn.flatetellinger, tellingsGrense) }
+    : { maalt: false, siste7d: tomTellinger() };
+
   return {
     nyeBrukere: {
       siste24t: inn.brukere.filter((b) => nyere(b.created_at, time24)).length,
       siste7d: inn.brukere.filter((b) => nyere(b.created_at, dag7)).length,
-      totalt: inn.brukere.length
+      totalt: inn.brukere.length,
+      perTidssone7d
     },
     aldriInnloggetIgjen: inn.brukere.filter((b) => !b.last_sign_in_at).length,
     betalende: {
       totalt: aktive.length,
       perKilde,
-      // Bare ekte kjøp teller som nytt salg. Et gavepass er ikke en kunde.
-      nyeSiste7d: aktive.filter((a) => kildeAv(a) !== 'manuell' && nyere(a.created_at, dag7)).length
+      // Bare ekte kjøp teller som nytt salg. Et gavepass er ikke en kunde, og
+      // en prøve som konverterte teller den dagen den ble belastet — ikke
+      // dagen raden ble opprettet.
+      nyeSiste7d: aktive.filter((a) => kildeAv(a) !== 'manuell' && nyere(kjopsdato(a), dag7)).length
     },
+    prover,
     utloptMenMarkertAktiv: inn.abonnement.filter(
-      (a) => a.status === 'active' && !erReeltAktiv(a, inn.naa)
+      (a) => (a.status === 'active' || a.status === 'trialing') && !periodeLoper(a, inn.naa)
     ).length,
     varselabonnement: inn.varselabonnement,
     toppRegioner: [...inn.regionerIDag].sort((a, b) => b.score - a.score).slice(0, 3),
@@ -320,6 +447,7 @@ export function byggDagsrapport(inn: RapportInn): Dagsrapport {
     kilder,
     varsel,
     bruk,
+    tellinger,
     puls: (inn.rapportpuls ?? [])
       .filter((p): p is PulsRad & { avvikPst: number } => p.avvikPst !== null)
       .sort((a, b) => b.avvikPst - a.avvikPst)
@@ -332,7 +460,7 @@ function byggBruk(inn: RapportInn, naa: number, kildeForBruker: Map<string, stri
   const dag14 = 14 * 24 * 3600_000;
   const nye = inn.brukere.filter((b) => naa - new Date(b.created_at).getTime() <= dag14);
   if (!inn.bruksdager) {
-    return { maalt: false, brukereSiste7d: 0, perFlate: tomt, nyeSiste14d: nye.length, komTilbake: 0, perKilde: [], gjenbruk28d: 0 };
+    return { maalt: false, brukereSiste7d: 0, perFlate: tomt, nyeSiste14d: nye.length, komTilbake: 0, perKilde: [], gjenbruk28d: 0, tilbud: [] };
   }
 
   // Dagsgrenser i Oslo-dato, som radene. «Siste 7 dager» = i dag og seks før.
@@ -347,9 +475,22 @@ function byggBruk(inn: RapportInn, naa: number, kildeForBruker: Map<string, stri
   const perFlateSett: Record<Flate, Set<string>> = { hjem: new Set(), kart: new Set(), omrade: new Set(), steder: new Set(), pris: new Set(), tilbud: new Set() };
   const ukerPerBruker = new Map<string, Set<string>>();
   const dagerPerBruker = new Map<string, string[]>();
+  // Trakten ark → pris: tilbud-rader siste 7 dager med utløser, og alle
+  // prissidedager (28 d) per bruker, så «dagen etter» også finnes for et
+  // ark vist på vinduets siste dag.
+  const tilbudRader: Array<{ user_id: string; dag: string; utloser: string }> = [];
+  const prisDager = new Map<string, Set<string>>();
   for (const r of rader) {
     if (r.flate === 'pris' || r.flate === 'tilbud') {
       if (r.dag >= grense7) perFlateSett[r.flate].add(r.user_id);
+      if (r.flate === 'pris') {
+        let d = prisDager.get(r.user_id);
+        if (!d) prisDager.set(r.user_id, (d = new Set()));
+        d.add(r.dag);
+      } else if (r.dag >= grense7) {
+        const u = r.omrade ?? '';
+        tilbudRader.push({ user_id: r.user_id, dag: r.dag, utloser: (TILBUD_UTLOSERE as readonly string[]).includes(u) ? u : UKJENT_KILDE });
+      }
       continue;
     }
     let dager = dagerPerBruker.get(r.user_id);
@@ -379,6 +520,25 @@ function byggBruk(inn: RapportInn, naa: number, kildeForBruker: Map<string, stri
     if (komTilbakeSett.has(b.id)) t.komTilbake += 1;
   }
 
+  // Per utløser: brukere som fikk arket vist, og hvor mange av dem som så
+  // prissiden samme dag eller dagen etter. En bruker teller én gang per
+  // utløser, og som «til pris» hvis NOEN av visningene ble fulgt opp.
+  const perUtloser = new Map<string, { vist: Set<string>; tilPris: Set<string> }>();
+  for (const t of tilbudRader) {
+    let u = perUtloser.get(t.utloser);
+    if (!u) perUtloser.set(t.utloser, (u = { vist: new Set(), tilPris: new Set() }));
+    u.vist.add(t.user_id);
+    const pris = prisDager.get(t.user_id);
+    if (pris && (pris.has(t.dag) || pris.has(dagenEtter(t.dag)))) u.tilPris.add(t.user_id);
+  }
+  const tilbud = [...perUtloser.entries()]
+    .map(([utloser, u]) => ({ utloser, vist: u.vist.size, tilPris: u.tilPris.size }))
+    .sort((x, y) => {
+      if (x.utloser === UKJENT_KILDE) return 1;
+      if (y.utloser === UKJENT_KILDE) return -1;
+      return y.vist - x.vist || x.utloser.localeCompare(y.utloser);
+    });
+
   return {
     maalt: true,
     brukereSiste7d: brukereSiste7d.size,
@@ -399,6 +559,7 @@ function byggBruk(inn: RapportInn, naa: number, kildeForBruker: Map<string, stri
         if (y.kilde === UKJENT_KILDE) return -1;
         return y.nye - x.nye || x.kilde.localeCompare(y.kilde);
       }),
-    gjenbruk28d: [...ukerPerBruker.values()].filter((u) => u.size >= 2).length
+    gjenbruk28d: [...ukerPerBruker.values()].filter((u) => u.size >= 2).length,
+    tilbud
   };
 }

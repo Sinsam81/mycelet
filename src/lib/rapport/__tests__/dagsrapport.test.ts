@@ -153,8 +153,101 @@ describe('brukere', () => {
         ]
       })
     );
-    expect(r.nyeBrukere).toEqual({ siste24t: 1, siste7d: 3, totalt: 4 });
+    expect(r.nyeBrukere).toEqual({ siste24t: 1, siste7d: 3, totalt: 4, perTidssone7d: [{ tidssone: 'ukjent', antall: 3 }] });
     expect(r.aldriInnloggetIgjen).toBe(2);
+  });
+
+  it('fordeler nye siste 7 dager på tidssone — landsignalet — med ukjent sist', () => {
+    const r = byggDagsrapport(
+      inn({
+        brukere: [
+          br({ created_at: dagerSiden(1), tidssone: 'Europe/Stockholm' }),
+          br({ created_at: dagerSiden(2), tidssone: 'Europe/Stockholm' }),
+          br({ created_at: dagerSiden(2), tidssone: 'Europe/Oslo' }),
+          br({ created_at: dagerSiden(3) }),
+          br({ created_at: dagerSiden(20), tidssone: 'Europe/Oslo' }) // utenfor vinduet
+        ]
+      })
+    );
+    expect(r.nyeBrukere.perTidssone7d).toEqual([
+      { tidssone: 'Europe/Stockholm', antall: 2 },
+      { tidssone: 'Europe/Oslo', antall: 1 },
+      { tidssone: 'ukjent', antall: 1 }
+    ]);
+  });
+});
+
+describe('prøver — sju dager gratis er ikke en kunde', () => {
+  const PROVE_START = dagerSiden(5);
+  const BELASTNING = dagerSiden(1);
+
+  it('teller ikke trialing som betalende, men som løpende prøve', () => {
+    const r = byggDagsrapport(inn({ abonnement: [ab({ status: 'trialing', metadata: { provider: 'stripe', prove_start: PROVE_START } })] }));
+    expect(r.betalende.totalt).toBe(0);
+    expect(r.betalende.perKilde.stripe).toBe(0);
+    expect(r.prover.lopende).toBe(1);
+    expect(r.prover.startetSiste7d).toBe(1);
+    expect(r.prover.gikkTilBetaling).toBe(0);
+    expect(r.prover.avbrutt).toBe(0);
+  });
+
+  it('en prøve fra før merkingen (trialing uten prove_start) teller som startet ved radens opprettelse', () => {
+    const r = byggDagsrapport(inn({ abonnement: [ab({ status: 'trialing', created_at: dagerSiden(2), metadata: { provider: 'revenuecat' } })] }));
+    expect(r.prover.lopende).toBe(1);
+    expect(r.prover.startetSiste7d).toBe(1);
+  });
+
+  it('gikk til betaling = forste_belastning etter prove_start; teller som nytt kjøp den dagen, ikke ved radens opprettelse', () => {
+    const r = byggDagsrapport(
+      inn({
+        abonnement: [
+          ab({ status: 'active', created_at: dagerSiden(40), metadata: { provider: 'stripe', prove_start: PROVE_START, forste_belastning: BELASTNING } })
+        ]
+      })
+    );
+    expect(r.betalende.totalt).toBe(1);
+    expect(r.betalende.nyeSiste7d).toBe(1);
+    expect(r.prover.lopende).toBe(0);
+    expect(r.prover.gikkTilBetaling).toBe(1);
+    expect(r.prover.gikkTilBetalingSiste7d).toBe(1);
+    expect(r.prover.avbrutt).toBe(0);
+  });
+
+  it('avbrutt = oppsagt i prøven, eller en merket prøve som endte uten belastning', () => {
+    const r = byggDagsrapport(
+      inn({
+        abonnement: [
+          ab({ user_id: 'a', status: 'trialing', cancel_at_period_end: true, metadata: { provider: 'revenuecat', prove_start: PROVE_START } }),
+          ab({ user_id: 'b', status: 'canceled', metadata: { provider: 'stripe', prove_start: PROVE_START } }),
+          ab({ user_id: 'c', status: 'canceled', metadata: { provider: 'stripe' } }), // vanlig oppsigelse uten prøve
+          ab({ user_id: 'd', status: 'canceled', metadata: { provider: 'stripe', prove_start: PROVE_START, forste_belastning: BELASTNING } }) // betalte, sa opp senere
+        ]
+      })
+    );
+    expect(r.prover.avbrutt).toBe(2);
+    expect(r.prover.gikkTilBetaling).toBe(1);
+    expect(r.prover.lopende).toBe(1);
+  });
+
+  it('gavepass og interne kontoer er aldri prøver', () => {
+    const r = byggDagsrapport(
+      inn({
+        abonnement: [
+          ab({ user_id: 'gave', status: 'trialing', metadata: null }),
+          ab({ user_id: 'qa', status: 'trialing', metadata: { provider: 'revenuecat', prove_start: PROVE_START } })
+        ],
+        interneBrukere: new Set(['qa'])
+      })
+    );
+    expect(r.prover.lopende).toBe(0);
+    expect(r.prover.startetSiste7d).toBe(0);
+    expect(r.betalende.totalt).toBe(0);
+  });
+
+  it('en utløpt prøve som fortsatt står som trialing telles som utløpt-men-merket', () => {
+    const r = byggDagsrapport(inn({ abonnement: [ab({ status: 'trialing', current_period_end: dagerSiden(1), metadata: { provider: 'stripe' } })] }));
+    expect(r.prover.lopende).toBe(0);
+    expect(r.utloptMenMarkertAktiv).toBe(1);
   });
 });
 
@@ -375,5 +468,73 @@ describe('bruk av soppforholdene — aktivering og gjenbruk', () => {
     expect(r.bruk.brukereSiste7d).toBe(0);
     expect(r.bruk.komTilbake).toBe(0);
     expect(r.bruk.gjenbruk28d).toBe(0);
+  });
+
+  it('prøvetilbudet per utløser: vist, og til prissiden samme dag eller dagen etter', () => {
+    const r = byggDagsrapport(
+      inn({
+        bruksdager: [
+          // a: ark ved start dag 3, pris samme dag → til pris
+          { user_id: 'a', dag: dagIso(3), flate: 'tilbud', omrade: 'start' },
+          { user_id: 'a', dag: dagIso(3), flate: 'pris' },
+          // b: ark ved start dag 3, pris dag 2 (dagen etter) → til pris
+          { user_id: 'b', dag: dagIso(3), flate: 'tilbud', omrade: 'start' },
+          { user_id: 'b', dag: dagIso(2), flate: 'pris' },
+          // c: ark ved start dag 4, pris først dag 1 → for sent
+          { user_id: 'c', dag: dagIso(4), flate: 'tilbud', omrade: 'start' },
+          { user_id: 'c', dag: dagIso(1), flate: 'pris' },
+          // d: ark ved «begrenset», ingen pris
+          { user_id: 'd', dag: dagIso(2), flate: 'tilbud', omrade: 'begrenset' },
+          // e: rad uten utløser (fra før bølge 1)
+          { user_id: 'e', dag: dagIso(1), flate: 'tilbud', omrade: '' },
+          // f: ark for åtte dager siden — utenfor 7-dagersvinduet
+          { user_id: 'f', dag: dagIso(8), flate: 'tilbud', omrade: 'start' },
+          { user_id: 'f', dag: dagIso(8), flate: 'pris' }
+        ]
+      })
+    );
+    expect(r.bruk.tilbud).toEqual([
+      { utloser: 'start', vist: 3, tilPris: 2 },
+      { utloser: 'begrenset', vist: 1, tilPris: 0 },
+      { utloser: 'ukjent', vist: 1, tilPris: 0 }
+    ]);
+    expect(r.bruk.perFlate.tilbud).toBe(5);
+  });
+
+  it('prissiden dagen etter vinduets siste dag teller fortsatt (prisdager leses over 28 d)', () => {
+    const r = byggDagsrapport(
+      inn({
+        bruksdager: [
+          { user_id: 'a', dag: dagIso(1), flate: 'tilbud', omrade: 'forste-okt' },
+          { user_id: 'a', dag: dagIso(0), flate: 'pris' }
+        ]
+      })
+    );
+    expect(r.bruk.tilbud).toEqual([{ utloser: 'forste-okt', vist: 1, tilPris: 1 }]);
+  });
+
+  it('en ukjent utløser-tekst i kolonnen renses til «ukjent» — kolonnen er fritekst', () => {
+    const r = byggDagsrapport(inn({ bruksdager: [{ user_id: 'a', dag: dagIso(1), flate: 'tilbud', omrade: '<b>x</b>' }] }));
+    expect(r.bruk.tilbud).toEqual([{ utloser: 'ukjent', vist: 1, tilPris: 0 }]);
+  });
+});
+
+describe('tellinger før konto (anonyme flatetellinger)', () => {
+  const dagIso = (n: number) => dagerSiden(n).slice(0, 10);
+
+  it('«ikke målt» uten rader, og summert per flate og språk siste 7 dager ellers', () => {
+    expect(byggDagsrapport(inn()).tellinger.maalt).toBe(false);
+    const r = byggDagsrapport(
+      inn({
+        flatetellinger: [
+          { dag: dagIso(0), flate: 'soppforhold', sprak: 'nb', antall: 12 },
+          { dag: dagIso(6), flate: 'soppforhold', sprak: 'sv', antall: 4 },
+          { dag: dagIso(6), flate: 'register', sprak: 'nb', antall: 3 },
+          { dag: dagIso(7), flate: 'register', sprak: 'nb', antall: 50 } // åttende dag — utenfor
+        ]
+      })
+    );
+    expect(r.tellinger.maalt).toBe(true);
+    expect(r.tellinger.siste7d).toEqual({ soppforhold: { nb: 12, sv: 4 }, register: { nb: 3, sv: 0 } });
   });
 });

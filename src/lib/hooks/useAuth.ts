@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { registreringsKilde } from '@/lib/analytics/kilde';
+import { registreringsKilde, registreringsSprak, vaskTidssone } from '@/lib/analytics/kilde';
 import { isNativePlatform, plattform } from '@/lib/native/platform';
 import type { Session, User } from '@supabase/supabase-js';
 import { createClient } from '@/lib/supabase/client';
@@ -81,10 +81,21 @@ export function useAuth() {
 
   const signUp = async ({ email, password, username, displayName }: SignUpPayload) => {
     // Hvor kom de fra? Satt av middleware ved forsidebesøket; mangler den, var
-    // besøket direkte og rapporten sier «ukjent». Inne i appen er svaret alltid
-    // «app» — App Store er inngangen. Se @/lib/analytics/kilde.
+    // besøket direkte og kilden blir «web:direkte». Inne i appen er svaret
+    // alltid «app» — App Store er inngangen. Se @/lib/analytics/kilde.
     const nativ = isNativePlatform();
-    const kilde = registreringsKilde(typeof document === 'undefined' ? null : document.cookie, nativ);
+    const cookie = typeof document === 'undefined' ? null : document.cookie;
+    const kilde = registreringsKilde(cookie, nativ);
+    // Språk og tidssone (Europe/Oslo mot Europe/Stockholm) er det eneste
+    // ærlige landsignalet vi har — appen er den samme i begge land. Feiler
+    // Intl-oppslaget (gamle WebViews), registreres kontoen uten tidssone.
+    const sprak = registreringsSprak(cookie, typeof document === 'undefined' ? null : document.documentElement.lang);
+    let tidssone: string | null = null;
+    try {
+      tidssone = vaskTidssone(Intl.DateTimeFormat().resolvedOptions().timeZone);
+    } catch {
+      tidssone = null;
+    }
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
@@ -96,7 +107,9 @@ export function useAuth() {
         data: {
           username,
           display_name: displayName,
-          ...(kilde ? { kilde } : {}),
+          kilde,
+          sprak,
+          ...(tidssone ? { tidssone } : {}),
           ...(nativ ? { plattform: plattform() } : {}),
           // Provable consent: the signup form requires accepting the Terms +
           // age (18+/guardian) before this runs, so record the version + time

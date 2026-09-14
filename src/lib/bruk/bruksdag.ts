@@ -58,6 +58,13 @@ export function isoUke(dagIso: string): string {
   return `${aar}-W${String(uke).padStart(2, '0')}`;
 }
 
+/** Dagen etter en YYYY-MM-DD-dato, ren UTC-regning som isoUke — «samme dag eller neste» i trakten ark → pris. */
+export function dagenEtter(dagIso: string): string {
+  const d = new Date(`${dagIso}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + 1);
+  return d.toISOString().slice(0, 10);
+}
+
 /** Nøkkel for «har vi alt meldt denne i dag?» i sessionStorage — sparer ett kall per sidevisning. */
 export function bruksdagNokkel(flate: Flate, omrade: string, dag: string): string {
   return `mycelet:bruksdag:${flate}:${omrade}:${dag}`;

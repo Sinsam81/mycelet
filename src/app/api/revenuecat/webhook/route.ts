@@ -12,6 +12,7 @@ import {
   MANUAL_GRANT_SOURCE
 } from '@/lib/billing/revenuecat';
 import { hasPaidAccess, BillingStatus, BillingTier } from '@/lib/billing/plans';
+import { oppdaterProveMerker } from '@/lib/billing/prove-merke';
 import { createRequestLogger } from '@/lib/log/request';
 import { secretsMatch } from '@/lib/security/secret-compare';
 
@@ -345,12 +346,22 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    // Prøvemerker: prøvestart ved TRIAL, første belastning ved første grant
+    // som ikke er prøve (RENEWAL etter TRIAL). Ut fra butikkens status før
+    // gulvet, og bare grants er kjøp — CANCELLATION mapper også til active.
+    const proveMerker = oppdaterProveMerker(existing, {
+      status: decision.update.status,
+      periodeStart: decision.update.currentPeriodStart,
+      naa: eventTs !== null ? new Date(eventTs).toISOString() : new Date().toISOString(),
+      kjop: decision.kind === 'grant' && event.period_type !== 'TRIAL'
+    });
     const rcMetadata = {
       store: event.store ?? null,
       rc_product_id: event.product_id ?? null,
       rc_event_type: eventType,
       rc_event_timestamp_ms: eventTs,
-      rc_environment: event.environment ?? null
+      rc_environment: event.environment ?? null,
+      ...proveMerker
     };
     // Passet følger raden uansett hvem som eier den, slik at det kan leses
     // tilbake senere. Når gulvet gjelder, eier passet raden — da holder

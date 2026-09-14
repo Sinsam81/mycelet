@@ -244,3 +244,50 @@ describe('decideStripeWrite — ukjent pris-ID', () => {
     expect(decision.tierKept).toBe(false);
   });
 });
+
+describe('decideStripeWrite — prøvemerker (prove_start / forste_belastning)', () => {
+  const PROVE_START = '2026-09-07T10:00:00.000Z';
+  const BELASTNING = '2026-09-14T10:00:00.000Z';
+
+  it('setter prove_start når abonnementet opprettes som trialing', () => {
+    const decision = decideStripeWrite(
+      facts({ eventType: 'customer.subscription.created', status: 'trialing', currentPeriodStart: PROVE_START }),
+      null
+    );
+    expect(decision.action).toBe('write');
+    if (decision.action !== 'write') return;
+    expect(decision.write.metadata.prove_start).toBe(PROVE_START);
+    expect(decision.write.metadata.forste_belastning).toBeUndefined();
+  });
+
+  it('trialing → active setter forste_belastning og beholder prove_start — metadata bygges ellers på nytt', () => {
+    const decision = decideStripeWrite(
+      facts({ status: 'active', currentPeriodStart: BELASTNING }),
+      row({ status: 'trialing', metadata: { provider: 'stripe', prove_start: PROVE_START, [STRIPE_EVENT_WATERMARK_KEY]: NOW - HOUR } })
+    );
+    expect(decision.action).toBe('write');
+    if (decision.action !== 'write') return;
+    expect(decision.write.metadata.prove_start).toBe(PROVE_START);
+    expect(decision.write.metadata.forste_belastning).toBe(BELASTNING);
+    expect(decision.write.metadata.provider).toBe('stripe');
+  });
+
+  it('et abonnement uten prøve får ingen merker', () => {
+    const decision = decideStripeWrite(facts({ eventType: 'customer.subscription.created', status: 'active' }), null);
+    expect(decision.action).toBe('write');
+    if (decision.action !== 'write') return;
+    expect(decision.write.metadata.prove_start).toBeUndefined();
+    expect(decision.write.metadata.forste_belastning).toBeUndefined();
+  });
+
+  it('merkene overlever en oppsigelse', () => {
+    const decision = decideStripeWrite(
+      facts({ eventType: 'customer.subscription.deleted', status: 'canceled', currentPeriodEnd: PAST_ISO }),
+      row({ metadata: { provider: 'stripe', prove_start: PROVE_START, forste_belastning: BELASTNING, [STRIPE_EVENT_WATERMARK_KEY]: NOW - HOUR } })
+    );
+    expect(decision.action).toBe('write');
+    if (decision.action !== 'write') return;
+    expect(decision.write.metadata.prove_start).toBe(PROVE_START);
+    expect(decision.write.metadata.forste_belastning).toBe(BELASTNING);
+  });
+});

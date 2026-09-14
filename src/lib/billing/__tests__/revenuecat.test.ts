@@ -128,6 +128,15 @@ describe('mapRevenueCatEvent — cancellation vs expiration (the critical distin
     expect(decision.update.currentPeriodEnd).toBe(new Date(EXPIRES_MS).toISOString());
   });
 
+  it('CANCELLATION i prøven beholder trialing — en avbrutt gratisuke er ikke en kunde', () => {
+    const decision = mapRevenueCatEvent(baseEvent({ type: 'CANCELLATION', cancel_reason: 'UNSUBSCRIBE', period_type: 'TRIAL' }));
+    expect(decision.action).toBe('apply');
+    if (decision.action !== 'apply') return;
+    expect(decision.kind).toBe('modify');
+    expect(decision.update.status).toBe('trialing');
+    expect(decision.update.cancelAtPeriodEnd).toBe(true);
+  });
+
   it('CANCELLATION (CUSTOMER_SUPPORT = refund) revokes immediately', () => {
     const now = 1784500000000;
     const decision = mapRevenueCatEvent(
