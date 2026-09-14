@@ -20,6 +20,17 @@ export function erFlate(v: unknown): v is Flate {
   return typeof v === 'string' && (FLATER as readonly string[]).includes(v);
 }
 
+/**
+ * `omrade`-kolonnen bærer én ekstra opplysning per flate (bølge 1, sep 2026):
+ * - omrade: områdeslug (som før)
+ * - hjem: «egen» når forsidekortet viste brukerens eget område, «standard» når
+ *   det falt tilbake på standardområdet — så vi ser om kortet viser rett sted
+ * - tilbud: utløseren arket ble vist for, så trakten «ark → pris» kan leses
+ *   per utløser. Alt annet lagres som tom streng.
+ */
+export const HJEM_OMRADER = ['egen', 'standard'] as const;
+export const TILBUD_UTLOSERE = ['start', 'begrenset', 'andre-dag', 'forste-okt', 'omslag'] as const;
+
 const OSLO = new Intl.DateTimeFormat('sv-SE', {
   timeZone: 'Europe/Oslo',
   year: 'numeric',
