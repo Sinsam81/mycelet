@@ -34,6 +34,7 @@
  * kontoløs varselpåmelding (alert_subscriptions.kilde, migrasjon 063).
  */
 
+import { DEFAULT_LOCALE, LOCALE_COOKIE, isLocale, type Locale } from '@/i18n/config';
 import { classifyTrafficSource, type TrafficSource } from './traffic-source';
 
 export const KILDE_COOKIE = 'mycelet_kilde';
@@ -113,9 +114,54 @@ export function normaliserKilde(raw: unknown): string | null {
  */
 export const APP_KILDE = 'app';
 
-export function registreringsKilde(cookieString: string | null | undefined, erNativ: boolean): string | null {
+/**
+ * Nettregistrering uten cookie. Før sto disse uten kilde i det hele tatt og
+ * havnet i samme «ukjent»-rad som alle fra før målingen startet — så «direkte
+ * på nettet» og «vet ikke» kunne ikke skilles i rapporten (september 2026).
+ * Kontoer fra før september 2026 har fortsatt ingen kilde og leses som ukjent.
+ */
+export const WEB_DIREKTE_KILDE = 'web:direkte';
+
+export function registreringsKilde(cookieString: string | null | undefined, erNativ: boolean): string {
   if (erNativ) return APP_KILDE;
-  return lesKildeCookie(cookieString);
+  return lesKildeCookie(cookieString) ?? WEB_DIREKTE_KILDE;
+}
+
+/**
+ * Språket kontoen ble opprettet på — user_metadata.sprak. Cookien
+ * `MYCELET_LOCALE` er sannheten når den finnes (språkvelgeren setter den);
+ * ellers `<html lang>`, som serveren alt har avgjort fra Accept-Language.
+ * Sammen med tidssonen er dette det eneste ærlige landsignalet vi har.
+ */
+export function registreringsSprak(cookieString: string | null | undefined, htmlLang: string | null | undefined): Locale {
+  const fraCookie = lesSprakCookie(cookieString);
+  if (fraCookie) return fraCookie;
+  const lang = htmlLang ?? undefined;
+  return isLocale(lang) ? lang : DEFAULT_LOCALE;
+}
+
+export function lesSprakCookie(cookieString: string | null | undefined): Locale | null {
+  if (!cookieString) return null;
+  for (const del of cookieString.split(';')) {
+    const [navn, ...rest] = del.split('=');
+    if (navn?.trim() === LOCALE_COOKIE) {
+      const verdi = rest.join('=').trim();
+      return isLocale(verdi) ? verdi : null;
+    }
+  }
+  return null;
+}
+
+/**
+ * Enhetens tidssone (IANA-navn som «Europe/Oslo») — user_metadata.tidssone.
+ * Verdien kommer fra `Intl.DateTimeFormat().resolvedOptions().timeZone` i
+ * nettleseren og ender i dagsrapporten, så bare et kort IANA-lignende navn
+ * slipper gjennom. null = ukjent.
+ */
+export function vaskTidssone(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null;
+  const s = raw.trim();
+  return /^[A-Za-z][A-Za-z0-9_+\-/]{0,63}$/.test(s) ? s : null;
 }
 
 /**

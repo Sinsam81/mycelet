@@ -4,7 +4,8 @@ import { createRequestLogger } from '@/lib/log/request';
 import { bearerSecretMatches } from '@/lib/security/secret-compare';
 import { byggDagsrapport, UKJENT_KILDE, type AbonnementRad, type BruksdagRad, type Dagsrapport, type VarselAbonnentRad } from '@/lib/rapport/dagsrapport';
 import { osloDag } from '@/lib/bruk/bruksdag';
-import { normaliserKilde } from '@/lib/analytics/kilde';
+import { type TellingRad } from '@/lib/bruk/tell';
+import { WEB_DIREKTE_KILDE, normaliserKilde, vaskTidssone } from '@/lib/analytics/kilde';
 import { sendEpost } from '@/lib/email/send';
 
 /**
@@ -72,13 +73,14 @@ export async function GET(request: NextRequest) {
     id: u.id,
     created_at: u.created_at,
     last_sign_in_at: u.last_sign_in_at ?? null,
-    kilde: normaliserKilde(u.user_metadata?.kilde)
+    kilde: normaliserKilde(u.user_metadata?.kilde),
+    tidssone: vaskTidssone(u.user_metadata?.tidssone)
   }));
 
   // ── Abonnement ────────────────────────────────────────────────────────────
   const { data: abData } = await db
     .from('billing_subscriptions')
-    .select('user_id,tier,status,current_period_end,created_at,metadata');
+    .select('user_id,tier,status,current_period_end,cancel_at_period_end,created_at,metadata');
 
   // ── Varselabonnement ──────────────────────────────────────────────────────
   // Radene, ikke bare tallet: kilde, region og aktivering er det strategien
@@ -109,7 +111,7 @@ export async function GET(request: NextRequest) {
     const fra = side * 1000;
     const { data: bruksRader, error: bruksErr } = await db
       .from('bruksdager')
-      .select('user_id,dag,flate')
+      .select('user_id,dag,flate,omrade')
       .gte('dag', bruksGrense)
       .order('dag', { ascending: true })
       .order('user_id', { ascending: true })
@@ -130,6 +132,17 @@ export async function GET(request: NextRequest) {
     }
   }
   const bruksdager = bruksdagerMaalt ? samledeBruksdager : undefined;
+
+  // ── Anonyme tellinger før konto, siste 7 dager (migrasjon 070) ───────────
+  // Høyst 7 dager × 2 flater × 2 språk = 28 rader; ingen paginering nødvendig.
+  // Mangler tabellen, sier rapporten «ikke målt».
+  const tellingsGrense = osloDag(new Date(naa.getTime() - 6 * 24 * 3600_000));
+  const { data: tellingRader, error: tellingErr } = await db
+    .from('flatetellinger')
+    .select('dag,flate,sprak,antall')
+    .gte('dag', tellingsGrense);
+  if (tellingErr) log.warn('dagsrapport.flatetellinger_feilet', { message: tellingErr.message });
+  const flatetellinger = tellingErr ? undefined : ((tellingRader ?? []) as TellingRad[]);
 
   // ── Rapportpuls i dag ─────────────────────────────────────────────────────
   const { data: pulsRader } = await db.from('rapportpuls').select('region,siste7,avvik_pst').eq('dag', osloDag(naa));
@@ -155,6 +168,7 @@ export async function GET(request: NextRequest) {
     varselabonnenter,
     bruksdager,
     rapportpuls,
+    flatetellinger,
     interneBrukere,
     regionerIDag: velg(iDagDato),
     regionerIGar: velg(iGarDato),
@@ -198,10 +212,15 @@ function byggRapportEpost(r: Dagsrapport, naa: Date) {
     : 'ingen';
 
   // Hvor de kom fra. Én linje per kilde: «12 · 3 siste 7 d · 1 betaler».
-  const kildeNavn = (k: string) => (k === UKJENT_KILDE ? 'direkte / ukjent' : k);
+  // «ukjent» = før målingen (september 2026) pluss OAuth-kontoer uten cookie
+  // fra før «web:direkte» fantes; nettregistreringer uten cookie er nå egen rad.
+  const kildeNavn = (k: string) => (k === UKJENT_KILDE ? 'ukjent (før måling)' : k === WEB_DIREKTE_KILDE ? 'nettet, direkte' : k);
   const kildeVerdi = (k: Dagsrapport['kilder'][number]) =>
     `${k.totalt} · ${k.siste7d} siste 7 d · ${k.betalende} betaler`;
   const kildeRader = r.kilder.slice(0, 8);
+  const tidssoneNavn = (t: string) => (t === UKJENT_KILDE ? 'ukjent' : t);
+  const tidssoneTekst = r.nyeBrukere.perTidssone7d.map((t) => `${tidssoneNavn(t.tidssone)} ${t.antall}`).join(' · ') || '—';
+  const p = r.prover;
   const v = r.varsel;
   const u = r.bruk;
   const brukRader: Array<[string, string]> = u.maalt
@@ -209,12 +228,22 @@ function byggRapportEpost(r: Dagsrapport, naa: Date) {
         ['Så forholdene siste 7 dager', `${u.brukereSiste7d} brukere`],
         ['— forsiden / kartet / områdeside / mine steder', `${u.perFlate.hjem} / ${u.perFlate.kart} / ${u.perFlate.omrade} / ${u.perFlate.steder}`],
         ['Så prøvetilbudet (7 d)', String(u.perFlate.tilbud)],
+        // Trakten per utløser: «vist → til prissiden samme dag eller dagen etter».
+        ...u.tilbud.map((t): [string, string] => [`— ark ved «${t.utloser}» → pris`, `${t.tilPris} av ${t.vist}`]),
         ['Så prissiden (7 d)', String(u.perFlate.pris)],
         ['Nye siste 14 d som kom tilbake', `${u.komTilbake} av ${u.nyeSiste14d}`],
         ...u.perKilde.slice(0, 6).map((k): [string, string] => [`— ${kildeNavn(k.kilde)}`, `${k.komTilbake} av ${k.nye}`]),
         ['Brukt i to ulike uker (28 d)', String(u.gjenbruk28d)]
       ]
     : [['Bruk av soppforholdene', 'ikke målt — tabellen bruksdager svarte ikke']];
+  // Før konto i appen: anonyme tellinger per språk (migrasjon 070).
+  const tl = r.tellinger.siste7d;
+  const tellingRader: Array<[string, string]> = r.tellinger.maalt
+    ? [
+        ['Første skjerm i appen, utlogget (7 d) nb / sv', `${tl.soppforhold.nb} / ${tl.soppforhold.sv}`],
+        ['Registreringsskjema åpnet (7 d) nb / sv', `${tl.register.nb} / ${tl.register.sv}`]
+      ]
+    : [['Før konto i appen', 'ikke målt — tabellen flatetellinger svarte ikke']];
 
   const html = `<!doctype html>
 <html lang="nb"><body style="font-family:-apple-system,system-ui,sans-serif;color:#1f2937;max-width:520px;margin:24px auto;padding:0 16px">
@@ -224,18 +253,32 @@ function byggRapportEpost(r: Dagsrapport, naa: Date) {
   <table style="width:100%;border-collapse:collapse;font-size:14px">
     ${rad('Nye brukere siste døgn', String(r.nyeBrukere.siste24t))}
     ${rad('Nye siste 7 dager', String(r.nyeBrukere.siste7d))}
+    ${rad('— per tidssone (land)', tidssoneTekst)}
     ${rad('Registrerte totalt', String(r.nyeBrukere.totalt))}
     ${rad('…som aldri logget inn igjen', String(r.aldriInnloggetIgjen))}
   </table>
 
   <h2 style="font-size:14px;color:#1A3409;margin:22px 0 6px">Abonnement</h2>
   <table style="width:100%;border-collapse:collapse;font-size:14px">
-    ${rad('Løpende totalt', String(b.totalt))}
+    ${rad('Betalende (løpende, uten prøver)', String(b.totalt))}
     ${rad('— betalt via Stripe', String(b.perKilde.stripe))}
     ${rad('— betalt via App Store', String(b.perKilde.revenuecat))}
     ${rad('— gavepass og testkontoer', String(b.perKilde.manuell))}
     ${rad('Nye ekte kjøp siste 7 dager', String(b.nyeSiste7d))}
     ${r.utloptMenMarkertAktiv > 0 ? rad('⚠️ utløpt, men merket aktiv', String(r.utloptMenMarkertAktiv)) : ''}
+  </table>
+
+  <h2 style="font-size:14px;color:#1A3409;margin:22px 0 6px">Prøver</h2>
+  <table style="width:100%;border-collapse:collapse;font-size:14px">
+    ${rad('Løpende prøver nå', String(p.lopende))}
+    ${rad('Startet siste 7 dager', String(p.startetSiste7d))}
+    ${rad('Gikk til første belastning (7 d / totalt)', `${p.gikkTilBetalingSiste7d} / ${p.gikkTilBetaling}`)}
+    ${rad('Avbrutt', String(p.avbrutt))}
+  </table>
+
+  <h2 style="font-size:14px;color:#1A3409;margin:22px 0 6px">Før konto i appen</h2>
+  <table style="width:100%;border-collapse:collapse;font-size:14px">
+    ${tellingRader.map(([n, v]) => rad(n, v)).join('\n    ')}
   </table>
 
   <h2 style="font-size:14px;color:#1A3409;margin:22px 0 6px">I skogen</h2>
@@ -272,7 +315,10 @@ function byggRapportEpost(r: Dagsrapport, naa: Date) {
     registrerte seg før det. «Kom tilbake» = så soppforholdene på en senere dag
     enn registreringsdagen (forsidekortet vises automatisk samme dag, så det
     teller ikke); «to ulike uker» = ISO-uker. Bruk måles fra 6. september 2026.
-    Se kommentaren i <code>api/cron/dagsrapport</code>.
+    «Betalende» er status active med løpende periode — prøver står for seg,
+    og «til første belastning» leses av prøvemerkene webhookene skriver fra
+    14. september 2026. «Før konto i appen» er anonyme tellinger uten noen
+    ID. Se kommentaren i <code>api/cron/dagsrapport</code>.
   </p>
 </body></html>`;
 
@@ -282,15 +328,25 @@ ${overskrift}
 BRUKERE
   siste døgn ................ ${r.nyeBrukere.siste24t}
   siste 7 dager ............. ${r.nyeBrukere.siste7d}
+    per tidssone (land) ..... ${tidssoneTekst}
   totalt .................... ${r.nyeBrukere.totalt}
   aldri logget inn igjen .... ${r.aldriInnloggetIgjen}
 
 ABONNEMENT
-  løpende totalt ............ ${b.totalt}
+  betalende (uten prøver) ... ${b.totalt}
     via Stripe .............. ${b.perKilde.stripe}
     via App Store ........... ${b.perKilde.revenuecat}
     gavepass/test ........... ${b.perKilde.manuell}
   nye ekte kjøp (7 d) ....... ${b.nyeSiste7d}${r.utloptMenMarkertAktiv > 0 ? `\n  ⚠️ utløpt men merket aktiv .. ${r.utloptMenMarkertAktiv}` : ''}
+
+PRØVER
+  løpende nå ................ ${p.lopende}
+  startet (7 d) ............. ${p.startetSiste7d}
+  til første belastning ..... ${p.gikkTilBetalingSiste7d} (7 d) / ${p.gikkTilBetaling} totalt
+  avbrutt ................... ${p.avbrutt}
+
+FØR KONTO I APPEN
+${tellingRader.map(([n, v]) => `  ${n.padEnd(42, '.')} ${v}`).join('\n')}
 
 I SKOGEN
   best i dag ................ ${r.toppRegioner.map((t) => `${t.region} ${t.score}`).join(', ') || '—'}
@@ -312,7 +368,10 @@ ${kildeRader.map((k) => `  ${kildeNavn(k.kilde).padEnd(26, '.')} ${kildeVerdi(k)
 Besøkstall for forsiden er ikke målt — landingssiden har ingen JavaScript.
 Kilde per registrering er målt fra september 2026; «direkte / ukjent» er
 direkte besøk pluss alle fra før det. «Kom tilbake» = så forholdene en senere
-dag enn registreringsdagen. Bruk måles fra 6. september 2026.`;
+dag enn registreringsdagen. Bruk måles fra 6. september 2026. «Betalende» er
+status active med løpende periode; prøver står for seg, og «til første
+belastning» leses av prøvemerkene fra 14. september 2026. «Før konto i appen»
+er anonyme tellinger uten noen ID.`;
 
   return { emne: `Mycelet ${dato}: ${overskrift.toLowerCase()}`, html, tekst };
 }

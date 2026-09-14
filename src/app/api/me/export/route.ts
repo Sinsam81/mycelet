@@ -274,9 +274,12 @@ export async function GET(request: NextRequest) {
       email: user.email ?? null,
       createdAt: user.created_at,
       lastSignInAt: user.last_sign_in_at ?? null,
-      // user_metadata bærer registreringskilden (kilde), vilkårssamtykket
-      // (terms_version/terms_accepted_at — et tidsstemplet samtykkebevis)
-      // og brukernavn. Persondata etter art. 15, og de lå utenfor før.
+      // user_metadata bærer registreringskilden (kilde), plattform, språk
+      // (sprak) og enhetens tidssone ved registrering (tidssone — fra
+      // september 2026), vilkårssamtykket (terms_version/terms_accepted_at —
+      // et tidsstemplet samtykkebevis) og brukernavn. Persondata etter
+      // art. 15, og de lå utenfor før. Hele objektet følger med, så nye
+      // nøkler trenger ingen endring her.
       metadata: user.user_metadata ?? {},
       identities: (user.identities ?? []).map((i) => i.provider)
     },

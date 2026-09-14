@@ -7,6 +7,8 @@ import { useTranslations } from 'next-intl';
 import { Button } from '@/components/ui/Button';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { useIsNative } from '@/lib/hooks/useIsNative';
+import { NativeOnly } from '@/components/native/NativeOnly';
+import { TellFlate } from '@/components/bruk/TellFlate';
 import { trackEvent } from '@/lib/analytics';
 import { readSafeNext } from '@/lib/auth/safe-redirect';
 import { ensureProfile } from '@/lib/auth/ensure-profile';
@@ -103,6 +105,10 @@ function RegisterForm() {
 
   return (
     <main className="mx-auto min-h-screen w-full max-w-screen-sm p-6 pt-[calc(1.5rem_+_env(safe-area-inset-top))]">
+      {/* Registreringsskjemaet åpnet: anonym telling (migrasjon 070), bare i appen. */}
+      <NativeOnly>
+        <TellFlate flate="register" />
+      </NativeOnly>
       <div className="rounded-xl bg-white p-6 shadow-sm">
         <h1 className="text-2xl font-semibold text-forest-900">{t('title')}</h1>
         <p className="mt-2 text-sm text-gray-700">{t('subtitle')}</p>
