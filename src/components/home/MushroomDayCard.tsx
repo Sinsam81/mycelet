@@ -9,6 +9,7 @@ import { forecastBarHeights } from '@/lib/utils/forecast-bars';
 import { forecastBand } from '@/lib/utils/forecast-scale';
 import { getCurrentPositionIfGranted, getCurrentPositionOnce } from '@/lib/hooks/useGeolocation';
 import { lagreHusketPosisjon, lesHusketPosisjon, sammeRute } from '@/lib/map/husket-posisjon';
+import { posisjonsVisning } from '@/lib/map/posisjon-visning';
 import { standardPosisjon } from '@/lib/map/standard-posisjon';
 import { nearestRegion } from '@/lib/prediction/tile-regions';
 import type { HJEM_OMRADER } from '@/lib/bruk/bruksdag';
@@ -78,6 +79,10 @@ function colorFor(score: number, optimal: boolean): string {
  *      Capacitor-laget — i iOS-skallet fantes ikke navigator.geolocation, så alle
  *      app-brukere sto på Oslo ved hver åpning. Kortet spør ALDRI selv; kartet gjør det.
  *   3. Ellers standardområdet for språket (Oslo / Stockholm), merket «omtrentlig».
+ *   4. Bare en posisjon som en fersk måling fra DENNE åpningen bekrefter, er ferdig.
+ *      Husket (kan være ei uke gammel; på Safari eller etter trukket tilgang kommer
+ *      det aldri en fersk av seg selv) og standard får «Min posisjon», så den kan
+ *      rettes her og ikke bare fra kartet (posisjon-visning.ts).
  * Bruksdagen (hjem, «egen»/«standard») skrives én gang, med den kilden som faktisk
  * ble vist først — aldri «standard» og så «egen» for samme åpning.
  */
@@ -89,6 +94,8 @@ export function MushroomDayCard() {
   const [posisjon, setPosisjon] = useState<Posisjon | null>(null);
   /** Posisjonen dataene på skjermen faktisk gjelder for (etiketten følger den, ikke ønsket). */
   const [vist, setVist] = useState<Posisjon | null>(null);
+  /** Fersk måling fra denne monteringen (stille eller ved eget trykk) — bekrefter det som vises, eller ikke. */
+  const [ferskFix, setFerskFix] = useState<{ lat: number; lng: number } | null>(null);
   /** Frosset ved første data: én hjem-rad per montering, med kilden kortet viste. */
   const [registrert, setRegistrert] = useState<Kilde | null>(null);
   const klarSendt = useRef(false);
@@ -104,6 +111,7 @@ export function MushroomDayCard() {
       if (cancelled) return;
       if (fersk) {
         lagreHusketPosisjon(fersk.latitude, fersk.longitude);
+        setFerskFix({ lat: fersk.latitude, lng: fersk.longitude });
         // Samme ~1 km-rute som den huskede → samme forespørsel → ingen ny henting.
         if (husket && sammeRute(husket, { lat: fersk.latitude, lng: fersk.longitude })) return;
         setPosisjon({ lat: fersk.latitude, lng: fersk.longitude, kilde: 'egen' });
@@ -168,9 +176,10 @@ export function MushroomDayCard() {
     try {
       const pos = await getCurrentPositionOnce();
       lagreHusketPosisjon(pos.latitude, pos.longitude);
+      setFerskFix({ lat: pos.latitude, lng: pos.longitude });
       setPosisjon({ lat: pos.latitude, lng: pos.longitude, kilde: 'egen' });
     } catch {
-      // Avslått eller utilgjengelig: kortet blir stående på standardområdet, som før.
+      // Avslått eller utilgjengelig: kortet blir stående på det det viser, som før.
     }
   };
 
@@ -196,7 +205,12 @@ export function MushroomDayCard() {
   if (!data) return null;
 
   const { today, days } = data;
-  const usingDefault = vist?.kilde === 'standard';
+  // Standard → «omtrentlig» + det store delingstilbudet. Alt en fersk måling fra
+  // denne åpningen IKKE bekrefter (husket fra forrige uke, Safari uten Permissions
+  // API, trukket tilgang) → den lille «Min posisjon»-lenka. Se posisjon-visning.ts.
+  const { omtrentlig, kanRettes } = vist
+    ? posisjonsVisning(vist, ferskFix)
+    : { omtrentlig: false, kanRettes: false };
   const areaLabel = vist ? omradeEtikett(vist) : '';
   // Regnes over hele uka før noe tegnes — se forecast-bars.ts.
   const barHeights = forecastBarHeights(days.map((d) => d.score));
@@ -287,7 +301,7 @@ export function MushroomDayCard() {
       {/* Without a position the whole card is regional. Say so plainly and make
           the offer, rather than showing a default region that reads as local.
           Deliberately NOT a prompt on load — the user taps if they want it. */}
-      {usingDefault ? (
+      {omtrentlig ? (
         <button
           type="button"
           onClick={() => void hentMinPosisjon()}
@@ -310,10 +324,12 @@ export function MushroomDayCard() {
       <div className="mt-2 flex items-center justify-between text-xs">
         <span className="text-gray-500">
           📍 {areaLabel}
-          {usingDefault ? <span className="text-gray-400"> · {t('approximate')}</span> : null}
+          {omtrentlig ? <span className="text-gray-400"> · {t('approximate')}</span> : null}
         </span>
         <div className="flex items-center gap-3">
-          {usingDefault ? (
+          {/* Også for en husket posisjon: den kan være gammel, og uten lenka her var
+              kartet eneste vei til å rette den. */}
+          {kanRettes ? (
             <button
               type="button"
               onClick={() => void hentMinPosisjon()}
