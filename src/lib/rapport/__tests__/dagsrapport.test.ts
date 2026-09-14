@@ -50,6 +50,27 @@ function inn(over: Partial<RapportInn> = {}): RapportInn {
   };
 }
 
+describe('rapportpuls', () => {
+  it('viser de tre områdene med størst avvik og hopper over tynne', () => {
+    const r = byggDagsrapport(
+      inn({
+        rapportpuls: [
+          { region: 'Oslo', siste7: 84, avvikPst: 61 },
+          { region: 'Bergen', siste7: 40, avvikPst: -20 },
+          { region: 'Innlandet', siste7: 120, avvikPst: 90 },
+          { region: 'Trondheim', siste7: 50, avvikPst: 10 },
+          { region: 'Stavanger', siste7: 3, avvikPst: null }
+        ]
+      })
+    );
+    expect(r.puls.map((p) => p.region)).toEqual(['Innlandet', 'Oslo', 'Trondheim']);
+  });
+
+  it('tom uten data', () => {
+    expect(byggDagsrapport(inn()).puls).toEqual([]);
+  });
+});
+
 describe('betalende — den tellingen som kan lyve', () => {
   it('teller ikke et abonnement der perioden er utløpt, selv om status sier aktiv', () => {
     // Den ekte raden fra produksjon: status «active», sluttdato 2. juli.

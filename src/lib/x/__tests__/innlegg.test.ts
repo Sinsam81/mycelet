@@ -86,6 +86,19 @@ describe('byggOmslagsPost', () => {
     expect(vektetLengde(tekst)).toBeLessThanOrEqual(280);
   });
 
+  it('rapportpuls-linja legges inn når det er plass, og kuttes først når posten blir for lang', () => {
+    const puls = 'Artsobservasjoner uka 1.–7. september: 84 soppfunn i Oslo, 61 % over vanlig.';
+    const kort = byggOmslagsPost([{ region: 'Oslo', fra: 62, til: 88 }], puls)!;
+    expect(kort).toContain('84 soppfunn');
+    expect(kort).toContain('ikke en lovnad');
+    expect(vektetLengde(kort)).toBeLessThanOrEqual(280);
+
+    const mange = ['Oslo', 'Bergen', 'Trondheim', 'Innlandet', 'Kristiansand'].map((region) => ({ region, fra: 60, til: 88 }));
+    const lang = byggOmslagsPost(mange, puls)!;
+    expect(vektetLengde(lang)).toBeLessThanOrEqual(280);
+    expect(lang).not.toContain('84 soppfunn');
+  });
+
   it('inneholder aldri en URL — det ville 13-doblet prisen per post', () => {
     const tekst = byggOmslagsPost([{ region: 'Oslo', fra: 62, til: 88 }])!;
     expect(tekst).not.toMatch(/https?:\/\//);

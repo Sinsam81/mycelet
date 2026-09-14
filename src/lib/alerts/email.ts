@@ -1,3 +1,4 @@
+import { pulsKilde, pulsLinje, type Puls } from '@/lib/rapportpuls/puls';
 import type { Locale } from '@/i18n/config';
 
 /**
@@ -43,6 +44,8 @@ interface VarselEpostArgs {
   arter?: string[];
   /** Fasit for FORRIGE varsel i regionen — kun når tallene er modne (fasit.ts). */
   fasit?: { dato: string; ukenEtter: number; ukenFor: number } | null;
+  /** Rapportpuls for området (migrasjon 069) — forklaring, aldri utløser. Norge foreløpig. */
+  puls?: Puls | null;
   /**
    * Knappens mål. Standard er kartet; cronen sender den sporbare lenka til
    * områdesiden (/api/soppvarsel/klikk → /soppforhold/<område>), som er det
@@ -158,6 +161,10 @@ ${
   args.arter && args.arter.length
     ? `\n    <p style="font-size: 14px; line-height: 1.55;">🍄 ${t.arter(args.arter.join(', '))}</p>`
     : ''
+}${
+  pulsLinje(args.puls, args.locale)
+    ? `\n    <p style="font-size: 14px; line-height: 1.55;">📈 ${pulsLinje(args.puls, args.locale)} <span style="color: #6b7280;">${pulsKilde(args.locale)}</span></p>`
+    : ''
 }
 
     <p style="margin: 26px 0;">
@@ -189,6 +196,8 @@ ${
     : '';
   const toppdagLinje = args.toppdag ? `\n${toppdagLinjeFor(t, args.toppdag)}\n` : '';
   const arterLinje = args.arter && args.arter.length ? `\n${t.arter(args.arter.join(', '))}\n` : '';
+  const pulsTekst = pulsLinje(args.puls, args.locale);
+  const pulsLinjeTekst = pulsTekst ? `\n${pulsTekst} ${pulsKilde(args.locale)}\n` : '';
 
   const tekst = `${t.tittel(args.region)}
 
@@ -197,7 +206,7 @@ ${fasitLinje}
 ${t.hvorfor}
 
 ${t.forbehold}
-${toppdagLinje}${arterLinje}
+${toppdagLinje}${arterLinje}${pulsLinjeTekst}
 ${t.knapp}: ${kartUrl}
 
 ${t.sikkerhet}
