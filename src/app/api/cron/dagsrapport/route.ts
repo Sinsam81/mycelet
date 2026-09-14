@@ -39,7 +39,9 @@ import { sendEpost } from '@/lib/email/send';
  * user_metadata, og her leses den ut igjen — se src/lib/analytics/kilde.ts.
  * Det svarer på det annonsetesten (docs/google-ads-test.md) trenger: hvor
  * mange av dem som kom via annonsen registrerte seg, og betalte. «ukjent» er
- * direkte besøk pluss alle som registrerte seg før målingen startet.
+ * alle som registrerte seg før målingen startet (pluss OAuth-kontoer uten
+ * cookie fra før «web:direkte» fantes); nettregistreringer uten cookie er
+ * «web:direkte» fra 14. september 2026 og står på egen rad.
  */
 
 export const maxDuration = 60;
@@ -191,8 +193,11 @@ export async function GET(request: NextRequest) {
 /**
  * E-posten. Bevisst nøktern: dette er et arbeidsverktøy, ikke markedsføring.
  * Tallene skal kunne leses på en telefon på tre sekunder.
+ *
+ * Eksportert for testen i __tests__: fotnoten skal navngi de samme radene
+ * som kildeNavn() faktisk skriver, ikke en rad som ikke lenger finnes.
  */
-function byggRapportEpost(r: Dagsrapport, naa: Date) {
+export function byggRapportEpost(r: Dagsrapport, naa: Date) {
   const dato = naa.toLocaleDateString('nb-NO', { day: 'numeric', month: 'long' });
   const b = r.betalende;
 
@@ -311,8 +316,10 @@ function byggRapportEpost(r: Dagsrapport, naa: Date) {
   <p style="font-size:12px;color:#9ca3af;margin-top:24px;line-height:1.5">
     Besøkstall for forsiden er ikke målt — den statiske landingssiden har ingen
     JavaScript, så analyseverktøyet kjører ikke der. Kilde per registrering er
-    målt fra september 2026; «direkte / ukjent» er direkte besøk pluss alle som
-    registrerte seg før det. «Kom tilbake» = så soppforholdene på en senere dag
+    målt fra september 2026; «ukjent (før måling)» er kontoer fra før det (og
+    OAuth-kontoer uten cookie fra før «web:direkte» fantes), «nettet, direkte»
+    er nettregistreringer uten cookie fra 14. september 2026. «Kom tilbake» =
+    så soppforholdene på en senere dag
     enn registreringsdagen (forsidekortet vises automatisk samme dag, så det
     teller ikke); «to ulike uker» = ISO-uker. Bruk måles fra 6. september 2026.
     «Betalende» er status active med løpende periode — prøver står for seg,
@@ -366,9 +373,11 @@ HVOR DE REGISTRERTE KOM FRA
 ${kildeRader.map((k) => `  ${kildeNavn(k.kilde).padEnd(26, '.')} ${kildeVerdi(k)}`).join('\n') || '  ingen registrerte'}
 
 Besøkstall for forsiden er ikke målt — landingssiden har ingen JavaScript.
-Kilde per registrering er målt fra september 2026; «direkte / ukjent» er
-direkte besøk pluss alle fra før det. «Kom tilbake» = så forholdene en senere
-dag enn registreringsdagen. Bruk måles fra 6. september 2026. «Betalende» er
+Kilde per registrering er målt fra september 2026; «ukjent (før måling)» er
+kontoer fra før det (og OAuth-kontoer uten cookie fra før «web:direkte»
+fantes), «nettet, direkte» er nettregistreringer uten cookie fra 14. september
+2026. «Kom tilbake» = så forholdene en senere dag enn registreringsdagen.
+Bruk måles fra 6. september 2026. «Betalende» er
 status active med løpende periode; prøver står for seg, og «til første
 belastning» leses av prøvemerkene fra 14. september 2026. «Før konto i appen»
 er anonyme tellinger uten noen ID.`;
