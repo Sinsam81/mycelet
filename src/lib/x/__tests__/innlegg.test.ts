@@ -87,7 +87,7 @@ describe('byggOmslagsPost', () => {
   });
 
   it('rapportpuls-linja legges inn når det er plass, og kuttes først når posten blir for lang', () => {
-    const puls = 'Artsobservasjoner uka 1.–7. september: 84 soppfunn i Oslo, 61 % over vanlig.';
+    const puls = 'Artsobservasjoner/GBIF uka 1.–7. september: 84 soppfunn i Oslo, 61 % over vanlig.';
     const kort = byggOmslagsPost([{ region: 'Oslo', fra: 62, til: 88 }], puls)!;
     expect(kort).toContain('84 soppfunn');
     expect(kort).toContain('ikke en lovnad');

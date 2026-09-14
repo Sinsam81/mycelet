@@ -59,7 +59,7 @@ describe('pulsPeriode', () => {
 describe('pulsLinje / pulsKortLinje', () => {
   it('sier fra bare når grunnlaget holder, og tar med trenden når den er tydelig', () => {
     expect(pulsLinje(beregnPuls(inn()))).toBe(
-      'Uka 1.–7. september: 84 soppfunn registrert i Artsobservasjoner her, 61 % over det vanlige for uka.'
+      'Uka 1.–7. september: 84 soppfunn registrert i Artsobservasjoner/GBIF her, 61 % over det vanlige for uka.'
     );
     expect(pulsLinje(beregnPuls(inn({ forrigeUke: 60 })))).toContain('og 40 % flere enn uka før');
     expect(pulsLinje(beregnPuls(inn({ forrigeUke: 200 })))).toContain('men 58 % færre enn uka før');
@@ -71,7 +71,7 @@ describe('pulsLinje / pulsKortLinje', () => {
   it('svensk variant finnes, og X-linja bare ved «over»', () => {
     expect(pulsLinje(beregnPuls(inn()), 'sv')).toContain('svampfynd');
     expect(pulsKortLinje('Innlandet', beregnPuls(inn()))).toBe(
-      'Artsobservasjoner uka 1.–7. september: 84 soppfunn i Innlandet, 61 % over vanlig.'
+      'Artsobservasjoner/GBIF uka 1.–7. september: 84 soppfunn i Innlandet, 61 % over vanlig.'
     );
     expect(pulsKortLinje('Innlandet', beregnPuls(inn({ siste7: 55 })))).toBeNull();
   });

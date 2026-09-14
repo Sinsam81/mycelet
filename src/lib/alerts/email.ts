@@ -163,7 +163,7 @@ ${
     : ''
 }${
   pulsLinje(args.puls, args.locale)
-    ? `\n    <p style="font-size: 14px; line-height: 1.55;">📈 ${pulsLinje(args.puls, args.locale)} <span style="color: #6b7280;">${pulsKilde(args.locale)}</span></p>`
+    ? `\n    <p style="font-size: 14px; line-height: 1.55;">${args.puls?.nivaa === 'over' ? '📈' : args.puls?.nivaa === 'under' ? '📉' : '📊'} ${pulsLinje(args.puls, args.locale)} <span style="color: #6b7280;">${pulsKilde(args.locale)}</span></p>`
     : ''
 }
 
