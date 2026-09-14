@@ -1067,7 +1067,7 @@
     "shareFinding": "Dela fynd"
   },
   "MushroomDayCard": {
-    "defaultRegion": "Södra Norge",
+    "defaultRegion": "Mellansverige",
     "yourPosition": "din position",
     "checkingConditions": "Kollar svampförhållandena …",
     "outOf100": "av 100 · väder + säsong",
@@ -1077,7 +1077,8 @@
     "ringLabel": "Väder och säsong i dag: {score} av 100",
     "scaleNote": "Siffran är väder och säsong för området. Markfukten är en egen spärr och ingår inte i siffran — därför kan den vara hög även när marken är för torr. Kartan räknar på ett annat sätt, så siffrorna kan inte jämföras direkt.",
     "sharePositionTitle": "Dela position för bättre råd.",
-    "sharePositionBody": "Nu visar vi vädret för södra Norge generellt. Med din position räknar vi på vädret där du faktiskt är — och kartan kan föreslå platser i närheten.",
+    "sharePositionBody": "Nu visar vi vädret för {area}. Med din position räknar vi på vädret där du faktiskt är — och kartan kan föreslå platser i närheten.",
+    "nearestArea": "närmaste område: {name}, {km} km",
     "approximate": "ungefärlig"
   },
   "LookAlikeCheck": {

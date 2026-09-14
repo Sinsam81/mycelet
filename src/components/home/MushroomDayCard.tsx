@@ -1,12 +1,18 @@
 'use client';
 
 import { RegistrerBruksdag } from '@/components/bruk/RegistrerBruksdag';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { MapPin } from 'lucide-react';
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import { forecastBarHeights } from '@/lib/utils/forecast-bars';
 import { forecastBand } from '@/lib/utils/forecast-scale';
+import { getCurrentPositionIfGranted, getCurrentPositionOnce } from '@/lib/hooks/useGeolocation';
+import { lagreHusketPosisjon, lesHusketPosisjon, sammeRute } from '@/lib/map/husket-posisjon';
+import { posisjonsVisning } from '@/lib/map/posisjon-visning';
+import { standardPosisjon } from '@/lib/map/standard-posisjon';
+import { nearestRegion } from '@/lib/prediction/tile-regions';
+import type { HJEM_OMRADER } from '@/lib/bruk/bruksdag';
 
 interface DayPoint {
   date: string;
@@ -33,6 +39,18 @@ interface Forecast {
   hasForecast: boolean;
 }
 
+/** «egen» = brukerens egen eller huskede posisjon, «standard» = standardområdet for språket (bruksdag.ts). */
+type Kilde = (typeof HJEM_OMRADER)[number];
+
+interface Posisjon {
+  lat: number;
+  lng: number;
+  kilde: Kilde;
+}
+
+/** Sendes på window én gang, når kortet først har data — andre flater (tilbudsarket) kan vente på den. */
+export const FORSIDEKORT_KLAR_EVENT = 'mycelet:forsidekort-klar';
+
 // Tint the flush banner by status — green when ripe, amber when on the way,
 // muted when dry/dormant. The flush title already carries its own emoji.
 const FLUSH_TINT: Record<FlushStatus, string> = {
@@ -42,11 +60,6 @@ const FLUSH_TINT: Record<FlushStatus, string> = {
   dry: 'border-gray-200 bg-gray-50 text-gray-700',
   dormant: 'border-gray-200 bg-gray-50 text-gray-600'
 };
-
-// Default region (Sør-Norge) used until the visitor opts to share their position —
-// we never prompt for location on the landing page. The display label is resolved
-// via i18n inside the component.
-const DEFAULT = { lat: 59.91, lon: 10.75 };
 
 // Tersklene og båndlogikken ligger i forecast-scale.ts, delt med
 // PlaceForecastStrip. De var fire ulike sett på samme skjerm.
@@ -58,76 +71,125 @@ function colorFor(score: number, optimal: boolean): string {
 /**
  * "Soppforhold i dag" + 7-day trend on the home page. Calls /api/mushroom-forecast
  * and shows a color-coded score ring + verdict + the data-backed "why" for today,
- * plus a small bar chart of the days ahead. Personalizes silently only if location
- * is already granted (never prompts on load).
+ * plus a small bar chart of the days ahead.
+ *
+ * Hvor kortet regner, avgjøres FØR noe hentes (posisjon → henting → bruksdag):
+ *   1. Husket posisjon fra kartet (husket-posisjon.ts) brukes med én gang.
+ *   2. Er posisjonstilgang alt gitt, hentes en fersk, grov posisjon (≤ 4 s) gjennom
+ *      Capacitor-laget — i iOS-skallet fantes ikke navigator.geolocation, så alle
+ *      app-brukere sto på Oslo ved hver åpning. Kortet spør ALDRI selv; kartet gjør det.
+ *   3. Ellers standardområdet for språket (Oslo / Stockholm), merket «omtrentlig».
+ *   4. Bare en posisjon som en fersk måling fra DENNE åpningen bekrefter, er ferdig.
+ *      Husket (kan være ei uke gammel; på Safari eller etter trukket tilgang kommer
+ *      det aldri en fersk av seg selv) og standard får «Min posisjon», så den kan
+ *      rettes her og ikke bare fra kartet (posisjon-visning.ts).
+ * Bruksdagen (hjem, «egen»/«standard») skrives én gang, med den kilden som faktisk
+ * ble vist først — aldri «standard» og så «egen» for samme åpning.
  */
 export function MushroomDayCard() {
   const t = useTranslations('MushroomDayCard');
-  const defaultLabel = t('defaultRegion');
-  const myLocationLabel = t('yourPosition');
+  const locale = useLocale();
   const [data, setData] = useState<Forecast | null>(null);
   const [loading, setLoading] = useState(true);
-  const [areaLabel, setAreaLabel] = useState(defaultLabel);
-  const [usingDefault, setUsingDefault] = useState(true);
+  const [posisjon, setPosisjon] = useState<Posisjon | null>(null);
+  /** Posisjonen dataene på skjermen faktisk gjelder for (etiketten følger den, ikke ønsket). */
+  const [vist, setVist] = useState<Posisjon | null>(null);
+  /** Fersk måling fra denne monteringen (stille eller ved eget trykk) — bekrefter det som vises, eller ikke. */
+  const [ferskFix, setFerskFix] = useState<{ lat: number; lng: number } | null>(null);
+  /** Frosset ved første data: én hjem-rad per montering, med kilden kortet viste. */
+  const [registrert, setRegistrert] = useState<Kilde | null>(null);
+  const klarSendt = useRef(false);
 
-  const load = async (lat: number, lon: number, label: string, isDefault: boolean) => {
-    setLoading(true);
-    setAreaLabel(label);
-    setUsingDefault(isDefault);
-    try {
-      // Grovkorn til ~1 km FØR posisjonen legges i en URL. Hjemskjermen lastes
-      // hver gang appen åpnes, og en URL med meterpresis GPS havner i
-      // infrastrukturens forespørselslogg — over en sesong blir det et
-      // bevegelsesspor vi ikke har bruk for. Ruta runder uansett selv til to
-      // desimaler for cache-nøkkelen sin, og værdataene er regionale, så svaret
-      // er identisk.
-      const res = await fetch(
-        `/api/mushroom-forecast?lat=${lat.toFixed(2)}&lon=${lon.toFixed(2)}`,
-        { cache: 'no-store' }
-      );
-      setData(res.ok ? ((await res.json()) as Forecast) : null);
-    } catch {
-      setData(null);
-    } finally {
-      setLoading(false);
-    }
-  };
-
+  // 1. Hvor? Se dokkommentaren over. Kjøres på nytt ved språkbytte, fordi
+  // standardområdet følger språket — bruksdagen og hendelsen er alt frosset.
   useEffect(() => {
     let cancelled = false;
-    const start = async () => {
-      let granted = false;
-      try {
-        const perm = await navigator.permissions?.query({ name: 'geolocation' as PermissionName });
-        granted = perm?.state === 'granted';
-      } catch {
-        granted = false;
-      }
-      if (granted && navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(
-          (pos) => {
-            if (!cancelled) void load(pos.coords.latitude, pos.coords.longitude, myLocationLabel, false);
-          },
-          () => {
-            if (!cancelled) void load(DEFAULT.lat, DEFAULT.lon, defaultLabel, true);
-          },
-          { timeout: 6000, maximumAge: 600000 }
-        );
-      } else if (!cancelled) {
-        void load(DEFAULT.lat, DEFAULT.lon, defaultLabel, true);
+    const velg = async () => {
+      const husket = lesHusketPosisjon();
+      if (husket) setPosisjon({ lat: husket.lat, lng: husket.lng, kilde: 'egen' });
+      const fersk = await getCurrentPositionIfGranted();
+      if (cancelled) return;
+      if (fersk) {
+        lagreHusketPosisjon(fersk.latitude, fersk.longitude);
+        setFerskFix({ lat: fersk.latitude, lng: fersk.longitude });
+        // Samme ~1 km-rute som den huskede → samme forespørsel → ingen ny henting.
+        if (husket && sammeRute(husket, { lat: fersk.latitude, lng: fersk.longitude })) return;
+        setPosisjon({ lat: fersk.latitude, lng: fersk.longitude, kilde: 'egen' });
+      } else if (!husket) {
+        const std = standardPosisjon(locale);
+        setPosisjon({ lat: std.lat, lng: std.lng, kilde: 'standard' });
       }
     };
-    void start();
+    void velg();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [locale]);
 
-  const useMyLocation = () => {
-    if (!navigator.geolocation) return;
-    navigator.geolocation.getCurrentPosition((pos) =>
-      void load(pos.coords.latitude, pos.coords.longitude, myLocationLabel, false)
-    );
+  // 2. Hent prognosen for den valgte posisjonen. Bytter posisjonen mens en
+  // henting pågår, forkastes det gamle svaret (cancelled) — det huskede og det
+  // ferske kappløpet skal ikke ende med feil etikett på riktig tall.
+  useEffect(() => {
+    if (!posisjon) return;
+    let cancelled = false;
+    const hent = async () => {
+      setLoading(true);
+      try {
+        // Grovkorn til ~1 km FØR posisjonen legges i en URL. Hjemskjermen lastes
+        // hver gang appen åpnes, og en URL med meterpresis GPS havner i
+        // infrastrukturens forespørselslogg — over en sesong blir det et
+        // bevegelsesspor vi ikke har bruk for. Ruta runder uansett selv til to
+        // desimaler for cache-nøkkelen sin, og værdataene er regionale, så svaret
+        // er identisk.
+        const res = await fetch(
+          `/api/mushroom-forecast?lat=${posisjon.lat.toFixed(2)}&lon=${posisjon.lng.toFixed(2)}`,
+          { cache: 'no-store' }
+        );
+        const neste = res.ok ? ((await res.json()) as Forecast) : null;
+        if (cancelled) return;
+        // Feiler en OPPFRISKING, blir det som alt vises stående; feiler den
+        // første hentingen, er det ingenting å vise (som før).
+        setData((forrige) => neste ?? forrige);
+        if (neste) {
+          setVist(posisjon);
+          setRegistrert((forrige) => forrige ?? posisjon.kilde);
+          if (!klarSendt.current) {
+            klarSendt.current = true;
+            window.dispatchEvent(new Event(FORSIDEKORT_KLAR_EVENT));
+          }
+        }
+      } catch {
+        // Nett nede: samme regel som over — behold det som vises, ellers ingenting.
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+    void hent();
+    return () => {
+      cancelled = true;
+    };
+  }, [posisjon]);
+
+  // Brukerens eget trykk — den ene gangen kortet får be om tillatelse, og da
+  // gjennom Capacitor-laget så det virker i skallet også.
+  const hentMinPosisjon = async () => {
+    try {
+      const pos = await getCurrentPositionOnce();
+      lagreHusketPosisjon(pos.latitude, pos.longitude);
+      setFerskFix({ lat: pos.latitude, lng: pos.longitude });
+      setPosisjon({ lat: pos.latitude, lng: pos.longitude, kilde: 'egen' });
+    } catch {
+      // Avslått eller utilgjengelig: kortet blir stående på det det viser, som før.
+    }
+  };
+
+  // Etiketten: bynavnet inne i et av områdene våre, «nærmeste område: Bergen, 35 km»
+  // like utenfor, og bare den generelle teksten når ingen boks er i nærheten.
+  const omradeEtikett = (p: Posisjon): string => {
+    const naer = nearestRegion(p.lat, p.lng);
+    if (naer?.inside) return naer.region.name;
+    if (naer) return t('nearestArea', { name: naer.region.name, km: naer.distanceKm });
+    return p.kilde === 'standard' ? t('defaultRegion') : t('yourPosition');
   };
 
   if (loading && !data) {
@@ -143,6 +205,13 @@ export function MushroomDayCard() {
   if (!data) return null;
 
   const { today, days } = data;
+  // Standard → «omtrentlig» + det store delingstilbudet. Alt en fersk måling fra
+  // denne åpningen IKKE bekrefter (husket fra forrige uke, Safari uten Permissions
+  // API, trukket tilgang) → den lille «Min posisjon»-lenka. Se posisjon-visning.ts.
+  const { omtrentlig, kanRettes } = vist
+    ? posisjonsVisning(vist, ferskFix)
+    : { omtrentlig: false, kanRettes: false };
+  const areaLabel = vist ? omradeEtikett(vist) : '';
   // Regnes over hele uka før noe tegnes — se forecast-bars.ts.
   const barHeights = forecastBarHeights(days.map((d) => d.score));
   const color = colorFor(today.score, today.optimal);
@@ -152,8 +221,9 @@ export function MushroomDayCard() {
 
   return (
     <article className="min-h-[15rem] rounded-xl bg-white p-4 shadow-sm">
-      {/* «Så soppforholdene i dag» — først her, når kortet faktisk viser noe (migrasjon 064). */}
-      <RegistrerBruksdag flate="hjem" />
+      {/* «Så soppforholdene i dag» — først her, når kortet faktisk viser noe (migrasjon 064),
+          og med kilden det viste først: «egen» eller «standard» (bruksdag.ts). */}
+      {registrert ? <RegistrerBruksdag flate="hjem" omrade={registrert} /> : null}
       <div className="flex items-center gap-4">
         <svg
           viewBox="0 0 110 110"
@@ -231,16 +301,16 @@ export function MushroomDayCard() {
       {/* Without a position the whole card is regional. Say so plainly and make
           the offer, rather than showing a default region that reads as local.
           Deliberately NOT a prompt on load — the user taps if they want it. */}
-      {usingDefault ? (
+      {omtrentlig ? (
         <button
           type="button"
-          onClick={useMyLocation}
+          onClick={() => void hentMinPosisjon()}
           className="mt-3 flex w-full items-start gap-2 rounded-xl border border-forest-200 bg-forest-50/60 px-3 py-2 text-left transition hover:bg-forest-50"
         >
           <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-forest-700" />
           <span className="text-xs leading-relaxed text-forest-900">
             <span className="font-semibold">{t('sharePositionTitle')}</span>{' '}
-            <span className="text-forest-800">{t('sharePositionBody')}</span>
+            <span className="text-forest-800">{t('sharePositionBody', { area: areaLabel })}</span>
           </span>
         </button>
       ) : null}
@@ -254,13 +324,15 @@ export function MushroomDayCard() {
       <div className="mt-2 flex items-center justify-between text-xs">
         <span className="text-gray-500">
           📍 {areaLabel}
-          {usingDefault ? <span className="text-gray-400"> · {t('approximate')}</span> : null}
+          {omtrentlig ? <span className="text-gray-400"> · {t('approximate')}</span> : null}
         </span>
         <div className="flex items-center gap-3">
-          {usingDefault ? (
+          {/* Også for en husket posisjon: den kan være gammel, og uten lenka her var
+              kartet eneste vei til å rette den. */}
+          {kanRettes ? (
             <button
               type="button"
-              onClick={useMyLocation}
+              onClick={() => void hentMinPosisjon()}
               className="inline-flex items-center gap-1 font-medium text-forest-800 hover:underline"
             >
               <MapPin className="h-3 w-3" /> {t('myPosition')}

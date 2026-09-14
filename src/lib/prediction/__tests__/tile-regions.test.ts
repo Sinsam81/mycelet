@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { PREDICTION_TILE_REGIONS, predictionTileGridCells } from '../tile-regions';
+import { NEAREST_REGION_MAX_KM, PREDICTION_TILE_REGIONS, nearestRegion, predictionTileGridCells } from '../tile-regions';
 import { getRegion } from '@/lib/utils/region';
 
 /**
@@ -75,5 +75,58 @@ describe('PREDICTION_TILE_REGIONS', () => {
       const n = PREDICTION_TILE_REGIONS.filter((r) => r.country === land).length;
       expect(n, `${land} må ha regioner`).toBeGreaterThanOrEqual(5);
     }
+  });
+});
+
+/**
+ * Etiketten på forsidekortet: bynavnet inne i en boks, «nærmeste område, N km»
+ * like utenfor, og bare den generelle etiketten når ingen boks er i nærheten.
+ */
+describe('nearestRegion', () => {
+  it('inne i boksen: regionen, avstand 0', () => {
+    const bergen = nearestRegion(60.39, 5.32);
+    expect(bergen?.region.name).toBe('Bergen');
+    expect(bergen?.inside).toBe(true);
+    expect(bergen?.distanceKm).toBe(0);
+  });
+
+  it('hvert regionsenter ligger i sin egen boks', () => {
+    for (const r of PREDICTION_TILE_REGIONS) {
+      const m = nearestRegion((r.minLat + r.maxLat) / 2, (r.minLng + r.maxLng) / 2);
+      expect(m?.region.name, r.name).toBe(r.name);
+      expect(m?.inside, r.name).toBe(true);
+    }
+  });
+
+  it('like utenfor: nærmeste senter innen 60 km, med avstanden i hele km', () => {
+    // Drammen ligger vest for Oslo-boksen (minLng 10,35), ~35 km fra senteret.
+    const drammen = nearestRegion(59.74, 10.2);
+    expect(drammen?.region.name).toBe('Oslo');
+    expect(drammen?.inside).toBe(false);
+    expect(drammen?.distanceKm).toBeGreaterThan(30);
+    expect(drammen?.distanceKm).toBeLessThan(40);
+    expect(Number.isInteger(drammen?.distanceKm)).toBe(true);
+  });
+
+  it('grensen er 60 km fra senteret: 30 km nord for Tromsø treffer, 65 km gjør det ikke', () => {
+    const tromso = PREDICTION_TILE_REGIONS.find((r) => r.name === 'Tromsø')!;
+    const senterLat = (tromso.minLat + tromso.maxLat) / 2;
+    const senterLng = (tromso.minLng + tromso.maxLng) / 2;
+    const gradPerKm = 1 / 111.2;
+    const naer = nearestRegion(senterLat + 30 * gradPerKm, senterLng);
+    expect(naer?.region.name).toBe('Tromsø');
+    expect(naer?.inside).toBe(false);
+    expect(naer?.distanceKm).toBe(30);
+    expect(nearestRegion(senterLat + (NEAREST_REGION_MAX_KM + 5) * gradPerKm, senterLng)).toBeNull();
+  });
+
+  it('langt fra alt: null — da beholder kortet den generelle etiketten', () => {
+    expect(nearestRegion(62.57, 11.38)).toBeNull(); // Røros
+    expect(nearestRegion(67.86, 20.23)).toBeNull(); // Kiruna
+  });
+
+  it('tåler ugyldig inndata', () => {
+    expect(nearestRegion(Number.NaN, 10)).toBeNull();
+    expect(nearestRegion(60, Number.POSITIVE_INFINITY)).toBeNull();
   });
 });
