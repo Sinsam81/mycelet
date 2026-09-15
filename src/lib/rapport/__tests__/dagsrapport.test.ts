@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { tellAbonnement } from '../abonnement';
 import { byggDagsrapport, type AbonnementRad, type BrukerRad, type RapportInn, type VarselAbonnentRad } from '../dagsrapport';
 
 /**
@@ -99,12 +100,16 @@ describe('betalende — den tellingen som kan lyve', () => {
           ab({ metadata: { provider: 'stripe' } }),
           ab({ metadata: { provider: 'revenuecat' } }),
           ab({ metadata: null }), // grunnleggerpasset
-          ab({ metadata: {} }) // demokontoen til Apple
+          ab({ metadata: {} }), // demokontoen til Apple
+          ab({ metadata: { source: 'manual_grant' } }) // slik SQL-editoren merker et pass
         ]
       })
     );
-    expect(r.betalende.totalt).toBe(4);
-    expect(r.betalende.perKilde).toEqual({ stripe: 1, revenuecat: 1, manuell: 2 });
+    // Gavepassene gir tilgang, men er ikke kunder: de står for seg og ligger
+    // ikke i totalen (fram til 15. september 2026 gjorde de det).
+    expect(r.betalende.totalt).toBe(2);
+    expect(r.betalende.perKilde).toEqual({ stripe: 1, revenuecat: 1 });
+    expect(r.gratisTildelt).toBe(3);
   });
 
   it('regner ikke et nytt gavepass som et salg', () => {
@@ -121,7 +126,8 @@ describe('betalende — den tellingen som kan lyve', () => {
 
   it('gjengir hele produksjonsbildet riktig', () => {
     // Seks rader, alle med status «active». Fasit: fem løper, én er utløpt,
-    // og bare to av de fem representerer penger som har flyttet seg.
+    // og bare to av de fem representerer penger som har flyttet seg — de to
+    // er de betalende, de tre andre er gratis tildelt.
     const r = byggDagsrapport(
       inn({
         abonnement: [
@@ -134,10 +140,32 @@ describe('betalende — den tellingen som kan lyve', () => {
         ]
       })
     );
-    expect(r.betalende.totalt).toBe(5);
+    expect(r.betalende.totalt).toBe(2);
     expect(r.utloptMenMarkertAktiv).toBe(1);
-    expect(r.betalende.perKilde.manuell).toBe(3);
+    expect(r.gratisTildelt).toBe(3);
     expect(r.betalende.perKilde.revenuecat).toBe(2);
+  });
+});
+
+describe('én regel, to flater — rapporten og /admin', () => {
+  it('gir samme tall som tellAbonnement, som admin-siden bruker', () => {
+    const rader = [
+      ab({ user_id: 'kunde', metadata: { provider: 'stripe' } }),
+      ab({ user_id: 'oppsagt', cancel_at_period_end: true, metadata: { provider: 'revenuecat' } }),
+      ab({ user_id: 'prove', status: 'trialing', metadata: { provider: 'revenuecat', prove_start: dagerSiden(2) } }),
+      ab({ user_id: 'gave', metadata: { source: 'manual_grant' } }),
+      ab({ user_id: 'qa', metadata: { provider: 'revenuecat' } }),
+      ab({ user_id: 'gammel', current_period_end: '2026-07-02T00:00:00Z' })
+    ];
+    const interne = new Set(['qa']);
+    const r = byggDagsrapport(inn({ abonnement: rader, interneBrukere: interne }));
+    const t = tellAbonnement(rader, NAA, interne);
+    expect(t).toMatchObject({ betalende: 2, prover: 1, gratisTildelt: 2, utloptMenMarkertAktiv: 1 });
+    expect(r.betalende.totalt).toBe(t.betalende);
+    expect(r.betalende.perKilde).toEqual(t.betalendePerButikk);
+    expect(r.prover.lopende).toBe(t.prover);
+    expect(r.gratisTildelt).toBe(t.gratisTildelt);
+    expect(r.utloptMenMarkertAktiv).toBe(t.utloptMenMarkertAktiv);
   });
 });
 
@@ -457,7 +485,8 @@ describe('bruk av soppforholdene — aktivering og gjenbruk', () => {
       })
     );
     expect(r.betalende.perKilde.revenuecat).toBe(0);
-    expect(r.betalende.perKilde.manuell).toBe(1);
+    expect(r.betalende.totalt).toBe(0);
+    expect(r.gratisTildelt).toBe(1);
     expect(r.betalende.nyeSiste7d).toBe(0);
   });
 
