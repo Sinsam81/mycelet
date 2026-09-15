@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { getTranslations } from 'next-intl/server';
 import { ORGANISASJON } from '@/lib/seo/organisasjon';
 import Link from 'next/link';
 import { ChevronRight, MapPin, CalendarDays } from 'lucide-react';
@@ -6,11 +7,19 @@ import { PageWrapper } from '@/components/layout/PageWrapper';
 import { SoppforholdForbehold } from '@/components/soppforhold/Forbehold';
 import { NativeOnly } from '@/components/native/NativeOnly';
 import { TellFlate } from '@/components/bruk/TellFlate';
+import { getUserLocale } from '@/i18n/locale';
 import { regionSlug } from '@/lib/prediction/region-slug';
-import { farge, hentRegioner, norskDato } from './hent-regioner';
+import {
+  farge,
+  hentRegioner,
+  innledningsRegion,
+  lokalDato,
+  regionerPerLand,
+  type SoppforholdRegion
+} from './hent-regioner';
 
 /**
- * «Soppforhold i Norge i dag» — den delbare siden.
+ * «Soppforhold i Norge i dag» / «Svampläget i Sverige idag» — den delbare siden.
  *
  * ═══════════════════════════════════════════════════════════════════════════
  * HVORFOR DENNE SIDEN FINNES
@@ -37,6 +46,25 @@ import { farge, hentRegioner, norskDato } from './hent-regioner';
  * Konkurrentene selger kart som «her finner du sopp». Vår posisjon er den
  * motsatte, og den tåler at noen har flere brukere enn oss — men bare så lenge
  * vi faktisk holder oss til den. Ikke skriv om teksten til noe som lover mer.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ * SPRÅK: HER FØLGER DET LESEREN
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * Siden er også appens første skjerm for utloggede, og 17 av 22 åpninger
+ * 15. sep 2026 var svenske økter — som fikk en helnorsk side med Norge først.
+ * Nå avgjør getUserLocale() (cookie → Accept-Language → nb) teksten, dommene og
+ * artsnavnene (hentRegioner(locale) → ?locale=sv mot API-et) og hvilket land
+ * som står først. Crawlere uten cookie får nb, som før.
+ *
+ * Områdesidene gjør det motsatt — der følger språket LANDET (se
+ * [omrade]/page.tsx) — fordi hver av dem handler om ett land, med landets eget
+ * giftnummer. Samlesiden handler om begge, så leserens språk er det riktige
+ * signalet, også for giftnummeret i forbeholdet.
+ *
+ * Cookien gjør ikke siden dynamisk: rot-layouten leser den allerede, så ruta
+ * var ƒ også før. Selvhentingen er fortsatt cachet på fetch-nivå
+ * (SOPPFORHOLD_REVALIDATE), med én oppføring per språk-URL.
  */
 
 const BASE = 'https://www.mycelet.com';
@@ -44,41 +72,84 @@ const BASE = 'https://www.mycelet.com';
 export const revalidate = 3600;
 
 export async function generateMetadata(): Promise<Metadata> {
+  const locale = await getUserLocale();
+  const t = await getTranslations({ locale, namespace: 'Soppforhold' });
   // Delingsbildet versjoneres med rasterdatoen, ellers kan en deling vise
-  // gårsdagens tall ved siden av dagens side — se hent-regioner.ts.
-  const { tileDate } = await hentRegioner();
+  // gårsdagens tall ved siden av dagens side — se hent-regioner.ts. Samme
+  // språk-URL som siden, så kallet deles med sidens eget i samme forespørsel.
+  const { tileDate } = await hentRegioner(locale);
   const ogBilde = `${BASE}/soppforhold/opengraph-image${tileDate ? `?d=${tileDate}` : ''}`;
 
   return {
     // NB: rot-layouten har template '%s — Mycelet'. Skriv ALDRI merkenavnet her
     // også — da blir tittelen «… | Mycelet — Mycelet» i søketreff og delinger.
-    title: 'Soppforhold i Norge i dag — oppdatert daglig',
-    description:
-      'Er det sopp i skogen nå? Daglig oversikt over soppforholdene i 22 norske og svenske områder, regnet ut fra nedbør, jordfuktighet, temperatur og sesong.',
+    title: t('metaTitle'),
+    description: t('metaDescription'),
     alternates: { canonical: `${BASE}/soppforhold` },
     openGraph: {
-      title: 'Soppforhold i Norge i dag',
-      description: 'Daglig oversikt over hvor forholdene ligger best an akkurat nå.',
+      title: t('ogTitle'),
+      description: t('ogDescription'),
       url: `${BASE}/soppforhold`,
       type: 'website',
+      locale: locale === 'sv' ? 'sv_SE' : 'nb_NO',
       images: [{ url: ogBilde, width: 1200, height: 630 }]
     }
   };
 }
 
+/**
+ * Ett områdekort. Hele kortet er lenken: områdesiden er den delbare enheten.
+ *
+ * Ingen egen «Nå: kantarell»-linje: dommen fra API-et navngir allerede arten
+ * som drar toppen, i alle fire trinn («Nu är det blek taggsvamp 🍄», «Lite
+ * piggsopp i skogen nå»), og på leserens språk via getSpeciesDisplayName i
+ * /api/prediction/regions. En linje til ville bare gjentatt den.
+ */
+function RegionKort({ region, avHundre }: { region: SoppforholdRegion; avHundre: string }) {
+  return (
+    <li>
+      <Link
+        href={`/soppforhold/${regionSlug(region.name)}`}
+        className="block rounded-xl border border-gray-200 bg-white p-3 transition-colors hover:border-forest-700"
+      >
+        <div className="flex items-baseline justify-between gap-3">
+          <span className="flex items-center gap-1.5 font-medium text-forest-900">
+            <MapPin className="h-4 w-4 shrink-0 text-forest-700" aria-hidden="true" />
+            {region.name}
+          </span>
+          <span className="flex items-center gap-1 text-sm tabular-nums text-gray-600">
+            <strong className="text-base text-forest-900">{region.score}</strong> {avHundre}
+            <ChevronRight className="h-4 w-4 text-gray-400" aria-hidden="true" />
+          </span>
+        </div>
+        <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-gray-100">
+          <div className={`h-full rounded-full ${farge(region.score)}`} style={{ width: `${region.score}%` }} />
+        </div>
+        {region.verdict ? <p className="mt-2 text-sm text-gray-700">{region.verdict}</p> : null}
+      </Link>
+    </li>
+  );
+}
+
 export default async function SoppforholdPage() {
-  const { tileDate, regions } = await hentRegioner();
-  const norske = regions.filter((r) => r.country === 'NO');
-  const svenske = regions.filter((r) => r.country === 'SE');
-  const beste = norske[0] ?? null;
+  const locale = await getUserLocale();
+  const t = await getTranslations({ locale, namespace: 'Soppforhold' });
+  const { tileDate, regions } = await hentRegioner(locale);
+  const seksjoner = regionerPerLand(regions, locale);
+  const egetLand = locale === 'sv' ? 'SE' : 'NO';
+  // Innledningen peker på det beste området i leserens eget land, og ellers på
+  // det beste totalt. «Ikke klar» vises bare når det ikke finnes tall
+  // overhodet — NO-rastret skrives en halvtime før SE-rastret, og i det
+  // vinduet sa svensk innledning «inte klar» over en full norsk liste.
+  const { region: beste, egetLandMangler } = innledningsRegion(regions, locale);
+  const fet = (chunks: React.ReactNode) => <strong>{chunks}</strong>;
 
   const jsonLd = {
     '@context': 'https://schema.org',
     '@type': 'WebPage',
-    name: 'Soppforhold i Norge i dag',
-    description:
-      'Daglig oversikt over soppforholdene i 22 norske og svenske områder, regnet ut fra nedbør, jordfuktighet, temperatur og sesong.',
-    inLanguage: 'nb',
+    name: t('heading'),
+    description: t('jsonLdDescription'),
+    inLanguage: locale,
     ...(tileDate ? { dateModified: tileDate } : {}),
     isPartOf: { '@type': 'WebSite', name: 'Mycelet', url: 'https://www.mycelet.com' },
     publisher: ORGANISASJON
@@ -95,115 +166,75 @@ export default async function SoppforholdPage() {
         <header className="space-y-3">
           <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-forest-700">
             <CalendarDays className="h-4 w-4" aria-hidden="true" />
-            {tileDate ? `Oppdatert ${norskDato(tileDate)}` : 'Oppdateres daglig'}
+            {tileDate ? t('updated', { date: lokalDato(tileDate, locale) }) : t('updatedDaily')}
           </p>
           <h1 className="font-serif text-3xl font-bold tracking-tight text-forest-900 sm:text-4xl">
-            Soppforhold i Norge i dag
+            {t('heading')}
           </h1>
           {beste ? (
             <p className="text-lg text-gray-700">
-              Forholdene ligger best an rundt <strong>{beste.name}</strong> akkurat nå
-              {beste.leadingSpecies ? <> — der er det særlig {beste.leadingSpecies.toLowerCase()} som er i sesong</> : null}.
-              Under ser du hvordan det står til i {regions.length} områder.
+              {beste.leadingSpecies
+                ? t.rich('leadWithSpecies', {
+                    region: beste.name,
+                    species: beste.leadingSpecies.toLowerCase(),
+                    count: regions.length,
+                    strong: fet
+                  })
+                : t.rich('lead', { region: beste.name, count: regions.length, strong: fet })}
             </p>
           ) : (
-            <p className="text-lg text-gray-700">
-              Beregningen for i dag er ikke klar ennå. Prøv igjen om en liten stund.
-            </p>
+            <p className="text-lg text-gray-700">{t('notReady')}</p>
           )}
+          {egetLandMangler ? <p className="text-sm text-gray-600">{t('ownCountryPending')}</p> : null}
         </header>
 
-        {norske.length > 0 ? (
-          <section className="space-y-3">
-            <h2 className="font-serif text-xl font-semibold text-forest-900">Norge</h2>
-            <ul className="space-y-2">
-              {norske.map((r) => (
-                <li key={r.name}>
-                  {/* Hele kortet er lenken: områdesiden er den delbare enheten. */}
-                  <Link
-                    href={`/soppforhold/${regionSlug(r.name)}`}
-                    className="block rounded-xl border border-gray-200 bg-white p-3 transition-colors hover:border-forest-700"
-                  >
-                    <div className="flex items-baseline justify-between gap-3">
-                      <span className="flex items-center gap-1.5 font-medium text-forest-900">
-                        <MapPin className="h-4 w-4 shrink-0 text-forest-700" aria-hidden="true" />
-                        {r.name}
-                      </span>
-                      <span className="flex items-center gap-1 text-sm tabular-nums text-gray-600">
-                        <strong className="text-base text-forest-900">{r.score}</strong> av 100
-                        <ChevronRight className="h-4 w-4 text-gray-400" aria-hidden="true" />
-                      </span>
-                    </div>
-                    <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-gray-100">
-                      <div className={`h-full rounded-full ${farge(r.score)}`} style={{ width: `${r.score}%` }} />
-                    </div>
-                    {r.verdict ? <p className="mt-2 text-sm text-gray-700">{r.verdict}</p> : null}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </section>
-        ) : null}
-
-        {svenske.length > 0 ? (
-          <section className="space-y-3">
-            <h2 className="font-serif text-xl font-semibold text-forest-900">Sverige</h2>
-            <ul className="space-y-2">
-              {/* De svenske områdesidene er PÅ SVENSK (språket følger landet,
-                  med Giftinformationscentralen — se [omrade]/page.tsx). */}
-              {svenske.map((r) => (
-                <li key={r.name}>
-                  <Link
-                    href={`/soppforhold/${regionSlug(r.name)}`}
-                    className="block rounded-xl border border-gray-200 bg-white p-3 transition-colors hover:border-forest-700"
-                  >
-                    <div className="flex items-baseline justify-between gap-3">
-                      <span className="flex items-center gap-1.5 font-medium text-forest-900">
-                        <MapPin className="h-4 w-4 shrink-0 text-forest-700" aria-hidden="true" />
-                        {r.name}
-                      </span>
-                      <span className="flex items-center gap-1 text-sm tabular-nums text-gray-600">
-                        <strong className="text-base text-forest-900">{r.score}</strong> av 100
-                        <ChevronRight className="h-4 w-4 text-gray-400" aria-hidden="true" />
-                      </span>
-                    </div>
-                    <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-gray-100">
-                      <div className={`h-full rounded-full ${farge(r.score)}`} style={{ width: `${r.score}%` }} />
-                    </div>
-                    {r.verdict ? <p className="mt-2 text-sm text-gray-700">{r.verdict}</p> : null}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </section>
-        ) : null}
-
-        {/* Ingen VarselCta her: siden hadde to «Få beskjed når det snur»-
-            bokser med motsatt budskap («med en konto» / «ingen konto
-            nødvendig»). Den kontoløse seksjonen under er inngangen. */}
-        <SoppforholdForbehold />
-
+        {/* Hovedhandlingen står RETT UNDER innledningen, synlig uten å rulle på
+            en telefon. Dette er appens første skjerm for utloggede, og
+            15. sep 2026 ble den åpnet 22 ganger mot 4 åpninger av
+            registreringsskjemaet — knappen lå da under 22 områdekort,
+            forbeholdet og varselboksen. */}
         <section className="rounded-xl border border-forest-700 bg-white p-4">
-          <h2 className="font-serif text-lg font-semibold text-forest-900">Vil du ha det for ditt eget område?</h2>
-          <p className="mt-1 text-sm text-gray-700">
-            Tallene over er for 22 større områder. I appen regner vi det samme for stedet du faktisk står, viser
-            428 000 registrerte funn på kart, og forteller hvilke arter som er i sesong akkurat nå.
-          </p>
+          <h2 className="font-serif text-lg font-semibold text-forest-900">{t('ownAreaHeading')}</h2>
+          <p className="mt-1 text-sm text-gray-700">{t('ownAreaBody')}</p>
           <div className="mt-3 flex flex-wrap gap-2">
             <Link
               href="/auth/register"
               className="rounded-xl bg-forest-800 px-4 py-2 text-sm font-semibold text-white hover:bg-forest-700"
             >
-              Prøv gratis
+              {t('tryFree')}
             </Link>
             <Link
-              href="/sanketips/sopp-etter-regn"
+              href={locale === 'sv' ? '/sanketips/svamp-efter-regn' : '/sanketips/sopp-etter-regn'}
               className="rounded-xl border border-forest-700 px-4 py-2 text-sm font-semibold text-forest-800 hover:bg-forest-50"
             >
-              Hvorfor kommer soppen etter regn?
+              {t('whyRain')}
             </Link>
           </div>
         </section>
+
+        {/* Leserens eget land først (regionerPerLand). Områdesidene selv har
+            språket til LANDET de handler om — en svensk side er på svensk, med
+            Giftinformationscentralen (se [omrade]/page.tsx). */}
+        {seksjoner.map(({ land, regions: iLandet }) => (
+          <section key={land} className="space-y-3">
+            <h2 className="font-serif text-xl font-semibold text-forest-900">
+              {land === 'SE' ? t('countrySE') : t('countryNO')}
+            </h2>
+            <ul className="space-y-2">
+              {iLandet.map((r) => (
+                <RegionKort key={r.name} region={r} avHundre={t('outOf100')} />
+              ))}
+            </ul>
+          </section>
+        ))}
+
+        {/* Ingen VarselCta her: siden hadde to «Få beskjed når det snur»-
+            bokser med motsatt budskap («med en konto» / «ingen konto
+            nødvendig»). Den kontoløse seksjonen under er inngangen.
+
+            Forbeholdet følger leserens språk, med det landets giftnummer: på
+            samlesiden er det det beste signalet vi har for hvor leseren bor. */}
+        <SoppforholdForbehold land={egetLand} />
 
         {/* Varsel-CTA-en står HER, rett etter at leseren har sett tallene for
             sitt område — det er øyeblikket «si fra når dette snur» gir mening.
@@ -211,29 +242,29 @@ export default async function SoppforholdPage() {
             organiske besøkende får ett tydelig neste steg som ikke krever
             konto. */}
         <section className="rounded-2xl border border-forest-200 bg-forest-50 p-5 text-center">
-          <h2 className="font-serif text-xl font-semibold text-forest-900">📬 Få beskjed når det snur</h2>
-          <p className="mx-auto mt-1 max-w-md text-sm text-forest-900">
-            Gratis soppvarsel på e-post — vi sier fra den dagen forholdene krysser fra dårlige til gode i
-            området ditt. Maks én e-post i uka, ingen konto nødvendig.
-          </p>
+          <h2 className="font-serif text-xl font-semibold text-forest-900">{t('alertHeading')}</h2>
+          <p className="mx-auto mt-1 max-w-md text-sm text-forest-900">{t('alertBody')}</p>
           <Link
             href="/soppvarsel"
             className="mt-3 inline-block rounded-full bg-forest-800 px-6 py-2.5 text-sm font-semibold text-white hover:bg-forest-700"
           >
-            Meld deg på soppvarselet
+            {t('alertButton')}
           </Link>
         </section>
 
         <p className="text-xs text-gray-500">
-          Datagrunnlag: MET Norway og SMHI (vær), NIBIO og CORINE (skog), GBIF og Artsdatabanken (funn). Se{' '}
-          <Link href="/datakilder" className="underline">
-            datakilder
-          </Link>{' '}
-          for lisenser, og{' '}
-          <Link href="/apenhet" className="underline">
-            åpenhet
-          </Link>{' '}
-          for hvordan vi måler treffsikkerheten.
+          {t.rich('sources', {
+            datakilder: (chunks) => (
+              <Link href="/datakilder" className="underline">
+                {chunks}
+              </Link>
+            ),
+            apenhet: (chunks) => (
+              <Link href="/apenhet" className="underline">
+                {chunks}
+              </Link>
+            )
+          })}
         </p>
       </article>
     </PageWrapper>

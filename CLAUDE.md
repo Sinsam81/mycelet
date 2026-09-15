@@ -120,6 +120,8 @@ See `docs/logging.md` for the full conceptual model + the documented Next 14+ qu
 
 **i18n** (`src/i18n/`, next-intl, no URL prefixes). Locale comes from the `MYCELET_LOCALE` cookie, falling back to `Accept-Language` and then `nb`. Client components use `useTranslations()` / `useLocale()` against `messages/{nb,sv}.json`; server code calls `getUserLocale()` from `src/i18n/locale.ts`.
 
+`/soppforhold` (the app's logged-out first screen) follows the visitor's locale: copy from the `Soppforhold` namespace, verdicts and species names via `hentRegioner(locale)`, and **Sweden's section first for `sv`** (`regionerPerLand`). The area pages `/soppforhold/[omrade]` instead follow the region's *country* (Göteborg is always Swedish, with Swedish poison-centre numbers), so each shared URL has one language for crawlers.
+
 Two gotchas that produced real Swedish-user bugs:
 
 - **Text generated server-side is not covered by next-intl.** Anything an API route returns as prose — prediction verdicts, flush banners, habitat reasons, weekday labels, "nothing found" messages — needs the locale threaded in explicitly. The pure prediction libs (`src/lib/prediction/mushroom-day.ts`, `flush.ts`, `src/lib/utils/prediction-explanation.ts`, `src/lib/nibio/habitat.ts`) each take an optional `locale` and hold a per-language `COPY` table next to the logic; they default to `nb` so tests and pre-generated tiles are unaffected. **If a route caches its response, the locale must be part of the cache key** — otherwise the first caller's language is served to everyone.
