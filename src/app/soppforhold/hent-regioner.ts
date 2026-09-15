@@ -124,3 +124,28 @@ export function regionerPerLand(
     .map((land) => ({ land, regions: regions.filter((r) => r.country === land) }))
     .filter((seksjon) => seksjon.regions.length > 0);
 }
+
+/**
+ * Området samlesidens innledning peker på: det beste i leserens eget land, og
+ * ellers det beste totalt. API-et sorterer på score, så første treff er best.
+ *
+ * ⚠️ «Ikke klar ennå» er BARE riktig når det ikke finnes tall overhodet.
+ * /api/prediction/regions leser nyeste tile_date på tvers av landene, og
+ * NO-cronen (01:15 UTC) skriver dagens dato en halvtime før SE-cronen
+ * (01:45 UTC). I det vinduet — og hele dagen hvis SE-kjøringen feiler — har
+ * svaret bare norske rader. Innledningen sa da «Dagens beräkning är inte klar
+ * ännu» til svenske lesere, rett over en komplett liste med norske områder.
+ * Nå faller den tilbake til beste område totalt, og `egetLandMangler` lar
+ * siden si ærlig at leserens eget land ikke er med i dagens tall.
+ */
+export function innledningsRegion(
+  regions: SoppforholdRegion[],
+  locale: Locale
+): { region: SoppforholdRegion | null; egetLandMangler: boolean } {
+  const egetLand = locale === 'sv' ? 'SE' : 'NO';
+  const iEgetLand = regions.find((r) => r.country === egetLand) ?? null;
+  return {
+    region: iEgetLand ?? regions[0] ?? null,
+    egetLandMangler: regions.length > 0 && iEgetLand === null
+  };
+}

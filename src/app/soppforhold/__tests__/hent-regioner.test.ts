@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { datoTekst, lokalDato, regionerPerLand, type SoppforholdRegion } from '../hent-regioner';
+import {
+  datoTekst,
+  innledningsRegion,
+  lokalDato,
+  regionerPerLand,
+  type SoppforholdRegion
+} from '../hent-regioner';
 
 function region(name: string, country: 'NO' | 'SE', score: number): SoppforholdRegion {
   return { name, country, score, cells: 10, leadingSpecies: null, verdict: null };
@@ -65,5 +71,36 @@ describe('regionerPerLand', () => {
     const bareSverige = regioner.filter((r) => r.country === 'SE');
     expect(regionerPerLand(bareSverige, 'nb').map((s) => s.land)).toEqual(['SE']);
     expect(regionerPerLand([], 'sv')).toEqual([]);
+  });
+});
+
+describe('innledningsRegion', () => {
+  const regioner = [
+    region('Trondheim', 'NO', 100),
+    region('Linköping', 'SE', 96),
+    region('Oslo', 'NO', 98)
+  ];
+
+  it('peker på beste område i leserens eget land', () => {
+    expect(innledningsRegion(regioner, 'nb')).toEqual({ region: regioner[0], egetLandMangler: false });
+    expect(innledningsRegion(regioner, 'sv')).toEqual({ region: regioner[1], egetLandMangler: false });
+  });
+
+  it('faller tilbake til beste område totalt når leserens land mangler (NO er skrevet, SE ikke ennå)', () => {
+    // Mellom NO-cronen (01:15 UTC) og SE-cronen (01:45 UTC) har nyeste
+    // rasterdato bare norske rader. Da skal svenske lesere IKKE få «ikke klar».
+    const bareNorge = regioner.filter((r) => r.country === 'NO');
+    expect(innledningsRegion(bareNorge, 'sv')).toEqual({ region: bareNorge[0], egetLandMangler: true });
+    expect(innledningsRegion(bareNorge, 'nb')).toEqual({ region: bareNorge[0], egetLandMangler: false });
+  });
+
+  it('er symmetrisk når bare Sverige finnes', () => {
+    const bareSverige = regioner.filter((r) => r.country === 'SE');
+    expect(innledningsRegion(bareSverige, 'nb')).toEqual({ region: bareSverige[0], egetLandMangler: true });
+  });
+
+  it('gir ingen region, og ingen «mangler»-linje, når det ikke finnes tall overhodet', () => {
+    expect(innledningsRegion([], 'sv')).toEqual({ region: null, egetLandMangler: false });
+    expect(innledningsRegion([], 'nb')).toEqual({ region: null, egetLandMangler: false });
   });
 });

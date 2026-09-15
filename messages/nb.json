@@ -1827,6 +1827,7 @@
     "leadWithSpecies": "Forholdene ligger best an rundt <strong>{region}</strong> akkurat nå — der er det særlig {species} som er i sesong. Under ser du hvordan det står til i {count} områder.",
     "lead": "Forholdene ligger best an rundt <strong>{region}</strong> akkurat nå. Under ser du hvordan det står til i {count} områder.",
     "notReady": "Beregningen for i dag er ikke klar ennå. Prøv igjen om en liten stund.",
+    "ownCountryPending": "Dagens tall for Norge er ikke klare ennå. Under ser du områdene som allerede er regnet ut.",
     "countryNO": "Norge",
     "countrySE": "Sverige",
     "outOf100": "av 100",

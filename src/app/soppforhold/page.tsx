@@ -9,7 +9,14 @@ import { NativeOnly } from '@/components/native/NativeOnly';
 import { TellFlate } from '@/components/bruk/TellFlate';
 import { getUserLocale } from '@/i18n/locale';
 import { regionSlug } from '@/lib/prediction/region-slug';
-import { farge, hentRegioner, lokalDato, regionerPerLand, type SoppforholdRegion } from './hent-regioner';
+import {
+  farge,
+  hentRegioner,
+  innledningsRegion,
+  lokalDato,
+  regionerPerLand,
+  type SoppforholdRegion
+} from './hent-regioner';
 
 /**
  * «Soppforhold i Norge i dag» / «Svampläget i Sverige idag» — den delbare siden.
@@ -130,9 +137,11 @@ export default async function SoppforholdPage() {
   const { tileDate, regions } = await hentRegioner(locale);
   const seksjoner = regionerPerLand(regions, locale);
   const egetLand = locale === 'sv' ? 'SE' : 'NO';
-  // Innledningen peker på det beste området i leserens eget land. API-et
-  // sorterer på score, så det første treffet er det beste.
-  const beste = regions.find((r) => r.country === egetLand) ?? null;
+  // Innledningen peker på det beste området i leserens eget land, og ellers på
+  // det beste totalt. «Ikke klar» vises bare når det ikke finnes tall
+  // overhodet — NO-rastret skrives en halvtime før SE-rastret, og i det
+  // vinduet sa svensk innledning «inte klar» over en full norsk liste.
+  const { region: beste, egetLandMangler } = innledningsRegion(regions, locale);
   const fet = (chunks: React.ReactNode) => <strong>{chunks}</strong>;
 
   const jsonLd = {
@@ -176,6 +185,7 @@ export default async function SoppforholdPage() {
           ) : (
             <p className="text-lg text-gray-700">{t('notReady')}</p>
           )}
+          {egetLandMangler ? <p className="text-sm text-gray-600">{t('ownCountryPending')}</p> : null}
         </header>
 
         {/* Hovedhandlingen står RETT UNDER innledningen, synlig uten å rulle på
