@@ -1,5 +1,5 @@
 import { ImageResponse } from 'next/og';
-import { fargeHex, hentRegioner, norskDato } from './hent-regioner';
+import { fargeHex, hentRegioner, lokalDato } from './hent-regioner';
 
 /**
  * Delingsbildet for samlesiden: dagens beste norske område + tallet. Samme
@@ -60,7 +60,7 @@ export default async function OgBilde() {
           )}
           <div style={{ display: 'flex', fontSize: 32, color: '#cfe0c2', marginTop: 4 }}>
             {regions.length > 0 ? `${regions.length} områder i Norge og Sverige` : ''}
-            {tileDate ? ` · ${norskDato(tileDate)}` : ''}
+            {tileDate ? ` · ${lokalDato(tileDate)}` : ''}
           </div>
         </div>
 

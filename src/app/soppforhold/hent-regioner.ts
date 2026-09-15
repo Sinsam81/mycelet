@@ -1,4 +1,6 @@
+import { timeZoneForLocale, type Locale } from '@/i18n/config';
 import { regionBand, regionBandHex } from '@/lib/prediction/region-score';
+import { intlLocale } from '@/lib/utils/intl-locale';
 
 /**
  * Delt datagrunnlag for /soppforhold-sidene (samlesiden, områdesidene og
@@ -81,19 +83,44 @@ export function fargeHex(score: number): string {
   return regionBandHex(score);
 }
 
-export function norskDato(iso: string | null): string {
+/**
+ * Datoen på et gitt språk: «12. august 2026» (nb) / «12 augusti 2026» (sv).
+ *
+ * Het tidligere `norskDato` og kunne bare norsk — samlesiden viste derfor
+ * «Oppdatert 15. september 2026» også til svenske lesere. Tidssonen er satt
+ * eksplisitt: rasterdatoen er en ren dato (ÅÅÅÅ-MM-DD), som `Date` tolker som
+ * UTC-midnatt, og uten sone ville en maskin vest for Greenwich vist dagen før.
+ */
+export function lokalDato(iso: string | null, locale: Locale = 'nb'): string {
   if (!iso) return '';
   const d = new Date(iso);
-  return d.toLocaleDateString('nb-NO', { day: 'numeric', month: 'long', year: 'numeric' });
-}
-
-/** Datoen på sidens eget språk: «12. august 2026» (NO) / «12 augusti 2026» (SE). */
-export function datoTekst(iso: string | null, land: 'NO' | 'SE'): string {
-  if (!iso) return '';
-  const d = new Date(iso);
-  return d.toLocaleDateString(land === 'SE' ? 'sv-SE' : 'nb-NO', {
+  return d.toLocaleDateString(intlLocale(locale), {
     day: 'numeric',
     month: 'long',
-    year: 'numeric'
+    year: 'numeric',
+    timeZone: timeZoneForLocale(locale)
   });
+}
+
+/** Datoen på sidens eget språk, der språket følger LANDET (områdesidene). */
+export function datoTekst(iso: string | null, land: 'NO' | 'SE'): string {
+  return lokalDato(iso, land === 'SE' ? 'sv' : 'nb');
+}
+
+/**
+ * Samlesidens seksjoner, med leserens eget land først: Norge → Sverige på
+ * norsk, Sverige → Norge på svensk. 17 av 22 åpninger av appens første skjerm
+ * var svenske økter (målt 15. sep 2026), og de måtte forbi hele Norge først.
+ *
+ * Rekkefølgen INNE i hvert land er API-ets (høyest score først). Et land uten
+ * regioner i rasteret får ingen seksjon — en tom overskrift er verre enn ingen.
+ */
+export function regionerPerLand(
+  regions: SoppforholdRegion[],
+  locale: Locale
+): { land: 'NO' | 'SE'; regions: SoppforholdRegion[] }[] {
+  const rekkefolge: ('NO' | 'SE')[] = locale === 'sv' ? ['SE', 'NO'] : ['NO', 'SE'];
+  return rekkefolge
+    .map((land) => ({ land, regions: regions.filter((r) => r.country === land) }))
+    .filter((seksjon) => seksjon.regions.length > 0);
 }
