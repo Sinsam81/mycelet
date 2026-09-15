@@ -5,9 +5,11 @@ import { getForestProperties, buildSpeciesHabitatPreferences, computeHabitatScor
 import { computeCellPrediction } from '@/lib/prediction/cell-score';
 import { dayOfYearOf } from '@/lib/prediction/phenology';
 import {
+  EKSTRA_SKOGOPPSLAG_PER_RUTE,
   PREDICTION_TILE_REGIONS,
   predictionTileGridCells
 } from '@/lib/prediction/tile-regions';
+import { provSkogIRuter, skogproveFrist } from '@/lib/prediction/skogprover';
 import { PREDICTION_SPECIES_LATIN_NAMES } from '@/lib/prediction/prediction-species';
 import { computeTileDataCoverage } from '@/lib/prediction/tile-data-coverage';
 import type { SpeciesContext } from '@/lib/utils/species-scoring';
@@ -48,21 +50,8 @@ interface SpeciesRow {
   mycorrhizal_partners: string[] | null;
 }
 
-/** Run an async fn over items with bounded concurrency (gentle on NIBIO). */
-async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
-  const results: R[] = new Array(items.length);
-  let cursor = 0;
-  async function worker() {
-    while (cursor < items.length) {
-      const idx = cursor++;
-      results[idx] = await fn(items[idx]);
-    }
-  }
-  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
-  return results;
-}
-
 export async function POST(request: NextRequest) {
+  const startetMs = Date.now();
   const log = createRequestLogger(request);
 
   if (!bearerSecretMatches(request.headers.get('authorization'), process.env.CRON_SECRET)) {
@@ -110,8 +99,13 @@ export async function POST(request: NextRequest) {
   const month = new Date().getMonth() + 1;
   const dayOfYear = dayOfYearOf(new Date());
   const generated: Record<string, number> = {};
+  // Rutenettet per region regnes ut på forhånd, så tidsfristen for forskjøvne
+  // skogoppslag vet hvor mange midtpunkter som gjenstår. Se skogprover.ts.
+  const rutenett = regions.map((r) => predictionTileGridCells(r));
+  const tidsmaling = { senterMs: 0, senterRuter: 0 };
+  const skogprove: Record<string, { senter: number; forskjovet: number; utenSkog: number; avkortet: number }> = {};
 
-  for (const region of regions) {
+  for (const [ri, region] of regions.entries()) {
     // Weather is fetched once per region (it varies slowly over a city area).
     const weather = await fetchWeatherSummary({
       lat: (region.minLat + region.maxLat) / 2,
@@ -129,16 +123,77 @@ export async function POST(request: NextRequest) {
       soilMoistureIndex: weather.soilMoistureIndex
     };
 
-    const cells = predictionTileGridCells(region);
+    const cells = rutenett[ri];
     // Forest is per cell but species-agnostic — fetch once per cell.
-    const forests = await mapLimit(cells, 5, (c) => getForestProperties({ lat: c.lat, lon: c.lng }));
+    //
+    // Midtpunktet først, så de fire kvadrantsentrene når midtpunktet bommer
+    // (vann, fjord, jorde, vei, boligfelt). Før dette forsvant hele ruta når
+    // bare midtpunktet var ikke-skog — se src/lib/prediction/skogprover.ts.
+    //
+    // Forskyvningen har to grenser, og begge logges når de biter:
+    //  - et fast tak per region (EKSTRA_SKOGOPPSLAG_PER_RUTE i tile-regions.ts),
+    //    dimensjonert så hvert land holder seg innenfor maxDuration og fordelt
+    //    per region, så de første regionene ikke spiser budsjettet til de siste;
+    //  - en tidsfrist som holder av tid til midtpunktene i regionene som
+    //    gjenstår, med farten målt i DENNE kjøringen. En treg natt hos NIBIO
+    //    eller EEA skal koste forskyvning, ikke regioner.
+    const gjenstaendeRuter = rutenett.slice(ri + 1).reduce((n, c) => n + c.length, 0);
+    const forskyvningstak = Math.round(cells.length * EKSTRA_SKOGOPPSLAG_PER_RUTE[region.country]);
+    let forskyvningIgjen = forskyvningstak;
+    let frist = Number.POSITIVE_INFINITY;
+    let avkortetTak = 0;
+    let avkortetTid = 0;
+    const senterStart = Date.now();
+    const { prover, statistikk } = await provSkogIRuter(
+      cells,
+      { lat: region.step, lng: region.step },
+      (p) => getForestProperties({ lat: p.lat, lon: p.lng }),
+      {
+        samtidighet: 5,
+        vedSenterFerdig: () => {
+          tidsmaling.senterMs += Date.now() - senterStart;
+          tidsmaling.senterRuter += cells.length;
+          frist = skogproveFrist({
+            startetMs,
+            maxDurationMs: maxDuration * 1000,
+            gjenstaendeRuter,
+            msPerRute: tidsmaling.senterMs / Math.max(1, tidsmaling.senterRuter),
+            gjenstaendeRegioner: regions.length - ri - 1
+          });
+        },
+        tillatForskyvning: () => {
+          if (forskyvningIgjen <= 0) {
+            avkortetTak++;
+            return false;
+          }
+          if (Date.now() >= frist) {
+            avkortetTid++;
+            return false;
+          }
+          forskyvningIgjen--;
+          return true;
+        }
+      }
+    );
+    skogprove[region.name] = {
+      senter: statistikk.senter,
+      forskjovet: statistikk.forskjovet,
+      utenSkog: statistikk.utenSkog,
+      avkortet: statistikk.avkortet
+    };
+    // Ingen stille tak: ruter som ikke fikk prøvd alle punktene sine står i
+    // loggen som en advarsel, med grunnen (taket eller tidsfristen).
+    const skogproveLogg = { region: region.name, ...statistikk, forskyvningstak, avkortetTak, avkortetTid };
+    if (statistikk.avkortet > 0) log.warn('generate_tiles.skogprove_avkortet', skogproveLogg);
+    else log.info('generate_tiles.skogprove', skogproveLogg);
 
     const rows = cells.flatMap((cell, ci) => {
-      const forest = forests[ci];
-      // No real forest signal → skip the whole cell, matching the live grid
-      // route (grid/route.ts). Neutral fallback values are appropriate for an
+      const { skog: forest, kilde, punkt } = prover[ci];
+      // Ingen skog i noe prøvepunkt → hopp over hele ruta, som de levende
+      // rutenettene (grid/route.ts og species-spots/route.ts bruker den samme
+      // provSkogIRuter). Neutral fallback values are appropriate for an
       // on-demand summary, but not enough evidence to publish a hotspot tile.
-      if (!forest) return [];
+      if (!forest || !kilde || !punkt) return [];
       // Datadekning er per CELLE — den avhenger av skogkilden og værserien, ikke
       // av hvilken art raden gjelder. Regnes én gang og gjenbrukes for alle
       // artsradene på cellen. Se src/lib/prediction/tile-data-coverage.ts.
@@ -217,7 +272,17 @@ export async function POST(request: NextRequest) {
                 }
               : null
           },
-          metadata: { region: region.name, grid_size_deg: region.step }
+          metadata: {
+            region: region.name,
+            grid_size_deg: region.step,
+            // Hvor i ruta skogdataene faktisk er målt: 'senter' eller
+            // 'forskjovet' (et kvadrantsenter, se skogprover.ts), med punktet.
+            // Gjør ruta etterprøvbar, og lar nearestForestTile oppgi avstanden
+            // til målingen i stedet for til midtpunktet.
+            skogprove: kilde,
+            skogprove_lat: punkt.lat,
+            skogprove_lng: punkt.lng
+          }
         };
       });
     });
@@ -285,6 +350,7 @@ export async function POST(request: NextRequest) {
     tileDate,
     species: species.length,
     generated,
+    skogprove,
     pruned: pruneErr ? null : pruned ?? 0
   });
 }

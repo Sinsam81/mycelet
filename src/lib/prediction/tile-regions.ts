@@ -93,6 +93,35 @@ export const PREDICTION_TILE_REGIONS: readonly PredictionTileRegion[] = [
   { name: 'Östersund', country: 'SE', minLat: 63.12, maxLat: 63.28, minLng: 14.45, maxLng: 14.87, step: 0.07 }
 ];
 
+/**
+ * Tak på FORSKJØVNE skogoppslag i nattjobben, som andel av rutene i en region.
+ *
+ * Når midtpunktet i en rute ikke er skog, prøver generatoren inntil fire
+ * kvadrantsentre til (se src/lib/prediction/skogprover.ts). Det koster ekstra
+ * oppslag akkurat der rutenettet treffer vann og by — i verste fall fire per
+ * rute. Taket gjelder per region, så de første regionene i lista ikke bruker
+ * opp det de siste skulle hatt.
+ *
+ * Målt live 15. sep 2026 med `npm run dekning:rutenett` (ingen skriving):
+ *
+ * NO: 4 = ingen reell grense. SR16 er billig (~28 ms per oppslag). Alle ni
+ * regionene brukte 582 forskjøvne oppslag (~17 s) og gikk fra 181 til 317 av
+ * 399 ruter med skog.
+ * SE: CORINE koster ~250–330 ms per oppslag, og midtpunktene alene bruker
+ * nesten halvparten av maxDuration. Uten tak ville de 13 regionene brukt 489
+ * forskjøvne oppslag (~120 s) for å gå fra 219 til 354 av 420 ruter. Med 0,65
+ * er taket 274 oppslag; simulert på de samme svarene bruker det ~246 (~60 s) og
+ * redder ~99 av de 135 rutene. 0,65 er det høyeste som består budsjett-testen
+ * med den dokumenterte 329 ms. Ruter som ikke rekker alle forsøkene sine logges
+ * som `generate_tiles.skogprove_avkortet`.
+ *
+ * Testen «holder forskyvningen innenfor maxDuration» vokter at taket passer.
+ */
+export const EKSTRA_SKOGOPPSLAG_PER_RUTE: Readonly<Record<PredictionTileRegion['country'], number>> = {
+  NO: 4,
+  SE: 0.65
+};
+
 export function predictionTileGridCells(
   region: PredictionTileRegion
 ): Array<{ lat: number; lng: number }> {

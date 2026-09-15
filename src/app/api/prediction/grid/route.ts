@@ -11,6 +11,8 @@ import { weightedOccurrenceDensity, countWithinKm, OCCURRENCE_FETCH_LIMIT } from
 import { buildAreaReport, summariseNeighbourhood } from '@/lib/prediction/area-report';
 import { getElevation } from '@/lib/terrain';
 import { computeHabitatScore } from '@/lib/forest';
+import { FORSKYVNINGSVINDU_LEVENDE_MS, provSkogIRuter } from '@/lib/prediction/skogprover';
+import { haversineKm } from '@/lib/utils/geo-distance';
 import { buildSpotSummary, scoreVerdict } from '@/lib/utils/prediction-explanation';
 import type { SpeciesContext } from '@/lib/utils/species-scoring';
 import { checkRateLimit } from '@/lib/rate-limit';
@@ -311,13 +313,26 @@ export async function GET(request: NextRequest) {
       soilMoistureIndex: weather.soilMoistureIndex
     });
 
-    const scored = await mapWithConcurrency(cellCenters, FOREST_CONCURRENCY, async (cell) => {
-      const [forest, elev] = await Promise.all([
-        withTimeout(getForestProperties({ lat: cell.lat, lon: cell.lng }), FOREST_TIMEOUT_MS),
-        getElevation({ lat: cell.lat, lon: cell.lng })
-      ]);
-      // No real forest signal → skip (never invent a gradient).
-      if (!forest) return null;
+    // Skogen slås opp etter samme regel som nattjobben: midtpunktet, så de fire
+    // kvadrantsentrene når midtpunktet er vann, jorde eller by (se
+    // src/lib/prediction/skogprover.ts). Høyden hentes parallelt, for rutens
+    // midtpunkt som før — nåla og scoren står fortsatt i midtpunktet.
+    const skogFrist = Date.now() + FORSKYVNINGSVINDU_LEVENDE_MS;
+    const [skog, elevations] = await Promise.all([
+      provSkogIRuter(
+        cellCenters,
+        { lat: latSpan, lng: lngSpan },
+        (p) => withTimeout(getForestProperties({ lat: p.lat, lon: p.lng }), FOREST_TIMEOUT_MS),
+        { samtidighet: FOREST_CONCURRENCY, tillatForskyvning: () => Date.now() < skogFrist }
+      ),
+      mapWithConcurrency(cellCenters, FOREST_CONCURRENCY, (cell) => getElevation({ lat: cell.lat, lon: cell.lng }))
+    ]);
+
+    const scored = cellCenters.map((cell, i) => {
+      const { skog: forest, punkt } = skog.prover[i];
+      const elev = elevations[i];
+      // No real forest signal in any sample point → skip (never invent a gradient).
+      if (!forest || !punkt) return null;
       const cellWeather = nearestWeatherSample(weatherSamples, cell.lat, cell.lng)?.weather;
       if (!cellWeather) return null;
       const nearby = weightedOccurrenceDensity(occurrences, cell.lat, cell.lng);
@@ -342,6 +357,9 @@ export async function GET(request: NextRequest) {
         forestType: forest.forestType,
         productivity: forest.productivity,
         forest,
+        // Hvor langt fra nåla skogdataene er målt: 0 i midtpunktet, ellers
+        // avstanden til kvadrantsenteret som ga treff.
+        forestDistanceKm: haversineKm(cell.lat, cell.lng, punkt.lat, punkt.lng),
         weather: cellWeather,
         nearbyOccurrences: nearby,
         elevation: elev?.elevationM ?? null
@@ -520,11 +538,13 @@ export async function GET(request: NextRequest) {
             productivity: c.forest.productivity,
             volumePerHa: c.forest.volumePerHa,
             source: c.forest.source,
-            // Rutenettet slår opp skogen i selve punktet nåla står i (SR16 og
-            // CORINE er punktoppslag), så avstanden er null. Feltet sendes
-            // likevel med: uten det kunne ikke rapporten si HVOR målingen er
-            // gjort, og «granskog» ville igjen vært en påstand uten sted.
-            distanceKm: 0
+            // SR16 og CORINE er punktoppslag. Rutenettet slår opp skogen i
+            // punktet nåla står i, og bare når det ikke er skog der, i et
+            // kvadrantsenter inne i ruta (skogprover.ts). Avstanden er da 0
+            // eller et par hundre meter — og sendes med, så rapporten sier
+            // HVOR målingen er gjort i stedet for å late som skogen står
+            // under nåla.
+            distanceKm: c.forestDistanceKm
           },
           weather: {
             temperatureC: c.weather.temperatureC,
@@ -566,6 +586,11 @@ export async function GET(request: NextRequest) {
       paid,
       total: cellCenters.length,
       withForest: allCells.length,
+      forestAtCenter: skog.statistikk.senter,
+      forestOffset: skog.statistikk.forskjovet,
+      forestOffsetLookups: skog.statistikk.ekstraOppslag,
+      // Ruter der vinduet gikk ut før alle prøvepunktene var slått opp.
+      forestOffsetCutShort: skog.statistikk.avkortet,
       returned: cells.length,
       weatherSource,
       weatherSamples: weatherSamples.length,

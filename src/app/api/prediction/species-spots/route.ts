@@ -8,6 +8,7 @@ import { computeCellPrediction } from '@/lib/prediction/cell-score';
 import { dayOfYearOf } from '@/lib/prediction/phenology';
 import { weightedOccurrenceDensity, OCCURRENCE_FETCH_LIMIT } from '@/lib/prediction/occurrences';
 import { getElevation } from '@/lib/terrain';
+import { FORSKYVNINGSVINDU_LEVENDE_MS, provSkogIRuter } from '@/lib/prediction/skogprover';
 import { buildSpotSummary } from '@/lib/utils/prediction-explanation';
 import type { SpeciesContext } from '@/lib/utils/species-scoring';
 import { checkRateLimit } from '@/lib/rate-limit';
@@ -240,15 +241,25 @@ export async function GET(request: NextRequest) {
     }
 
     // Fetch forest ONCE per cell (the expensive part); reuse across all species.
-    const forested = await mapWithConcurrency(cellCenters, FOREST_CONCURRENCY, async (cell) => {
-      const [forest, elev] = await Promise.all([
-        withTimeout(getForestProperties({ lat: cell.lat, lon: cell.lng }), FOREST_TIMEOUT_MS),
-        getElevation({ lat: cell.lat, lon: cell.lng })
-      ]);
+    // Samme prøveregel som nattjobben og /api/prediction/grid: midtpunktet, så
+    // de fire kvadrantsentrene når midtpunktet ikke er skog
+    // (src/lib/prediction/skogprover.ts). Nåla står fortsatt i midtpunktet.
+    const skogFrist = Date.now() + FORSKYVNINGSVINDU_LEVENDE_MS;
+    const [skog, elevations] = await Promise.all([
+      provSkogIRuter(
+        cellCenters,
+        { lat: latSpan, lng: lngSpan },
+        (p) => withTimeout(getForestProperties({ lat: p.lat, lon: p.lng }), FOREST_TIMEOUT_MS),
+        { samtidighet: FOREST_CONCURRENCY, tillatForskyvning: () => Date.now() < skogFrist }
+      ),
+      mapWithConcurrency(cellCenters, FOREST_CONCURRENCY, (cell) => getElevation({ lat: cell.lat, lon: cell.lng }))
+    ]);
+    const forested = cellCenters.map((cell, i) => {
+      const forest = skog.prover[i].skog;
       if (!forest) return null;
       const cellWeather = nearestWeatherSample(weatherSamples, cell.lat, cell.lng)?.weather;
       if (!cellWeather) return null;
-      return { lat: cell.lat, lng: cell.lng, forest, weather: cellWeather, elevation: elev?.elevationM ?? null };
+      return { lat: cell.lat, lng: cell.lng, forest, weather: cellWeather, elevation: elevations[i]?.elevationM ?? null };
     });
     const cells = forested.filter((c): c is NonNullable<typeof c> => c !== null);
 
@@ -382,6 +393,10 @@ export async function GET(request: NextRequest) {
       candidates: candidates.length,
       spots: spots.length,
       cells: cells.length,
+      forestAtCenter: skog.statistikk.senter,
+      forestOffset: skog.statistikk.forskjovet,
+      forestOffsetLookups: skog.statistikk.ekstraOppslag,
+      forestOffsetCutShort: skog.statistikk.avkortet,
       weatherSource,
       weatherSamples: weatherSamples.length
     });
