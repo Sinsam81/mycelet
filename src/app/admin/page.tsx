@@ -17,6 +17,7 @@ import { getTranslations } from 'next-intl/server';
 import { PageWrapper } from '@/components/layout/PageWrapper';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { erInternKonto, tellAbonnement, type AbonnementRad } from '@/lib/rapport/abonnement';
 
 /**
  * Admin statistics dashboard — the `/admin` landing page (and hub linking to
@@ -173,32 +174,43 @@ export default async function AdminDashboardPage() {
   const fetchAccounts = async () => {
     const perPage = 1000;
     const createdAt: string[] = [];
+    // Interne kontoer (QA, Apples demokonto) — samme regel som dagsrapporten.
+    const interne = new Set<string>();
     // Bevisst tak: 50 000 kontoer. Ved den grensen skal dette uansett være en
     // SQL-spørring mot auth.users, ikke sidevis henting i en sidevisning.
     for (let page = 1; page <= 50; page++) {
       const { data, error } = await admin.auth.admin.listUsers({ page, perPage });
       if (error) return null;
       const users = data?.users ?? [];
-      for (const u of users) if (u.created_at) createdAt.push(u.created_at);
+      for (const u of users) {
+        if (u.created_at) createdAt.push(u.created_at);
+        if (erInternKonto(u.email)) interne.add(u.id);
+      }
       if (users.length < perPage) break;
     }
     return {
       total: createdAt.length,
       week: createdAt.filter((d) => d >= WEEK).length,
-      month: createdAt.filter((d) => d >= MONTH).length
+      month: createdAt.filter((d) => d >= MONTH).length,
+      interne
     };
   };
 
-  const fetchBilling = async () => {
-    const { data } = await admin.from('billing_subscriptions').select('tier,status');
-    const rows = data ?? [];
-    const byTier: Record<string, number> = { free: 0, premium: 0, season_pass: 0 };
-    let paid = 0;
-    for (const r of rows) {
-      byTier[r.tier] = (byTier[r.tier] ?? 0) + 1;
-      if (r.tier !== 'free' && (r.status === 'active' || r.status === 'trialing')) paid += 1;
-    }
-    return { total: rows.length, byTier, paid };
+  /**
+   * Abonnement-radene, rå. Hvem som er betalende, prøve eller gratis tildelt
+   * avgjøres av tellAbonnement (src/lib/rapport/abonnement.ts) — samme regel
+   * som dagsrapporten — etter at kontoene er hentet, fordi interne kontoer
+   * kjennes igjen på e-posten.
+   *
+   * Her sto det tidligere en egen løkke: tier ≠ free og status active eller
+   * trialing. 15. september 2026 viste den «Betalende: 8» der fasit var én —
+   * tre prøver, tre gavepass og en Stripe-rad som utløp 2. juli telte med.
+   */
+  const fetchBillingRows = async (): Promise<AbonnementRad[] | null> => {
+    const { data, error } = await admin
+      .from('billing_subscriptions')
+      .select('user_id,tier,status,current_period_end,cancel_at_period_end,created_at,metadata');
+    return error ? null : ((data ?? []) as AbonnementRad[]);
   };
 
   const fetchSpecies = async () => {
@@ -270,7 +282,7 @@ export default async function AdminDashboardPage() {
     verifiedForagers,
     moderators,
     pendingDeletions,
-    billing,
+    billingRows,
     species,
     forumCategories,
     topSpecies
@@ -298,13 +310,19 @@ export default async function AdminDashboardPage() {
     c('verified_foragers'),
     c('moderator_roles'),
     c('account_deletion_warnings'),
-    fetchBilling(),
+    fetchBillingRows(),
     fetchSpecies(),
     fetchForumCategories(),
     fetchTopSpecies()
   ]);
 
   const likesTotal = likesPost == null && likesComment == null ? null : (likesPost ?? 0) + (likesComment ?? 0);
+
+  // Uten kontolista vet vi ikke hvilke kontoer som er interne, og da ser et
+  // App Store-kjøp fra QA-kontoen ut som et salg. Heller «—» enn et for høyt tall.
+  const abonnement = billingRows && accounts ? tellAbonnement(billingRows, new Date(), accounts.interne) : null;
+  const byTier: Record<string, number> = { free: 0, premium: 0, season_pass: 0 };
+  for (const r of billingRows ?? []) byTier[r.tier] = (byTier[r.tier] ?? 0) + 1;
 
   return (
     <PageWrapper wide>
@@ -328,12 +346,9 @@ export default async function AdminDashboardPage() {
             <StatCard label={t('usersTotal')} value={accounts?.total ?? null} />
             <StatCard label={t('newWeek')} value={accounts?.week ?? null} />
             <StatCard label={t('newMonth')} value={accounts?.month ?? null} />
-            <StatCard label={t('paying')} value={billing.paid} tone={billing.paid > 0 ? 'good' : 'default'} />
-          </Grid>
-          {/* Avviket skal være synlig. Hver konto SKAL ha en profilrad; står
-              det et lavere tall her, er det kontoer registreringen ikke fikk
-              fullført — og de er ellers usynlige overalt i appen. */}
-          <Grid>
+            {/* Avviket skal være synlig. Hver konto SKAL ha en profilrad; står
+                det et lavere tall her, er det kontoer registreringen ikke fikk
+                fullført — og de er ellers usynlige overalt i appen. */}
             <StatCard
               label={t('usersWithProfile')}
               value={profilesTotal}
@@ -342,12 +357,31 @@ export default async function AdminDashboardPage() {
               }
             />
           </Grid>
+          {/* Samme regel som dagsrapporten (rapport/abonnement.ts): hver rad er
+              betalende, prøve, gratis tildelt, utløpt eller avsluttet — aldri
+              to av dem. Prøver og gavepass gir fortsatt Premium; dette er
+              bare tellingen. */}
           <Grid>
-            <StatCard label={t('premium')} value={billing.byTier.premium ?? 0} icon={CreditCard} />
-            <StatCard label={t('seasonPass')} value={billing.byTier.season_pass ?? 0} icon={CreditCard} />
-            <StatCard label={t('free')} value={billing.byTier.free ?? 0} />
-            <StatCard label={t('subscriptionRows')} value={billing.total} />
+            <StatCard
+              label={t('paying')}
+              value={abonnement?.betalende ?? null}
+              tone={abonnement != null && abonnement.betalende > 0 ? 'good' : 'default'}
+            />
+            <StatCard label={t('trials')} value={abonnement?.prover ?? null} />
+            <StatCard label={t('freeGrants')} value={abonnement?.gratisTildelt ?? null} />
+            <StatCard label={t('subscriptionRows')} value={billingRows?.length ?? null} />
           </Grid>
+          {abonnement != null && abonnement.utloptMenMarkertAktiv > 0 && (
+            <p className="text-xs text-amber-800">
+              {t('expiredMarkedActive', { count: abonnement.utloptMenMarkertAktiv })}
+            </p>
+          )}
+          <Grid>
+            <StatCard label={t('premium')} value={billingRows ? byTier.premium : null} icon={CreditCard} />
+            <StatCard label={t('seasonPass')} value={billingRows ? byTier.season_pass : null} icon={CreditCard} />
+            <StatCard label={t('free')} value={billingRows ? byTier.free : null} />
+          </Grid>
+          <p className="text-xs text-gray-500">{t('billingHint')}</p>
         </Section>
 
         <Section title={t('sectionFindings')} icon={MapPin} hint={t('findingsHint')}>
