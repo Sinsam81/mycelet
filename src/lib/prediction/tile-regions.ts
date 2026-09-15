@@ -111,9 +111,10 @@ export const PREDICTION_TILE_REGIONS: readonly PredictionTileRegion[] = [
  * nesten halvparten av maxDuration. Uten tak ville de 13 regionene brukt 489
  * forskjøvne oppslag (~120 s) for å gå fra 219 til 354 av 420 ruter. Med 0,65
  * er taket 274 oppslag; simulert på de samme svarene bruker det ~246 (~60 s) og
- * redder ~99 av de 135 rutene. 0,65 er det høyeste som består budsjett-testen
- * med den dokumenterte 329 ms. Ruter som ikke rekker alle forsøkene sine logges
- * som `generate_tiles.skogprove_avkortet`.
+ * redder ~99 av de 135 rutene. Budsjett-testen med den dokumenterte 329 ms
+ * består opp til 0,67 (700 oppslag ≈ 230,3 s mot 231 s; 0,68 gir 704 ≈ 231,6 s
+ * og feiler). 0,65 (694 ≈ 228,3 s) er valgt med vilje for litt slakk. Ruter som
+ * ikke rekker alle forsøkene sine logges som `generate_tiles.skogprove_avkortet`.
  *
  * Testen «holder forskyvningen innenfor maxDuration» vokter at taket passer.
  */

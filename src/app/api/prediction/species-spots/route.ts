@@ -8,7 +8,7 @@ import { computeCellPrediction } from '@/lib/prediction/cell-score';
 import { dayOfYearOf } from '@/lib/prediction/phenology';
 import { weightedOccurrenceDensity, OCCURRENCE_FETCH_LIMIT } from '@/lib/prediction/occurrences';
 import { getElevation } from '@/lib/terrain';
-import { FORSKYVNINGSVINDU_LEVENDE_MS, provSkogIRuter } from '@/lib/prediction/skogprover';
+import { FORSKYVNINGSVINDU_LEVENDE_MS, provSkogIRuter, skogavstandKm } from '@/lib/prediction/skogprover';
 import { buildSpotSummary } from '@/lib/utils/prediction-explanation';
 import type { SpeciesContext } from '@/lib/utils/species-scoring';
 import { checkRateLimit } from '@/lib/rate-limit';
@@ -259,7 +259,17 @@ export async function GET(request: NextRequest) {
       if (!forest) return null;
       const cellWeather = nearestWeatherSample(weatherSamples, cell.lat, cell.lng)?.weather;
       if (!cellWeather) return null;
-      return { lat: cell.lat, lng: cell.lng, forest, weather: cellWeather, elevation: elevations[i]?.elevationM ?? null };
+      return {
+        lat: cell.lat,
+        lng: cell.lng,
+        forest,
+        // Nåla står i midtpunktet. Kom skogen fra et kvadrantsenter, er den
+        // målt opptil flere km unna (ruta er en n×n-del av hele utsnittet), og
+        // da skal teksten si avstanden i stedet for «Skog her». Null i midtpunktet.
+        forestDistanceKm: skogavstandKm(cell, skog.prover[i]),
+        weather: cellWeather,
+        elevation: elevations[i]?.elevationM ?? null
+      };
     });
     const cells = forested.filter((c): c is NonNullable<typeof c> => c !== null);
 
@@ -359,7 +369,8 @@ export async function GET(request: NextRequest) {
             volumePerHa: best.cell.forest.volumePerHa,
             habitatScore: habitat.score,
             habitatReasons: habitat.reasons,
-            source: best.cell.forest.source
+            source: best.cell.forest.source,
+            distanceKm: best.cell.forestDistanceKm
           },
           nearbyOccurrences: best.nearby,
           month,

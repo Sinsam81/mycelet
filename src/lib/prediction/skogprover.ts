@@ -27,6 +27,8 @@
  * scripts/dekning-rutenett.mjs.
  */
 
+import { haversineKm } from '@/lib/utils/geo-distance';
+
 export interface Punkt {
   lat: number;
   lng: number;
@@ -70,6 +72,21 @@ export interface Skogprove<F> {
    * så etter — skal telles og logges, aldri forsvinne stille.
    */
   avkortet: boolean;
+}
+
+/**
+ * Hvor langt fra rutas midtpunkt — der nåla og popupen står — skogdataene er
+ * målt, i km. Til `distanceKm` i forklaringsteksten (prediction-explanation.ts).
+ *
+ * `null` når skogen er målt i selve midtpunktet, og BARE da: tekstbyggeren
+ * skriver «Skog her» for null, mens 0 ville blitt «Nærmeste skogdata (100 m
+ * unna)». Kom skogen fra et kvadrantsenter, er den målt et stykke unna nåla —
+ * ~1,9 km i rasteret, og flere km i de levende rutenettene der rutene er store
+ * (35 km radius delt i 7×7 gir ~3,5 km) — og da skal avstanden stå i setningen.
+ */
+export function skogavstandKm(senter: Punkt, prove: Pick<Skogprove<unknown>, 'kilde' | 'punkt'>): number | null {
+  if (prove.kilde !== 'forskjovet' || !prove.punkt) return null;
+  return haversineKm(senter.lat, senter.lng, prove.punkt.lat, prove.punkt.lng);
 }
 
 export interface Skogprovestatistikk {

@@ -11,8 +11,7 @@ import { weightedOccurrenceDensity, countWithinKm, OCCURRENCE_FETCH_LIMIT } from
 import { buildAreaReport, summariseNeighbourhood } from '@/lib/prediction/area-report';
 import { getElevation } from '@/lib/terrain';
 import { computeHabitatScore } from '@/lib/forest';
-import { FORSKYVNINGSVINDU_LEVENDE_MS, provSkogIRuter } from '@/lib/prediction/skogprover';
-import { haversineKm } from '@/lib/utils/geo-distance';
+import { FORSKYVNINGSVINDU_LEVENDE_MS, provSkogIRuter, skogavstandKm } from '@/lib/prediction/skogprover';
 import { buildSpotSummary, scoreVerdict } from '@/lib/utils/prediction-explanation';
 import type { SpeciesContext } from '@/lib/utils/species-scoring';
 import { checkRateLimit } from '@/lib/rate-limit';
@@ -357,9 +356,10 @@ export async function GET(request: NextRequest) {
         forestType: forest.forestType,
         productivity: forest.productivity,
         forest,
-        // Hvor langt fra nåla skogdataene er målt: 0 i midtpunktet, ellers
-        // avstanden til kvadrantsenteret som ga treff.
-        forestDistanceKm: haversineKm(cell.lat, cell.lng, punkt.lat, punkt.lng),
+        // Hvor langt fra nåla skogdataene er målt: null i midtpunktet, ellers
+        // avstanden til kvadrantsenteret som ga treff — med rutenettets store
+        // ruter gjerne et par km (skogavstandKm).
+        forestDistanceKm: skogavstandKm(cell, skog.prover[i]),
         weather: cellWeather,
         nearbyOccurrences: nearby,
         elevation: elev?.elevationM ?? null
@@ -494,7 +494,11 @@ export async function GET(request: NextRequest) {
             volumePerHa: c.forest.volumePerHa,
             habitatScore: habitat ? habitat.score : null,
             habitatReasons: habitat ? habitat.reasons : [],
-            source: c.forest.source
+            source: c.forest.source,
+            // Null bare når skogen er målt under nåla — da, og bare da, sier
+            // teksten «Skog her». Fra et kvadrantsenter står avstanden i
+            // setningen, likt med områderapporten i samme svar.
+            distanceKm: c.forestDistanceKm
           },
           nearbyOccurrences: c.nearbyOccurrences,
           month,
@@ -540,11 +544,12 @@ export async function GET(request: NextRequest) {
             source: c.forest.source,
             // SR16 og CORINE er punktoppslag. Rutenettet slår opp skogen i
             // punktet nåla står i, og bare når det ikke er skog der, i et
-            // kvadrantsenter inne i ruta (skogprover.ts). Avstanden er da 0
-            // eller et par hundre meter — og sendes med, så rapporten sier
-            // HVOR målingen er gjort i stedet for å late som skogen står
-            // under nåla.
-            distanceKm: c.forestDistanceKm
+            // kvadrantsenter inne i ruta (skogprover.ts). Avstanden er da 0 —
+            // rapporten skiller «målt i punktet» fra null, som betyr «ukjent
+            // sted» — eller gjerne et par km, siden rutene her er store. Den
+            // sendes med, så rapporten sier HVOR målingen er gjort i stedet for
+            // å late som skogen står under nåla.
+            distanceKm: c.forestDistanceKm ?? 0
           },
           weather: {
             temperatureC: c.weather.temperatureC,

@@ -3,10 +3,12 @@ import {
   SKOGPROVE_MS_PER_REGION,
   SKOGPROVE_SIKKERHETSMARGIN_MS,
   provSkogIRuter,
+  skogavstandKm,
   skogproveFrist,
   skogprovepunkter,
   type Punkt
 } from '../skogprover';
+import { buildExplanation } from '@/lib/utils/prediction-explanation';
 
 /**
  * Rasteret slo opp skog i midtpunktet alene og kastet hele ruta når det bommet.
@@ -162,6 +164,70 @@ describe('provSkogIRuter', () => {
     const { prover, statistikk } = await provSkogIRuter([], STEG, oppslag, { samtidighet: 5 });
     expect(prover).toEqual([]);
     expect(statistikk).toMatchObject({ ruter: 0, senter: 0, forskjovet: 0, utenSkog: 0 });
+  });
+});
+
+/**
+ * De levende rutenettene satte nåla i midtpunktet, men sendte ingen avstand til
+ * forklaringsteksten. Kom skogen fra et kvadrantsenter, sto det «Skog her
+ * (SR16): granskog, bonitet 20» om skog målt ~3,5 km unna — mens
+ * områderapporten i samme svar sa at skogdataene var målt 3,5 km unna.
+ */
+describe('skogavstandKm', () => {
+  const rute = { lat: 59.84, lng: 10.71 };
+
+  it('er null når skogen er målt i midtpunktet, eller ikke finnes', () => {
+    expect(skogavstandKm(rute, { kilde: 'senter', punkt: rute })).toBeNull();
+    expect(skogavstandKm(rute, { kilde: null, punkt: null })).toBeNull();
+  });
+
+  it('gir avstanden til kvadrantsenteret — aldri 0 — når skogen kom derfra', () => {
+    const [, nordvest] = skogprovepunkter(rute, 0.06);
+    const km = skogavstandKm(rute, { kilde: 'forskjovet', punkt: nordvest });
+    // 0,015° nord og 0,015° vest på 59,84° N ≈ 1,9 km.
+    expect(km).toBeGreaterThan(1.8);
+    expect(km).toBeLessThan(2);
+  });
+
+  const GRANSKOG = {
+    forestType: 'gran',
+    productivity: 20,
+    volumePerHa: 300,
+    habitatScore: null,
+    habitatReasons: [],
+    source: 'sr16'
+  };
+  const VAER = { temperatureC: 12, humidityPct: 85, rain3dMm: 8 };
+
+  it('sier ikke «Skog her» om skog fra et kvadrantsenter i et levende rutenett', async () => {
+    // 35 km radius i 7×7 ruter på ~60° N: ~0,09° × 0,18° per rute. Midtpunktet
+    // ligger i et vann; skogen står i nordvest-kvadranten, ~3,5 km fra nåla.
+    const steg = { lat: 0.09, lng: 0.18 };
+    const [, nordvest] = skogprovepunkter(rute, steg.lat, steg.lng);
+    const { oppslag } = skogkart([nordvest]);
+    const { prover } = await provSkogIRuter([rute], steg, oppslag, { samtidighet: 5 });
+    expect(prover[0].kilde).toBe('forskjovet');
+
+    const linjer = buildExplanation({
+      weather: VAER,
+      month: 9,
+      forest: { ...GRANSKOG, distanceKm: skogavstandKm(rute, prover[0]) }
+    });
+    const skoglinje = linjer.find((l) => l.category === 'habitat' && l.text.includes('bonitet'));
+    expect(skoglinje?.text).not.toContain('Skog her');
+    expect(skoglinje?.text).toBe('Nærmeste skogdata (NIBIO, 3,5 km unna): granskog, bonitet 20');
+  });
+
+  it('beholder «Skog her» når skogen er målt under nåla', async () => {
+    const { oppslag } = skogkart([rute]);
+    const { prover } = await provSkogIRuter([rute], { lat: 0.09, lng: 0.18 }, oppslag, { samtidighet: 5 });
+    const linjer = buildExplanation({
+      weather: VAER,
+      month: 9,
+      forest: { ...GRANSKOG, distanceKm: skogavstandKm(rute, prover[0]) }
+    });
+    const skoglinje = linjer.find((l) => l.category === 'habitat' && l.text.includes('bonitet'));
+    expect(skoglinje?.text).toBe('Skog her (NIBIO): granskog, bonitet 20');
   });
 });
 
