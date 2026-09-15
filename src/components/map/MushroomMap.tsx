@@ -2242,8 +2242,23 @@ export function MushroomMap({
     if (geoError) toast.error(t('gpsUnavailable'), { id: 'map-geolocation-error' });
   }, [geoError, t]);
 
+  // `isolate` gir kartet sin egen stablingskontekst. Uten den konkurrerte
+  // Leaflets lag (400) og kontroller (1000) og våre egne knapper
+  // (z-[1000]–z-[1100]) i rot-konteksten og malte over bunnmenyen (z-50) —
+  // bare etikettene stakk fram, ikonene lå under kartet. Alt som skal dekke
+  // hele skjermen herfra (GpxKopierModal, ProvGratisArk) portales til <body>;
+  // resten er `absolute` inni kartet med vilje.
+  //
+  // Høyden: 100dvh minus det som faktisk står over og under kartet på /map —
+  // header (3.5rem + safe-area topp), main pt-4 (1rem), tittelraden (2rem),
+  // space-y-3 (0.75rem), main pb-4 (1rem) og PageWrapper sin bunnpolstring
+  // (5rem + safe-area bunn) = 13.25rem. Da blir siden nøyaktig én skjerm høy
+  // og kartet slutter ~1.5rem over bunnmenyen (4.44rem). Før trakk den bare
+  // fra 8.5rem, så kartet gikk 51px inn under menyen på alle skjermer.
+  // vh er reserve for iOS 15.0–15.3 (appens minstemål), som ikke kan dvh.
+  // min-h holder kartet brukbart på små/liggende skjermer; da ruller siden.
   return (
-    <div className="relative h-[calc(100vh-8.5rem)] overflow-hidden rounded-xl border border-gray-200">
+    <div className="relative isolate h-[calc(100vh_-_13.25rem_-_env(safe-area-inset-top)_-_env(safe-area-inset-bottom))] min-h-[20rem] overflow-hidden rounded-xl border border-gray-200 supports-[height:100dvh]:h-[calc(100dvh_-_13.25rem_-_env(safe-area-inset-top)_-_env(safe-area-inset-bottom))]">
       <div ref={containerRef} className="h-full w-full" />
 
       <MapFilters
