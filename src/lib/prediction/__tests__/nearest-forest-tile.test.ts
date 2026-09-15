@@ -34,6 +34,29 @@ describe('nearestForestTile', () => {
     expect(nearestForestTile(tiles, 59.91, 10.75)).toBeNull();
   });
 
+  it('måler avstanden til punktet skogen er målt i, ikke til midtpunktet', () => {
+    // Midtpunktet 59,84/10,71 ligger i fjorden; nattjobben fant skogen i
+    // kvadrantsenteret 59,825/10,695 og skrev punktet i metadata.
+    const forskjovet = {
+      center_lat: 59.84,
+      center_lng: 10.71,
+      score: 40,
+      components: skog('lauv'),
+      metadata: { skogprove_lat: 59.825, skogprove_lng: 10.695 }
+    };
+    const naermest = nearestForestTile([forskjovet], 59.84, 10.71);
+    // 0,015° nord–sør og 0,015° øst–vest på 59,8° N ≈ 1,9 km.
+    expect(naermest?.distanceKm).toBeGreaterThan(1.8);
+    expect(naermest?.distanceKm).toBeLessThan(2);
+  });
+
+  it('bruker midtpunktet for fliser uten prøvepunkt (generert før regelen)', () => {
+    const gammel = { center_lat: 59.84, center_lng: 10.71, score: 40, components: skog('lauv'), metadata: { region: 'Oslo' } };
+    const utenMetadata = { center_lat: 59.84, center_lng: 10.71, score: 40, components: skog('lauv'), metadata: null };
+    expect(nearestForestTile([gammel], 59.84, 10.71)?.distanceKm).toBe(0);
+    expect(nearestForestTile([utenMetadata], 59.84, 10.71)?.distanceKm).toBe(0);
+  });
+
   it('gir null for tom liste', () => {
     expect(nearestForestTile([], 59.91, 10.75)).toBeNull();
   });

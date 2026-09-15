@@ -140,8 +140,18 @@ interface PredictionTileRow {
      */
     habitat?: { score: number; reasons: string[]; reasonsSv?: string[] } | null;
   } | null;
-  /** Generatoren legger rutestørrelsen (grader) her — se tile-regions.ts. */
-  metadata?: { region?: string; grid_size_deg?: number } | null;
+  /**
+   * Generatoren legger rutestørrelsen (grader) her — se tile-regions.ts — og
+   * punktet skogen er målt i (skogprover.ts), som nearestForestTile måler
+   * avstanden til.
+   */
+  metadata?: {
+    region?: string;
+    grid_size_deg?: number;
+    skogprove?: 'senter' | 'forskjovet';
+    skogprove_lat?: number;
+    skogprove_lng?: number;
+  } | null;
 }
 
 /**
