@@ -29,7 +29,7 @@ Nyttig å vite før du leser den:
 | Migrasjoner 030–032 | ✅ Kjørt i produksjon 31.07 |
 | Landingsside for utloggede + 3 sanketips-artikler | ✅ Live (PR #92–#95) |
 | Apple: avtaler, bank, skatt | ✅ Alle Active |
-| Abonnementer i ASC (79 kr/mnd + 249 kr/år) | ✅ Komplette |
+| Abonnementer i ASC (den gang 79 kr/mnd + 249 kr/år; månedsprisen er nå 99) | ✅ Komplette |
 | RevenueCat | ✅ Konfigurert + verifisert |
 | IAP-koden i appen | ✅ Deployet (PR #90/#91) |
 | Apple 1.2 (brukerinnhold) | ✅ Alle fire krav dekket (PR #99) |

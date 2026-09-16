@@ -56,7 +56,7 @@ helt år) og hever CAC-taket for annonsene. Gjennomført:
 - Kode: plans.ts, kjøpsvilkår (nb+sv), begge statiske landingssider, vaktest.
 
 **⚠️ Restanse:** den NORSKE App Store-beskrivelsen sier fortsatt «79 kr per
-måned» og kan bare endres ved neste versjonsinnsending. Adopter da den svenske
+måned» (bekreftet mot Apples lookup-API 16.09.2026, versjon 1.0.1) og kan bare endres ved neste versjonsinnsending. Adopter da den svenske
 løsningen («aktuelle priser vises i appen og i App Store») permanent, så
 forsvinner denne koblingen.
 

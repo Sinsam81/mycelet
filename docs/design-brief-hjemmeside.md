@@ -42,7 +42,7 @@ Mycelet er en norsk/svensk soppjakt-app. Hovedløftet: **«Riktig tid, riktig sk
 
 **Priser:**
 - **Gratis** (0 kr): 5 AI-identifiseringer/døgn, artsbibliotek, soppkart, varsel, kalender, forum
-- **Premium** (79 kr/mnd): ubegrenset AI, full prediksjon med begrunnelse, offline-kart
+- **Premium** (99 kr/mnd): ubegrenset AI, full prediksjon med begrunnelse, offline-kart
 - **Sesongpass** (249 kr/år): alt i Premium, best verdi — «mindre enn én kurv kantareller»
 - Avslutt når som helst · Sikker betaling
 
