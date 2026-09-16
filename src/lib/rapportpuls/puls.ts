@@ -8,19 +8,23 @@
  * står (punktene sier hvor folk går — docs/mikro-prediksjon-gjennomgang.md)
  * og ikke en utløser for varsel (fasiten teller de samme rapportene).
  *
- * Etterslep: GBIF får de norske rapportene over ~en uke (målt 14. sep 2026:
- * et vindu som slutter i dag holder ~40 % av det et uke gammelt vindu holder,
- * se migrasjon 069). Derfor slutter vinduet PULS_LAG_DAGER dager tilbake, og
- * trenden mot uka før sammenligner to rader med samme alder — aldri et
- * ferskt tall mot et gammelt. Sammenligningen med tidligere år ligger
- * likevel litt lavt (sen-opplastinger over måneder), så «under» krever mer
- * enn «over».
+ * ⚠️ IKKE VIST UTAD siden 17.09.2026. Forklaringen som sto her («GBIF fyller
+ * på over ~en uke, så et vindu én uke tilbake er ~98 % komplett») var feil.
+ * Etterslepet er ikke GBIF, men at folk legger inn soppfunn i
+ * Artsobservasjoner uker og måneder etter turen: 15. september i 2023–25 var
+ * bare 57–74 % av augustfunnene lagt inn, og ~95 % først ved nyttår. Et
+ * uferdig vindu i år mot ferdige tidligere år sier derfor «under» nesten
+ * overalt hver høst (Kristiansand −92 %), og små områdebokser gir støy fra
+ * enkeltpersoner (Stavanger +555 % på en normal av 20). Riktig sammenligning
+ * er tidligere år SLIK DE SÅ UT PÅ SAMME DATO, via Artsobservasjoners
+ * løpenummer (catalogNumber) — se CLAUDE.md. Til den finnes, brukes pulsen
+ * bare i eierens dagsrapport, aldri i varsel-e-post eller X-poster.
  *
  * Alle sopparter, ikke per art. Bare Norge: Artportalen leverer til GBIF med
  * ukers etterslep.
  */
 
-/** Vinduet slutter så mange dager før «dag». 7 = ~98 % av platået (migrasjon 069). */
+/** Vinduet slutter så mange dager før «dag». NB: dekker IKKE etterregistrering over uker og måneder — se toppen av fila. */
 export const PULS_LAG_DAGER = 7;
 export const PULS_MIN_BASELINE = 10;
 export const PULS_OVER_PST = 30;
