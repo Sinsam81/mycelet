@@ -47,7 +47,7 @@ forgiftningssak er «vi visste at innholdet var ukontrollert og skjulte det» et
 - **Produktansvarsforsikring.** Ett erstatningskrav etter forgiftning treffer privatøkonomien
   direkte. Dette er den største enkeltrisikoen ved å lansere, og den er ikke teknisk.
   `docs/forsikring-foresporsel.md` ligger klar.
-- **Live Stripe-priser.** `.env.local` har testnøkkelen, så jeg verifiserte testmodus: 79 kr/mnd og
+- **Live Stripe-priser.** `.env.local` har testnøkkelen, så jeg verifiserte testmodus: 79 kr/mnd (månedsprisen ble hevet til 99 kr 30.08.2026) og
   249 kr/år, riktige pris-ID-er. **Live-prisene kan jeg ikke se herfra.** Åpne Stripe Dashboard →
   Products og bekreft de samme to tallene.
 - **Alt bak innlogging.** Jeg taster aldri passord. Kartet, profilen, funnregistrering, forumet og
