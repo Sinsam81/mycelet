@@ -286,9 +286,13 @@ describe('customer.subscription.trial_will_end', () => {
     expect(e.til).toBe('kunde@example.com');
     expect(e.emne).toMatch(/3 dager/);
     expect(e.tekst).toContain('Premium');
-    expect(e.tekst).toContain('Da trekkes 79 kr');
+    // Datoen er dynamisk her («om tre dager»), så beløpssetningen matches som mønster.
+    expect(e.tekst).toMatch(/\d{1,2}\. \p{L}+ trekkes 79 kr, om du ikke sier opp før det/u);
     expect(e.tekst).toContain('https://www.mycelet.com/pricing');
     expect(e.tekst).not.toContain('/profile');
+    // Hva som blir borte står først, veien ut før tallet.
+    expect(e.tekst).toContain('Offline-kartet');
+    expect(e.tekst.indexOf('https://www.mycelet.com/pricing')).toBeLessThan(e.tekst.indexOf('79 kr'));
     expect(e.idempotensNokkel).toBe(`stripe/prove-slutt/${TEST_SUBSCRIPTION_ID}`);
 
     expect(sisteHendelsesStatus()).toBe('processed');
@@ -343,7 +347,7 @@ describe('customer.subscription.trial_will_end', () => {
     };
     await postEvent(trialEvent({ discounts: ['di_1Abc'] }));
     const e = sendtEpost();
-    expect(e.tekst).toContain('Da trekkes 39,50 kr');
+    expect(e.tekst).toMatch(/trekkes 39,50 kr, om du ikke sier opp før det/);
     expect(e.tekst).not.toContain('79 kr');
   });
 

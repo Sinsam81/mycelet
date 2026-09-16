@@ -1,6 +1,7 @@
 import type { Locale } from '@/i18n/config';
 import { isLocale } from '@/i18n/config';
 import { fasitDato } from '@/lib/alerts/email';
+import { FREE_DAILY_AI_LIMIT } from './plans';
 
 /**
  * Påminnelsen tre dager før gratisuka på nett blir til en belastning.
@@ -8,8 +9,9 @@ import { fasitDato } from '@/lib/alerts/email';
  * Stripe sender `customer.subscription.trial_will_end` tre dager før
  * prøveperioden slutter. Uten en e-post da er det første kunden merker et
  * trekk på kortet — og en refusjonsforespørsel er dyrere for alle enn en
- * kunde som sa opp i tide. Teksten er derfor bevisst nøktern: når, hvor mye,
- * og hvor man sier opp. Ingen «vi håper du blir».
+ * kunde som sa opp i tide. Teksten minner først om hva abonnementet gir og
+ * hva som blir borte, og sier så trekket rett ut til slutt: dato, beløp og
+ * veien ut, i vanlig brødtekst. Ingen nedtelling, ingen «vi håper du blir».
  *
  * Ren logikk (beslutning + tekst), så reglene kan testes uten Stripe. Beløpet
  * kommer ALLTID fra prisobjektet i hendelsen, aldri fra plans.ts — Stripe-
@@ -172,29 +174,61 @@ export function sprakFraMetadata(meta: Record<string, unknown> | null | undefine
   return typeof v === 'string' && isLocale(v) ? v : 'nb';
 }
 
+/**
+ * Teksten: hva du mister, hva du beholder, og så trekket — i den rekkefølgen.
+ *
+ * Beløpet, datoen og veien ut skal aldri være vanskeligere å finne enn
+ * verditeksten over. Derfor står oppsigelseslenken FØR tallet i siste avsnitt
+ * (ingen skal måtte lese seg forbi pengene for å finne utgangen), og alle
+ * avsnittene rendres i samme brødtekst — ingen grå småskrift under trekket.
+ *
+ * Tre ting teksten IKKE sier, og ikke skal begynne å si:
+ *   · at soppforholdene, soppkartet eller soppvarselet stopper. De er gratis
+ *     i denne koden (ingen billing-sjekk i /api/mushroom-forecast,
+ *     /soppforhold eller varsel-cronen), og et falskt tap tre dager før et
+ *     trekk leses som skremsel.
+ *   · at du finner sopp. Forbeholdet er ordrett det samme som i
+ *     varsel-e-posten (src/lib/alerts/email.ts) — mykner det der, mykner det
+ *     her, aldri før.
+ *   · noe om måned, sesong eller nedtelling. COPY-tabellen er statisk og
+ *     Stripe sender trial_will_end hele året; «september» ville vært usant
+ *     for de fleste, og en nedtelling er presset denne e-posten ikke skal ha.
+ *
+ * Tallene i teksten er bundet til koden der det går: dagsgrensen kommer fra
+ * FREE_DAILY_AI_LIMIT. «Tre områder» er hotspotsFull.slice(0, 3) i
+ * /api/prediction — endres den, må dette avsnittet endres samtidig.
+ */
 const COPY = {
   nb: {
     naar: (d: number) => (d <= 0 ? 'i dag' : d === 1 ? 'i morgen' : `om ${d} dager`),
     emne: (naar: string) => `Prøveperioden din i Mycelet slutter ${naar}`,
     tittel: (naar: string) => `Prøveperioden slutter ${naar}`,
-    kropp: (plan: string, naar: string, dato: string, belop: string) =>
-      `Prøveperioden din på ${plan} slutter ${naar} (${dato}). Da trekkes ${belop}, om du ikke sier opp før det.`,
-    kroppUtenBelop: (plan: string, naar: string, dato: string) =>
-      `Prøveperioden din på ${plan} slutter ${naar} (${dato}). Da belastes kortet ditt — med rabatten din trukket fra — om du ikke sier opp før det.`,
-    siOpp: 'Si opp her:',
-    beholder: 'Sier du opp, beholder du soppforholdene, kartet og varselet gratis. Vil du fortsette med Premium, trenger du ikke gjøre noe.',
+    innledning: (plan: string, naar: string) => `Prøveperioden din på ${plan} slutter ${naar}.`,
+    verdi: (aiGrense: number) =>
+      `Med abonnement viser kartet de lovende områdene nær deg, og begrunnelsen bak hvert tall: været, sesongen og skogtypen. Uten abonnement står tre områder igjen, grovere plassert og uten begrunnelsen. Offline-kartet til turer uten dekning slutter å virke, og AI-identifikasjonen får en grense på ${aiGrense} bilder i døgnet.`,
+    beholder: 'Soppforholdene for området ditt, soppkartet og soppvarselet beholder du gratis uansett.',
+    forbehold:
+      'Tallet er vær og sesong for et område. Det sier ingenting om skogen der du står, og vi lover ikke at du finner sopp.',
+    avslutning: (dato: string, belop: string, lenke: string) =>
+      `Vil du ikke fortsette, sier du opp her: ${lenke}. Vil du fortsette, trenger du ikke gjøre noe. ${dato} trekkes ${belop}, om du ikke sier opp før det.`,
+    avslutningUtenBelop: (dato: string, lenke: string) =>
+      `Vil du ikke fortsette, sier du opp her: ${lenke}. Vil du fortsette, trenger du ikke gjøre noe. ${dato} belastes kortet ditt — med rabatten din trukket fra — om du ikke sier opp før det.`,
     signatur: 'Mycelet — soppvarsel for Norge og Sverige'
   },
   sv: {
     naar: (d: number) => (d <= 0 ? 'i dag' : d === 1 ? 'i morgon' : `om ${d} dagar`),
     emne: (naar: string) => `Din provperiod i Mycelet slutar ${naar}`,
     tittel: (naar: string) => `Provperioden slutar ${naar}`,
-    kropp: (plan: string, naar: string, dato: string, belop: string) =>
-      `Din provperiod på ${plan} slutar ${naar} (${dato}). Då dras ${belop}, om du inte säger upp innan dess.`,
-    kroppUtenBelop: (plan: string, naar: string, dato: string) =>
-      `Din provperiod på ${plan} slutar ${naar} (${dato}). Då debiteras ditt kort — med din rabatt avdragen — om du inte säger upp innan dess.`,
-    siOpp: 'Säg upp här:',
-    beholder: 'Säger du upp behåller du svampläget, kartan och varningen gratis. Vill du fortsätta med Premium behöver du inte göra något.',
+    innledning: (plan: string, naar: string) => `Din provperiod på ${plan} slutar ${naar}.`,
+    verdi: (aiGrense: number) =>
+      `Med abonnemang visar kartan de lovande områdena nära dig, och motiveringen bakom varje siffra: vädret, säsongen och skogstypen. Utan abonnemang återstår tre områden, grovare placerade och utan motiveringen. Offlinekartan för turer utan täckning slutar fungera, och AI-identifieringen får en gräns på ${aiGrense} bilder om dygnet.`,
+    beholder: 'Svampläget för ditt område, svampkartan och svampvarningen behåller du gratis ändå.',
+    forbehold:
+      'Siffran är väder och säsong för ett område. Den säger ingenting om skogen där du står, och vi lovar inte att du hittar svamp.',
+    avslutning: (dato: string, belop: string, lenke: string) =>
+      `Vill du inte fortsätta säger du upp här: ${lenke}. Vill du fortsätta behöver du inte göra något. Den ${dato} dras ${belop}, om du inte säger upp innan dess.`,
+    avslutningUtenBelop: (dato: string, lenke: string) =>
+      `Vill du inte fortsätta säger du upp här: ${lenke}. Vill du fortsätta behöver du inte göra något. Den ${dato} debiteras ditt kort — med din rabatt avdragen — om du inte säger upp innan dess.`,
     signatur: 'Mycelet — svampvarning för Norge och Sverige'
   }
 } as const;
@@ -221,22 +255,28 @@ export function byggProvePaaminnelseEpost(args: ProvePaaminnelseEpostArgs): { em
   const t = COPY[args.locale] ?? COPY.nb;
   const naar = t.naar(args.dagerIgjen);
   const dato = fasitDato(args.sluttIso, args.locale);
-  const kropp = args.belop
-    ? t.kropp(args.plan, naar, dato, formaterBelop(args.belop.unitAmount, args.belop.currency, args.locale))
-    : t.kroppUtenBelop(args.plan, naar, dato);
+  // Samme setning i begge delene; bare lenken rendres ulikt (anker vs. ren URL).
+  const avslutning = (lenke: string) =>
+    args.belop
+      ? t.avslutning(dato, formaterBelop(args.belop.unitAmount, args.belop.currency, args.locale), lenke)
+      : t.avslutningUtenBelop(dato, lenke);
 
+  const avsnitt = [t.innledning(args.plan, naar), t.verdi(FREE_DAILY_AI_LIMIT), t.beholder, t.forbehold];
+  const anker = `<a href="${args.oppsigelseUrl}" style="color: #1A3409;">${args.oppsigelseUrl}</a>`;
+
+  // Alle avsnitt i samme brødtekst: trekket og lenken skal ikke stå mindre
+  // eller blekere enn det som står over dem.
+  const p = (avsnittTekst: string) => `    <p style="font-size: 16px; line-height: 1.5;">${avsnittTekst}</p>`;
   const html = `<!doctype html>
 <html lang="${args.locale}">
   <body style="font-family: -apple-system, system-ui, sans-serif; color: #1f2937; max-width: 560px; margin: 24px auto; padding: 0 16px;">
     <h1 style="font-size: 20px; font-weight: 600; color: #1A3409; margin-bottom: 8px;">${t.tittel(naar)}</h1>
-    <p style="font-size: 16px; line-height: 1.5;">${kropp}</p>
-    <p style="font-size: 16px; line-height: 1.5;">${t.siOpp} <a href="${args.oppsigelseUrl}" style="color: #1A3409;">${args.oppsigelseUrl}</a></p>
-    <p style="font-size: 14px; color: #4b5563; line-height: 1.5;">${t.beholder}</p>
+${[...avsnitt, avslutning(anker)].map(p).join('\n')}
     <p style="font-size: 12px; color: #6b7280; margin-top: 24px;">${t.signatur}</p>
   </body>
 </html>`;
 
-  const tekst = [t.tittel(naar), '', kropp, '', `${t.siOpp} ${args.oppsigelseUrl}`, '', t.beholder, '', t.signatur].join('\n');
+  const tekst = [t.tittel(naar), ...avsnitt, avslutning(args.oppsigelseUrl), t.signatur].join('\n\n');
 
   return { emne: t.emne(naar), html, tekst };
 }
