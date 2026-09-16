@@ -5,13 +5,15 @@ import {
   GBIF_AVSTAND_MS,
   GbifFeil,
   ID_FACET_GRENSE,
-  indekseringFerdig,
+  PROSESS_SIDE,
   lagGbifKlient,
-  lesUtgavedato,
+  lesUtgave,
   planlagteKall,
-  tellSoppregistreringer
+  sjekkIndeksering,
+  tellSoppregistreringer,
+  vurderIndeksering
 } from '../soppregistreringer-henting';
-import { FYLKER, NORGE, STORSOPP_ORDENER, fylkeForGadm, plussDager, vinduerFor } from '../soppregistreringer';
+import { ARTSOBS_DATASET, FYLKER, NORGE, STORSOPP_ORDENER, fylkeForGadm, plussDager, vinduerFor } from '../soppregistreringer';
 
 /**
  * En liten falsk GBIF: poster med funn-id i innleggingsrekkefølge,
@@ -73,6 +75,43 @@ function lagVerden(seed = 7): Post[] {
     .map(({ p }, i) => ({ ...p, id: 30_000_000 + i }));
 }
 
+// ── GBIFs egen logg for 12. sep-utgaven (14. sep 2026, UTC), forkortet ─────
+// Henting 494 lastet ned 11:28, registeret fikk ny pubDate 11:35:52, en
+// tom henting (495, NOT_MODIFIED) sto som FINISHED 11:36:53 — og søkeindeksen
+// fikk utgaven først 13:22:08. Formen er som i de ekte svarene.
+
+const REGISTER_ENDRET = '2026-09-14T11:35:52.268+00:00';
+
+function prosess(...hentinger: Array<[number, string]>) {
+  return {
+    results: hentinger.map(([attempt, finishReason]) => ({
+      finishReason,
+      processStateOccurrence: 'FINISHED',
+      crawlJob: { datasetKey: ARTSOBS_DATASET, attempt }
+    }))
+  };
+}
+
+const PROSESS_14_SEP = prosess([495, 'NOT_MODIFIED'], [494, 'NORMAL'], [493, 'NORMAL']);
+
+function steg(type: string, state: string, finished?: string) {
+  return { type, state, started: '2026-09-14 11:40:14Z', ...(finished ? { finished } : {}) };
+}
+
+function kjoring(created: string, steps: unknown[], rerunReason?: string) {
+  return { created, createdBy: rerunReason ? 'staff' : 'crawler.gbif.org', ...(rerunReason ? { rerunReason } : {}), steps };
+}
+
+function historikk(attempt: number, executions: unknown[]) {
+  return { results: [{ datasetKey: ARTSOBS_DATASET, attempt, created: '2026-09-14 11:40:14Z', executions }] };
+}
+
+const HENTING_494_FERDIG = kjoring('2026-09-14 11:40:14Z', [
+  steg('DWCA_TO_VERBATIM', 'COMPLETED', '2026-09-14 12:19:00Z'),
+  steg('INTERPRETED_TO_INDEX', 'COMPLETED', '2026-09-14 13:22:08Z')
+]);
+const HISTORIKK_14_SEP_FERDIG = historikk(494, [HENTING_494_FERDIG]);
+
 interface FalskGbif {
   fetch: typeof fetch;
   urler: string[];
@@ -85,11 +124,10 @@ function falskGbif(poster: Post[], valg: { svar?: (url: string, n: number) => Re
     urler.push(url.toString());
     const spesial = valg.svar?.(url.toString(), urler.length);
     if (spesial) return spesial;
-    if (url.pathname.endsWith('/process')) {
-      return Response.json({ results: [{ processStateOccurrence: 'FINISHED', finishedCrawling: '2026-09-14T11:36:53.168+00:00' }] });
-    }
+    if (url.pathname.endsWith('/process')) return Response.json(PROSESS_14_SEP);
+    if (url.pathname.startsWith('/v1/pipelines/history/')) return Response.json(HISTORIKK_14_SEP_FERDIG);
     if (url.pathname.startsWith('/v1/dataset/')) {
-      return Response.json({ pubDate: '2026-09-12T00:00:00.000+00:00' });
+      return Response.json({ pubDate: '2026-09-12T00:00:00.000+00:00', modified: REGISTER_ENDRET });
     }
     const p = url.searchParams;
     let utvalg = poster;
@@ -162,7 +200,7 @@ describe('tellingen mot en falsk GBIF — id-grenser og snitt gir samme tall som
     const gbif = falskGbif(poster);
     const tid = falskTid(300);
     const klient = lagGbifKlient({ fetch: tid.medSvartid(gbif.fetch), klokke: tid.klokke, vent: tid.vent });
-    const snapshot = await lesUtgavedato(klient);
+    const { dato: snapshot } = await lesUtgave(klient);
     const res = await tellSoppregistreringer(klient, snapshot);
 
     expect(snapshot).toBe('2026-09-12');
@@ -193,32 +231,32 @@ describe('tellingen mot en falsk GBIF — id-grenser og snitt gir samme tall som
     const r = res.rader.find((x) => x.vindu === 'sesong' && x.gruppe === 'storsopp' && x.omrade === 'Innlandet')!;
     expect(r.grenser['2024'].dato).toBe('2024-09-11');
     expect(r.perAar['2024']).toBe(fasit(utenDagen, { aar: 2024, fra: '2026-08-01', til: '2026-09-05', innlagtSenest: '2024-09-11', omrade: 'Innlandet', storsopp: true }));
-    // Selve tellingen er 61 kall; her ett ekstra grensekall (dagen før). Utgave- og indekseringskallet er ikke med.
-    expect(res.kall).toBe(planlagteKall() - 2 + 1);
+    // Selve tellingen er 61 kall; her ett ekstra grensekall (dagen før). Utgave- og indekseringskallene er ikke med.
+    expect(res.kall).toBe(planlagteKall() - 3 + 1);
   });
 });
 
-describe('budsjettet: 63 kall, 2 s mellom hvert, innenfor 300 s', () => {
+describe('budsjettet: 64 kall, 2 s mellom hvert, innenfor 300 s', () => {
   const poster = lagVerden(11);
 
   /** Det cronen gjør når utgaven er ny: utgave, indeksering, tellingen. */
   async function helKjoring(klient: ReturnType<typeof lagGbifKlient>) {
-    const snapshot = await lesUtgavedato(klient);
-    expect(await indekseringFerdig(klient)).toBe(true);
-    return tellSoppregistreringer(klient, snapshot);
+    const utgave = await lesUtgave(klient);
+    expect((await sjekkIndeksering(klient, utgave)).ferdig).toBe(true);
+    return tellSoppregistreringer(klient, utgave.dato);
   }
 
-  it('en vanlig kjøring er 63 kall: utgave + indeksering + 4 i år + 3 × (1 grense + 3 Norge + 15 fylker)', async () => {
-    expect(planlagteKall()).toBe(63);
+  it('en vanlig kjøring er 64 kall: utgave + 2 indeksering + 4 i år + 3 × (1 grense + 3 Norge + 15 fylker)', async () => {
+    expect(planlagteKall()).toBe(64);
     const gbif = falskGbif(poster);
     const tid = falskTid(0);
     const klient = lagGbifKlient({ fetch: tid.medSvartid(gbif.fetch), klokke: tid.klokke, vent: tid.vent });
     await helKjoring(klient);
-    expect(klient.kall()).toBe(63);
-    expect(gbif.urler).toHaveLength(63);
+    expect(klient.kall()).toBe(64);
+    expect(gbif.urler).toHaveLength(64);
   });
 
-  it('aldri to kall nærmere enn 2 s, og med 1,2 s svartid (tregeste målt) tar alt under 200 s', async () => {
+  it('aldri to kall nærmere enn 2 s, og med 1,2 s svartid (tregeste målt) tar alt ~203 s', async () => {
     const gbif = falskGbif(poster);
     const tid = falskTid(1_200);
     const klient = lagGbifKlient({ fetch: tid.medSvartid(gbif.fetch), klokke: tid.klokke, vent: tid.vent });
@@ -226,18 +264,18 @@ describe('budsjettet: 63 kall, 2 s mellom hvert, innenfor 300 s', () => {
     for (let i = 1; i < tid.hendelser.length; i += 1) {
       expect(tid.hendelser[i].start - tid.hendelser[i - 1].slutt).toBeGreaterThanOrEqual(GBIF_AVSTAND_MS);
     }
-    // 63 × 1,2 s + 62 × 2 s = 199,6 s.
-    expect(klient.brukt()).toBe(63 * 1_200 + 62 * GBIF_AVSTAND_MS);
+    // 64 × 1,2 s + 63 × 2 s = 202,8 s.
+    expect(klient.brukt()).toBe(64 * 1_200 + 63 * GBIF_AVSTAND_MS);
     expect(klient.brukt()).toBeLessThan(FRIST_MS);
   });
 
-  it('selv med 2 s svartid på hvert eneste kall rekker det (250 s < 270 s frist < 300 s)', async () => {
+  it('selv med 2 s svartid på hvert eneste kall rekker det (254 s < 270 s frist < 300 s)', async () => {
     const gbif = falskGbif(poster);
     const tid = falskTid(2_000);
     const klient = lagGbifKlient({ fetch: tid.medSvartid(gbif.fetch), klokke: tid.klokke, vent: tid.vent });
     const res = await helKjoring(klient);
     expect(res.rader).toHaveLength(64);
-    expect(klient.brukt()).toBe(63 * 2_000 + 62 * GBIF_AVSTAND_MS);
+    expect(klient.brukt()).toBe(64 * 2_000 + 63 * GBIF_AVSTAND_MS);
     expect(klient.brukt()).toBeLessThan(FRIST_MS);
     expect(klient.brukt()).toBeLessThan(300_000);
   });
@@ -246,7 +284,7 @@ describe('budsjettet: 63 kall, 2 s mellom hvert, innenfor 300 s', () => {
     const gbif = falskGbif(poster);
     const tid = falskTid(3_000);
     const klient = lagGbifKlient({ fetch: tid.medSvartid(gbif.fetch), klokke: tid.klokke, vent: tid.vent });
-    const snapshot = await lesUtgavedato(klient);
+    const { dato: snapshot } = await lesUtgave(klient);
     await expect(tellSoppregistreringer(klient, snapshot)).rejects.toBeInstanceOf(FristUteFeil);
     // (3 + 2) s per kall → det 55. kallet ville startet etter 270 s.
     expect(klient.kall()).toBe(54);
@@ -254,17 +292,90 @@ describe('budsjettet: 63 kall, 2 s mellom hvert, innenfor 300 s', () => {
   });
 });
 
-describe('indeksering — utgavedatoen kommer timer før tallene', () => {
-  const svar = (body: unknown) => lagGbifKlient({ fetch: (async () => Response.json(body)) as unknown as typeof fetch, vent: async () => {} });
+describe('indeksering — utgavedatoen og FINISHED kommer timer før søkeindeksen', () => {
+  const vurder = (o: { endret?: string | null; prosess?: unknown; historikk?: unknown }) =>
+    vurderIndeksering({
+      endret: o.endret === undefined ? REGISTER_ENDRET : o.endret,
+      prosess: (o.prosess ?? PROSESS_14_SEP) as Record<string, unknown>,
+      historikk: (o.historikk ?? HISTORIKK_14_SEP_FERDIG) as Record<string, unknown>
+    });
 
-  it('venter når siste prosess ikke er ferdig', async () => {
-    expect(await indekseringFerdig(svar({ results: [{ processStateOccurrence: 'RUNNING' }] }))).toBe(false);
-    expect(await indekseringFerdig(svar({ results: [{ processStateOccurrence: 'FINISHED' }] }))).toBe(true);
+  it('14. sep 11:37: ny pubDate og FINISHED i /process, men pipelines har bare forrige ukes forsøk → vent', () => {
+    const forrigeUke = historikk(493, [kjoring('2026-09-06 03:36:54Z', [steg('INTERPRETED_TO_INDEX', 'COMPLETED', '2026-09-06 05:13:04Z')])]);
+    const svar = vurder({ historikk: forrigeUke });
+    expect(svar.ferdig).toBe(false);
+    expect(svar.grunn).toMatch(/494/);
   });
 
-  it('mangler svaret feltet, stopper det ikke målingen for alltid', async () => {
-    expect(await indekseringFerdig(svar({ results: [] }))).toBe(true);
-    expect(await indekseringFerdig(svar({}))).toBe(true);
+  it('14. sep 12:30: forsøk 494 lastes inn, indekssteget finnes ikke ennå → vent', () => {
+    const underveis = historikk(494, [kjoring('2026-09-14 11:40:14Z', [steg('DWCA_TO_VERBATIM', 'RUNNING')])]);
+    expect(vurder({ historikk: underveis }).ferdig).toBe(false);
+  });
+
+  it('14. sep 13:00: INTERPRETED_TO_INDEX kjører → vent', () => {
+    const indekserer = historikk(494, [
+      kjoring('2026-09-14 11:40:14Z', [steg('DWCA_TO_VERBATIM', 'COMPLETED', '2026-09-14 12:19:00Z'), steg('INTERPRETED_TO_INDEX', 'RUNNING')])
+    ]);
+    expect(vurder({ historikk: indekserer })).toMatchObject({ ferdig: false, grunn: expect.stringMatching(/indekseres nå/) });
+  });
+
+  it('14. sep 13:23: indeksen ferdig etter registerendringen → tell', () => {
+    expect(vurder({})).toMatchObject({ ferdig: true });
+  });
+
+  it('en omkjøring som indekserer forsøket på nytt, stopper også (15. sep 17:29–17:50)', () => {
+    const omkjoring = historikk(494, [kjoring('2026-09-15 15:36:10Z', [steg('INTERPRETED_TO_INDEX', 'RUNNING')], 'nested-struct-reprocessing-sept15'), HENTING_494_FERDIG]);
+    expect(vurder({ historikk: omkjoring }).ferdig).toBe(false);
+  });
+
+  it('en ferdig omkjøring erstatter ikke hentingens egen indeksering', () => {
+    const feiletHenting = historikk(494, [
+      kjoring('2026-09-15 15:36:10Z', [steg('INTERPRETED_TO_INDEX', 'COMPLETED', '2026-09-15 17:50:32Z')], 'omkjoring'),
+      kjoring('2026-09-14 11:40:14Z', [steg('INTERPRETED_TO_INDEX', 'FAILED', '2026-09-14 13:22:08Z')])
+    ]);
+    expect(vurder({ historikk: feiletHenting }).ferdig).toBe(false);
+  });
+
+  it('registeret endret etter at indeksen ble ferdig (ny utgave meldt før hentingen) → vent', () => {
+    expect(vurder({ endret: '2026-09-14T14:00:00.000+00:00' }).ferdig).toBe(false);
+  });
+
+  it('henting uten pipelines-forsøk (som 492, 30. aug) → vent', () => {
+    const henting492 = prosess([492, 'NORMAL'], [491, 'NOT_MODIFIED'], [490, 'NORMAL']);
+    const bare490 = historikk(490, [kjoring('2026-08-25 11:05:14Z', [steg('INTERPRETED_TO_INDEX', 'COMPLETED', '2026-08-25 13:10:10Z')])]);
+    expect(vurder({ endret: '2026-08-25T11:00:00.000+00:00', prosess: henting492, historikk: bare490 }).ferdig).toBe(false);
+  });
+
+  it('mangler et felt, er svaret nei — aldri «tell likevel»', () => {
+    expect(vurder({ endret: null }).ferdig).toBe(false);
+    expect(vurder({ endret: 'ikke en dato' }).ferdig).toBe(false);
+    expect(vurder({ prosess: {} }).ferdig).toBe(false);
+    expect(vurder({ prosess: prosess([495, 'NOT_MODIFIED']) }).ferdig).toBe(false);
+    expect(vurder({ prosess: { results: [{ finishReason: 'NORMAL' }] } }).ferdig).toBe(false);
+    expect(vurder({ historikk: {} }).ferdig).toBe(false);
+    expect(vurder({ historikk: { results: [{ executions: [HENTING_494_FERDIG] }] } }).ferdig).toBe(false);
+    expect(vurder({ historikk: historikk(494, []) }).ferdig).toBe(false);
+    expect(vurder({ historikk: historikk(494, [kjoring('2026-09-14 11:40:14Z', [steg('INTERPRETED_TO_INDEX', 'COMPLETED')])]) }).ferdig).toBe(false);
+  });
+
+  it('sjekkIndeksering bruker to kall: de siste hentingene og nyeste pipelines-forsøk', async () => {
+    const urler: string[] = [];
+    const f = (async (input: string | URL | Request) => {
+      const url = new URL(String(input));
+      urler.push(url.pathname + url.search);
+      return Response.json(url.pathname.endsWith('/process') ? PROSESS_14_SEP : HISTORIKK_14_SEP_FERDIG);
+    }) as unknown as typeof fetch;
+    const klient = lagGbifKlient({ fetch: f, vent: async () => {} });
+    const svar = await sjekkIndeksering(klient, { dato: '2026-09-12', endret: REGISTER_ENDRET });
+    expect(svar.ferdig).toBe(true);
+    expect(urler).toEqual([`/v1/dataset/${ARTSOBS_DATASET}/process?limit=${PROSESS_SIDE}`, `/v1/pipelines/history/${ARTSOBS_DATASET}?limit=1`]);
+  });
+
+  it('lesUtgave tar med når registeret ble endret, og null når feltet mangler', async () => {
+    const med = lagGbifKlient({ fetch: (async () => Response.json({ pubDate: '2026-09-12T00:00:00.000+00:00', modified: REGISTER_ENDRET })) as unknown as typeof fetch, vent: async () => {} });
+    expect(await lesUtgave(med)).toEqual({ dato: '2026-09-12', endret: REGISTER_ENDRET });
+    const uten = lagGbifKlient({ fetch: (async () => Response.json({ pubDate: '2026-09-12' })) as unknown as typeof fetch, vent: async () => {} });
+    expect(await lesUtgave(uten)).toEqual({ dato: '2026-09-12', endret: null });
   });
 });
 
@@ -276,7 +387,7 @@ describe('GBIF-klienten', () => {
     let n = 0;
     const svar = [new Response('', { status: 429 }), ok()];
     const klient = lagGbifKlient({ fetch: tid.medSvartid((async () => svar[n++]) as unknown as typeof fetch), klokke: tid.klokke, vent: tid.vent });
-    expect(await lesUtgavedato(klient)).toBe('2026-09-12');
+    expect((await lesUtgave(klient)).dato).toBe('2026-09-12');
     expect(klient.kall()).toBe(2);
     expect(tid.hendelser[1].start - tid.hendelser[0].slutt).toBeGreaterThanOrEqual(5_000);
   });
@@ -284,14 +395,14 @@ describe('GBIF-klienten', () => {
   it('gir opp etter andre feil på rad', async () => {
     const tid = falskTid(0);
     const klient = lagGbifKlient({ fetch: tid.medSvartid((async () => new Response('', { status: 503 })) as unknown as typeof fetch), klokke: tid.klokke, vent: tid.vent });
-    await expect(lesUtgavedato(klient)).rejects.toBeInstanceOf(GbifFeil);
+    await expect(lesUtgave(klient)).rejects.toBeInstanceOf(GbifFeil);
     expect(klient.kall()).toBe(2);
   });
 
   it('prøver ikke igjen på 400 — det er en feil i spørringen, ikke i GBIF', async () => {
     const tid = falskTid(0);
     const klient = lagGbifKlient({ fetch: tid.medSvartid((async () => new Response('', { status: 400 })) as unknown as typeof fetch), klokke: tid.klokke, vent: tid.vent });
-    await expect(lesUtgavedato(klient)).rejects.toBeInstanceOf(GbifFeil);
+    await expect(lesUtgave(klient)).rejects.toBeInstanceOf(GbifFeil);
     expect(klient.kall()).toBe(1);
   });
 
@@ -304,7 +415,7 @@ describe('GBIF-klienten', () => {
       return ok();
     }) as unknown as typeof fetch;
     const klient = lagGbifKlient({ fetch: tid.medSvartid(f), klokke: tid.klokke, vent: tid.vent });
-    expect(await lesUtgavedato(klient)).toBe('2026-09-12');
+    expect((await lesUtgave(klient)).dato).toBe('2026-09-12');
     expect(klient.kall()).toBe(2);
   });
 });
@@ -322,6 +433,29 @@ describe('vaktene mot tall som ser riktige ut uten å være det', () => {
     const tid = falskTid(0);
     const klient = lagGbifKlient({ fetch: tid.medSvartid(gbif.fetch), klokke: tid.klokke, vent: tid.vent });
     await expect(tellSoppregistreringer(klient, '2026-09-12')).rejects.toThrow(/kuttet/);
+  });
+
+  it('en kuttet grensefacett stopper kjøringen — ellers blir grensen for lav og prosentene for høye', async () => {
+    // Som GBIF: likt antall sortert på navnet som tekst, så de høyeste id-ene faller bort.
+    const fullDag = Array.from({ length: ID_FACET_GRENSE }, (_, i) => ({ name: String(32_000_000 + i), count: 1 }));
+    const gbif = falskGbif(poster, {
+      svar: (url) => (url.includes('modified=2023') ? Response.json({ count: ID_FACET_GRENSE + 39_000, facets: [{ counts: fullDag }] }) : null)
+    });
+    const tid = falskTid(0);
+    const klient = lagGbifKlient({ fetch: tid.medSvartid(gbif.fetch), klokke: tid.klokke, vent: tid.vent });
+    await expect(tellSoppregistreringer(klient, '2026-09-12')).rejects.toThrow(/modified 2023-09-12 ble kuttet/);
+  });
+
+  it('grensefacetten stopper også når count når taket med færre navn, eller når id-ene ikke dekker postene', async () => {
+    const kjor = async (svar: Response) => {
+      const gbif = falskGbif(poster, { svar: (url) => (url.includes('modified=2023') ? svar : null) });
+      const tid = falskTid(0);
+      const klient = lagGbifKlient({ fetch: tid.medSvartid(gbif.fetch), klokke: tid.klokke, vent: tid.vent });
+      return tellSoppregistreringer(klient, '2026-09-12');
+    };
+    const enId = [{ name: '32960925', count: 1 }];
+    await expect(kjor(Response.json({ count: ID_FACET_GRENSE, facets: [{ counts: enId }] }))).rejects.toThrow(/kuttet/);
+    await expect(kjor(Response.json({ count: 5_000, facets: [{ counts: enId }] }))).rejects.toThrow(/gyldig funn-id \(modified 2023-09-12\)/);
   });
 
   it('mangler mer enn 1 % av postene en funn-id, stoler vi ikke på tellingen', async () => {

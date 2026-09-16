@@ -3,8 +3,8 @@ import type { NextRequest } from 'next/server';
 
 /**
  * Cronens rekkefølge er det som holder GBIF-kallene nede og tabellen ærlig:
- * ett kall for utgaven, ut igjen hvis den er målt, vent på indekseringen,
- * og skriv ALT eller INGENTING.
+ * ett kall for utgaven, ut igjen hvis den er målt, vent til søkeindeksen har
+ * utgaven, og skriv ALT eller INGENTING.
  */
 
 const db = {
@@ -41,8 +41,8 @@ vi.mock('@/lib/rapport/soppregistreringer-henting', async (orig) => {
   return {
     ...ekte,
     lagGbifKlient: () => ({ hent: vi.fn(), kall: () => 0, brukt: () => 0 }),
-    lesUtgavedato: async () => henting.utgave,
-    indekseringFerdig: async () => henting.indeksert,
+    lesUtgave: async () => ({ dato: henting.utgave, endret: '2026-09-14T11:35:52.268+00:00' }),
+    sjekkIndeksering: async () => ({ ferdig: henting.indeksert, grunn: henting.indeksert ? 'indeksert' : 'henting 494 har ikke startet i pipelines' }),
     tellSoppregistreringer: (...a: unknown[]) => henting.tell(...a)
   };
 });
@@ -98,10 +98,11 @@ describe('cron/soppregistreringer', () => {
     expect(henting.tell).not.toHaveBeenCalled();
   });
 
-  it('GBIF indekserer fortsatt: ut uten å telle', async () => {
+  it('søkeindeksen har ikke utgaven ennå: ut uten å telle, med grunnen', async () => {
     henting.indeksert = false;
     const body = await (await kall()).json();
-    expect(body.hoppetOver).toMatch(/indekserer/);
+    expect(body.hoppetOver).toMatch(/ikke indeksert/);
+    expect(body.grunn).toMatch(/pipelines/);
     expect(henting.tell).not.toHaveBeenCalled();
     expect(db.upserts).toHaveLength(0);
   });

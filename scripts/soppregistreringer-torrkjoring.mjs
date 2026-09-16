@@ -12,7 +12,7 @@
 // vite-node fordi scriptet bruker de ekte modulene i src/ (med @/-aliaset):
 // kallene, grensene og snittene er nøyaktig de cronen bruker. Tar 2–4 minutter
 // med 2 s mellom kallene — GBIF svarer 429 hvis det går fortere.
-import { indekseringFerdig, lagGbifKlient, lesUtgavedato, tellSoppregistreringer } from '@/lib/rapport/soppregistreringer-henting';
+import { lagGbifKlient, lesUtgave, sjekkIndeksering, tellSoppregistreringer } from '@/lib/rapport/soppregistreringer-henting';
 import { OMRADER, prosentTekst } from '@/lib/rapport/soppregistreringer';
 import { writeFileSync } from 'node:fs';
 
@@ -27,11 +27,12 @@ const args = Object.fromEntries(
 );
 
 const klient = lagGbifKlient();
-const pubDate = await lesUtgavedato(klient);
-const utgave = args.utgave ?? pubDate;
-console.log(`Utgave i GBIF (pubDate): ${pubDate}${args.utgave ? ` — overstyrt til ${utgave}` : ''}`);
-// Cronen stopper her hvis indekseringen ikke er ferdig; tørrkjøringen sier bare fra.
-console.log(`Indeksering ferdig: ${(await indekseringFerdig(klient)) ? 'ja' : 'NEI — tallene kan blande to utgaver'}`);
+const registeret = await lesUtgave(klient);
+const utgave = args.utgave ?? registeret.dato;
+console.log(`Utgave i GBIF (pubDate): ${registeret.dato}${args.utgave ? ` — overstyrt til ${utgave}` : ''} · registeret endret ${registeret.endret ?? '—'}`);
+// Cronen stopper her hvis søkeindeksen ikke har utgaven; tørrkjøringen sier bare fra.
+const indeksering = await sjekkIndeksering(klient, registeret);
+console.log(`Søkeindeksen har utgaven: ${indeksering.ferdig ? 'ja' : 'NEI — tallene kan blande to utgaver'} (${indeksering.grunn})`);
 
 const res = await tellSoppregistreringer(klient, utgave, {
   sesongTil: args.til,

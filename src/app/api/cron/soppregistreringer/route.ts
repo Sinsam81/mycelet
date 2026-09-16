@@ -3,21 +3,24 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { createRequestLogger } from '@/lib/log/request';
 import { bearerSecretMatches } from '@/lib/security/secret-compare';
 import { NORGE, tilTabellrad, vinduerFor } from '@/lib/rapport/soppregistreringer';
-import { FristUteFeil, indekseringFerdig, lagGbifKlient, lesUtgavedato, tellSoppregistreringer } from '@/lib/rapport/soppregistreringer-henting';
+import { FristUteFeil, lagGbifKlient, lesUtgave, sjekkIndeksering, tellSoppregistreringer, type Utgave } from '@/lib/rapport/soppregistreringer-henting';
 
 /**
  * Soppregistreringer, samme dato som før (migrasjon 071) — til eierens
  * dagsrapport, aldri til kunder.
  *
- * Går hver natt 03:30 UTC, men gjør bare jobben når Artsobservasjoner har
- * en ny utgave i GBIF (omtrent ukentlig):
+ * Går hver natt 05:45 UTC, men gjør bare jobben når Artsobservasjoner har
+ * en ny utgave i GBIF (omtrent ukentlig). 05:45 fordi GBIF henter utgaven
+ * søndager ~03:00–03:35 og er ferdig med å indeksere ~05:00–05:20, og
+ * dagsrapporten går 06:00.
  *
- *   1. ETT kall: datasettets pubDate = utgaven.
+ *   1. ETT kall: datasettets pubDate = utgaven (og når registeret fikk den).
  *   2. Utenfor sesongen (vinduet slutter før 7. august eller etter 30.
  *      november)? Ferdig.
  *   3. Finnes det rader for utgaven? Ferdig — den er regnet.
- *   4. Indekserer GBIF fortsatt utgaven (pubDate kommer timer før tallene)?
- *      Ferdig for i natt.
+ *   4. To kall: har søkeindeksen utgaven? pubDate kommer timer før tallene,
+ *      og /process sier FINISHED lenge før indeksen er byttet — se
+ *      sjekkIndeksering. Nei, eller usikkert? Ferdig for i natt.
  *   5. Ellers: 61 kall til (se soppregistreringer-henting.ts), 2 s mellom
  *      hvert, ~2,5 minutter. Alle 64 rader skrives i ÉN upsert til slutt.
  *
@@ -35,13 +38,14 @@ export async function GET(request: NextRequest) {
   }
 
   const klient = lagGbifKlient();
-  let snapshot: string;
+  let utgave: Utgave;
   try {
-    snapshot = await lesUtgavedato(klient);
+    utgave = await lesUtgave(klient);
   } catch (e) {
     log.warn('soppregistreringer.utgave_feilet', { message: e instanceof Error ? e.message : String(e) });
     return NextResponse.json({ ok: false, grunn: 'GBIF svarte ikke på utgavedatoen' }, { status: 502 });
   }
+  const snapshot = utgave.dato;
 
   if (!vinduerFor(snapshot)) {
     log.info('soppregistreringer.utenfor_sesong', { snapshot });
@@ -54,7 +58,7 @@ export async function GET(request: NextRequest) {
     .select('snapshot', { count: 'exact', head: true })
     .eq('snapshot', snapshot);
   if (lesFeil) {
-    // Uten tabellen (migrasjonen ikke kjørt) er 62 GBIF-kall bortkastet.
+    // Uten tabellen (migrasjonen ikke kjørt) er 63 GBIF-kall bortkastet.
     log.error('soppregistreringer.les_feilet', { message: lesFeil.message });
     return NextResponse.json({ ok: false, grunn: 'Kunne ikke lese soppregistreringer' }, { status: 500 });
   }
@@ -63,9 +67,10 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    if (!(await indekseringFerdig(klient))) {
-      log.info('soppregistreringer.indekserer', { snapshot });
-      return NextResponse.json({ ok: true, snapshot, hoppetOver: 'GBIF indekserer fortsatt utgaven' });
+    const indeksering = await sjekkIndeksering(klient, utgave);
+    if (!indeksering.ferdig) {
+      log.info('soppregistreringer.ikke_indeksert', { snapshot, grunn: indeksering.grunn });
+      return NextResponse.json({ ok: true, snapshot, hoppetOver: 'GBIF har ikke indeksert utgaven ennå', grunn: indeksering.grunn });
     }
     const res = await tellSoppregistreringer(klient, snapshot, { logg: (h, d) => log.info(h, d) });
     const { error: skrivFeil } = await db

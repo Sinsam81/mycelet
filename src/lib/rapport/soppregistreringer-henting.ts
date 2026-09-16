@@ -19,18 +19,33 @@
  *    uke = fylkets id-er ∩ Norges uke-id-er (uka ligger inne i sesongen).
  *    Det er 19 kall per år, 57 for tre år.
  *
- * Pluss ett kall for utgavedatoen og ett for om GBIF er ferdig med å
- * indeksere den: 2 + 4 + 57 = 63. Med 2 s pause etter hvert svar og
- * svartider målt til 0,1–1,2 s er det ~130–200 s (tørrkjøringene 17. sep
- * 2026: 130 og 145 s).
+ * Pluss ett kall for utgaven og to for om GBIF er ferdig med å indeksere
+ * den: 3 + 4 + 57 = 64. Med 2 s pause etter hvert svar og svartider målt
+ * til 0,1–1,2 s er det ~130–210 s.
  *
  * ── UTGAVEDATOEN KOMMER FØR TALLENE ────────────────────────────────────────
  *
- * pubDate i registeret oppdateres når GBIF henter arkivet (12. sep-utgaven:
- * datasettet endret 14. sep 11:35, hentingen startet 11:36), men
- * indekseringen av 38 millioner poster (september 2026) tar tid etter det. En telling midt
- * i den ville blandet to utgaver — og ble lagret for hele uka. Derfor
- * venter cronen til siste prosess står som FINISHED.
+ * 12. sep-utgaven, 14. sep 2026 (UTC), slik GBIF selv logget den:
+ *   11:28–11:29  henting 494 laster ned arkivet (finishReason NORMAL)
+ *   11:35:52     registeret får ny pubDate (datasettets modified)
+ *   11:36:52     henting 495: ingenting nytt (NOT_MODIFIED), står som FINISHED
+ *   11:40        pipelines for forsøk 494 starter
+ *   13:22:08     INTERPRETED_TO_INDEX ferdig — FØRST NÅ svarer søket med
+ *                den nye utgaven
+ * I nesten to timer sto altså ny pubDate og FINISHED i /process mens
+ * søkeindeksen fortsatt var forrige ukes. /process beskriver nedlastingen,
+ * ikke indeksen. Den ukentlige hentingen går søndager ~03:00–03:35 UTC, og
+ * indeksen er ferdig ~05:00–05:20 (sesongen 2026). En telling i det vinduet
+ * ville regnet i år fra forrige utgave og tidligere år fra den nye datoen —
+ * skjevt nedover, akkurat den falske nedgangen tabellen skal fjerne — og
+ * låst tallene for hele uka.
+ *
+ * Derfor sjekkIndeksering: nyeste NORMAL-henting må ha et pipelines-forsøk,
+ * ingen indeksering av det forsøket kan pågå, og hentingens egen
+ * INTERPRETED_TO_INDEX må være COMPLETED og ferdig ETTER datasettets
+ * modified. Mangler noe av dette, ventes det (feiler lukket): en tapt natt
+ * koster ingenting, en feil utgave står en uke. Cronen går 05:45 UTC, etter
+ * søndagsindekseringen og før dagsrapporten 06:00.
  *
  * ── NÅR DET LIKEVEL IKKE RAKK ──────────────────────────────────────────────
  *
@@ -87,11 +102,14 @@ export const GRENSE_MAKS_DAGER_BAKOVER = 3;
 /** Minst så stor andel av postene må ha en gyldig funn-id, ellers stoler vi ikke på tellingen. */
 export const MIN_ID_ANDEL = 0.99;
 
-/** Kall i en vanlig kjøring, utgave- og indekseringskallet medregnet. Testen binder dette til budsjettet. */
+/** Så mange hentinger bakover i /process letes det etter den nyeste NORMAL-hentingen. */
+export const PROSESS_SIDE = 20;
+
+/** Kall i en vanlig kjøring, utgavekallet og de to indekseringskallene medregnet. Testen binder dette til budsjettet. */
 export function planlagteKall(antallAar = NORMAL_AAR): number {
   const iAar = VINDUER.length * GRUPPER.length;
   const perTidligereAar = 1 + 3 + FYLKER.length;
-  return 2 + iAar + antallAar * perTidligereAar;
+  return 3 + iAar + antallAar * perTidligereAar;
 }
 
 export class FristUteFeil extends Error {
@@ -173,25 +191,82 @@ export function lagGbifKlient(o: KlientOppsett = {}): GbifKlient {
   };
 }
 
-/** Datoen på Artsobservasjoners nyeste utgave i GBIF (pubDate), som YYYY-MM-DD. */
-export async function lesUtgavedato(klient: GbifKlient): Promise<string> {
+export interface Utgave {
+  /** pubDate som YYYY-MM-DD — nøkkelen radene lagres under. */
+  dato: string;
+  /** Datasettets modified (når registeret sist ble oppdatert), eller null. */
+  endret: string | null;
+}
+
+/** Artsobservasjoners nyeste utgave i GBIF: pubDate, og når registeret fikk den. Ett kall. */
+export async function lesUtgave(klient: GbifKlient): Promise<Utgave> {
   const d = await klient.hent(`/dataset/${ARTSOBS_DATASET}`);
   const pub = typeof d.pubDate === 'string' ? d.pubDate.slice(0, 10) : '';
   if (!/^\d{4}-\d{2}-\d{2}$/.test(pub)) throw new GbifFeil('Datasettet mangler pubDate');
-  return pub;
+  return { dato: pub, endret: typeof d.modified === 'string' ? d.modified : null };
 }
 
+export interface Indeksering {
+  ferdig: boolean;
+  /** Hvorfor — til loggen og tørrkjøringen. */
+  grunn: string;
+}
+
+type Obj = Record<string, unknown>;
+const somObj = (x: unknown): Obj | null => (x !== null && typeof x === 'object' && !Array.isArray(x) ? (x as Obj) : null);
+const liste = (x: unknown): Obj[] => (Array.isArray(x) ? x.map(somObj).filter((o): o is Obj => o !== null) : []);
+
+/** GBIF skriver både «2026-09-14T11:35:52.268+00:00» og «2026-09-14 13:22:08Z». */
+function tidspunkt(x: unknown): number | null {
+  if (typeof x !== 'string') return null;
+  const t = Date.parse(/^\d{4}-\d{2}-\d{2} /.test(x) ? x.replace(' ', 'T') : x);
+  return Number.isFinite(t) ? t : null;
+}
+
+/** Tilstander der en indeksering ikke er ferdig (pipelines' Status-enum). */
+const PAGAAR = new Set(['SUBMITTED', 'QUEUED', 'RUNNING']);
+
 /**
- * Er GBIF ferdig med å indeksere siste henting av datasettet? Ser på den
- * nyeste prosessen i /dataset/{key}/process. Bare et uttrykkelig annet
- * svar enn FINISHED stopper: mangler feltet (API-et endret), telles det
- * heller enn at målingen stopper stille for alltid.
+ * Har søkeindeksen utgaven registeret nå viser? Ren funksjon over svarene
+ * fra /dataset/{key}/process og /pipelines/history/{key} — se toppen av
+ * fila for hvorfor /process alene ikke holder. Alle vilkårene må stemme, og
+ * mangler et felt, er svaret nei.
  */
-export async function indekseringFerdig(klient: GbifKlient): Promise<boolean> {
-  const d = await klient.hent(`/dataset/${ARTSOBS_DATASET}/process`, new URLSearchParams({ limit: '1' }));
-  const siste = Array.isArray(d.results) ? (d.results[0] as Record<string, unknown> | undefined) : undefined;
-  const tilstand = siste?.processStateOccurrence;
-  return typeof tilstand !== 'string' || tilstand === 'FINISHED';
+export function vurderIndeksering(inn: { endret: string | null; prosess: Obj; historikk: Obj }): Indeksering {
+  const endret = tidspunkt(inn.endret);
+  if (endret === null) return { ferdig: false, grunn: 'datasettet mangler modified' };
+
+  const normal = liste(inn.prosess.results).find((p) => p.finishReason === 'NORMAL');
+  const hentet = somObj(normal?.crawlJob)?.attempt;
+  if (typeof hentet !== 'number') return { ferdig: false, grunn: `ingen NORMAL-henting blant de ${PROSESS_SIDE} siste i /process` };
+
+  const siste = liste(inn.historikk.results)[0];
+  const forsok = siste?.attempt;
+  if (typeof forsok !== 'number') return { ferdig: false, grunn: 'pipelines-historikken er tom' };
+  if (forsok < hentet) return { ferdig: false, grunn: `henting ${hentet} har ikke startet i pipelines (nyeste der: ${forsok})` };
+
+  const kjoringer = liste(siste.executions);
+  const indekssteg = (k: Obj | undefined) => liste(k?.steps).filter((st) => st.type === 'INTERPRETED_TO_INDEX');
+  if (kjoringer.some((k) => indekssteg(k).some((st) => typeof st.state === 'string' && PAGAAR.has(st.state)))) {
+    return { ferdig: false, grunn: `forsøk ${forsok} indekseres nå` };
+  }
+  // Hentingens egen kjøring — ikke en senere omkjøring (rerunReason) — nyeste først.
+  const henting = kjoringer.filter((k) => !k.rerunReason).sort((a, b) => (tidspunkt(b.created) ?? 0) - (tidspunkt(a.created) ?? 0))[0];
+  const steg = indekssteg(henting).find((st) => st.state === 'COMPLETED');
+  if (!steg) return { ferdig: false, grunn: `forsøk ${forsok} er ikke ferdig indeksert` };
+  const ferdigTid = tidspunkt(steg.finished);
+  if (ferdigTid === null) return { ferdig: false, grunn: `indekseringen av forsøk ${forsok} mangler ferdigtid` };
+  if (ferdigTid <= endret) {
+    return { ferdig: false, grunn: `forsøk ${forsok} ble indeksert ${String(steg.finished)}, før registeret sist ble endret ${inn.endret}` };
+  }
+  return { ferdig: true, grunn: `forsøk ${forsok} indeksert ${String(steg.finished)}, etter registerendringen ${inn.endret}` };
+}
+
+/** To kall: de siste hentingene og det nyeste pipelines-forsøket. */
+export async function sjekkIndeksering(klient: GbifKlient, utgave: Utgave): Promise<Indeksering> {
+  const prosess = await klient.hent(`/dataset/${ARTSOBS_DATASET}/process`, new URLSearchParams({ limit: String(PROSESS_SIDE) }));
+  const historikk = await klient.hent(`/pipelines/history/${ARTSOBS_DATASET}`, new URLSearchParams({ limit: '1' }));
+  return vurderIndeksering({ endret: utgave.endret, prosess, historikk });
 }
 
 // ── Spørringene ─────────────────────────────────────────────────────────────
@@ -233,16 +308,28 @@ function antallAv(svar: Record<string, unknown>): number {
   return svar.count;
 }
 
-async function hentIder(klient: GbifKlient, s: Omit<Sporring, 'facet'>): Promise<IdTelling> {
-  const svar = await klient.hent('/occurrence/search', sokeParametre({ ...s, facet: 'catalogNumber' }));
+/**
+ * Leser en catalogNumber-facett og stopper hvis den kan være ufullstendig:
+ * fullt svar (facetLimit nådd — GBIF sorterer likt antall på navnet som
+ * tekst, så det er de høyeste id-ene som faller bort, og både tellinger og
+ * grenser blir for lave uten å se gale ut) eller for få poster med gyldig id.
+ */
+function fullIdFacet(svar: Record<string, unknown>, hva: string): { counts: FacetTelling[]; ider: Map<number, number> } {
   const counts = facetAv(svar);
   const totalt = antallAv(svar);
-  if (counts.length >= ID_FACET_GRENSE) throw new GbifFeil(`Id-facetten ble kuttet ved ${ID_FACET_GRENSE}`);
+  if (counts.length >= ID_FACET_GRENSE || totalt >= ID_FACET_GRENSE) {
+    throw new GbifFeil(`Id-facetten for ${hva} ble kuttet ved ${ID_FACET_GRENSE} (${totalt} poster)`);
+  }
   const { ider, sum } = lesIdFacet(counts);
   if (totalt > 0 && sum < totalt * MIN_ID_ANDEL) {
-    throw new GbifFeil(`Bare ${sum} av ${totalt} poster har en gyldig funn-id`);
+    throw new GbifFeil(`Bare ${sum} av ${totalt} poster har en gyldig funn-id (${hva})`);
   }
-  return ider;
+  return { counts, ider };
+}
+
+async function hentIder(klient: GbifKlient, s: Omit<Sporring, 'facet'>): Promise<IdTelling> {
+  const svar = await klient.hent('/occurrence/search', sokeParametre({ ...s, facet: 'catalogNumber' }));
+  return fullIdFacet(svar, `eventDate ${s.vindu.fra},${s.vindu.til}`).ider;
 }
 
 /** T_Y for én dato, med tilbakefall til dagene før når ingen poster ble endret den dagen. */
@@ -256,7 +343,9 @@ export async function hentGrense(klient: GbifKlient, dato: string): Promise<{ da
     p.set('facet', 'catalogNumber');
     p.set('facetLimit', String(ID_FACET_GRENSE));
     const svar = await klient.hent('/occurrence/search', p);
-    const id = grenseFraFacet(facetAv(svar));
+    // Samme vakt som for tellingene: en kuttet grensefacett gir en for lav
+    // grense, og da blir tidligere år for små og prosentene for høye.
+    const id = grenseFraFacet(fullIdFacet(svar, `modified ${d}`).counts);
     if (id !== null) return { dato: d, id };
   }
   throw new GbifFeil(`Ingen grense funnet for ${dato} eller de ${GRENSE_MAKS_DAGER_BAKOVER} dagene før`);
