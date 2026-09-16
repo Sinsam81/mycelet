@@ -30,7 +30,7 @@ Recreational mushroom foragers in **Norway and Sweden** (the product deliberatel
 - Species catalog + detail pages, seasonal calendar, look-alike warnings.
 - Forum (posts/comments/likes/reports/moderation) with verified-forager badges — **currently hidden behind a feature flag** (`FLAGS.forumInNav = false`).
 - Auth (email/password + Google), profile, "mine steder" private spot vault.
-- Billing (Stripe): Free / Premium (79 kr/mo) / Sesongpass (249 kr/yr).
+- Billing (Stripe): Free / Premium (99 kr/mo, raised from 79 on 2026-08-30) / Sesongpass (249 kr/yr).
 - Full GDPR tooling (export, delete, retention warnings), audit log, structured logging, health check.
 
 ### What is done (shipped / live)

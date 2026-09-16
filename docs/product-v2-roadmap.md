@@ -146,7 +146,7 @@ flowchart TD
 
 Anbefalt test:
 
-- Premium månedlig: 79 kr.
+- Premium månedlig: 99 kr (hevet fra 79 den 30.08.2026).
 - Årlig: prisankring med tydelig rabatt.
 - Sesongpass: engangskjøp, eksplisitt gyldig til dato, ingen skjult fornyelse.
 - 7–14 dagers prøve kun hvis oppsigelse og fornyelse er helt tydelig.

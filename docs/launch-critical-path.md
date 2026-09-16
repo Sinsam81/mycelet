@@ -41,11 +41,11 @@ Disse blokkerer alt annet og tar tid å få gjennom. Gjør i denne rekkefølgen:
   - **In-App Purchase Key** fra App Store Connect lastes opp til RevenueCat (kreves av StoreKit 2 — dashbordet forklarer hvor).
   - **Products**: legg inn de to produkt-ID-ene fra punkt 6.
   - **Entitlement** med id **`premium`** — koble BEGGE produktene til den.
-  - **Offering** (default) med pakkene **`$rc_monthly`** (79 kr-produktet) og **`$rc_annual`** (249 kr-produktet).
+  - **Offering** (default) med pakkene **`$rc_monthly`** (månedsproduktet) og **`$rc_annual`** (249 kr-produktet).
   - **Webhook**: URL `https://www.mycelet.com/api/revenuecat/webhook`, og sett en «Authorization header value» (lang tilfeldig streng).
   - Gi Claude: **Public Apple API Key** (SDK-nøkkelen) + **webhook-Authorization-strengen** → legges i Vercel som `NEXT_PUBLIC_REVENUECAT_APPLE_KEY` og `REVENUECAT_WEBHOOK_AUTH` (+ `REVENUECAT_ALLOW_SANDBOX=1` — må stå PÅ gjennom sandbox-testing OG Apple-review (reviewere kjøper i sandbox!); fjernes først etter godkjenning).
 - [ ] **5. Opprett app-oppføringen** i App Store Connect: navn `Mycelet`, bundle `no.mycelet.app`, SKU `mycelet-ios-001` (alt annet er ferdig i `docs/app-store-metadata.md`).
-- [x] ~~Opprett IAP-produktene~~ — **GJORT 2026-07-27**: gruppe «Mycelet Premium» med `no.mycelet.premium.monthly` (79 kr/mnd) + `no.mycelet.seasonpass.yearly` (249 kr/år), norsk localization, priser + availability satt. Paid Apps Agreement + bank + skatt alle **Active**.
+- [x] ~~Opprett IAP-produktene~~ — **GJORT 2026-07-27**: gruppe «Mycelet Premium» med `no.mycelet.premium.monthly` (79 kr/mnd den gang; 99 kr fra 01.09.2026) + `no.mycelet.seasonpass.yearly` (249 kr/år), norsk localization, priser + availability satt. Paid Apps Agreement + bank + skatt alle **Active**.
 - [ ] **💰 Etter lansering: App Store Small Business Program** — gratis påmelding (under $1M/år) → Apples kutt blir 15 % fra dag én i stedet for 30 % første år (~169 kr i stedet for ~139 kr per sesongpass-salg). developer.apple.com → Small Business Program.
 - [ ] **7. Sandbox-tester** — App Store Connect → Users and Access → Sandbox Testers: opprett én testbruker (ekte e-post du kan bekrefte, ALDRI din ekte Apple-ID). Brukes på fysisk iPhone: Innstillinger → Utvikler → Sandbox Apple Account.
 - [ ] **8. Xcode (ved arkivering):** slå på **In-App Purchase**-capability på App-targetet (Signing & Capabilities → + Capability). Claude guider når vi er der.
