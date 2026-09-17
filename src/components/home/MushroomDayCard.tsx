@@ -1,5 +1,6 @@
 'use client';
 
+import { FolgOmrade } from '@/components/home/FolgOmrade';
 import { RegistrerBruksdag } from '@/components/bruk/RegistrerBruksdag';
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
@@ -87,8 +88,22 @@ function colorFor(score: number, optimal: boolean): string {
  *      rettes her og ikke bare fra kartet (posisjon-visning.ts).
  * Bruksdagen (hjem, «egen»/«standard») skrives én gang, med den kilden som faktisk
  * ble vist først — aldri «standard» og så «egen» for samme åpning.
+ *
+ * Under dommen ligger «Følg området ditt» (FolgOmrade) — samme skille mellom
+ * «egen» og «standard» avgjør om stripa navngir området eller spør hvor
+ * brukeren plukker.
  */
-export function MushroomDayCard() {
+export function MushroomDayCard({
+  innlogget = false,
+  /**
+   * Serveren så alt en aktiv kontorad for soppvarselet. Da spør «Følg området
+   * ditt»-stripa aldri — og den slipper å hente noe som helst.
+   */
+  folgerOmrade = false
+}: {
+  innlogget?: boolean;
+  folgerOmrade?: boolean;
+}) {
   const t = useTranslations('MushroomDayCard');
   const locale = useLocale();
   const [data, setData] = useState<Forecast | null>(null);
@@ -214,6 +229,11 @@ export function MushroomDayCard() {
     ? posisjonsVisning(vist, ferskFix)
     : { omtrentlig: false, kanRettes: false };
   const areaLabel = vist ? omradeEtikett(vist) : '';
+  // Området stripa har lov til å navngi: bare når kortet regner på brukerens
+  // EGEN posisjon, og bare når den ligger i eller inntil et område vi dekker
+  // (nearestRegion gir null over 60 km). Standardområdet navngis aldri.
+  const folgbartOmrade =
+    vist && vist.kilde === 'egen' ? (nearestRegion(vist.lat, vist.lng)?.region.name ?? null) : null;
   // Regnes over hele uka før noe tegnes — se forecast-bars.ts.
   const barHeights = forecastBarHeights(days.map((d) => d.score));
   const color = colorFor(today.score, today.optimal);
@@ -267,6 +287,16 @@ export function MushroomDayCard() {
           ) : null}
         </div>
       </div>
+
+      {/* Rett under dommen, inne i kortet — aldri et sprettoppvindu. Stripa
+          avgjør selv om den skal vises (folg-omrade.ts) og henter ingenting når
+          den ikke kan. */}
+      <FolgOmrade
+        innlogget={innlogget}
+        folgerAlt={folgerOmrade}
+        posisjonsKilde={vist?.kilde ?? 'standard'}
+        omrade={folgbartOmrade}
+      />
 
       {data.flush ? (
         <div className={`mt-3 rounded-xl border px-3 py-2 ${FLUSH_TINT[data.flush.status]}`}>

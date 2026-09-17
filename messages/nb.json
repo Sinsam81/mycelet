@@ -1082,6 +1082,18 @@
     "nearestArea": "nærmeste område: {name}, {km} km",
     "approximate": "omtrentlig"
   },
+  "FolgOmrade": {
+    "folg": "Følg {omrade}",
+    "lofte": "Vi sender deg én e-post når soppforholdene i {omrade} snur. Aldri mer enn én i uka, og avmelding i hver e-post.",
+    "annetOmrade": "Et annet område",
+    "ikkeNaa": "Ikke nå",
+    "hvorPlukker": "Hvor plukker du?",
+    "velgOmrade": "Velg område …",
+    "norge": "Norge",
+    "sverige": "Sverige",
+    "bekreftelse": "Du følger {omrade}. Du kan endre eller avslutte på <lenke>profilen din</lenke>.",
+    "feil": "Det gikk ikke akkurat nå. Trykk en gang til."
+  },
   "LookAlikeCheck": {
     "sectionLabel": "Forvekslingssjekk",
     "heading": "Sjekk forvekslingen før du plukker",
