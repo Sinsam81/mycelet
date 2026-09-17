@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { byggDagsrapport, type AbonnementRad, type BrukerRad, type RapportInn, type VarselAbonnentRad } from '../dagsrapport';
+import {
+  byggDagsrapport,
+  kontoerSomFolgerOmrade,
+  type AbonnementRad,
+  type BrukerRad,
+  type FolgerRad,
+  type RapportInn,
+  type VarselAbonnentRad
+} from '../dagsrapport';
+import type { SoppregistreringRad } from '../soppregistreringer';
 
 /**
  * Testene her er skrevet mot ÉN feil: at rapporten oppgir flere kunder enn
@@ -50,24 +59,90 @@ function inn(over: Partial<RapportInn> = {}): RapportInn {
   };
 }
 
-describe('rapportpuls', () => {
-  it('viser de tre områdene med størst avvik og hopper over tynne', () => {
-    const r = byggDagsrapport(
-      inn({
-        rapportpuls: [
-          { region: 'Oslo', siste7: 84, avvikPst: 61 },
-          { region: 'Bergen', siste7: 40, avvikPst: -20 },
-          { region: 'Innlandet', siste7: 120, avvikPst: 90 },
-          { region: 'Trondheim', siste7: 50, avvikPst: 10 },
-          { region: 'Stavanger', siste7: 3, avvikPst: null }
-        ]
-      })
-    );
-    expect(r.puls.map((p) => p.region)).toEqual(['Innlandet', 'Oslo', 'Trondheim']);
+describe('soppregistreringer, samme dato som før', () => {
+  const rad = (over: Partial<SoppregistreringRad>): SoppregistreringRad => ({
+    snapshot: '2026-09-12',
+    vindu: 'sesong',
+    fra: '2026-08-01',
+    til: '2026-09-05',
+    omrade: 'Norge',
+    gruppe: 'storsopp',
+    antall: 8449,
+    normal: 9839,
+    prosent: 86,
+    tynt: false,
+    perAar: { 2023: 9982, 2024: 11891, 2025: 7644 },
+    grenser: {},
+    ...over
   });
 
-  it('tom uten data', () => {
-    expect(byggDagsrapport(inn()).puls).toEqual([]);
+  it('ikke målt når tabellen ikke svarte, og ingen blokk før første utgave', () => {
+    expect(byggDagsrapport(inn()).registreringer).toEqual({ maalt: false, blokk: null });
+    expect(byggDagsrapport(inn({ soppregistreringer: [] })).registreringer).toEqual({ maalt: true, blokk: null });
+  });
+
+  it('bygger blokken fra radene', () => {
+    const r = byggDagsrapport(inn({ soppregistreringer: [rad({}), rad({ omrade: 'Vestfold', antall: 40, normal: 530.7, prosent: 8 })] }));
+    expect(r.registreringer.maalt).toBe(true);
+    expect(r.registreringer.blokk?.sesong.storsopp?.prosent).toBe(86);
+    expect(r.registreringer.blokk?.lavest.map((c) => c.omrade)).toEqual(['Vestfold']);
+  });
+});
+
+describe('nye kontoer som følger et område', () => {
+  const folger = (over: Partial<FolgerRad>): FolgerRad => ({ user_id: null, email: null, active: true, confirmed_at: dagerSiden(1), ...over });
+
+  it('kobler på user_id og på samme e-post (uten store bokstaver og mellomrom), og svarer bare med id-er', () => {
+    const kontoer = [
+      { id: 'u-app', email: 'app@eksempel.no' },
+      { id: 'u-skjema', email: 'Skjema@Eksempel.no' },
+      { id: 'u-ingen', email: 'ingen@eksempel.no' }
+    ];
+    const sett = kontoerSomFolgerOmrade(kontoer, [folger({ user_id: 'u-app' }), folger({ email: '  skjema@eksempel.NO ' })]);
+    expect([...sett].sort()).toEqual(['u-app', 'u-skjema']);
+    expect([...sett].some((v) => v.includes('@'))).toBe(false);
+  });
+
+  it('en kontoløs påmelding teller bare når den er bekreftet og aktiv; en kontorad bare når den er aktiv', () => {
+    const kontoer = [
+      { id: 'a', email: 'a@x.no' },
+      { id: 'b', email: 'b@x.no' },
+      { id: 'c', email: 'c@x.no' }
+    ];
+    const sett = kontoerSomFolgerOmrade(kontoer, [
+      folger({ email: 'a@x.no', confirmed_at: null }),
+      folger({ email: 'b@x.no', active: false }),
+      folger({ user_id: 'c', active: false })
+    ]);
+    expect(sett.size).toBe(0);
+  });
+
+  it('konto uten e-post matcher ikke en rad uten e-post, og en rad for en slettet konto teller ikke', () => {
+    const sett = kontoerSomFolgerOmrade([{ id: 'uten', email: null }], [folger({ email: '' }), folger({ email: null }), folger({ user_id: 'slettet' })]);
+    expect(sett.size).toBe(0);
+  });
+
+  it('teller nye kontoer siste 14 dager per plattform — iOS fra user_metadata.plattform, resten nettet', () => {
+    const r = byggDagsrapport(
+      inn({
+        brukere: [
+          br({ id: 'i1', plattform: 'ios', created_at: dagerSiden(2) }),
+          br({ id: 'i2', plattform: 'ios', created_at: dagerSiden(13) }),
+          br({ id: 'w1', created_at: dagerSiden(1) }),
+          br({ id: 'w2', plattform: 'noe-rart', created_at: dagerSiden(5) }),
+          br({ id: 'gammel', plattform: 'ios', created_at: dagerSiden(20) })
+        ],
+        kontoerSomFolger: new Set(['i1', 'w2', 'gammel'])
+      })
+    );
+    expect(r.nyeKontoerFolger.maalt).toBe(true);
+    expect(r.nyeKontoerFolger.perPlattform.ios).toEqual({ folger: 1, nye: 2 });
+    expect(r.nyeKontoerFolger.perPlattform.web).toEqual({ folger: 1, nye: 2 });
+    expect(r.nyeKontoerFolger.perPlattform.android).toEqual({ folger: 0, nye: 0 });
+  });
+
+  it('ikke målt uten koblingen', () => {
+    expect(byggDagsrapport(inn({ brukere: [br({ created_at: dagerSiden(1) })] })).nyeKontoerFolger.maalt).toBe(false);
   });
 });
 

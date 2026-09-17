@@ -47,6 +47,7 @@ import { lesProveMerke } from '@/lib/billing/prove-merke';
 import { TILBUD_UTLOSERE, dagenEtter, isoUke, osloDag, type Flate } from '@/lib/bruk/bruksdag';
 import { summerTellinger, tomTellinger, type Tellinger, type TellingRad } from '@/lib/bruk/tell';
 import { PREDICTION_TILE_REGIONS } from '@/lib/prediction/tile-regions';
+import { byggRegistreringsblokk, type Registreringsblokk, type SoppregistreringRad } from '@/lib/rapport/soppregistreringer';
 
 export type Betalingskilde = 'stripe' | 'revenuecat' | 'manuell';
 
@@ -77,6 +78,11 @@ export interface BrukerRad {
    * landsignalet vi har. null/undefined = ukjent (eldre kontoer, OAuth).
    */
   tidssone?: string | null;
+  /**
+   * user_metadata.plattform: «ios» / «android» for kontoer laget i appen,
+   * ellers null (nettet). Valgfri for eldre kall.
+   */
+  plattform?: string | null;
 }
 
 /** Én rad per varselabonnement — konto- og e-postrader om hverandre. */
@@ -103,13 +109,6 @@ export interface BruksdagRad {
   omrade?: string;
 }
 
-/** Dagens rapportpuls per område (migrasjon 069). */
-export interface PulsRad {
-  region: string;
-  siste7: number;
-  avvikPst: number | null;
-}
-
 export interface RapportInn {
   brukere: BrukerRad[];
   abonnement: AbonnementRad[];
@@ -118,8 +117,17 @@ export interface RapportInn {
   varselabonnenter?: VarselAbonnentRad[];
   /** Bruksdager siste 28 dager. undefined = ikke målt (rapporten sier det). */
   bruksdager?: BruksdagRad[];
-  /** Rapportpuls i dag (norske områder). Tom = ikke hentet. */
-  rapportpuls?: PulsRad[];
+  /**
+   * Radene for den nyeste utgaven av soppregistreringer i år (migrasjon 071).
+   * [] = ikke målt ennå, undefined = tabellen svarte ikke.
+   */
+  soppregistreringer?: SoppregistreringRad[];
+  /**
+   * Kontoer som følger minst ett område — koblet på user_id ELLER samme
+   * e-post (se kontoerSomFolgerOmrade). Bare id-er: e-postene blir igjen i
+   * ruten. undefined = ikke målt.
+   */
+  kontoerSomFolger?: ReadonlySet<string>;
   /**
    * Anonyme flatetellinger siste 7 dager (migrasjon 070): første skjerm i
    * appen utlogget og registreringsskjemaet, per dag og språk. undefined =
@@ -193,6 +201,18 @@ export interface Dagsrapport {
     perRegion: Array<{ region: string; bekreftede: number }>;
   };
   /**
+   * Soppregistreringer, samme dato som før (migrasjon 071): nyeste utgave i
+   * år. maalt=false når tabellen ikke svarte; blokk=null når ingen utgave er
+   * målt ennå. Registreringsaktivitet, ikke soppmengde.
+   */
+  registreringer: { maalt: boolean; blokk: Registreringsblokk | null };
+  /**
+   * Nye kontoer siste 14 dager som følger et område (soppvarsel på konto
+   * eller på samme e-post uten konto), per plattform. maalt=false når
+   * koblingen ikke ble gjort.
+   */
+  nyeKontoerFolger: { maalt: boolean; perPlattform: Record<Plattform, { folger: number; nye: number }> };
+  /**
    * Bruk av soppforholdene blant innloggede (docs/strategi-2026-2027.md § 4).
    * «Kom tilbake» = så forholdene på en SENERE dag enn registreringsdagen —
    * forsidekortet vises automatisk rett etter registrering, så samme dag
@@ -201,8 +221,6 @@ export interface Dagsrapport {
    * «steder» (Mine steder) fra migrasjon 066 — tallet vinterplanen trenger
    * for å avgjøre områdekartoteket.
    */
-  /** De tre områdene med størst avvik oppover (kan være negative i en stille uke — etiketten er nøytral). */
-  puls: Array<{ region: string; siste7: number; avvikPst: number }>;
   bruk: {
     maalt: boolean;
     brukereSiste7d: number;
@@ -227,6 +245,53 @@ export interface Dagsrapport {
 }
 
 export const UKJENT_KILDE = 'ukjent';
+
+export type Plattform = 'ios' | 'android' | 'web';
+
+/** Plattformen kontoen ble laget på. Alt uten «ios»/«android» er nettet. */
+export function plattformFor(b: Pick<BrukerRad, 'plattform'>): Plattform {
+  return b.plattform === 'ios' || b.plattform === 'android' ? b.plattform : 'web';
+}
+
+/** Det minste varselraden må ha for å avgjøre «følger et område». */
+export interface FolgerRad {
+  user_id: string | null;
+  email: string | null;
+  active: boolean;
+  confirmed_at: string | null;
+}
+
+/**
+ * Hvilke kontoer følger minst ett område? En konto kan følge på to måter:
+ * en rad med egen user_id (skrudd på i appen), eller en kontoløs påmelding
+ * på samme e-postadresse (skjemaet på /soppvarsel, ofte FØR kontoen ble
+ * laget). Kontoer laget 1.–16. september 2026: 5 av 89 fulgte et område,
+ * 3 av dem via skjemaet — uten e-postkoblingen hadde de manglet.
+ *
+ * Samme regel for «følger» som varseltrakten: aktiv, og bekreftet (en
+ * kontorad er bekreftet i kraft av kontoen). E-post sammenlignes trimmet og
+ * med små bokstaver, bare i minnet; svaret er id-er, aldri adresser.
+ */
+export function kontoerSomFolgerOmrade(
+  kontoer: ReadonlyArray<{ id: string; email: string | null | undefined }>,
+  rader: readonly FolgerRad[]
+): Set<string> {
+  const vask = (e: string | null | undefined) => (typeof e === 'string' ? e.trim().toLowerCase() : '');
+  const folger = new Set<string>();
+  const eposter = new Set<string>();
+  for (const r of rader) {
+    if (!r.active) continue;
+    if (r.user_id) folger.add(r.user_id);
+    else if (r.confirmed_at !== null && vask(r.email)) eposter.add(vask(r.email));
+  }
+  const kjente = new Set<string>();
+  for (const k of kontoer) {
+    kjente.add(k.id);
+    if (eposter.has(vask(k.email))) folger.add(k.id);
+  }
+  // Bare id-er som faktisk er kontoer: en rad kan peke på en slettet bruker.
+  return new Set([...folger].filter((id) => kjente.has(id)));
+}
 
 /**
  * Terskelen varselet bruker. Sto hardkodet som 85 og gikk ut av takt da
@@ -415,6 +480,19 @@ export function byggDagsrapport(inn: RapportInn): Dagsrapport {
     }
   }
 
+  // Nye kontoer (14 d) som følger et område, per plattform.
+  const perPlattform: Record<Plattform, { folger: number; nye: number }> = {
+    ios: { folger: 0, nye: 0 },
+    android: { folger: 0, nye: 0 },
+    web: { folger: 0, nye: 0 }
+  };
+  for (const b of inn.brukere) {
+    if (!nyere(b.created_at, 14 * time24)) continue;
+    const p = perPlattform[plattformFor(b)];
+    p.nye += 1;
+    if (inn.kontoerSomFolger?.has(b.id)) p.folger += 1;
+  }
+
   // Tellingene før konto: siste 7 dager i Oslo-dato, som bruksdagene.
   const tellingsGrense = osloDag(new Date(naa - 6 * 24 * 3600_000));
   const tellinger = inn.flatetellinger
@@ -448,10 +526,10 @@ export function byggDagsrapport(inn: RapportInn): Dagsrapport {
     varsel,
     bruk,
     tellinger,
-    puls: (inn.rapportpuls ?? [])
-      .filter((p): p is PulsRad & { avvikPst: number } => p.avvikPst !== null)
-      .sort((a, b) => b.avvikPst - a.avvikPst)
-      .slice(0, 3)
+    registreringer: inn.soppregistreringer
+      ? { maalt: true, blokk: byggRegistreringsblokk(inn.soppregistreringer) }
+      : { maalt: false, blokk: null },
+    nyeKontoerFolger: { maalt: inn.kontoerSomFolger !== undefined, perPlattform }
   };
 }
 
