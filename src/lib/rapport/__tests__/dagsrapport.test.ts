@@ -117,6 +117,22 @@ describe('nye kontoer som følger et område', () => {
     expect(sett.size).toBe(0);
   });
 
+  it('teller ÉN gang når samme menneske har både kontorad og kontoløs rad — også etter adopsjonen', () => {
+    // Tre av fem som fulgte et område 17. september 2026 kom inn gjennom det
+    // kontoløse skjemaet. /api/me/soppvarsel setter user_id på slike rader
+    // (src/lib/alerts/adopsjon.ts); svaret er et Set, så verken før eller etter
+    // adopsjonen kan ett menneske telles to ganger.
+    const kontoer = [{ id: 'u', email: 'begge@eksempel.no' }];
+    const for_ = kontoerSomFolgerOmrade(kontoer, [
+      folger({ user_id: 'u' }),
+      folger({ email: 'begge@eksempel.no' })
+    ]);
+    expect([...for_]).toEqual(['u']);
+    // Etter adopsjonen: én rad, som nå bærer BÅDE user_id og adressen.
+    const etter = kontoerSomFolgerOmrade(kontoer, [folger({ user_id: 'u', email: 'begge@eksempel.no' })]);
+    expect([...etter]).toEqual(['u']);
+  });
+
   it('konto uten e-post matcher ikke en rad uten e-post, og en rad for en slettet konto teller ikke', () => {
     const sett = kontoerSomFolgerOmrade([{ id: 'uten', email: null }], [folger({ email: '' }), folger({ email: null }), folger({ user_id: 'slettet' })]);
     expect(sett.size).toBe(0);

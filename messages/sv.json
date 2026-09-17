@@ -1082,6 +1082,18 @@
     "nearestArea": "närmaste område: {name}, {km} km",
     "approximate": "ungefärlig"
   },
+  "FolgOmrade": {
+    "folg": "Följ {omrade}",
+    "lofte": "Vi mejlar dig när svampläget i {omrade} vänder. Aldrig mer än ett mejl i veckan, och avregistrering i varje mejl.",
+    "annetOmrade": "Ett annat område",
+    "ikkeNaa": "Inte nu",
+    "hvorPlukker": "Var plockar du?",
+    "velgOmrade": "Välj område …",
+    "norge": "Norge",
+    "sverige": "Sverige",
+    "bekreftelse": "Du följer {omrade}. Du kan ändra eller avsluta på <lenke>din profil</lenke>.",
+    "feil": "Det gick inte just nu. Tryck en gång till."
+  },
   "LookAlikeCheck": {
     "sectionLabel": "Förväxlingskontroll",
     "heading": "Kontrollera förväxlingen innan du plockar",
