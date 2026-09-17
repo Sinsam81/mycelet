@@ -17,8 +17,10 @@
  * overalt hver høst (Kristiansand −92 %), og små områdebokser gir støy fra
  * enkeltpersoner (Stavanger +555 % på en normal av 20). Riktig sammenligning
  * er tidligere år SLIK DE SÅ UT PÅ SAMME DATO, via Artsobservasjoners
- * løpenummer (catalogNumber) — se CLAUDE.md. Til den finnes, brukes pulsen
- * bare i eierens dagsrapport, aldri i varsel-e-post eller X-poster.
+ * løpenummer (catalogNumber). Det er nå bygget i src/lib/rapport/
+ * soppregistreringer.ts (migrasjon 071), som erstattet pulsen i eierens
+ * dagsrapport. Denne modulen og tabellen står igjen som historikk: ingen
+ * flate leser dem, og nattjobben er tatt ut av vercel.json.
  *
  * Alle sopparter, ikke per art. Bare Norge: Artportalen leverer til GBIF med
  * ukers etterslep.
