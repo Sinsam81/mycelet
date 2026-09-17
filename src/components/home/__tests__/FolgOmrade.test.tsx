@@ -35,11 +35,17 @@ function svarUtenAbonnement() {
   });
 }
 
-function rendrer(props: Partial<React.ComponentProps<typeof FolgOmrade>> = {}, sprak: 'nb' | 'sv' = 'nb') {
-  return render(
+function tre(props: Partial<React.ComponentProps<typeof FolgOmrade>> = {}, sprak: 'nb' | 'sv' = 'nb') {
+  return (
     <NextIntlClientProvider locale={sprak} messages={(sprak === 'nb' ? nb : sv) as never} timeZone="Europe/Oslo">
       <FolgOmrade innlogget folgerAlt={false} omrade="Oslo" posisjonsKilde="egen" {...props} />
-    </NextIntlClientProvider>,
+    </NextIntlClientProvider>
+  );
+}
+
+function rendrer(props: Partial<React.ComponentProps<typeof FolgOmrade>> = {}, sprak: 'nb' | 'sv' = 'nb') {
+  return render(
+    tre(props, sprak),
     // React kjører hver effekt to ganger her, som i utviklingsmodus. Uten
     // levende-refen i komponenten kastet opprydningen etter FØRSTE kjøring
     // svaret, mens vakten hindret andre kjøring i å hente på nytt — og stripa
@@ -122,6 +128,46 @@ describe('FolgOmrade', () => {
     expect(screen.getByText(/soppforholdene i Bergen/)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Følg Bergen' }));
     await waitFor(() => expect(kroppen()?.region).toBe('Bergen'));
+  });
+
+  /**
+   * Kortet lever lenger enn én posisjon: den huskede posisjonen tegnes først,
+   * og en fersk måling kan bytte område et sekund senere UTEN at stripa
+   * monteres på nytt. Sto området i en startverdi i state, tilbød stripa
+   * fortsatt det gamle — og trykket meldte brukeren på et område kortet ikke
+   * lenger viste.
+   */
+  it('følger kortet når området bytter etter at stripa er tegnet', async () => {
+    const { rerender } = rendrer({ omrade: 'Bergen' });
+    expect(await screen.findByRole('button', { name: 'Følg Bergen' })).toBeTruthy();
+
+    rerender(tre({ omrade: 'Oslo' }));
+    expect(screen.getByRole('button', { name: 'Følg Oslo' })).toBeTruthy();
+    expect(screen.queryByText(/Bergen/)).toBe(null);
+    expect(screen.getByText(/soppforholdene i Oslo/)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Følg Oslo' }));
+    await waitFor(() => expect(kroppen()?.region).toBe('Oslo'));
+  });
+
+  it('slutter å spørre når kortet finner brukerens egen posisjon', async () => {
+    const { rerender } = rendrer({ posisjonsKilde: 'standard', omrade: 'Oslo' });
+    expect(await screen.findByText('Hvor plukker du?')).toBeTruthy();
+
+    rerender(tre({ posisjonsKilde: 'egen', omrade: 'Bergen' }));
+    expect(screen.getByRole('button', { name: 'Følg Bergen' })).toBeTruthy();
+    expect(screen.queryByText('Hvor plukker du?')).toBe(null);
+  });
+
+  it('brukerens eget valg står seg mot et posisjonsbytte', async () => {
+    const { rerender } = rendrer({ omrade: 'Oslo' });
+    fireEvent.click(await screen.findByRole('button', { name: 'Et annet område' }));
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'Bergen' } });
+
+    rerender(tre({ omrade: 'Göteborg' }));
+    expect(screen.getByRole('button', { name: 'Følg Bergen' })).toBeTruthy();
+    // Velgeren blir stående åpen: den var brukerens egen vei inn hit.
+    expect(screen.getByRole('combobox')).toBeTruthy();
   });
 
   it('«Et annet område» åpner velgeren fra den navngitte varianten', async () => {

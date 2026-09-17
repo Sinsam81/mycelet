@@ -64,8 +64,22 @@ export function FolgOmrade({
 
   const [klar, setKlar] = useState(false);
   const [regioner, setRegioner] = useState<Region[]>([]);
-  const [valgt, setValgt] = useState(variant.type === 'kjent' ? variant.omrade : '');
-  const [viserVelger, setViserVelger] = useState(variant.type === 'sporre');
+  /**
+   * ⚠️ Området stripa tilbyr utledes av PROPENE på hver tegning, aldri av en
+   * startverdi i state. Kortet beholder stripa montert når posisjonen endrer
+   * seg (`data` blir aldri null igjen), og tegner den bare på nytt med nye
+   * proper: en husket Bergen-posisjon som blir erstattet av en fersk måling i
+   * Stavanger byttet ring, dom, begrunnelser og 📍-etikett — mens stripa rett
+   * under fortsatt sa «Følg Bergen» og meldte brukeren på Bergen. Motsatt vei
+   * ble spørrevarianten stående med «Hvor plukker du?» og en tom velger selv
+   * etter at «Min posisjon» hadde gitt kortet et område.
+   *
+   * I state ligger derfor BARE brukerens eget valg: hen har åpnet velgeren
+   * (`vilVelge`) og hen har plukket et område (`overstyrt`). Det overstyrer
+   * propene, som seg hør og bør — alt annet følger kortet.
+   */
+  const [overstyrt, setOverstyrt] = useState<string | null>(null);
+  const [vilVelge, setVilVelge] = useState(false);
   const [lagrer, setLagrer] = useState(false);
   const [feilet, setFeilet] = useState(false);
   const [bekreftet, setBekreftet] = useState<string | null>(null);
@@ -183,7 +197,8 @@ export function FolgOmrade({
     );
   }
 
-  const spor = viserVelger;
+  const spor = vilVelge || variant.type === 'sporre';
+  const valgt = overstyrt ?? (variant.type === 'kjent' ? variant.omrade : '');
   const tittel = spor ? t('hvorPlukker') : t('folg', { omrade: valgt });
 
   return (
@@ -199,7 +214,13 @@ export function FolgOmrade({
       {spor ? (
         <select
           value={valgt}
-          onChange={(e) => setValgt(e.target.value)}
+          onChange={(e) => {
+            // Et eget valg holder velgeren åpen også om kortet i mellomtiden
+            // finner brukerens egen posisjon — ellers ville den forsvinne
+            // under fingeren på hen.
+            setVilVelge(true);
+            setOverstyrt(e.target.value);
+          }}
           disabled={lagrer}
           aria-label={t('velgOmrade')}
           className="mt-2 w-full rounded-lg border border-forest-200 bg-white px-2.5 py-1.5 text-sm text-gray-900 focus:border-forest-700 focus:outline-none"
@@ -247,8 +268,8 @@ export function FolgOmrade({
           <button
             type="button"
             onClick={() => {
-              setViserVelger(true);
-              setValgt('');
+              setVilVelge(true);
+              setOverstyrt('');
             }}
             className="text-xs font-medium text-forest-800 underline-offset-2 hover:underline"
           >
