@@ -11,7 +11,8 @@ import { Check, Crown, Leaf, Loader2, ShieldCheck, Undo2 } from 'lucide-react';
 import { PageWrapper } from '@/components/layout/PageWrapper';
 import { BILLING_PLANS, FREE_DAILY_AI_LIMIT, STRIPE_PROVEDAGER } from '@/lib/billing/plans';
 import { canPurchasePlan, getBlockingPaidPlan, getPlanViewState } from '@/lib/billing/plan-state';
-import { fornyelsesTekst } from '@/lib/billing/fornyelse';
+import { fornyelsesTekst, forsteBelastningsTekst } from '@/lib/billing/fornyelse';
+import { kanFaaProveperiode } from '@/lib/billing/provetilbud';
 import { perMaanedAvAarspris, seasonPriceComesFromStore, showsStorePrices } from '@/lib/billing/store-pricing';
 import { statusLabel, tierLabel } from '@/lib/billing/labels';
 import { useIsNative } from '@/lib/hooks/useIsNative';
@@ -46,6 +47,8 @@ type BillingStatusResponse = {
     paid: boolean;
     aiDailyLimit: number | null;
   };
+  /** Serverens svar på om gratisuka finnes for DENNE kunden — samme sjekker som checkout. */
+  kanFaaProve?: boolean;
 };
 
 // Amounts come from BILLING_PLANS (the same source the checkout uses), so the
@@ -355,6 +358,9 @@ function PricingInner() {
       const data = await response.json();
 
       if (response.status === 401) {
+        // Uinnlogget: ingen historikk å sjekke, så kortene beskriver kjøpet
+        // en NY abonnent gjør («for nye abonnenter» står i teksten). Etter
+        // innlogging kommer serverens svar, og kjøp krever innlogging.
         const anonymous: BillingStatusResponse = {
           subscription: null,
           capabilities: {
@@ -362,7 +368,8 @@ function PricingInner() {
             status: 'inactive',
             paid: false,
             aiDailyLimit: 5
-          }
+          },
+          kanFaaProve: true
         };
         setStatus(anonymous);
         return anonymous;
@@ -445,6 +452,10 @@ function PricingInner() {
   // tidligere vist som «Aktiv plan» samtidig som kjøpsknappen forsvant.
   const planView = getPlanViewState(status?.capabilities);
   const currentTier = planView.activeTier;
+  // Gratisuka på nett loves bare når serveren sier at DENNE kunden får den
+  // (samme tre sjekker som checkout bruker for trial_period_days). Før svaret
+  // er kommet, loves ingenting — og datoene regnes uten prøve.
+  const kanFaaProve = kanFaaProveperiode(status);
   // Ved betalingsproblem er «oppdater kortet» den korteste veien tilbake; da
   // finnes det allerede en Stripe-kunde å sende dem til.
   const canOpenPortal =
@@ -586,6 +597,35 @@ function PricingInner() {
             // show it instead of the Stripe NOK constant when they differ.
             const displayPrice = planOffer ? planOffer.priceString : plan.price;
             const displayPeriod = planOffer ? (plan.id === 'premium' ? t('perMonth') : t('perYear')) : plan.period;
+            // Kjøpsknappen og alt som beskriver KJØPET — gratisuke, første
+            // belastning, fornyelsesdato — står bare der kunden faktisk kan
+            // kjøpe. På «Aktiv plan» sto «Fornyes ca. 22. september 2027» regnet
+            // fra i dag, rett under statuskortet med den ekte periodeslutten;
+            // to fornyelsesdatoer for ett abonnement på én skjerm er nettopp det
+            // 3.1.2 rammer. Statuskortet over eier den ekte datoen.
+            const kanKjope = canPurchasePlan(planView, plan.id) && (!native ? true : planOffer !== null);
+            // Prøvedagene DENNE kunden får på DENNE planen: nett = Stripe gir
+            // STRIPE_PROVEDAGER når serveren sier ja; skall = bare når App Store
+            // gir den på akkurat dette produktet. 0 = ingen; null = prøve av
+            // ukjent lengde (da sies ingen dato). Prøven skyver både første
+            // belastning og fornyelsen — Stripe fakturerer ved trial_end.
+            const proveDager: number | null = native
+              ? planOffer?.harProve
+                ? planOffer.proveDager
+                : 0
+              : kanFaaProve
+                ? STRIPE_PROVEDAGER
+                : 0;
+            const fornyelseTekst = !checkoutPlan
+              ? null
+              : proveDager === null
+                ? t('renewsOnProveUkjentLengde')
+                : proveDager > 0
+                  ? t('renewsOnEtterProve', {
+                      forsteBelastning: forsteBelastningsTekst(proveDager, locale),
+                      dato: fornyelsesTekst(checkoutPlan, locale, proveDager)
+                    })
+                  : t('renewsOn', { dato: fornyelsesTekst(checkoutPlan, locale) });
 
             return (
               <article
@@ -597,7 +637,12 @@ function PricingInner() {
                   cardRefs.current[plan.id] = el;
                 }}
                 className={`relative flex flex-col rounded-2xl border p-4 outline-none ${
-                  plan.highlight || focusedPlan === plan.id
+                  // Nøyaktig ett kort er uthevet: det anbefalte, eller det
+                  // brukeren trykket på (?plan=premium fra arkets månedslinje).
+                  // Med begge fikk «Heller måned for måned?» to ringede kort og
+                  // ingenting som skilte valget fra anbefalingen. «Anbefalt»-
+                  // merket blir på passet uansett.
+                  (plan.highlight && !focusedPlan) || focusedPlan === plan.id
                     ? 'border-forest-700 bg-white shadow-card ring-2 ring-forest-700'
                     : isCurrent
                       ? 'border-forest-700 bg-forest-50'
@@ -617,7 +662,12 @@ function PricingInner() {
                 <p className="text-xs text-gray-600">{plan.tagline}</p>
                 {/* Nett: Stripe-prisen (skjult før maling i skallet). Skall: butikkens
                     pris når tilbudet er lastet — aldri Stripe-kroner i App Store. */}
-                <p className="mt-3 text-3xl font-bold tracking-tight text-forest-900">
+                {/* <div>, ikke <p>: NonNativeOnly rendrer en <div data-web-only>, og
+                    en div inni en p er ugyldig HTML — nettleseren lukket p-en
+                    før den, og React kastet hele kortet og tegnet det på nytt
+                    («Hydration failed … <p> cannot contain a nested <div>») ved
+                    hvert besøk på prissiden. */}
+                <div className="mt-3 text-3xl font-bold tracking-tight text-forest-900">
                   <NonNativeOnly>
                     {plan.price}
                     <span className="text-sm font-medium text-gray-600">{plan.period}</span>
@@ -626,27 +676,39 @@ function PricingInner() {
                     {planOffer ? displayPrice : plan.id === 'free' ? plan.price : '…'}
                     <span className="text-sm font-medium text-gray-600">{planOffer || plan.id === 'free' ? displayPeriod : ''}</span>
                   </NativeOnly>
-                </p>
+                </div>
                 {/* Løftet om gratis prøveperiode bare når det er sant: nett = Stripe
-                    gir STRIPE_PROVEDAGER til nye abonnenter (checkout-ruta); skall =
-                    bare når App Store gir den på AKKURAT dette produktet
-                    (IapOffer.harProve). Ellers står prisen alene, uten løfte. */}
-                {plan.id !== 'free' ? (
+                    gir STRIPE_PROVEDAGER når serveren sier at denne kunden får den
+                    (kanFaaProve — checkout-rutas egen regel); skall = bare når App
+                    Store gir den på AKKURAT dette produktet (IapOffer.harProve).
+                    Ellers står prisen alene, uten løfte. */}
+                {kanKjope && !native && proveDager ? (
                   <NonNativeOnly>
-                    <p className="mt-1 text-xs font-semibold text-forest-800">{t('trialNote', { dager: STRIPE_PROVEDAGER })}</p>
+                    <p className="mt-1 text-xs font-semibold text-forest-800">{t('trialNote', { dager: proveDager })}</p>
                   </NonNativeOnly>
                 ) : null}
-                {plan.id !== 'free' && planOffer?.harProve ? (
+                {kanKjope && planOffer?.harProve ? (
                   <NativeOnly>
                     <p className="mt-1 text-xs font-semibold text-forest-800">
                       {planOffer.proveDager === null ? t('trialNoteUkjentLengde') : t('trialNote', { dager: planOffer.proveDager })}
                     </p>
                   </NativeOnly>
                 ) : null}
-                {/* Fornyelsesdatoen rett ut (fornyelse.ts — samme kilde som arket):
-                    «ca. 22. september 2027» ER argumentet for passet mot måneden. */}
-                {plan.id !== 'free' ? (
-                  <p className="mt-1 text-xs text-gray-600">{t('renewsOn', { dato: fornyelsesTekst(plan.id, locale) })}</p>
+                {/* Datoene rett ut (fornyelse.ts — samme kilde som arket): med
+                    gratisuke først belastning («ca. 29. september 2026»), så
+                    fornyelsen ett år / én måned etter den. «ca. 29. september 2027»
+                    ER argumentet for passet mot måneden. Bare på kort som kan
+                    kjøpes — statuskortet viser den ekte datoen for planen kunden har. */}
+                {kanKjope && fornyelseTekst ? (
+                  native ? (
+                    <NativeOnly>
+                      <p className="mt-1 text-xs text-gray-600">{fornyelseTekst}</p>
+                    </NativeOnly>
+                  ) : (
+                    <NonNativeOnly>
+                      <p className="mt-1 text-xs text-gray-600">{fornyelseTekst}</p>
+                    </NonNativeOnly>
+                  )
                 ) : null}
                 {plan.lead ? <p className="mt-3 text-xs font-semibold uppercase tracking-wide text-gray-500">{plan.lead}</p> : null}
                 <ul className={`${plan.lead ? 'mt-1.5' : 'mt-3'} flex-1 space-y-1.5 text-sm text-gray-700`}>
@@ -669,7 +731,7 @@ function PricingInner() {
                     native → Apple IAP for THIS plan's package (if offered).
                     canPurchasePlan er fasiten: en plan uten faktisk tilgang kan
                     alltid kjøpes på nytt, også den kunden nettopp mistet. */}
-                {canPurchasePlan(planView, plan.id) && (!native ? true : planOffer !== null) ? (
+                {kanKjope ? (
                   <button
                     type="button"
                     onClick={() => {

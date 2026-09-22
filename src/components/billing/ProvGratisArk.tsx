@@ -6,16 +6,13 @@ import Link from 'next/link';
 import { useLocale, useTranslations } from 'next-intl';
 import { X } from 'lucide-react';
 import type { TILBUD_UTLOSERE } from '@/lib/bruk/bruksdag';
-import { fornyelsesTekst } from '@/lib/billing/fornyelse';
+import { fornyelsesTekst, forsteBelastningsTekst } from '@/lib/billing/fornyelse';
 import { planLofte } from '@/lib/billing/prove-lofte';
 import { meldTilbudsarkApent } from '@/lib/billing/tilbudsark-apent';
 import { useProveLofte } from '@/lib/hooks/useProveLofte';
 
 /** Hva som fikk arket til å vises — samme verdier som bruksdag-raden «tilbud» lagrer. */
 export type TilbudUtloser = (typeof TILBUD_UTLOSERE)[number];
-
-/** En gratis prøveperiode på sju dager heter «prøveuka»; alt annet «prøveperioden». */
-const EN_UKE = 7;
 
 /**
  * Arket som vises én gang (to, med et døgns mellomrom) til en gratisbruker
@@ -45,6 +42,14 @@ const EN_UKE = 7;
  * den på akkurat det produktet (useProveLofte, per plan). Har passet ingen
  * gratisuke i butikken, selges det til pris — «Kjøp Sesongpass» — mens
  * månedslinja kan ha sin egen gratisuke.
+ *
+ * Med gratisuke sier vilkårene BEGGE datoene: når de 249 kronene trekkes
+ * første gang (kjøpsdag + prøvedager — Stripe fakturerer ved trial_end,
+ * Apple det samme), og at passet gjelder ett år fra DEN dagen. Første utgave
+ * regnet passet fra kjøpsdagen og nevnte aldri første belastning; «gjelder
+ * til september 2027, deretter 249 kr» leste som et gratis år, og Apple
+ * krever datoen for første belastning ved introduksjonstilbud (3.1.2). Er
+ * prøvens lengde ukjent, sies ingen dato — heller ingen enn en gal.
  *
  * Portal til <body>: kartets verktøyrad har en CSS-transform, og position:fixed
  * inni en transformert forelder får forelderen som ramme.
@@ -83,8 +88,11 @@ export function ProvGratisArk({
   const begrenset = utloser === 'begrenset';
   const pass = planLofte(lofte, 'season_pass');
   const maaned = planLofte(lofte, 'premium');
-  // Én kilde for datoen (fornyelse.ts), så arket og prissiden aldri sier to ulike.
-  const passDato = fornyelsesTekst('season_pass', locale);
+  // Prøvedagene passet faktisk får (0 uten gratisuke) skyver både første
+  // belastning og året passet gjelder. Én kilde for datoene (fornyelse.ts),
+  // så arket og prissiden aldri sier to ulike.
+  const passProveDager = pass?.harProve ? pass.proveDager : 0;
+  const passDato = fornyelsesTekst('season_pass', locale, passProveDager ?? 0);
 
   const tittel = begrenset
     ? t('tittel')
@@ -99,9 +107,14 @@ export function ProvGratisArk({
     ? t('vilkaarUtenProve')
     : !pass.harProve
       ? t('passVilkaar', { dato: passDato })
-      : pass.proveDager === EN_UKE
-        ? t('passVilkaarProve', { dato: passDato, pris: pass.pris })
-        : t('passVilkaarProvePeriode', { dato: passDato, pris: pass.pris });
+      : passProveDager === null
+        ? t('passVilkaarProveUkjentLengde', { pris: pass.pris })
+        : t('passVilkaarProve', {
+            dager: passProveDager,
+            forsteBelastning: forsteBelastningsTekst(passProveDager, locale),
+            pris: pass.pris,
+            dato: passDato
+          });
   const start = !pass ? t('sePass') : pass.harProve ? t('provPass') : t('kjopPass');
   // «Heller måned for måned?» — bare med butikkens pris, og med gratisuke bare når Premium har en.
   const maanedTekst = !maaned

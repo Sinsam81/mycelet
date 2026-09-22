@@ -6,6 +6,8 @@ import { PageWrapper } from '@/components/layout/PageWrapper';
 import { LandingPage } from '@/components/landing/LandingPage';
 import { EdibilityBadge } from '@/components/ui/EdibilityBadge';
 import { getBillingCapabilities, getUserBillingSubscription } from '@/lib/billing/subscription';
+import { harHattTilgangFor } from '@/lib/billing/tidligere-abonnent';
+import { getStripeServerClient } from '@/lib/stripe/server';
 import { ProvGratisVedStart } from '@/components/billing/ProvGratisVedStart';
 import { ProveLofteTekst } from '@/components/billing/ProveLofteTekst';
 import { MushroomDayCard } from '@/components/home/MushroomDayCard';
@@ -98,11 +100,14 @@ export default async function HomePage() {
 
   // Premium-kortet: aldri til betalende (de kan ikke løse inn noe), nøytral
   // knapp til tidligere abonnenter (ingen ny gratisuke), «prøv gratis» til nye.
+  // «Tidligere» avgjøres av samme funksjon som checkout og /api/billing/status
+  // (tidligere-abonnent.ts) — ikke av om raden finnes: en slettet konto med
+  // samme e-post har ingen rad, men Stripe nekter uka. Oppslaget går parallelt
+  // med artslista, så det ikke koster forsiden ventetid.
   const abonnement = await getUserBillingSubscription(supabase, user.id);
   const betaler = getBillingCapabilities(abonnement).paid;
-  const kanFaaProve = !betaler && abonnement == null;
 
-  const [{ data }, { data: recentFindings }] = await Promise.all([
+  const [{ data }, { data: recentFindings }, tidligereAbonnent] = await Promise.all([
     supabase
       .from('mushroom_species')
       .select('id,norwegian_name,swedish_name,latin_name,edibility,season_start,season_end,peak_season_start,peak_season_end,commonality,primary_image_url')
@@ -111,8 +116,10 @@ export default async function HomePage() {
       .from('public_findings')
       .select('id,found_at,location_name,species_id,norwegian_name,edibility,primary_image_url')
       .order('found_at', { ascending: false })
-      .limit(4)
+      .limit(4),
+    betaler ? Promise.resolve(true) : harHattTilgangFor({ subscription: abonnement, email: user.email, stripe: getStripeServerClient })
   ]);
+  const kanFaaProve = !betaler && !tidligereAbonnent;
 
   const species = (data ?? []) as SpeciesRow[];
   const findings = (recentFindings ?? []) as unknown as RecentFindingRow[];

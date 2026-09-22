@@ -5,15 +5,16 @@ import { NextIntlClientProvider } from 'next-intl';
 import { ProvGratisArk, type TilbudUtloser } from '../ProvGratisArk';
 import nb from '../../../../messages/nb.json';
 import sv from '../../../../messages/sv.json';
-import { fornyelsesTekst } from '@/lib/billing/fornyelse';
+import { fornyelsesTekst, forsteBelastningsTekst } from '@/lib/billing/fornyelse';
 import type { ProveLofte } from '@/lib/hooks/useProveLofte';
 
 /**
  * Arket skal (1) lede med sesongpasset og vise måneden som et synlig, like
  * tydelig alternativ, (2) love «7 dager gratis» bare når butikken faktisk gir
- * den PÅ DEN PLANEN, (3) si «3 av 12» bare når det er det brukeren ser, og
- * (4) melde utløseren på bruksdag-raden, så trakten ark → pris kan leses per
- * utløser.
+ * den PÅ DEN PLANEN — og da si når de 249 kronene trekkes første gang og at
+ * passet gjelder ett år fra DEN dagen, (3) si «3 av 12» bare når det er det
+ * brukeren ser, og (4) melde utløseren på bruksdag-raden, så trakten
+ * ark → pris kan leses per utløser.
  */
 
 const PASS = { plan: 'season_pass' as const, harProve: true, proveDager: 7, pris: '249 kr' };
@@ -61,7 +62,12 @@ function lenker(): HTMLAnchorElement[] {
 const fyll = (mal: string, verdier: Record<string, string | number>) =>
   Object.entries(verdier).reduce((s, [k, v]) => s.split(`{${k}}`).join(String(v)), mal);
 
+/** Uten gratisuke: passet gjelder ett år fra i dag. */
 const DATO = fornyelsesTekst('season_pass', 'nb');
+/** Med sju gratisdager: første belastning om en uke, og passet gjelder ett år fra den. */
+const FORSTE_BELASTNING = forsteBelastningsTekst(7, 'nb');
+const DATO_ETTER_PROVE = fornyelsesTekst('season_pass', 'nb', 7);
+const PASS_VILKAAR_PROVE = fyll(nb.ProvGratisArk.passVilkaarProve, { dager: 7, forsteBelastning: FORSTE_BELASTNING, pris: '249 kr', dato: DATO_ETTER_PROVE });
 
 beforeEach(() => {
   lofte = { kjent: true, season_pass: PASS, premium: MAANED };
@@ -77,11 +83,18 @@ afterEach(() => {
 });
 
 describe('ProvGratisArk — sesongpasset først', () => {
-  it('start-arket: passet med gratisuke i tittel, vilkår med dato og pris, passknappen først og måneden som synlig alternativ', () => {
+  it('start-arket: passet med gratisuke i tittel, vilkår med første belastning, pris og dato, passknappen først og måneden som synlig alternativ', () => {
     rendrer('start');
     expect(screen.getByRole('heading').textContent).toBe(fyll(nb.ProvGratisArk.tittelPassProve, { dager: 7 }));
-    expect(screen.getByText(fyll(nb.ProvGratisArk.passVilkaarProve, { dato: DATO, pris: '249 kr' }))).toBeTruthy();
-    expect(DATO).toMatch(/^ca\. \d{1,2}\. [a-zæøå]+ \d{4}$/);
+    expect(screen.getByText(PASS_VILKAAR_PROVE)).toBeTruthy();
+    expect(FORSTE_BELASTNING).toMatch(/^ca\. \d{1,2}\. [a-zæøå]+ \d{4}$/);
+    expect(DATO_ETTER_PROVE).toMatch(/^ca\. \d{1,2}\. [a-zæøå]+ \d{4}$/);
+    // Vilkårene sier når pengene trekkes første gang, prisen, og at året
+    // regnes fra den dagen — ikke fra i dag (Stripe fakturerer ved trial_end).
+    expect(PASS_VILKAAR_PROVE).toContain(`Fra ${FORSTE_BELASTNING} koster passet 249 kr per år`);
+    expect(PASS_VILKAAR_PROVE).toContain(`gjelder da til ${DATO_ETTER_PROVE}`);
+    expect(PASS_VILKAAR_PROVE).toContain(`avslutter før ${FORSTE_BELASTNING}`);
+    expect(DATO_ETTER_PROVE).not.toBe(DATO);
 
     const [pass, maaned] = lenker();
     expect(pass.textContent).toBe(nb.ProvGratisArk.provPass);
@@ -114,13 +127,14 @@ describe('ProvGratisArk — sesongpasset først', () => {
     lofte = { kjent: true, season_pass: PASS_UTEN_PROVE, premium: MAANED };
     rendrer('start');
     expect(screen.getByRole('heading').textContent).toBe(fyll(nb.ProvGratisArk.tittelPassUtenProve, { pris: 'kr 249,00' }));
+    // Uten prøve gjelder passet ett år fra i dag — ingen første belastning å nevne.
     expect(screen.getByText(fyll(nb.ProvGratisArk.passVilkaar, { dato: DATO }))).toBeTruthy();
     const [pass, maaned] = lenker();
     expect(pass.textContent).toBe(nb.ProvGratisArk.kjopPass);
     expect(maaned.textContent).toBe(fyll(nb.ProvGratisArk.maanedValgProve, { pris: '99 kr', dager: 7 }));
     // Ingen gratisuke lovet på passet — verken i tittel, vilkår eller knapp.
     expect(pass.textContent).not.toMatch(/gratis/i);
-    expect(screen.queryByText(/prøveuka|Prøv Sesongpass gratis/)).toBeNull();
+    expect(screen.queryByText(/prøveperiode|belastning|Prøv Sesongpass gratis/)).toBeNull();
   });
 
   it('månedslinja lover gratisuke bare når Premium har den', () => {
@@ -166,20 +180,40 @@ describe('ProvGratisArk — sesongpasset først', () => {
     expect(screen.queryByText(/gratis i|kr/)).toBeNull();
   });
 
-  it('gratisuke med ukjent lengde sier «gratis» uten tall', () => {
+  it('gratisuke med ukjent lengde sier «gratis» uten tall — og ingen dato, siden ingen kan regnes', () => {
     lofte = { kjent: true, season_pass: { ...PASS, proveDager: null }, premium: { ...MAANED, proveDager: null } };
     rendrer('start');
     expect(screen.getByRole('heading').textContent).toBe(nb.ProvGratisArk.tittelPassProveUkjentLengde);
-    expect(screen.getByText(fyll(nb.ProvGratisArk.passVilkaarProvePeriode, { dato: DATO, pris: '249 kr' }))).toBeTruthy();
+    const vilkaar = fyll(nb.ProvGratisArk.passVilkaarProveUkjentLengde, { pris: '249 kr' });
+    expect(screen.getByText(vilkaar)).toBeTruthy();
+    expect(vilkaar).not.toMatch(/\d{4}/);
     expect(lenker()[1].textContent).toBe(fyll(nb.ProvGratisArk.maanedValgProveUkjentLengde, { pris: '99 kr' }));
   });
 
-  it('svensk: samme oppbygning med svensk dato («ca. 22 september 2027»-formen, uten punktum etter dagen)', () => {
+  it('en kjent prøve som ikke er sju dager får samme vilkår med sitt eget tall og sine egne datoer', () => {
+    lofte = { kjent: true, season_pass: { ...PASS, proveDager: 14 }, premium: MAANED };
+    rendrer('start');
+    expect(screen.getByRole('heading').textContent).toBe(fyll(nb.ProvGratisArk.tittelPassProve, { dager: 14 }));
+    expect(
+      screen.getByText(
+        fyll(nb.ProvGratisArk.passVilkaarProve, {
+          dager: 14,
+          forsteBelastning: forsteBelastningsTekst(14, 'nb'),
+          pris: '249 kr',
+          dato: fornyelsesTekst('season_pass', 'nb', 14)
+        })
+      )
+    ).toBeTruthy();
+  });
+
+  it('svensk: samme oppbygning med svensk dato («ca 22 september 2027»-formen — «ca» uten punktum, ingen punktum etter dagen)', () => {
     rendrer('start', 'sv');
-    const dato = fornyelsesTekst('season_pass', 'sv');
-    expect(dato).toMatch(/^ca\. \d{1,2} [a-zäö]+ \d{4}$/);
+    const dato = fornyelsesTekst('season_pass', 'sv', 7);
+    const forsteBelastning = forsteBelastningsTekst(7, 'sv');
+    expect(dato).toMatch(/^ca \d{1,2} [a-zäö]+ \d{4}$/);
+    expect(forsteBelastning).toMatch(/^ca \d{1,2} [a-zäö]+ \d{4}$/);
     expect(screen.getByRole('heading').textContent).toBe(fyll(sv.ProvGratisArk.tittelPassProve, { dager: 7 }));
-    expect(screen.getByText(fyll(sv.ProvGratisArk.passVilkaarProve, { dato, pris: '249 kr' }))).toBeTruthy();
+    expect(screen.getByText(fyll(sv.ProvGratisArk.passVilkaarProve, { dager: 7, forsteBelastning, pris: '249 kr', dato }))).toBeTruthy();
     expect(lenker()[0].textContent).toBe(sv.ProvGratisArk.provPass);
   });
 

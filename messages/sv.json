@@ -781,7 +781,7 @@
     "seasonTagline": "Allt i Premium, ett år framåt",
     "perYear": "/år",
     "seasonLead": "Allt i Premium, plus:",
-    "seasonFeature1": "Motsvarar ca. {perMonth} per månad",
+    "seasonFeature1": "Motsvarar ca {perMonth} per månad",
     "seasonFeature1Native": "Lägre pris per månad än Premium",
     "seasonFeature2": "Billigare än en svampsäsong med Premium",
     "seasonFeature3": "Förnyas årligen — avsluta när som helst",
@@ -839,6 +839,8 @@
     "trialNote": "{dager} dagars gratis provperiod för nya prenumeranter",
     "trialNoteUkjentLengde": "Gratis provperiod för nya prenumeranter",
     "renewsOn": "Förnyas {dato} om du inte avslutar",
+    "renewsOnEtterProve": "Första debiteringen {forsteBelastning}. Förnyas {dato} om du inte avslutar.",
+    "renewsOnProveUkjentLengde": "Första debiteringen när provperioden är slut. Förnyas automatiskt om du inte avslutar.",
     "seasonUrgency": "🍂 Högsäsongen pågår — september och oktober är årets bästa svampmånader."
   },
   "Profile": {
@@ -1499,8 +1501,8 @@
     "tittelPassUtenProve": "Säsongspass: {pris} per år",
     "tittelUkjent": "Hela prognosen med Säsongspass",
     "tekstStart": "Alla 12 lovande områden nära dig, med motiveringen bakom varje siffra: nederbörd, markfukt, säsong och skogstyp. Offlinekarta för skogsturen. Och AI-svampkännare utan daglig gräns. Svampläget och varningen är gratis oavsett.",
-    "passVilkaarProve": "Passet gäller till {dato}: resten av hösten nu, och nästa säsong fram till dess. Därefter {pris} per år. Förnyas {dato} om du inte avslutar, även under provveckan.",
-    "passVilkaarProvePeriode": "Passet gäller till {dato}: resten av hösten nu, och nästa säsong fram till dess. Därefter {pris} per år. Förnyas {dato} om du inte avslutar, även under provperioden.",
+    "passVilkaarProve": "Gratis i {dager} dagar. Från {forsteBelastning} kostar passet {pris} per år, och det gäller då till {dato}: resten av hösten nu, och nästa säsong fram till dess. Förnyas automatiskt om du inte avslutar före {forsteBelastning}.",
+    "passVilkaarProveUkjentLengde": "Gratis provperiod först, därefter {pris} per år. Passet gäller ett år från första debiteringen: resten av hösten nu, och nästa säsong. Förnyas automatiskt om du inte avslutar innan provperioden är slut.",
     "passVilkaar": "Gäller till {dato}: resten av hösten nu, och nästa säsong fram till dess. Förnyas {dato} om du inte avslutar.",
     "vilkaarUtenProve": "Avsluta när du vill.",
     "provPass": "Prova Säsongspass gratis",

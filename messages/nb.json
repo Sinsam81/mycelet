@@ -839,6 +839,8 @@
     "trialNote": "{dager} dager gratis prøveperiode for nye abonnenter",
     "trialNoteUkjentLengde": "Gratis prøveperiode for nye abonnenter",
     "renewsOn": "Fornyes {dato} om du ikke avslutter",
+    "renewsOnEtterProve": "Første belastning {forsteBelastning}. Fornyes {dato} om du ikke avslutter.",
+    "renewsOnProveUkjentLengde": "Første belastning når prøveperioden er over. Fornyes automatisk om du ikke avslutter.",
     "seasonUrgency": "🍂 Høysesongen er i gang — september og oktober er årets beste soppmåneder."
   },
   "Profile": {
@@ -1499,8 +1501,8 @@
     "tittelPassUtenProve": "Sesongpass: {pris} per år",
     "tittelUkjent": "Hele prognosen med Sesongpass",
     "tekstStart": "Alle 12 lovende områder nær deg, med begrunnelsen bak hvert tall: nedbør, jordfuktighet, sesong og skogtype. Offline-kart for skogsturen. Og AI-soppkjenner uten daglig grense. Soppforholdene og varselet er gratis uansett.",
-    "passVilkaarProve": "Passet gjelder til {dato}: resten av høsten nå, og neste sesong fram til da. Deretter {pris} per år. Fornyes {dato} om du ikke avslutter, også i prøveuka.",
-    "passVilkaarProvePeriode": "Passet gjelder til {dato}: resten av høsten nå, og neste sesong fram til da. Deretter {pris} per år. Fornyes {dato} om du ikke avslutter, også i prøveperioden.",
+    "passVilkaarProve": "Gratis i {dager} dager. Fra {forsteBelastning} koster passet {pris} per år, og det gjelder da til {dato}: resten av høsten nå, og neste sesong fram til da. Fornyes automatisk om du ikke avslutter før {forsteBelastning}.",
+    "passVilkaarProveUkjentLengde": "Gratis prøveperiode først, deretter {pris} per år. Passet gjelder ett år fra første belastning: resten av høsten nå, og neste sesong. Fornyes automatisk om du ikke avslutter før prøveperioden er over.",
     "passVilkaar": "Gjelder til {dato}: resten av høsten nå, og neste sesong fram til da. Fornyes {dato} om du ikke avslutter.",
     "vilkaarUtenProve": "Avslutt når du vil.",
     "provPass": "Prøv Sesongpass gratis",
