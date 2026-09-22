@@ -233,7 +233,9 @@ export default async function HomePage() {
         {/* Før kortet i treet: arket lytter etter «kortet har data» (og introen),
             og lytteren må stå klar før kortets egen mount-effekt kan sende. */}
         {kanFaaProve ? <ProvGratisVedStart /> : null}
-        <MushroomDayCard />
+        {/* «Følg området ditt» ligger inne i kortet. Serveren vet alt om
+            kontoraden finnes, så et abonnent-kort slipper å hente noe. */}
+        <MushroomDayCard innlogget folgerOmrade={harVarsel} />
 
         {/* Tilbudet rett under forholdene, og én gang som ark ved første innlogging —
             gratisbrukere vi betaler for å hente inn, så aldri prissiden (1 av 12 kartbrukere,

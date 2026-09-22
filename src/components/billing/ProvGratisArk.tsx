@@ -7,6 +7,7 @@ import { useTranslations } from 'next-intl';
 import { X } from 'lucide-react';
 import type { TILBUD_UTLOSERE } from '@/lib/bruk/bruksdag';
 import { STRIPE_PROVEDAGER } from '@/lib/billing/plans';
+import { meldTilbudsarkApent } from '@/lib/billing/tilbudsark-apent';
 import { useProveLofte } from '@/lib/hooks/useProveLofte';
 
 /** Hva som fikk arket til å vises — samme verdier som bruksdag-raden «tilbud» lagrer. */
@@ -43,6 +44,10 @@ export function ProvGratisArk({
 }) {
   const t = useTranslations('ProvGratisArk');
   const lofte = useProveLofte();
+  // Mens arket ligger her, skal ingen annen flate stille sitt eget spørsmål
+  // under det (tilbudsark-apent.ts). Ett spørsmål om gangen.
+  useEffect(() => meldTilbudsarkApent(), []);
+
   // Måling: at tilbudet ble vist, og hva som utløste det (bruksflate «tilbud»,
   // migrasjon 068; utløseren i omrade-kolonnen). Uten dette vet vi ikke om
   // null prøveperioder betyr «nei takk» eller «aldri sett» — og ikke hvilken
