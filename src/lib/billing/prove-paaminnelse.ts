@@ -18,6 +18,10 @@ import { FREE_DAILY_AI_LIMIT } from './plans';
  * prisen kan endres uten at koden endres, og en e-post med feil beløp er
  * verre enn ingen e-post (da hoppes den over med grunn «pris-ukjent»).
  *
+ * Prøver kjøpt i App Store får samme tekst fra byggAppProvePaaminnelseEpost
+ * nederst i fila (beslutningen ligger i prove-paaminnelse-app.ts, siden
+ * Apple ikke sender noen hendelse — cronen må regne ut dagen selv).
+ *
  * Rabatt: checkout tillater kampanjekoder (allow_promotion_codes), så
  * listeprisen er ikke alltid det som trekkes. Kjenner vi rabatten, trekkes
  * den fra beløpet; vet vi bare at den finnes (hendelsen bærer bare id-en),
@@ -213,6 +217,17 @@ const COPY = {
       `Vil du ikke fortsette, sier du opp her: ${lenke}. Vil du fortsette, trenger du ikke gjøre noe. ${dato} trekkes ${belop}, om du ikke sier opp før det.`,
     avslutningUtenBelop: (dato: string, lenke: string) =>
       `Vil du ikke fortsette, sier du opp her: ${lenke}. Vil du fortsette, trenger du ikke gjøre noe. ${dato} belastes kortet ditt — med rabatten din trukket fra — om du ikke sier opp før det.`,
+    // App Store-varianten (cronen prove-paaminnelse-app). Ingen lenke og
+    // intet tall: oppsigelsen skjer i iPhonens innstillinger, og prisen
+    // står bare i App Store — vi lagrer den ikke, og gjetter ikke.
+    emneApp: (naar: string) => `Gratisuka di i Mycelet slutter ${naar}`,
+    tittelApp: (naar: string) => `Gratisuka slutter ${naar}`,
+    innledningApp: (plan: string, naar: string) => `Gratisuka di på ${plan} slutter ${naar}.`,
+    avslutningApp: (dato: string) =>
+      `Vil du ikke fortsette, avslutter du under Innstillinger → Apple-ID → Abonnementer på iPhonen. Vil du fortsette, trenger du ikke gjøre noe. ${dato} belastes Apple-ID-en din med prisen som sto i appen da du startet.`,
+    sporsmal: 'Hva var viktigst for deg i uka?',
+    sporsmalValg: { omrader: 'områdene med begrunnelse', offline: 'offline-kartet', ai: 'AI-identifikasjonen' },
+    sporsmalFrivillig: 'Ett trykk holder, og du trenger ikke svare.',
     signatur: 'Mycelet — soppvarsel for Norge og Sverige'
   },
   sv: {
@@ -229,9 +244,36 @@ const COPY = {
       `Vill du inte fortsätta säger du upp här: ${lenke}. Vill du fortsätta behöver du inte göra något. Den ${dato} dras ${belop}, om du inte säger upp innan dess.`,
     avslutningUtenBelop: (dato: string, lenke: string) =>
       `Vill du inte fortsätta säger du upp här: ${lenke}. Vill du fortsätta behöver du inte göra något. Den ${dato} debiteras ditt kort — med din rabatt avdragen — om du inte säger upp innan dess.`,
+    emneApp: (naar: string) => `Din gratisvecka i Mycelet slutar ${naar}`,
+    tittelApp: (naar: string) => `Gratisveckan slutar ${naar}`,
+    innledningApp: (plan: string, naar: string) => `Din gratisvecka på ${plan} slutar ${naar}.`,
+    avslutningApp: (dato: string) =>
+      `Vill du inte fortsätta avslutar du under Inställningar → Apple-ID → Prenumerationer på din iPhone. Vill du fortsätta behöver du inte göra något. Den ${dato} debiteras ditt Apple-ID med priset som stod i appen när du började.`,
+    sporsmal: 'Vad var viktigast för dig under veckan?',
+    sporsmalValg: { omrader: 'områdena med motivering', offline: 'offlinekartan', ai: 'AI-identifieringen' },
+    sporsmalFrivillig: 'Ett tryck räcker, och du behöver inte svara.',
     signatur: 'Mycelet — svampvarning för Norge och Sverige'
   }
 } as const;
+
+/** Alle avsnitt i samme brødtekst: trekket og lenken skal ikke stå mindre eller blekere enn det som står over dem. */
+function avsnittHtml(tekst: string): string {
+  return `    <p style="font-size: 16px; line-height: 1.5;">${tekst}</p>`;
+}
+
+/** Felles ramme for begge variantene: overskrift, avsnittene, signatur — HTML og ren tekst av samme blokker. */
+function renderEpost(args: { locale: Locale; tittel: string; html: string[]; tekst: string[]; signatur: string }): { html: string; tekst: string } {
+  const html = `<!doctype html>
+<html lang="${args.locale}">
+  <body style="font-family: -apple-system, system-ui, sans-serif; color: #1f2937; max-width: 560px; margin: 24px auto; padding: 0 16px;">
+    <h1 style="font-size: 20px; font-weight: 600; color: #1A3409; margin-bottom: 8px;">${args.tittel}</h1>
+${args.html.map(avsnittHtml).join('\n')}
+    <p style="font-size: 12px; color: #6b7280; margin-top: 24px;">${args.signatur}</p>
+  </body>
+</html>`;
+  const tekst = [args.tittel, ...args.tekst, args.signatur].join('\n\n');
+  return { html, tekst };
+}
 
 export interface ProvePaaminnelseEpostArgs {
   locale: Locale;
@@ -264,19 +306,72 @@ export function byggProvePaaminnelseEpost(args: ProvePaaminnelseEpostArgs): { em
   const avsnitt = [t.innledning(args.plan, naar), t.verdi(FREE_DAILY_AI_LIMIT), t.beholder, t.forbehold];
   const anker = `<a href="${args.oppsigelseUrl}" style="color: #1A3409;">${args.oppsigelseUrl}</a>`;
 
-  // Alle avsnitt i samme brødtekst: trekket og lenken skal ikke stå mindre
-  // eller blekere enn det som står over dem.
-  const p = (avsnittTekst: string) => `    <p style="font-size: 16px; line-height: 1.5;">${avsnittTekst}</p>`;
-  const html = `<!doctype html>
-<html lang="${args.locale}">
-  <body style="font-family: -apple-system, system-ui, sans-serif; color: #1f2937; max-width: 560px; margin: 24px auto; padding: 0 16px;">
-    <h1 style="font-size: 20px; font-weight: 600; color: #1A3409; margin-bottom: 8px;">${t.tittel(naar)}</h1>
-${[...avsnitt, avslutning(anker)].map(p).join('\n')}
-    <p style="font-size: 12px; color: #6b7280; margin-top: 24px;">${t.signatur}</p>
-  </body>
-</html>`;
-
-  const tekst = [t.tittel(naar), ...avsnitt, avslutning(args.oppsigelseUrl), t.signatur].join('\n\n');
+  const { html, tekst } = renderEpost({
+    locale: args.locale,
+    tittel: t.tittel(naar),
+    html: [...avsnitt, avslutning(anker)],
+    tekst: [...avsnitt, avslutning(args.oppsigelseUrl)],
+    signatur: t.signatur
+  });
 
   return { emne: t.emne(naar), html, tekst };
+}
+
+/** De tre svarene på spørsmålet nederst i App Store-e-posten. Samme nøkler som prove_svar.valg. */
+export type ProveSvarValg = 'omrader' | 'offline' | 'ai';
+
+export interface AppProvePaaminnelseEpostArgs {
+  locale: Locale;
+  /** Plannavnet slik kunden kjenner det, f.eks. «Premium» eller «Sesongpass». */
+  plan: string;
+  dagerIgjen: number;
+  /** «2026-09-26» — prøveslutt som Oslo-dato. */
+  sluttIso: string;
+  /**
+   * Ferdige lenker til GET /api/prove/svar med token og valg — én per svar.
+   * Bygges av cronen (src/lib/billing/prove-svar-token.ts); teksten vet
+   * ingenting om tokens.
+   */
+  svarLenker: Record<ProveSvarValg, string>;
+}
+
+/**
+ * Samme e-post for prøver kjøpt i App Store — samme verdiavsnitt, samme
+ * «beholder gratis», samme forbehold. To ting er annerledes, og begge er
+ * bundet av hva vi faktisk vet:
+ *
+ *   · Veien ut er iPhonens innstillinger, ikke en lenke. Apple eier
+ *     abonnementet; en «si opp her»-lenke til prissiden ville pekt på en
+ *     knapp som ikke kan avslutte det.
+ *   · Intet beløp. RevenueCat-webhooken lagrer verken pris eller valuta på
+ *     raden, og prisen i App Store settes per land av Apple — et tall fra
+ *     plans.ts kunne vært feil for akkurat denne kunden. Derfor «prisen som
+ *     sto i appen da du startet», og aldri et tall.
+ *
+ * Til slutt ett frivillig spørsmål med tre lenker (ett trykk, ingen
+ * innlogging). Det står ETTER belastningen, så ingen må lese forbi et
+ * spørsmål for å finne når og hvordan.
+ */
+export function byggAppProvePaaminnelseEpost(args: AppProvePaaminnelseEpostArgs): { emne: string; html: string; tekst: string } {
+  const t = COPY[args.locale] ?? COPY.nb;
+  const naar = t.naar(args.dagerIgjen);
+  const dato = fasitDato(args.sluttIso, args.locale);
+  const avsnitt = [t.innledningApp(args.plan, naar), t.verdi(FREE_DAILY_AI_LIMIT), t.beholder, t.forbehold, t.avslutningApp(dato)];
+
+  const valg: ProveSvarValg[] = ['omrader', 'offline', 'ai'];
+  const lenkerHtml = valg
+    .map((v) => `<a href="${args.svarLenker[v]}" style="color: #1A3409;">${t.sporsmalValg[v]}</a>`)
+    .join(' · ');
+  const sporsmalHtml = `${t.sporsmal} ${lenkerHtml}. ${t.sporsmalFrivillig}`;
+  const sporsmalTekst = [t.sporsmal, ...valg.map((v) => `– ${t.sporsmalValg[v]}: ${args.svarLenker[v]}`), t.sporsmalFrivillig].join('\n');
+
+  const { html, tekst } = renderEpost({
+    locale: args.locale,
+    tittel: t.tittelApp(naar),
+    html: [...avsnitt, sporsmalHtml],
+    tekst: [...avsnitt, sporsmalTekst],
+    signatur: t.signatur
+  });
+
+  return { emne: t.emneApp(naar), html, tekst };
 }

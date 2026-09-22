@@ -36,6 +36,10 @@
     {
       "path": "/api/cron/dagsrapport",
       "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/cron/prove-paaminnelse-app",
+      "schedule": "30 6 * * *"
     }
   ]
 }

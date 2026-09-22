@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   beregnBelop,
   bestemProvePaaminnelse,
+  byggAppProvePaaminnelseEpost,
   byggProvePaaminnelseEpost,
   dagerTil,
   formaterBelop,
@@ -10,7 +11,7 @@ import {
   sprakFraMetadata,
   type ProvePaaminnelseFakta
 } from '../prove-paaminnelse';
-import { FREE_DAILY_AI_LIMIT } from '../plans';
+import { BILLING_PLANS, FREE_DAILY_AI_LIMIT } from '../plans';
 
 /**
  * Tre dager før gratisuka på nett blir til et trekk, skal kunden få vite hva
@@ -291,5 +292,99 @@ describe('byggProvePaaminnelseEpost', () => {
     expect(tekst).toContain('om du ikke sier opp');
     expect(tekst).toContain('Vil du fortsette, trenger du ikke gjøre noe.');
     expect(tekst).not.toMatch(/tilbud|rabatt|håper/i);
+  });
+});
+
+/**
+ * App Store-varianten: samme verdiavsnitt, samme «beholder gratis», samme
+ * forbehold — men veien ut er iPhonens innstillinger, og det står ALDRI et
+ * beløp: RevenueCat-webhooken lagrer ingen pris, og Apple setter prisen per
+ * land. Et tall fra plans.ts kunne vært feil for akkurat denne kunden.
+ */
+describe('byggAppProvePaaminnelseEpost', () => {
+  const svarLenker = {
+    omrader: 'https://www.mycelet.com/api/prove/svar?t=TOKEN&valg=omrader&sprak=nb',
+    offline: 'https://www.mycelet.com/api/prove/svar?t=TOKEN&valg=offline&sprak=nb',
+    ai: 'https://www.mycelet.com/api/prove/svar?t=TOKEN&valg=ai&sprak=nb'
+  };
+  const felles = { plan: 'Premium', dagerIgjen: 3, sluttIso: '2026-09-27', svarLenker };
+  const nett = { plan: 'Premium', dagerIgjen: 3, sluttIso: '2026-09-27', belop: { unitAmount: 9900, currency: 'nok' }, oppsigelseUrl: 'https://www.mycelet.com/pricing' };
+
+  it('nb: emne, veien ut i innstillingene, og belastningen uten tall', () => {
+    const { emne, html, tekst } = byggAppProvePaaminnelseEpost({ ...felles, locale: 'nb' });
+    expect(emne).toBe('Gratisuka di i Mycelet slutter om 3 dager');
+    for (const del of [html, tekst]) {
+      expect(del).toContain('Gratisuka di på Premium slutter om 3 dager.');
+      expect(del).toContain(
+        'Vil du ikke fortsette, avslutter du under Innstillinger → Apple-ID → Abonnementer på iPhonen. Vil du fortsette, trenger du ikke gjøre noe. 27. september belastes Apple-ID-en din med prisen som sto i appen da du startet.'
+      );
+      expect(del).not.toContain('/pricing');
+      expect(del).not.toMatch(/sier du opp her/);
+    }
+  });
+
+  it('sv: naturlig svensk, ikke norsk reserve', () => {
+    const { emne, html, tekst } = byggAppProvePaaminnelseEpost({ ...felles, locale: 'sv' });
+    expect(emne).toBe('Din gratisvecka i Mycelet slutar om 3 dagar');
+    for (const del of [html, tekst]) {
+      expect(del).toContain('Din gratisvecka på Premium slutar om 3 dagar.');
+      expect(del).toContain(
+        'Vill du inte fortsätta avslutar du under Inställningar → Apple-ID → Prenumerationer på din iPhone. Vill du fortsätta behöver du inte göra något. Den 27 september debiteras ditt Apple-ID med priset som stod i appen när du började.'
+      );
+      expect(del).toContain('Vad var viktigast för dig under veckan?');
+      expect(del).not.toMatch(/begrunnelsen|trekkes|beholder du|områdene|Innstillinger/);
+    }
+  });
+
+  it.each(['nb', 'sv'] as const)('%s: ingen tall fra plans.ts, ingen kronebeløp i det hele tatt', (locale) => {
+    const { emne, html, tekst } = byggAppProvePaaminnelseEpost({ ...felles, locale });
+    const priser = Object.values(BILLING_PLANS).flatMap((p) => [p.monthlyNok, p.yearlyNok]).filter((n): n is number => typeof n === 'number');
+    expect(priser.length).toBeGreaterThan(0);
+    for (const del of [emne, html, tekst]) {
+      for (const pris of priser) expect(del).not.toMatch(new RegExp(`\\b${pris}\\b`));
+      expect(del).not.toMatch(/\d+(,\d\d)?\s?kr\b/);
+      expect(del).not.toMatch(/rabatt/i);
+    }
+    // De eneste tallene i teksten er dagsgrensen for AI, dagene igjen og datoen.
+    const tallITekst = tekst.replace(/https?:\/\/\S+/g, '').match(/\d+/g) ?? [];
+    expect(new Set(tallITekst)).toEqual(new Set([String(FREE_DAILY_AI_LIMIT), '3', '27']));
+  });
+
+  it.each(['nb', 'sv'] as const)('%s: verdien, «beholder gratis» og forbeholdet er ordrett de samme som på nett', (locale) => {
+    const app = byggAppProvePaaminnelseEpost({ ...felles, locale }).tekst.split('\n\n');
+    const web = byggProvePaaminnelseEpost({ ...nett, locale }).tekst.split('\n\n');
+    // Avsnitt 2–4: verdi, beholder, forbehold. Innledningen (1) og avslutningen skiller.
+    expect(app.slice(2, 5)).toEqual(web.slice(2, 5));
+    expect(app[1]).not.toBe(web[1]);
+    expect(app.slice(2, 5).join(' ')).toContain(
+      locale === 'sv'
+        ? 'Den säger ingenting om skogen där du står, och vi lovar inte att du hittar svamp.'
+        : 'Det sier ingenting om skogen der du står, og vi lover ikke at du finner sopp.'
+    );
+  });
+
+  it('spørsmålet står sist, etter belastningen, med tre lenker og at det er frivillig', () => {
+    const { html, tekst } = byggAppProvePaaminnelseEpost({ ...felles, locale: 'nb' });
+    const avsnitt = tekst.split('\n\n');
+    expect(avsnitt[avsnitt.length - 1]).toContain('Mycelet');
+    expect(avsnitt[avsnitt.length - 2]).toContain('Hva var viktigst for deg i uka?');
+    expect(avsnitt[avsnitt.length - 2]).toContain(`– områdene med begrunnelse: ${svarLenker.omrader}`);
+    expect(avsnitt[avsnitt.length - 2]).toContain(`– offline-kartet: ${svarLenker.offline}`);
+    expect(avsnitt[avsnitt.length - 2]).toContain(`– AI-identifikasjonen: ${svarLenker.ai}`);
+    expect(avsnitt[avsnitt.length - 2]).toContain('du trenger ikke svare');
+    expect(avsnitt[avsnitt.length - 3]).toContain('belastes Apple-ID-en din');
+    // HTML: tre ankere med de tre lenkene, i samme brødtekst som resten.
+    for (const url of Object.values(svarLenker)) expect(html).toContain(`<a href="${url}" style="color: #1A3409;">`);
+    const sporsmalLinje = html.split('\n').find((l) => l.includes('Hva var viktigst'));
+    expect(sporsmalLinje).toContain('font-size: 16px');
+    // Sju avsnitt: fem i teksten, spørsmålet, signaturen.
+    expect(html.match(/<p /g)).toHaveLength(7);
+  });
+
+  it('sier «om 2 dager» ved innhenting, og aldri en nedtelling eller et press', () => {
+    const { emne, tekst } = byggAppProvePaaminnelseEpost({ ...felles, locale: 'nb', dagerIgjen: 2, sluttIso: '2026-09-26' });
+    expect(emne).toBe('Gratisuka di i Mycelet slutter om 2 dager');
+    expect(tekst).toContain('26. september belastes');
+    expect(`${emne} ${tekst}`).not.toMatch(/siste sjanse|ikke gå glipp|snart slutt|nå eller aldri|synd om|vi håper|tilbud/i);
   });
 });
