@@ -2448,7 +2448,7 @@ export function MushroomMap({
                 </button>
               ) : (
                 <Link href="/pricing" className="rounded-lg px-2 py-2 text-xs font-medium text-forest-900 hover:bg-gray-100">
-                    ⭐ {kanFaaProve ? <ProveLofteTekst med={t('premiumTools')} utenProve={t('premiumToolsUtenProve')} /> : t('premiumToolsUtenProve')}
+                    ⭐ {kanFaaProve ? <ProveLofteTekst plan="premium" med={t('premiumTools')} utenProve={t('premiumToolsUtenProve')} /> : t('premiumToolsUtenProve')}
                   </Link>
               )}
               <button

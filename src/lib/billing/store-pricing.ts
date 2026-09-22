@@ -1,4 +1,5 @@
 import type { IapPlan } from './plans';
+import { intlLocale } from '@/lib/utils/intl-locale';
 
 /**
  * Hvilken pris er det egentlig som står på prissiden?
@@ -32,4 +33,23 @@ export function showsStorePrices({ native, offers }: StorePricingInput): boolean
 export function seasonPriceComesFromStore({ native, offers }: StorePricingInput): boolean {
   if (!native) return false;
   return (offers ?? []).some((offer) => offer.plan === 'season_pass');
+}
+
+/**
+ * «Tilsvarer ca. 21 kr per måned» — regnet av prisen som faktisk vises.
+ *
+ * I appen er det RevenueCats numeriske `price` og `currencyCode` for
+ * sesongpasset som deles på tolv, formatert i kontoens valuta: en svensk
+ * App Store-konto får «23 kr» av 279 SEK, en norsk konto i svensk språk
+ * «21 Nkr». Aldri Stripe-tallet ved siden av en App Store-pris. Null når
+ * butikken ikke ga et tall (eller ga en valutakode Intl ikke kjenner) —
+ * da faller kortet tilbake på en tekst uten beløp.
+ */
+export function perMaanedAvAarspris(aarspris: number | null | undefined, valuta: string | null | undefined, locale: string): string | null {
+  if (typeof aarspris !== 'number' || !Number.isFinite(aarspris) || aarspris <= 0 || !valuta) return null;
+  try {
+    return new Intl.NumberFormat(intlLocale(locale), { style: 'currency', currency: valuta, maximumFractionDigits: 0 }).format(aarspris / 12);
+  } catch {
+    return null;
+  }
 }

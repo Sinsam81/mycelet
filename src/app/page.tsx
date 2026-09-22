@@ -239,25 +239,28 @@ export default async function HomePage() {
 
         {/* Tilbudet rett under forholdene, og én gang som ark ved første innlogging —
             gratisbrukere vi betaler for å hente inn, så aldri prissiden (1 av 12 kartbrukere,
-            11. sep 2026). Betalende ser ingenting av dette. */}
+            11. sep 2026). Betalende ser ingenting av dette.
+            Kortet leder til sesongpasset (?plan=season_pass — prissiden åpner med det
+            valgt) og lover ingen sopp: tittelen sier hva du får, ikke hva du finner.
+            Punktene i samme rekkefølge som arket: områdene med begrunnelse, offline, AI sist. */}
         {betaler ? null : (
         <Link
-          href="/pricing"
+          href="/pricing?plan=season_pass"
           className="block rounded-2xl bg-gradient-to-br from-forest-900 to-forest-800 p-5 text-white shadow-card transition hover:-translate-y-0.5 hover:shadow-lg"
         >
             <div className="flex items-center gap-2">
-              <Crown className="h-5 w-5 text-amber-400" />
+              <Crown className="h-5 w-5 shrink-0 text-amber-400" />
               <h2 className="font-serif text-xl font-semibold">{t('premiumTitle')}</h2>
             </div>
             <ul className="mt-3 space-y-1.5 text-sm text-white/90">
-              <li className="flex items-center gap-2">
-                <Check className="h-4 w-4 shrink-0 text-amber-400" /> {t('premiumFeatureUnlimitedAi')}
-              </li>
               <li className="flex items-center gap-2">
                 <Check className="h-4 w-4 shrink-0 text-amber-400" /> {t('premiumFeatureFullPrediction')}
               </li>
               <li className="flex items-center gap-2">
                 <Check className="h-4 w-4 shrink-0 text-amber-400" /> {t('premiumFeatureOfflineMap')}
+              </li>
+              <li className="flex items-center gap-2">
+                <Check className="h-4 w-4 shrink-0 text-amber-400" /> {t('premiumFeatureUnlimitedAi')}
               </li>
             </ul>
             <div className="mt-4 flex items-center justify-between gap-3">
@@ -271,8 +274,9 @@ export default async function HomePage() {
                 </p>
               </NonNativeOnly>
               <span className="ml-auto rounded-full bg-white px-4 py-2 text-sm font-semibold text-forest-900">
-                {/* «Prøv gratis» bare når butikken faktisk gir gratisuka — i appen
-                    avgjør App Store det, og knappen skal ikke love mer enn arket. */}
+                {/* «Prøv Sesongpass gratis» bare når butikken faktisk gir gratisuka
+                    PÅ PASSET — i appen avgjør App Store det per produkt, og knappen
+                    skal ikke love mer enn arket. Ellers «Se Sesongpass og Premium». */}
                 {kanFaaProve ? <ProveLofteTekst med={t('premiumSeePlans')} utenProve={t('premiumSeePlansNeutral')} /> : t('premiumSeePlansNeutral')}
               </span>
             </div>

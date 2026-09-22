@@ -27,6 +27,13 @@ export interface IapOffer {
   /** Localized, store-formatted price, e.g. "kr 79,00". SHOW this in the UI —
    * the App Store price tier can differ from the Stripe NOK price. */
   priceString: string;
+  /**
+   * Butikkens tall bak priceString, til «tilsvarer ca. 21 kr per måned» på
+   * sesongpasset (perMaanedAvAarspris). Null når skallet ikke ga dem — da
+   * står kortet uten beløp per måned heller enn med Stripe-tallet.
+   */
+  price: number | null;
+  currencyCode: string | null;
   packageIdentifier: string;
   /**
    * Butikken gir en gratis prøveperiode på dette produktet (introPrice med
@@ -46,7 +53,14 @@ export type IapPurchaseOutcome = 'success' | 'cancelled' | 'blocked-active-plan'
 export interface PurchasesPackageLike {
   identifier: string;
   packageType: string;
-  product: { identifier: string; priceString: string; introPrice?: IntroPrisLike | null };
+  product: {
+    identifier: string;
+    priceString: string;
+    /** Numerisk pris + ISO-valutakode (PurchasesStoreProduct). Valgfrie: eldre skall kan mangle dem. */
+    price?: number | null;
+    currencyCode?: string | null;
+    introPrice?: IntroPrisLike | null;
+  };
 }
 interface CustomerInfoLike {
   entitlements: { active: Record<string, unknown> };
@@ -187,6 +201,8 @@ export async function getIapOffers(): Promise<IapOffer[]> {
       plan,
       productId: pkg.product.identifier,
       priceString: pkg.product.priceString,
+      price: typeof pkg.product.price === 'number' && Number.isFinite(pkg.product.price) ? pkg.product.price : null,
+      currencyCode: typeof pkg.product.currencyCode === 'string' && pkg.product.currencyCode ? pkg.product.currencyCode : null,
       packageIdentifier: pkg.identifier,
       harProve: prove.harProve,
       proveDager: prove.proveDager,

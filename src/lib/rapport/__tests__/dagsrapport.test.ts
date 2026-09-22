@@ -288,6 +288,22 @@ describe('prøver — sju dager gratis er ikke en kunde', () => {
     expect(r.prover.startetSiste7d).toBe(1);
   });
 
+  it('startet siste 7 dager deles på plan: sesongpass mot måned — det «sesongpass først» skal dømmes på', () => {
+    const r = byggDagsrapport(
+      inn({
+        abonnement: [
+          ab({ user_id: 'pass', tier: 'season_pass', status: 'trialing', metadata: { provider: 'revenuecat', prove_start: PROVE_START } }),
+          ab({ user_id: 'mnd-1', tier: 'premium', status: 'trialing', metadata: { provider: 'stripe', prove_start: PROVE_START } }),
+          ab({ user_id: 'mnd-2', tier: 'premium', status: 'trialing', metadata: { provider: 'revenuecat', prove_start: PROVE_START } }),
+          // En prøve startet for tolv dager siden hører ikke til uka — uansett plan.
+          ab({ user_id: 'gammel', tier: 'season_pass', status: 'trialing', metadata: { provider: 'stripe', prove_start: dagerSiden(12) } })
+        ]
+      })
+    );
+    expect(r.prover.startetSiste7d).toBe(3);
+    expect(r.prover.startetSiste7dPerPlan).toEqual({ pass: 1, maaned: 2 });
+  });
+
   it('gikk til betaling = forste_belastning etter prove_start; teller som nytt kjøp den dagen, ikke ved radens opprettelse', () => {
     const r = byggDagsrapport(
       inn({

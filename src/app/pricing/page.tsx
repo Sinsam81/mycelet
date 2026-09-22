@@ -11,7 +11,8 @@ import { Check, Crown, Leaf, Loader2, ShieldCheck, Undo2 } from 'lucide-react';
 import { PageWrapper } from '@/components/layout/PageWrapper';
 import { BILLING_PLANS, FREE_DAILY_AI_LIMIT, STRIPE_PROVEDAGER } from '@/lib/billing/plans';
 import { canPurchasePlan, getBlockingPaidPlan, getPlanViewState } from '@/lib/billing/plan-state';
-import { seasonPriceComesFromStore, showsStorePrices } from '@/lib/billing/store-pricing';
+import { fornyelsesTekst } from '@/lib/billing/fornyelse';
+import { perMaanedAvAarspris, seasonPriceComesFromStore, showsStorePrices } from '@/lib/billing/store-pricing';
 import { statusLabel, tierLabel } from '@/lib/billing/labels';
 import { useIsNative } from '@/lib/hooks/useIsNative';
 import { RegistrerBruksdag } from '@/components/bruk/RegistrerBruksdag';
@@ -125,21 +126,34 @@ function PricingInner() {
   // priser på samme skjerm, og feil valuta for en svensk App Store-konto.
   const storePrices = showsStorePrices({ native, offers: iapOffers });
   const seasonPriceFromStore = seasonPriceComesFromStore({ native, offers: iapOffers });
+  // «Tilsvarer ca. 21 kr per måned» regnes av prisen som faktisk står på kortet:
+  // butikkens tall for passet i appen, 249/12 på nett. Gir ikke skallet et tall,
+  // står kortet uten beløp per måned — aldri med Stripe-tallet ved en App Store-pris.
+  const seasonOffer = native ? iapOffers?.find((offer) => offer.plan === 'season_pass') ?? null : null;
+  const seasonPerMonth = native
+    ? seasonPriceFromStore
+      ? perMaanedAvAarspris(seasonOffer?.price, seasonOffer?.currencyCode, locale)
+      : null
+    : `${SEASON_PER_MONTH} kr`;
 
+  // Sesongpasset FØRST, på alle bredder, som anbefalt valg. Det var det tredje
+  // kortet — under bretten på en telefon — og 7 av 8 prøver siden 12. sep 2026
+  // valgte måned. Ærlig ramme: 99 kr dekker resten av høsten; passet gjelder
+  // neste sesong fram til fornyelsesdatoen, som står på kortet.
   const planCards = [
     {
-      id: 'free',
-      title: t('tierFree'),
-      tagline: t('freeTagline'),
-      price: '0 kr',
-      period: '',
-      lead: null,
+      id: 'season_pass',
+      title: t('tierSeasonPass'),
+      tagline: t('seasonTagline'),
+      price: `${SEASON_YEARLY} kr`,
+      period: t('perYear'),
+      lead: t('seasonLead'),
       features: [
-        t('freeFeature1', { limit: FREE_DAILY_AI_LIMIT }),
-        t('freeFeature2'),
-        t('freeFeature3')
+        seasonPerMonth ? t('seasonFeature1', { perMonth: seasonPerMonth }) : t('seasonFeature1Native'),
+        t('seasonFeature2'),
+        t('seasonFeature3')
       ],
-      highlight: false
+      highlight: true
     },
     {
       id: 'premium',
@@ -155,20 +169,33 @@ function PricingInner() {
       highlight: false
     },
     {
-      id: 'season_pass',
-      title: t('tierSeasonPass'),
-      tagline: t('seasonTagline'),
-      price: `${SEASON_YEARLY} kr`,
-      period: t('perYear'),
-      lead: t('seasonLead'),
+      id: 'free',
+      title: t('tierFree'),
+      tagline: t('freeTagline'),
+      price: '0 kr',
+      period: '',
+      lead: null,
       features: [
-        seasonPriceFromStore ? t('seasonFeature1Native') : t('seasonFeature1', { perMonth: SEASON_PER_MONTH }),
-        t('seasonFeature2'),
-        t('seasonFeature3')
+        t('freeFeature1', { limit: FREE_DAILY_AI_LIMIT }),
+        t('freeFeature2'),
+        t('freeFeature3')
       ],
-      highlight: true
+      highlight: false
     }
   ] as const;
+
+  // ?plan=season_pass (arket, forsidekortet) eller ?plan=premium: kortet får
+  // fokus og rulles inn, så prissiden åpner med planen brukeren trykket på.
+  const focusPlan = searchParams.get('plan');
+  const focusedPlan = focusPlan === 'season_pass' || focusPlan === 'premium' ? focusPlan : null;
+  const cardRefs = useRef<Partial<Record<(typeof planCards)[number]['id'], HTMLElement | null>>>({});
+  useEffect(() => {
+    if (!focusedPlan) return;
+    const el = cardRefs.current[focusedPlan];
+    if (!el) return;
+    if (typeof el.scrollIntoView === 'function') el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    el.focus({ preventScroll: true });
+  }, [focusedPlan]);
 
   const faqItems = [
     {
@@ -563,8 +590,14 @@ function PricingInner() {
             return (
               <article
                 key={plan.id}
-                className={`relative flex flex-col rounded-2xl border p-4 ${
-                  plan.highlight
+                id={`plan-${plan.id}`}
+                data-plan={plan.id}
+                tabIndex={-1}
+                ref={(el) => {
+                  cardRefs.current[plan.id] = el;
+                }}
+                className={`relative flex flex-col rounded-2xl border p-4 outline-none ${
+                  plan.highlight || focusedPlan === plan.id
                     ? 'border-forest-700 bg-white shadow-card ring-2 ring-forest-700'
                     : isCurrent
                       ? 'border-forest-700 bg-forest-50'
@@ -573,7 +606,7 @@ function PricingInner() {
               >
                 {plan.highlight ? (
                   <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-amber-400 px-3 py-0.5 text-[11px] font-bold uppercase tracking-wide text-forest-900 shadow-sm">
-                    {t('bestValue')}
+                    {t('recommended')}
                   </span>
                 ) : null}
                 <div className="flex items-center justify-between">
@@ -609,6 +642,11 @@ function PricingInner() {
                       {planOffer.proveDager === null ? t('trialNoteUkjentLengde') : t('trialNote', { dager: planOffer.proveDager })}
                     </p>
                   </NativeOnly>
+                ) : null}
+                {/* Fornyelsesdatoen rett ut (fornyelse.ts — samme kilde som arket):
+                    «ca. 22. september 2027» ER argumentet for passet mot måneden. */}
+                {plan.id !== 'free' ? (
+                  <p className="mt-1 text-xs text-gray-600">{t('renewsOn', { dato: fornyelsesTekst(plan.id, locale) })}</p>
                 ) : null}
                 {plan.lead ? <p className="mt-3 text-xs font-semibold uppercase tracking-wide text-gray-500">{plan.lead}</p> : null}
                 <ul className={`${plan.lead ? 'mt-1.5' : 'mt-3'} flex-1 space-y-1.5 text-sm text-gray-700`}>

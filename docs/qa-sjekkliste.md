@@ -82,7 +82,8 @@ Dette er bug-klassen som rammet oss i prod (svensk kart blankt, fast i Oslo, dø
 
 App Store-regel 3.1.1: native-appen får **ikke** vise ekstern betaling/Google-login.
 
-- [ ] **Web** `/pricing`: viser begge planer (Premium **79**, Sesongpass **249**) og «Velg …»-kjøpsknapper.
+- [ ] **Web** `/pricing`: Sesongpass **først** («Anbefalt», **249** kr, «Tilsvarer ca. 21 kr per måned», fornyelsesdato), så Premium (**99**), så Gratis — med «Velg …»-kjøpsknapper. `?plan=season_pass` gir passet fokus.
+- [ ] **Innlogget, 390×844** (`sesongpass.e2e.ts`): prøvearket leder med «Prøv Sesongpass gratis i 7 dager», «Heller måned for måned? 99 kr per måned» som synlig alternativ. Gratisuka loves på en plan bare når butikken gir den på akkurat den planen (nett: Stripe på begge; app: RevenueCat per produkt).
 - [ ] **Web** `/auth/login`: viser «Fortsett med Google».
 - [ ] **Native (simulert)** `/pricing`: kjøpsknappene er **skjult** (ingen «Velg Premium»/«Velg Sesongpass»).
 - [ ] **Native (simulert)** `/auth/login`: «Fortsett med Google» er **skjult**.
