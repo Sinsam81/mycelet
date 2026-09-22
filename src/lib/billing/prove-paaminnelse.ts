@@ -1,7 +1,9 @@
 import type { Locale } from '@/i18n/config';
 import { isLocale } from '@/i18n/config';
 import { fasitDato } from '@/lib/alerts/email';
+import { osloDag } from '@/lib/bruk/bruksdag';
 import { FREE_DAILY_AI_LIMIT } from './plans';
+import { avslutningsfrist, dagerMellom } from './prove-paaminnelse-app';
 
 /**
  * Påminnelsen tre dager før gratisuka på nett blir til en belastning.
@@ -217,15 +219,23 @@ const COPY = {
       `Vil du ikke fortsette, sier du opp her: ${lenke}. Vil du fortsette, trenger du ikke gjøre noe. ${dato} trekkes ${belop}, om du ikke sier opp før det.`,
     avslutningUtenBelop: (dato: string, lenke: string) =>
       `Vil du ikke fortsette, sier du opp her: ${lenke}. Vil du fortsette, trenger du ikke gjøre noe. ${dato} belastes kortet ditt — med rabatten din trukket fra — om du ikke sier opp før det.`,
-    // App Store-varianten (cronen prove-paaminnelse-app). Ingen lenke og
-    // intet tall: oppsigelsen skjer i iPhonens innstillinger, og prisen
-    // står bare i App Store — vi lagrer den ikke, og gjetter ikke.
+    // App Store-varianten (cronen prove-paaminnelse-app). Intet tall:
+    // prisen står bare i App Store — vi lagrer den ikke, og gjetter ikke.
+    // «Gratisuka» bare når prøven var en uke (erGratisuke); ellers brukes
+    // emne/tittel/innledning fra nettvarianten over, ordrett.
     emneApp: (naar: string) => `Gratisuka di i Mycelet slutter ${naar}`,
     tittelApp: (naar: string) => `Gratisuka slutter ${naar}`,
     innledningApp: (plan: string, naar: string) => `Gratisuka di på ${plan} slutter ${naar}.`,
-    avslutningApp: (dato: string) =>
-      `Vil du ikke fortsette, avslutter du under Innstillinger → Apple-ID → Abonnementer på iPhonen. Vil du fortsette, trenger du ikke gjøre noe. ${dato} belastes Apple-ID-en din med prisen som sto i appen da du startet.`,
+    // Fristen er prøveslutt minus ett døgn, med klokkeslett: Apple forsøker
+    // trekket i løpet av det siste døgnet. Veien ut er Apples egen: raden
+    // øverst i Innstillinger heter kundens navn, ikke «Apple-ID» (og kontoen
+    // heter Apple-konto siden iOS 18). Lenken er Apples abonnementsside.
+    senest: (fristDager: number, dato: string, time: string) =>
+      `${fristDager <= 0 ? 'i dag' : fristDager === 1 ? 'i morgen' : dato} kl. ${time}`,
+    avslutningApp: (frist: string, dato: string, lenke: string) =>
+      `Vil du ikke fortsette, avslutter du senest ${frist} under Innstillinger → navnet ditt øverst → Abonnementer på iPhonen, eller på ${lenke}. Vil du fortsette, trenger du ikke gjøre noe. Prøveperioden slutter ${dato}, og Apple-kontoen din belastes da med prisen som sto i appen da du startet. Fristen er et døgn før, fordi Apple kan trekke beløpet inntil ett døgn før prøveslutt.`,
     sporsmal: 'Hva var viktigst for deg i uka?',
+    sporsmalProve: 'Hva var viktigst for deg i prøveperioden?',
     sporsmalValg: { omrader: 'områdene med begrunnelse', offline: 'offline-kartet', ai: 'AI-identifikasjonen' },
     sporsmalFrivillig: 'Ett trykk holder, og du trenger ikke svare.',
     signatur: 'Mycelet — soppvarsel for Norge og Sverige'
@@ -247,14 +257,29 @@ const COPY = {
     emneApp: (naar: string) => `Din gratisvecka i Mycelet slutar ${naar}`,
     tittelApp: (naar: string) => `Gratisveckan slutar ${naar}`,
     innledningApp: (plan: string, naar: string) => `Din gratisvecka på ${plan} slutar ${naar}.`,
-    avslutningApp: (dato: string) =>
-      `Vill du inte fortsätta avslutar du under Inställningar → Apple-ID → Prenumerationer på din iPhone. Vill du fortsätta behöver du inte göra något. Den ${dato} debiteras ditt Apple-ID med priset som stod i appen när du började.`,
+    senest: (fristDager: number, dato: string, time: string) =>
+      `${fristDager <= 0 ? 'i dag' : fristDager === 1 ? 'i morgon' : `den ${dato}`} kl. ${time}`,
+    avslutningApp: (frist: string, dato: string, lenke: string) =>
+      `Vill du inte fortsätta avslutar du senast ${frist} under Inställningar → ditt namn överst → Prenumerationer på din iPhone, eller på ${lenke}. Vill du fortsätta behöver du inte göra något. Provperioden slutar den ${dato}, och ditt Apple-konto debiteras då med priset som stod i appen när du började. Fristen är ett dygn tidigare, eftersom Apple kan dra beloppet upp till ett dygn före provperiodens slut.`,
     sporsmal: 'Vad var viktigast för dig under veckan?',
+    sporsmalProve: 'Vad var viktigast för dig under provperioden?',
     sporsmalValg: { omrader: 'områdena med motivering', offline: 'offlinekartan', ai: 'AI-identifieringen' },
     sporsmalFrivillig: 'Ett tryck räcker, och du behöver inte svara.',
     signatur: 'Mycelet — svampvarning för Norge och Sverige'
   }
 } as const;
+
+/**
+ * Apples egen abonnementsside — åpner Abonnementer i App Store rett fra en
+ * e-post på iPhone. Ikke en Mycelet-adresse, så den bærer ingenting om
+ * kunden. Står i e-posten ved siden av innstillingsveien, ikke i stedet.
+ */
+export const APPLE_ABONNEMENT_URL = 'https://apps.apple.com/account/subscriptions';
+
+/** Teksten for ett av de tre svarene, slik den står i e-posten — brukes av svar-ruta til bekreftelsessiden. */
+export function proveSvarValgTekst(locale: Locale, valg: ProveSvarValg): string {
+  return (COPY[locale] ?? COPY.nb).sporsmalValg[valg];
+}
 
 /** Alle avsnitt i samme brødtekst: trekket og lenken skal ikke stå mindre eller blekere enn det som står over dem. */
 function avsnittHtml(tekst: string): string {
@@ -324,9 +349,15 @@ export interface AppProvePaaminnelseEpostArgs {
   locale: Locale;
   /** Plannavnet slik kunden kjenner det, f.eks. «Premium» eller «Sesongpass». */
   plan: string;
+  /** Hele Oslo-kalenderdager fra i dag til prøveslutt (3, eller 2 som innhenting). */
   dagerIgjen: number;
-  /** «2026-09-26» — prøveslutt som Oslo-dato. */
-  sluttIso: string;
+  /**
+   * Prøveslutt som tidspunkt (billing_subscriptions.current_period_end).
+   * Datoen i teksten er Oslo-dagen; fristen er ett døgn før, med time.
+   */
+  sluttMs: number;
+  /** Var prøven en uke? Fra erGratisuke(proveLengdeDager). False gir «prøveperioden», som på nett. */
+  gratisuke: boolean;
   /**
    * Ferdige lenker til GET /api/prove/svar med token og valg — én per svar.
    * Bygges av cronen (src/lib/billing/prove-svar-token.ts); teksten vet
@@ -337,16 +368,24 @@ export interface AppProvePaaminnelseEpostArgs {
 
 /**
  * Samme e-post for prøver kjøpt i App Store — samme verdiavsnitt, samme
- * «beholder gratis», samme forbehold. To ting er annerledes, og begge er
+ * «beholder gratis», samme forbehold. Tre ting er annerledes, og alle er
  * bundet av hva vi faktisk vet:
  *
- *   · Veien ut er iPhonens innstillinger, ikke en lenke. Apple eier
- *     abonnementet; en «si opp her»-lenke til prissiden ville pekt på en
- *     knapp som ikke kan avslutte det.
+ *   · Veien ut er iPhonens innstillinger (Innstillinger → navnet ditt
+ *     øverst → Abonnementer) og Apples abonnementsside, ikke prissiden.
+ *     Apple eier abonnementet; en «si opp her»-lenke til prissiden ville
+ *     pekt på en knapp som ikke kan avslutte det.
+ *   · Fristen står med dato og klokkeslett, ett døgn før prøveslutt: Apple
+ *     forsøker trekket i løpet av de siste 24 timene, så «avslutt innen
+ *     prøveslutt» ville vært et råd som kommer for sent. Ved innhenting
+ *     (2 dager igjen) heter fristen «i morgen».
  *   · Intet beløp. RevenueCat-webhooken lagrer verken pris eller valuta på
  *     raden, og prisen i App Store settes per land av Apple — et tall fra
  *     plans.ts kunne vært feil for akkurat denne kunden. Derfor «prisen som
  *     sto i appen da du startet», og aldri et tall.
+ *
+ * «Gratisuka» sies bare når prøven var en uke; ellers er emne, tittel og
+ * innledning nettvariantens «prøveperioden», ordrett.
  *
  * Til slutt ett frivillig spørsmål med tre lenker (ett trykk, ingen
  * innlogging). Det står ETTER belastningen, så ingen må lese forbi et
@@ -355,23 +394,33 @@ export interface AppProvePaaminnelseEpostArgs {
 export function byggAppProvePaaminnelseEpost(args: AppProvePaaminnelseEpostArgs): { emne: string; html: string; tekst: string } {
   const t = COPY[args.locale] ?? COPY.nb;
   const naar = t.naar(args.dagerIgjen);
-  const dato = fasitDato(args.sluttIso, args.locale);
-  const avsnitt = [t.innledningApp(args.plan, naar), t.verdi(FREE_DAILY_AI_LIMIT), t.beholder, t.forbehold, t.avslutningApp(dato)];
+  const sluttDag = osloDag(new Date(args.sluttMs));
+  const dato = fasitDato(sluttDag, args.locale);
+  const frist = avslutningsfrist(args.sluttMs);
+  const fristDager = args.dagerIgjen - dagerMellom(frist.dag, sluttDag);
+  const senest = t.senest(fristDager, fasitDato(frist.dag, args.locale), String(frist.time).padStart(2, '0'));
+  // Samme setning i begge delene; bare Apple-lenken rendres ulikt (anker vs. ren URL).
+  const avslutning = (lenke: string) => t.avslutningApp(senest, dato, lenke);
+  const anker = `<a href="${APPLE_ABONNEMENT_URL}" style="color: #1A3409;">${APPLE_ABONNEMENT_URL}</a>`;
 
+  const innledning = args.gratisuke ? t.innledningApp(args.plan, naar) : t.innledning(args.plan, naar);
+  const avsnitt = [innledning, t.verdi(FREE_DAILY_AI_LIMIT), t.beholder, t.forbehold];
+
+  const sporsmal = args.gratisuke ? t.sporsmal : t.sporsmalProve;
   const valg: ProveSvarValg[] = ['omrader', 'offline', 'ai'];
   const lenkerHtml = valg
     .map((v) => `<a href="${args.svarLenker[v]}" style="color: #1A3409;">${t.sporsmalValg[v]}</a>`)
     .join(' · ');
-  const sporsmalHtml = `${t.sporsmal} ${lenkerHtml}. ${t.sporsmalFrivillig}`;
-  const sporsmalTekst = [t.sporsmal, ...valg.map((v) => `– ${t.sporsmalValg[v]}: ${args.svarLenker[v]}`), t.sporsmalFrivillig].join('\n');
+  const sporsmalHtml = `${sporsmal} ${lenkerHtml}. ${t.sporsmalFrivillig}`;
+  const sporsmalTekst = [sporsmal, ...valg.map((v) => `– ${t.sporsmalValg[v]}: ${args.svarLenker[v]}`), t.sporsmalFrivillig].join('\n');
 
   const { html, tekst } = renderEpost({
     locale: args.locale,
-    tittel: t.tittelApp(naar),
-    html: [...avsnitt, sporsmalHtml],
-    tekst: [...avsnitt, sporsmalTekst],
+    tittel: args.gratisuke ? t.tittelApp(naar) : t.tittel(naar),
+    html: [...avsnitt, avslutning(anker), sporsmalHtml],
+    tekst: [...avsnitt, avslutning(APPLE_ABONNEMENT_URL), sporsmalTekst],
     signatur: t.signatur
   });
 
-  return { emne: t.emneApp(naar), html, tekst };
+  return { emne: args.gratisuke ? t.emneApp(naar) : t.emne(naar), html, tekst };
 }

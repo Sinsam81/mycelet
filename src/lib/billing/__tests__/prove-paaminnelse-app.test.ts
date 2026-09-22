@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   PAAMINNELSE_DAGER,
+  avslutningsfrist,
   bestemAppProvePaaminnelse,
   dagerMellom,
+  erGratisuke,
   proveSluttDag,
   sendtNokkel,
   type AppProveRad
@@ -16,14 +18,16 @@ import {
  */
 const BRUKER = '11111111-2222-4333-8444-555555555555';
 const I_DAG = '2026-09-24';
+const SLUTT = '2026-09-27T05:12:00.000Z';
 
 function rad(over: Partial<AppProveRad> = {}): AppProveRad {
   return {
     user_id: BRUKER,
     tier: 'premium',
     status: 'trialing',
-    // 27. september 05:12 UTC = 07:12 Oslo → prøveslutt 2026-09-27, 3 dager fra i dag.
-    current_period_end: '2026-09-27T05:12:00.000Z',
+    // Kjøpt 20. september, 7 dager: 27. september 05:12 UTC = 07:12 Oslo → prøveslutt 2026-09-27, 3 dager fra i dag.
+    current_period_start: '2026-09-20T05:12:00.000Z',
+    current_period_end: SLUTT,
     cancel_at_period_end: false,
     metadata: { provider: 'revenuecat', rc_environment: 'PRODUCTION', rc_event_type: 'INITIAL_PURCHASE', prove_start: '2026-09-20T05:12:00.000Z' },
     ...over
@@ -33,15 +37,23 @@ function rad(over: Partial<AppProveRad> = {}): AppProveRad {
 const INGEN_SENDT = new Set<string>();
 
 describe('bestemAppProvePaaminnelse', () => {
-  it('sender ved 3 dager igjen for en løpende App Store-prøve', () => {
-    expect(bestemAppProvePaaminnelse(rad(), I_DAG, INGEN_SENDT)).toEqual({ send: true, dagerIgjen: 3, proveSlutt: '2026-09-27' });
+  it('sender ved 3 dager igjen for en løpende App Store-prøve — med tidspunkt og prøvelengde til teksten', () => {
+    expect(bestemAppProvePaaminnelse(rad(), I_DAG, INGEN_SENDT)).toEqual({
+      send: true,
+      dagerIgjen: 3,
+      proveSlutt: '2026-09-27',
+      proveSluttMs: Date.parse(SLUTT),
+      proveLengdeDager: 7
+    });
   });
 
   it('sender også ved 2 dager igjen — innhenting når dag 3 gikk tapt', () => {
     expect(bestemAppProvePaaminnelse(rad({ current_period_end: '2026-09-26T20:00:00.000Z' }), I_DAG, INGEN_SENDT)).toEqual({
       send: true,
       dagerIgjen: 2,
-      proveSlutt: '2026-09-26'
+      proveSlutt: '2026-09-26',
+      proveSluttMs: Date.parse('2026-09-26T20:00:00.000Z'),
+      proveLengdeDager: 6
     });
   });
 
@@ -57,6 +69,15 @@ describe('bestemAppProvePaaminnelse', () => {
     // 26. sep 22:30 UTC = 27. sep 00:30 Oslo → prøveslutt 27. september.
     expect(bestemAppProvePaaminnelse(rad({ current_period_end: '2026-09-26T22:30:00.000Z' }), I_DAG, INGEN_SENDT)).toMatchObject({ send: true, proveSlutt: '2026-09-27' });
     expect(bestemAppProvePaaminnelse(rad({ current_period_end: '2026-09-27T21:59:00.000Z' }), I_DAG, INGEN_SENDT)).toMatchObject({ send: true, proveSlutt: '2026-09-27' });
+  });
+
+  it('prøvelengden leses fra startdatoen: en måneds tilbudskode er ikke en gratisuke, og mangler starten er lengden ukjent', () => {
+    const maaned = bestemAppProvePaaminnelse(rad({ current_period_start: '2026-08-28T05:12:00.000Z' }), I_DAG, INGEN_SENDT);
+    expect(maaned).toMatchObject({ send: true, proveLengdeDager: 30 });
+    expect(bestemAppProvePaaminnelse(rad({ current_period_start: '2026-09-24T05:12:00.000Z' }), I_DAG, INGEN_SENDT)).toMatchObject({ send: true, proveLengdeDager: 3 });
+    expect(bestemAppProvePaaminnelse(rad({ current_period_start: null }), I_DAG, INGEN_SENDT)).toMatchObject({ send: true, proveLengdeDager: null });
+    expect(bestemAppProvePaaminnelse(rad({ current_period_start: undefined }), I_DAG, INGEN_SENDT)).toMatchObject({ send: true, proveLengdeDager: null });
+    expect(bestemAppProvePaaminnelse(rad({ current_period_start: 'tull' }), I_DAG, INGEN_SENDT)).toMatchObject({ send: true, proveLengdeDager: null });
   });
 
   it('bare RevenueCat-eide rader — Stripe-prøver får sin e-post fra webhooken, gavepass har intet trekk', () => {
@@ -95,7 +116,9 @@ describe('bestemAppProvePaaminnelse', () => {
     expect(bestemAppProvePaaminnelse(rad({ current_period_end: '2026-10-05T05:12:00.000Z' }), '2026-10-02', sendt)).toEqual({
       send: true,
       dagerIgjen: 3,
-      proveSlutt: '2026-10-05'
+      proveSlutt: '2026-10-05',
+      proveSluttMs: Date.parse('2026-10-05T05:12:00.000Z'),
+      proveLengdeDager: 15
     });
     // En annen bruker med samme dato er heller ikke «sendt».
     expect(bestemAppProvePaaminnelse(rad({ user_id: '22222222-2222-4333-8444-555555555555' }), I_DAG, sendt)).toMatchObject({ send: true });
@@ -105,6 +128,34 @@ describe('bestemAppProvePaaminnelse', () => {
     const sendt = new Set([sendtNokkel(BRUKER, '2026-09-27')]);
     expect(bestemAppProvePaaminnelse(rad({ status: 'active' }), I_DAG, sendt)).toEqual({ send: false, grunn: 'ikke-prove' });
     expect(bestemAppProvePaaminnelse(rad({ current_period_end: '2026-09-30T05:12:00.000Z' }), I_DAG, sendt)).toEqual({ send: false, grunn: 'utenfor-vinduet' });
+  });
+});
+
+describe('erGratisuke', () => {
+  it('bare 6–8 dager er en uke; 3 dager, to uker, en måned og ukjent er det ikke', () => {
+    expect(erGratisuke(7)).toBe(true);
+    expect(erGratisuke(6)).toBe(true);
+    expect(erGratisuke(8)).toBe(true);
+    expect(erGratisuke(3)).toBe(false);
+    expect(erGratisuke(14)).toBe(false);
+    expect(erGratisuke(30)).toBe(false);
+    expect(erGratisuke(null)).toBe(false);
+  });
+});
+
+describe('avslutningsfrist', () => {
+  it('er prøveslutt minus ett døgn, som Oslo-dag og hel time rundet ned', () => {
+    // 27. sep 05:12 UTC = 07:12 Oslo → fristen 26. september kl. 07 (ikke 07:12: «senest kl. 07» skal aldri være for sent).
+    expect(avslutningsfrist(Date.parse('2026-09-27T05:12:00.000Z'))).toEqual({ dag: '2026-09-26', time: 7 });
+    // 23:59 Oslo → kl. 23 dagen før.
+    expect(avslutningsfrist(Date.parse('2026-09-27T21:59:00.000Z'))).toEqual({ dag: '2026-09-26', time: 23 });
+    // 00:30 Oslo den 27. → kl. 00 den 26.
+    expect(avslutningsfrist(Date.parse('2026-09-26T22:30:00.000Z'))).toEqual({ dag: '2026-09-26', time: 0 });
+  });
+
+  it('regner 24 klokketimer også over sommertidsskiftet (25. oktober 2026)', () => {
+    // 25. okt 06:00 UTC = 07:00 CET; 24 timer før er 24. okt 06:00 UTC = 08:00 CEST.
+    expect(avslutningsfrist(Date.parse('2026-10-25T06:00:00.000Z'))).toEqual({ dag: '2026-10-24', time: 8 });
   });
 });
 

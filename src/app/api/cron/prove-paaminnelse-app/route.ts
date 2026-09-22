@@ -9,6 +9,7 @@ import {
   ALLE_GRUNNER,
   PAAMINNELSE_KANAL,
   bestemAppProvePaaminnelse,
+  erGratisuke,
   sendtNokkel,
   type AppProveRad
 } from '@/lib/billing/prove-paaminnelse-app';
@@ -30,14 +31,25 @@ import { osloDag } from '@/lib/bruk/bruksdag';
  *   2. Les prove_paaminnelser. Svarer ikke tabellen (migrasjonen ikke
  *      kjørt), sendes INGENTING: uten sendt-merket kan vi ikke love «én
  *      gang», og to påminnelser er verre enn én dag for sent.
- *   3. Per rad: beslutning → adresse og språk fra auth → e-post → send med
- *      idempotensnøkkel rc/prove-slutt/<user_id>/<prove_slutt> → sendt-rad.
+ *   3. Per rad: beslutning → adresse og språk fra auth → e-post →
+ *      RESERVER sendt-raden → send → ved feil: frigi reservasjonen.
  *
- * Sendt-raden skrives BARE etter en vellykket sending, så en feilet sending
- * prøves igjen neste morgen (innenfor vinduet: høyst én gang til). Feiler
- * skrivingen etter at e-posten gikk, logges det som feil — Resend-nøkkelen
- * holder dobbeltsending unna i 24 timer, og neste morgen er vinduet det
- * samme nøkkelen dekker.
+ * ── RESERVASJON FØR SENDING, IKKE MERKE ETTER ───────────────────────────────
+ *
+ * Sendt-raden (user_id, kanal, prove_slutt) settes inn FØR e-posten går.
+ * Slår innsettingen feil på nøkkelen (23505), har en annen kjøring alt
+ * tatt denne prøven — hopp over. Slår den feil av annen grunn, sendes
+ * ingenting: uten merke kan «én gang» ikke loves. Feiler sendingen, slettes
+ * raden igjen, så neste morgen prøver på nytt (innenfor vinduet: høyst én
+ * gang til). Lar raden seg ikke slette, står den — kunden får da ingen
+ * påminnelse, og det logges som feil; det er den riktige siden å feile på.
+ *
+ * Merket kunne ikke ligge bak sendingen: gikk e-posten og innsettingen
+ * feilet, ville neste morgen (2 dager igjen) sendt igjen. Resend-nøkkelen
+ * rc/prove-slutt/<user_id>/<prove_slutt> holder et døgn, og cronen går
+ * hvert døgn — om den neste sendingen ble avvist eller levert, hang på
+ * sekunders slingring. Nøkkelen sendes fortsatt, som et nett til, men
+ * tabellen er garantien.
  *
  * Loggen får tall, aldri adresser. Bruker-ID-er er interne og passerer.
  */
@@ -48,6 +60,9 @@ interface SendtRad {
   user_id: string;
   prove_slutt: string;
 }
+
+/** Postgres unique_violation — nøkkelen finnes alt. */
+const NOKKEL_FINNES = '23505';
 
 export async function GET(request: NextRequest) {
   const log = createRequestLogger(request);
@@ -67,12 +82,14 @@ export async function GET(request: NextRequest) {
   }
 
   const db = createAdminClient();
-  const iDag = osloDag(new Date());
+  const naa = new Date();
+  const iDag = osloDag(naa);
+  const sendtSek = Math.floor(naa.getTime() / 1000);
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://www.mycelet.com';
 
   const { data: rader, error: lesFeil } = await db
     .from('billing_subscriptions')
-    .select('user_id,tier,status,current_period_end,cancel_at_period_end,metadata')
+    .select('user_id,tier,status,current_period_start,current_period_end,cancel_at_period_end,metadata')
     .eq('status', 'trialing');
   if (lesFeil) {
     log.error('prove_paaminnelse_app.les_feilet', { message: lesFeil.message });
@@ -107,18 +124,33 @@ export async function GET(request: NextRequest) {
     // Plannavnet i teksten. En trialing-rad uten betalt tier finnes ikke i
     // praksis (webhooken ack-er ukjente produkter); «Premium» er reserven.
     const tier = rad.tier === 'season_pass' ? 'season_pass' : 'premium';
-    const token = lagProveSvarToken(rad.user_id, beslutning.proveSlutt, hemmelighet);
+    const token = lagProveSvarToken(rad.user_id, beslutning.proveSlutt, sendtSek, hemmelighet);
     const epost = byggAppProvePaaminnelseEpost({
       locale,
       plan: billingTierLabel(tier, locale),
       dagerIgjen: beslutning.dagerIgjen,
-      sluttIso: beslutning.proveSlutt,
+      sluttMs: beslutning.proveSluttMs,
+      gratisuke: erGratisuke(beslutning.proveLengdeDager),
       svarLenker: {
         omrader: proveSvarUrl(appUrl, token, 'omrader', locale),
         offline: proveSvarUrl(appUrl, token, 'offline', locale),
         ai: proveSvarUrl(appUrl, token, 'ai', locale)
       }
     });
+
+    const nokkel = { user_id: rad.user_id, kanal: PAAMINNELSE_KANAL, prove_slutt: beslutning.proveSlutt };
+    const { error: reservasjonFeil } = await db.from('prove_paaminnelser').insert(nokkel);
+    if (reservasjonFeil) {
+      if (reservasjonFeil.code === NOKKEL_FINNES) {
+        log.info('prove_paaminnelse_app.reservert_av_annen', { userId: rad.user_id, proveSlutt: beslutning.proveSlutt });
+        telling.hoppetOver['allerede-sendt'] += 1;
+      } else {
+        log.error('prove_paaminnelse_app.reservasjon_feilet', { userId: rad.user_id, proveSlutt: beslutning.proveSlutt, message: reservasjonFeil.message });
+        telling.feilet += 1;
+      }
+      continue;
+    }
+    sendt.add(sendtNokkel(rad.user_id, beslutning.proveSlutt));
 
     let ok = false;
     let detalj = '';
@@ -132,18 +164,27 @@ export async function GET(request: NextRequest) {
     if (!ok) {
       log.warn('prove_paaminnelse_app.sending_feilet', { userId: rad.user_id, proveSlutt: beslutning.proveSlutt, detalj });
       telling.feilet += 1;
+      const { error: frigiFeil } = await db
+        .from('prove_paaminnelser')
+        .delete()
+        .eq('user_id', nokkel.user_id)
+        .eq('kanal', nokkel.kanal)
+        .eq('prove_slutt', nokkel.prove_slutt);
+      if (frigiFeil) {
+        // Raden står, så kunden får ingen påminnelse for denne prøven. Bedre enn to.
+        log.error('prove_paaminnelse_app.reservasjon_ikke_frigitt', { userId: rad.user_id, proveSlutt: beslutning.proveSlutt, message: frigiFeil.message });
+      }
       continue;
     }
 
-    const { error: skrivFeil } = await db
-      .from('prove_paaminnelser')
-      .insert({ user_id: rad.user_id, kanal: PAAMINNELSE_KANAL, prove_slutt: beslutning.proveSlutt });
-    if (skrivFeil) {
-      log.error('prove_paaminnelse_app.sendt_men_ikke_merket', { userId: rad.user_id, proveSlutt: beslutning.proveSlutt, message: skrivFeil.message });
-    }
-    sendt.add(sendtNokkel(rad.user_id, beslutning.proveSlutt));
     telling.sendt += 1;
-    log.info('prove_paaminnelse_app.sendt', { userId: rad.user_id, proveSlutt: beslutning.proveSlutt, dagerIgjen: beslutning.dagerIgjen, locale });
+    log.info('prove_paaminnelse_app.sendt', {
+      userId: rad.user_id,
+      proveSlutt: beslutning.proveSlutt,
+      dagerIgjen: beslutning.dagerIgjen,
+      proveLengdeDager: beslutning.proveLengdeDager,
+      locale
+    });
   }
 
   log.info('prove_paaminnelse_app.ferdig', { iDag, rader: (rader ?? []).length, ...telling });

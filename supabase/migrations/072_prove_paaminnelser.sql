@@ -16,19 +16,29 @@
 -- prove-merke.ts), så et sendt-merke der ville forsvinne ved neste
 -- RevenueCat-hendelse og e-posten gått igjen. Nøkkelen er bruker, kanal og
 -- prøveslutt-DATOEN: flyttes prøveslutt (ny prøve, forlenget periode) er det
--- en ny påminnelse; samme dato sendes aldri to ganger. Raden skrives BARE
--- etter en vellykket sending, så en feilet sending prøves igjen neste dag
--- (innenfor vinduet på 2–3 dager, altså høyst én gang til).
+-- en ny påminnelse; samme dato sendes aldri to ganger. Cronen RESERVERER
+-- raden før den sender (primærnøkkelen er låsen: finnes den alt, hopper
+-- kjøringen over) og sletter den igjen om sendingen feiler, så neste dag
+-- prøver på nytt (innenfor vinduet på 2–3 dager, altså høyst én gang til).
+-- En rad som står, betyr sendt. Merket kunne ikke skrives ETTER sendingen:
+-- gikk e-posten og skrivingen feilet, ville neste morgen sendt igjen —
+-- Resends idempotensnøkkel lever et døgn, og cronen går hvert døgn.
 --
 -- prove_svar: det frivillige spørsmålet nederst i e-posten («Hva var
 -- viktigst for deg i uka?») med tre lenker til GET /api/prove/svar. Lenka
--- bærer et HMAC-token av bruker + prøveslutt, aldri en adresse, aldri en
--- innlogging. Ett svar per bruker og prøve; et nytt trykk overskriver.
--- Leses av dagsrapporten («Svar fra prøvestartere (7 d)»).
+-- bærer et HMAC-token av bruker + prøveslutt + utsendingstid, aldri en
+-- adresse, aldri en innlogging. Ett svar per bruker og prøve; et nytt trykk
+-- overskriver. Ruta skriver bare på en ekte navigering (Sec-Fetch-Dest:
+-- document) minst ti minutter etter utsendingen, ellers via en knapp
+-- (POST) — e-postskannere følger alle lenkene i en e-post innen sekunder,
+-- og skal ikke svare for kunden. Leses av dagsrapporten («Svar fra
+-- prøvestartere (7 d)»).
 --
--- RLS er på uten policyer på begge: kun service role (cronen, svar-ruta og
--- rapporten). Slettes kontoen, følger radene med (cascade) — de er knyttet
--- til bruker-ID og hører til GDPR-eksporten når den neste gang utvides.
+-- RLS er på uten policyer på begge: kun service role (cronen, svar-ruta,
+-- rapporten og innsynsuttrekket). Slettes kontoen, følger radene med
+-- (cascade). Begge er knyttet til bruker-ID og er med i GDPR-eksporten
+-- (/api/me/export: trialReminders og trialAnswers, lest med
+-- tjenesterollen) og nevnt i personvernerklæringen under betalingsdata.
 
 create table if not exists prove_paaminnelser (
   user_id      uuid not null references auth.users(id) on delete cascade,
@@ -41,7 +51,7 @@ create table if not exists prove_paaminnelser (
 alter table prove_paaminnelser enable row level security;
 -- Ingen policyer med vilje: kun service role.
 
-comment on table prove_paaminnelser is 'Sendte påminnelser før første belastning for prøver kjøpt i butikk (App Store via RevenueCat). Én rad per bruker, kanal og prøveslutt-dato; skrives bare etter vellykket sending. Kun service role.';
+comment on table prove_paaminnelser is 'Sendte påminnelser før første belastning for prøver kjøpt i butikk (App Store via RevenueCat). Én rad per bruker, kanal og prøveslutt-dato; reserveres før sending og slettes om sendingen feiler, så en rad som står betyr sendt. Kun service role. Med i GDPR-eksporten (trialReminders).';
 comment on column prove_paaminnelser.prove_slutt is 'Prøveslutt som Oslo-dato (billing_subscriptions.current_period_end). Flytter datoen seg, er det en ny påminnelse.';
 
 create table if not exists prove_svar (

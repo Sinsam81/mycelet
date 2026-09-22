@@ -33,6 +33,25 @@ import { osloDag } from '@/lib/bruk/bruksdag';
  * prøveslutt-datoen, ikke 72 timer. En prøve som slutter 26. september
  * kl. 07 og en som slutter kl. 23 får e-posten samme morgen.
  *
+ * ── FRISTEN I E-POSTEN ER ETT DØGN FØR, MED KLOKKESLETT ─────────────────────
+ *
+ * Apple forsøker fornyelsen i løpet av de siste 24 timene FØR
+ * `expiration_at_ms` (kjøpsvilkårene sier det samme: slå av fornyelse
+ * senest 24 timer før). En e-post som bare nevner prøveslutt-datoen ville
+ * sendt kunden til innstillingene kvelden før — etter at trekket alt var
+ * forsøkt. Derfor regner avslutningsfrist() ut prøveslutt minus ett døgn og
+ * gir Oslo-dag og hel time (rundet NED, så «senest kl. 07» aldri er senere
+ * enn Apples tidligste forsøk). Teksten sier fristen først, datoen etterpå.
+ *
+ * ── «GRATISUKA» BARE NÅR DET VAR EN UKE ─────────────────────────────────────
+ *
+ * Apples introduksjonstilbud og tilbudskoder kan være 3 dager, 2 uker eller
+ * en måned, og RevenueCat leverer dem alle som TRIAL → trialing. Lengden
+ * leses fra `current_period_start` (webhooken skriver purchased_at_ms dit);
+ * er den 6–8 dager, sier e-posten «gratisuka», ellers den nøytrale
+ * «prøveperioden» — og mangler startdatoen, det nøytrale. Aldri et tall
+ * raden motsier.
+ *
  * ── HVA SOM HOPPES OVER, OG HVORFOR ─────────────────────────────────────────
  *
  *   · ikke-revenuecat: Stripe-prøver får sin e-post fra webhooken; gavepass
@@ -48,6 +67,9 @@ import { osloDag } from '@/lib/bruk/bruksdag';
  *   · allerede-sendt: samme bruker, kanal og prøveslutt-dato finnes i
  *     prove_paaminnelser. Flytter prøveslutt seg (ny prøve etter en gammel,
  *     forlenget periode), er nøkkelen ny og e-posten sendes for den.
+ *     Cronen RESERVERER raden før den sender og sletter den om sendingen
+ *     feiler — så en rad som står der, betyr sendt (eller en feilet sending
+ *     som ikke fikk frigitt reservasjonen, og det logges som feil).
  */
 
 export const PAAMINNELSE_KANAL = 'revenuecat' as const;
@@ -60,6 +82,8 @@ export interface AppProveRad {
   user_id: string;
   tier?: string | null;
   status: string | null;
+  /** Prøvestart (RevenueCats purchased_at_ms). Valgfri: eldre kall og rader uten den gir «prøveperioden», ikke «gratisuka». */
+  current_period_start?: string | null;
   current_period_end: string | null;
   cancel_at_period_end: boolean | null;
   metadata: Record<string, unknown> | null;
@@ -70,7 +94,41 @@ export type AppProveBeslutning =
       send: false;
       grunn: 'ikke-revenuecat' | 'ikke-prove' | 'sandkasse' | 'allerede-sagt-opp' | 'prove-slutt-passert' | 'utenfor-vinduet' | 'allerede-sendt';
     }
-  | { send: true; dagerIgjen: number; proveSlutt: string };
+  | {
+      send: true;
+      dagerIgjen: number;
+      /** Prøveslutt som Oslo-dato — nøkkelen i sendt-tabellen og i svartokenet. */
+      proveSlutt: string;
+      /** Selve tidspunktet (current_period_end), for fristen i teksten. */
+      proveSluttMs: number;
+      /** Hele dager fra prøvestart til prøveslutt; null når startdatoen mangler. */
+      proveLengdeDager: number | null;
+    };
+
+/** «Gratisuka» bare når prøven faktisk var en uke (6–8 dager tåler klokkeslett og sommertid). Ukjent lengde = ikke en uke. */
+export function erGratisuke(proveLengdeDager: number | null): boolean {
+  return proveLengdeDager !== null && proveLengdeDager >= 6 && proveLengdeDager <= 8;
+}
+
+const OSLO_DAG_OG_TIME = new Intl.DateTimeFormat('sv-SE', {
+  timeZone: 'Europe/Oslo',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  hourCycle: 'h23'
+});
+
+/**
+ * Siste sjanse til å avslutte uten trekk: prøveslutt minus 24 timer, som
+ * Oslo-dag og hel time rundet ned. Apple kan forsøke fornyelsen når som
+ * helst i det siste døgnet, så fristen må ligge FØR det døgnet begynner.
+ */
+export function avslutningsfrist(proveSluttMs: number): { dag: string; time: number } {
+  const deler = OSLO_DAG_OG_TIME.formatToParts(new Date(proveSluttMs - 24 * 3600_000));
+  const del = (type: string) => deler.find((p) => p.type === type)?.value ?? '';
+  return { dag: `${del('year')}-${del('month')}-${del('day')}`, time: Number(del('hour')) };
+}
 
 export const ALLE_GRUNNER: ReadonlyArray<Exclude<AppProveBeslutning, { send: true }>['grunn']> = [
   'ikke-revenuecat',
@@ -117,5 +175,12 @@ export function bestemAppProvePaaminnelse(rad: AppProveRad, iDag: string, sendt:
   if (!PAAMINNELSE_DAGER.includes(dagerIgjen)) return { send: false, grunn: 'utenfor-vinduet' };
   if (sendt.has(sendtNokkel(rad.user_id, proveSlutt))) return { send: false, grunn: 'allerede-sendt' };
 
-  return { send: true, dagerIgjen, proveSlutt };
+  const proveStart = proveSluttDag(rad.current_period_start);
+  return {
+    send: true,
+    dagerIgjen,
+    proveSlutt,
+    proveSluttMs: new Date(rad.current_period_end as string).getTime(),
+    proveLengdeDager: proveStart === null ? null : dagerMellom(proveStart, proveSlutt)
+  };
 }
