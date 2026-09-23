@@ -368,7 +368,7 @@ export function byggRapportEpost(r: Dagsrapport, naa: Date) {
   <h2 style="font-size:14px;color:#1A3409;margin:22px 0 6px">Prøver</h2>
   <table style="width:100%;border-collapse:collapse;font-size:14px">
     ${rad('Løpende prøver nå', String(p.lopende))}
-    ${rad('Startet siste 7 dager', String(p.startetSiste7d))}
+    ${rad('Startet siste 7 dager', `${p.startetSiste7d} (${p.startetSiste7dPerPlan.pass} pass / ${p.startetSiste7dPerPlan.maaned} måned)`)}
     ${rad('Gikk til første belastning (7 d / totalt)', `${p.gikkTilBetalingSiste7d} / ${p.gikkTilBetaling}`)}
     ${rad('Avbrutt', String(p.avbrutt))}
     ${rad('Svar fra prøvestartere (7 d)', svarTekst)}
@@ -447,7 +447,7 @@ ABONNEMENT
 
 PRØVER
   løpende nå ................ ${p.lopende}
-  startet (7 d) ............. ${p.startetSiste7d}
+  startet (7 d) ............. ${p.startetSiste7d} (${p.startetSiste7dPerPlan.pass} pass / ${p.startetSiste7dPerPlan.maaned} måned)
   til første belastning ..... ${p.gikkTilBetalingSiste7d} (7 d) / ${p.gikkTilBetaling} totalt
   avbrutt ................... ${p.avbrutt}
   svar fra prøvestartere (7 d) ... ${svarTekst}
