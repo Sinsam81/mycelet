@@ -3,10 +3,11 @@
 import { useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import { X } from 'lucide-react';
 import type { TILBUD_UTLOSERE } from '@/lib/bruk/bruksdag';
-import { STRIPE_PROVEDAGER } from '@/lib/billing/plans';
+import { fornyelsesTekst, forsteBelastningsTekst } from '@/lib/billing/fornyelse';
+import { planLofte } from '@/lib/billing/prove-lofte';
 import { meldTilbudsarkApent } from '@/lib/billing/tilbudsark-apent';
 import { useProveLofte } from '@/lib/hooks/useProveLofte';
 
@@ -14,11 +15,20 @@ import { useProveLofte } from '@/lib/hooks/useProveLofte';
 export type TilbudUtloser = (typeof TILBUD_UTLOSERE)[number];
 
 /**
- * «Start gratis uke» — arket som vises én gang (to, med et døgns mellomrom)
- * til en gratisbruker som nettopp har fått verdi i kartet, og én gang på
- * forsiden ved første innlogging. Reglene ligger i
- * src/lib/billing/provetilbud.ts. Knappen går til prissiden, som selger via
- * App Store i appen og Stripe på nett — samme sted for begge.
+ * Arket som vises én gang (to, med et døgns mellomrom) til en gratisbruker
+ * som nettopp har fått verdi i kartet, og én gang på forsiden ved første
+ * innlogging. Reglene ligger i src/lib/billing/provetilbud.ts. Knappene går
+ * til prissiden, som selger via App Store i appen og Stripe på nett — samme
+ * sted for begge, med planen valgt (?plan=…).
+ *
+ * Arket leder med SESONGPASSET. Sju av åtte prøver siden 12. september 2026
+ * valgte måned (99 kr, 67 kr netto etter Apple), fordi arket bare leste
+ * Premium-tilbudet og passet var det tredje kortet under bretten på
+ * prissiden. Et pass gir 169 kr netto med én gang og fornyes i september
+ * neste år — det passer et produkt folk bruker ti uker i året. Ærlig ramme:
+ * 99 kr dekker resten av denne høsten; argumentet for passet er NESTE sesong,
+ * så datoen passet gjelder til står i teksten. «Heller måned for måned?» er
+ * synlig og like tydelig — ingenting er forhåndsvalgt, ingen nedtelling.
  *
  * Rekkefølgen i teksten er bevisst: først alle områdene med begrunnelsen bak
  * tallet (det NÅR-per-område-signalet som faktisk er validert), så offline-
@@ -27,8 +37,19 @@ export type TilbudUtloser = (typeof TILBUD_UTLOSERE)[number];
  * «Gratis viser 3 av 12» sies bare når det er det brukeren ser (utløser
  * «begrenset»).
  *
- * Løftet om en gratis uke står bare når det er sant: på nett gir Stripe den
- * til nye abonnenter; i appen bare når App Store gir den (useProveLofte).
+ * Løftet om en gratis uke står bare når det er sant FOR DEN PLANEN: på nett
+ * gir Stripe den til nye abonnenter på begge; i appen bare når App Store gir
+ * den på akkurat det produktet (useProveLofte, per plan). Har passet ingen
+ * gratisuke i butikken, selges det til pris — «Kjøp Sesongpass» — mens
+ * månedslinja kan ha sin egen gratisuke.
+ *
+ * Med gratisuke sier vilkårene BEGGE datoene: når de 249 kronene trekkes
+ * første gang (kjøpsdag + prøvedager — Stripe fakturerer ved trial_end,
+ * Apple det samme), og at passet gjelder ett år fra DEN dagen. Første utgave
+ * regnet passet fra kjøpsdagen og nevnte aldri første belastning; «gjelder
+ * til september 2027, deretter 249 kr» leste som et gratis år, og Apple
+ * krever datoen for første belastning ved introduksjonstilbud (3.1.2). Er
+ * prøvens lengde ukjent, sies ingen dato — heller ingen enn en gal.
  *
  * Portal til <body>: kartets verktøyrad har en CSS-transform, og position:fixed
  * inni en transformert forelder får forelderen som ramme.
@@ -43,6 +64,7 @@ export function ProvGratisArk({
   utloser: TilbudUtloser;
 }) {
   const t = useTranslations('ProvGratisArk');
+  const locale = useLocale();
   const lofte = useProveLofte();
   // Mens arket ligger her, skal ingen annen flate stille sitt eget spørsmål
   // under det (tilbudsark-apent.ts). Ett spørsmål om gangen.
@@ -64,25 +86,44 @@ export function ProvGratisArk({
   if (typeof document === 'undefined') return null;
 
   const begrenset = utloser === 'begrenset';
-  const harProve = lofte.kjent && lofte.harProve;
-  const dager = harProve ? lofte.proveDager : null;
-  const pris = lofte.kjent ? lofte.pris : null;
+  const pass = planLofte(lofte, 'season_pass');
+  const maaned = planLofte(lofte, 'premium');
+  // Prøvedagene passet faktisk får (0 uten gratisuke) skyver både første
+  // belastning og året passet gjelder. Én kilde for datoene (fornyelse.ts),
+  // så arket og prissiden aldri sier to ulike.
+  const passProveDager = pass?.harProve ? pass.proveDager : 0;
+  const passDato = fornyelsesTekst('season_pass', locale, passProveDager ?? 0);
 
   const tittel = begrenset
     ? t('tittel')
-    : !harProve
-      ? t('tittelStartUtenProve')
-      : dager === null
-        ? t('tittelStartUkjentLengde')
-        : t('tittelStart', { dager });
-  const vilkaar = !harProve
-    ? pris
-      ? t('vilkaarPris', { pris })
-      : t('vilkaarUtenProve')
-    : dager === null
-      ? t('vilkaarUkjentLengde')
-      : t('vilkaar', { dager });
-  const start = !harProve ? t('startUtenProve') : dager === STRIPE_PROVEDAGER ? t('start') : t('startProve');
+    : !pass
+      ? t('tittelUkjent')
+      : !pass.harProve
+        ? t('tittelPassUtenProve', { pris: pass.pris })
+        : pass.proveDager === null
+          ? t('tittelPassProveUkjentLengde')
+          : t('tittelPassProve', { dager: pass.proveDager });
+  const vilkaar = !pass
+    ? t('vilkaarUtenProve')
+    : !pass.harProve
+      ? t('passVilkaar', { dato: passDato })
+      : passProveDager === null
+        ? t('passVilkaarProveUkjentLengde', { pris: pass.pris })
+        : t('passVilkaarProve', {
+            dager: passProveDager,
+            forsteBelastning: forsteBelastningsTekst(passProveDager, locale),
+            pris: pass.pris,
+            dato: passDato
+          });
+  const start = !pass ? t('sePass') : pass.harProve ? t('provPass') : t('kjopPass');
+  // «Heller måned for måned?» — bare med butikkens pris, og med gratisuke bare når Premium har en.
+  const maanedTekst = !maaned
+    ? null
+    : !maaned.harProve
+      ? t('maanedValg', { pris: maaned.pris })
+      : maaned.proveDager === null
+        ? t('maanedValgProveUkjentLengde', { pris: maaned.pris })
+        : t('maanedValgProve', { pris: maaned.pris, dager: maaned.proveDager });
 
   return createPortal(
     <div
@@ -92,7 +133,9 @@ export function ProvGratisArk({
       onClick={onIkkeNaa}
       className="fixed inset-0 z-[1100] flex items-end justify-center bg-black/40 p-3 sm:items-center"
     >
-      <div onClick={(e) => e.stopPropagation()} className="w-full max-w-md rounded-2xl bg-white p-5 shadow-xl">
+      {/* Passvilkårene gjør arket høyere enn før; på en liten telefon (iPhone SE, 667 px)
+          skal «Ikke nå» fortsatt nås — arket ruller heller enn å skyve knappen ut. */}
+      <div onClick={(e) => e.stopPropagation()} className="max-h-[calc(100dvh-1.5rem)] w-full max-w-md overflow-y-auto rounded-2xl bg-white p-5 shadow-xl">
         <div className="flex items-start justify-between gap-3">
           <h2 id="provetilbud-tittel" className="font-serif text-xl font-semibold text-forest-900">
             {tittel}
@@ -102,15 +145,24 @@ export function ProvGratisArk({
           </button>
         </div>
         <p className="mt-2 text-sm leading-relaxed text-gray-700">{t(begrenset ? 'tekst' : 'tekstStart')}</p>
-        <p className="mt-1 text-xs text-gray-500">{vilkaar}</p>
+        <p className={pass ? 'mt-2 text-sm leading-relaxed text-gray-700' : 'mt-1 text-xs text-gray-500'}>{vilkaar}</p>
         <div className="mt-4 flex flex-col gap-2">
           <Link
-            href="/pricing"
+            href="/pricing?plan=season_pass"
             onClick={onStart}
             className="rounded-xl bg-forest-800 px-4 py-3 text-center text-sm font-semibold text-white hover:bg-forest-900"
           >
             {start}
           </Link>
+          {maanedTekst ? (
+            <Link
+              href="/pricing?plan=premium"
+              onClick={onStart}
+              className="rounded-xl border border-gray-300 px-4 py-2.5 text-center text-sm font-medium text-forest-900 hover:bg-gray-50"
+            >
+              {maanedTekst}
+            </Link>
+          ) : null}
           <button type="button" onClick={onIkkeNaa} className="rounded-xl px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100">
             {t(utloser === 'start' ? 'fortsettGratis' : 'ikkeNaa')}
           </button>

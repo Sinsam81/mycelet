@@ -6,6 +6,8 @@ import { PageWrapper } from '@/components/layout/PageWrapper';
 import { LandingPage } from '@/components/landing/LandingPage';
 import { EdibilityBadge } from '@/components/ui/EdibilityBadge';
 import { getBillingCapabilities, getUserBillingSubscription } from '@/lib/billing/subscription';
+import { harHattTilgangFor } from '@/lib/billing/tidligere-abonnent';
+import { getStripeServerClient } from '@/lib/stripe/server';
 import { ProvGratisVedStart } from '@/components/billing/ProvGratisVedStart';
 import { ProveLofteTekst } from '@/components/billing/ProveLofteTekst';
 import { MushroomDayCard } from '@/components/home/MushroomDayCard';
@@ -98,11 +100,14 @@ export default async function HomePage() {
 
   // Premium-kortet: aldri til betalende (de kan ikke løse inn noe), nøytral
   // knapp til tidligere abonnenter (ingen ny gratisuke), «prøv gratis» til nye.
+  // «Tidligere» avgjøres av samme funksjon som checkout og /api/billing/status
+  // (tidligere-abonnent.ts) — ikke av om raden finnes: en slettet konto med
+  // samme e-post har ingen rad, men Stripe nekter uka. Oppslaget går parallelt
+  // med artslista, så det ikke koster forsiden ventetid.
   const abonnement = await getUserBillingSubscription(supabase, user.id);
   const betaler = getBillingCapabilities(abonnement).paid;
-  const kanFaaProve = !betaler && abonnement == null;
 
-  const [{ data }, { data: recentFindings }] = await Promise.all([
+  const [{ data }, { data: recentFindings }, tidligereAbonnent] = await Promise.all([
     supabase
       .from('mushroom_species')
       .select('id,norwegian_name,swedish_name,latin_name,edibility,season_start,season_end,peak_season_start,peak_season_end,commonality,primary_image_url')
@@ -111,8 +116,10 @@ export default async function HomePage() {
       .from('public_findings')
       .select('id,found_at,location_name,species_id,norwegian_name,edibility,primary_image_url')
       .order('found_at', { ascending: false })
-      .limit(4)
+      .limit(4),
+    betaler ? Promise.resolve(true) : harHattTilgangFor({ subscription: abonnement, email: user.email, stripe: getStripeServerClient })
   ]);
+  const kanFaaProve = !betaler && !tidligereAbonnent;
 
   const species = (data ?? []) as SpeciesRow[];
   const findings = (recentFindings ?? []) as unknown as RecentFindingRow[];
@@ -239,25 +246,28 @@ export default async function HomePage() {
 
         {/* Tilbudet rett under forholdene, og én gang som ark ved første innlogging —
             gratisbrukere vi betaler for å hente inn, så aldri prissiden (1 av 12 kartbrukere,
-            11. sep 2026). Betalende ser ingenting av dette. */}
+            11. sep 2026). Betalende ser ingenting av dette.
+            Kortet leder til sesongpasset (?plan=season_pass — prissiden åpner med det
+            valgt) og lover ingen sopp: tittelen sier hva du får, ikke hva du finner.
+            Punktene i samme rekkefølge som arket: områdene med begrunnelse, offline, AI sist. */}
         {betaler ? null : (
         <Link
-          href="/pricing"
+          href="/pricing?plan=season_pass"
           className="block rounded-2xl bg-gradient-to-br from-forest-900 to-forest-800 p-5 text-white shadow-card transition hover:-translate-y-0.5 hover:shadow-lg"
         >
             <div className="flex items-center gap-2">
-              <Crown className="h-5 w-5 text-amber-400" />
+              <Crown className="h-5 w-5 shrink-0 text-amber-400" />
               <h2 className="font-serif text-xl font-semibold">{t('premiumTitle')}</h2>
             </div>
             <ul className="mt-3 space-y-1.5 text-sm text-white/90">
-              <li className="flex items-center gap-2">
-                <Check className="h-4 w-4 shrink-0 text-amber-400" /> {t('premiumFeatureUnlimitedAi')}
-              </li>
               <li className="flex items-center gap-2">
                 <Check className="h-4 w-4 shrink-0 text-amber-400" /> {t('premiumFeatureFullPrediction')}
               </li>
               <li className="flex items-center gap-2">
                 <Check className="h-4 w-4 shrink-0 text-amber-400" /> {t('premiumFeatureOfflineMap')}
+              </li>
+              <li className="flex items-center gap-2">
+                <Check className="h-4 w-4 shrink-0 text-amber-400" /> {t('premiumFeatureUnlimitedAi')}
               </li>
             </ul>
             <div className="mt-4 flex items-center justify-between gap-3">
@@ -271,8 +281,9 @@ export default async function HomePage() {
                 </p>
               </NonNativeOnly>
               <span className="ml-auto rounded-full bg-white px-4 py-2 text-sm font-semibold text-forest-900">
-                {/* «Prøv gratis» bare når butikken faktisk gir gratisuka — i appen
-                    avgjør App Store det, og knappen skal ikke love mer enn arket. */}
+                {/* «Prøv Sesongpass gratis» bare når butikken faktisk gir gratisuka
+                    PÅ PASSET — i appen avgjør App Store det per produkt, og knappen
+                    skal ikke love mer enn arket. Ellers «Se Sesongpass og Premium». */}
                 {kanFaaProve ? <ProveLofteTekst med={t('premiumSeePlans')} utenProve={t('premiumSeePlansNeutral')} /> : t('premiumSeePlansNeutral')}
               </span>
             </div>

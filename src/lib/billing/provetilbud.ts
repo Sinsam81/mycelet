@@ -57,14 +57,21 @@ export function leggTilKartdag(raw: string | null | undefined, dag: string): str
 
 /**
  * Gratisuka finnes bare for nye abonnenter: Stripe gir ingen prøveperiode til
- * en som har hatt abonnement før (harHattTilgangFor i checkout), og Apples
- * introduksjonstilbud gjelder bare Apple-ID-er uten tidligere abonnement i
- * gruppen. En rad i billing_subscriptions uten betaling = tidligere abonnent.
+ * en som har hatt abonnement før, og Apples introduksjonstilbud gjelder bare
+ * Apple-ID-er uten tidligere abonnement i gruppen.
+ *
+ * Fasiten er `kanFaaProve` fra /api/billing/status — regnet der med de samme
+ * tre sjekkene som checkout bruker når den avgjør trial_period_days
+ * (tidligere-abonnent.ts). Her sto «finnes det en rad?»: en som slettet
+ * kontoen etter en betalt sesong og registrerte seg på nytt med samme e-post
+ * hadde ingen rad, fikk «Prøv Sesongpass gratis i 7 dager» i arket og på
+ * forsiden, og et Stripe-skjema som trakk 249 kr samme dag. Mangler feltet
+ * (eldre svar, mock), loves ingenting.
  */
-export function kanFaaProveperiode(status: { capabilities?: { paid?: boolean }; subscription?: unknown } | null | undefined): boolean {
+export function kanFaaProveperiode(status: { capabilities?: { paid?: boolean }; kanFaaProve?: boolean } | null | undefined): boolean {
   if (!status) return false;
   if (status.capabilities?.paid) return false;
-  return status.subscription == null;
+  return status.kanFaaProve === true;
 }
 
 export function skalViseProvetilbud(args: {

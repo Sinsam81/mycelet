@@ -178,6 +178,12 @@ export interface Dagsrapport {
   prover: {
     lopende: number;
     startetSiste7d: number;
+    /**
+     * Startet siste 7 dager, delt på plan: sesongpass mot måned. Det er dette
+     * «sesongpass først» (arket og prissiden leder med passet fra 22. sep 2026)
+     * skal dømmes på — 7 av 8 prøver før det valgte måned.
+     */
+    startetSiste7dPerPlan: { pass: number; maaned: number };
     gikkTilBetaling: number;
     gikkTilBetalingSiste7d: number;
     avbrutt: number;
@@ -392,12 +398,17 @@ export function byggDagsrapport(inn: RapportInn): Dagsrapport {
     const s = lesProveMerke(a.metadata, 'prove_start');
     return b && s && new Date(b).getTime() > new Date(s).getTime() ? b : null;
   };
+  const startetSiste7d = butikkRader.filter((a) => {
+    const s = proveStart(a);
+    return s !== null && nyere(s, dag7);
+  });
   const prover = {
     lopende: butikkRader.filter((a) => erProvende(a, inn.naa)).length,
-    startetSiste7d: butikkRader.filter((a) => {
-      const s = proveStart(a);
-      return s !== null && nyere(s, dag7);
-    }).length,
+    startetSiste7d: startetSiste7d.length,
+    startetSiste7dPerPlan: {
+      pass: startetSiste7d.filter((a) => a.tier === 'season_pass').length,
+      maaned: startetSiste7d.filter((a) => a.tier !== 'season_pass').length
+    },
     gikkTilBetaling: butikkRader.filter((a) => forsteBelastning(a) !== null).length,
     gikkTilBetalingSiste7d: butikkRader.filter((a) => {
       const b = forsteBelastning(a);

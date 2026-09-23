@@ -50,7 +50,7 @@ export default defineConfig({
     // Innlogget flyt — krever testbruker. Bruker lagret sesjon fra `setup`.
     {
       name: 'authed',
-      testMatch: ['authed-flows.e2e.ts', 'map-geo.e2e.ts', 'folg-omrade.e2e.ts'],
+      testMatch: ['authed-flows.e2e.ts', 'map-geo.e2e.ts', 'folg-omrade.e2e.ts', 'sesongpass.e2e.ts'],
       dependencies: ['setup'],
       use: { ...devices['Desktop Chrome'], storageState: AUTH_FILE }
     }

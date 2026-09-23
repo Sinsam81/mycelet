@@ -196,7 +196,7 @@ export function HotspotPanel({ speciesId, kanFaaProve = false, data, explanation
             <div className="mt-2 rounded border border-amber-300 bg-amber-50 px-2 py-1.5">
               <p className="text-xs text-amber-800">{data.upsellMessage ?? t('freeLimited')}</p>
               <Link href="/pricing" className="text-xs font-medium text-amber-900 underline">
-                {kanFaaProve ? <ProveLofteTekst med={t('upgradeVegetation')} utenProve={t('upgradeVegetationUtenProve')} /> : t('upgradeVegetationUtenProve')}
+                {kanFaaProve ? <ProveLofteTekst plan="premium" med={t('upgradeVegetation')} utenProve={t('upgradeVegetationUtenProve')} /> : t('upgradeVegetationUtenProve')}
               </Link>
             </div>
           ) : null}
