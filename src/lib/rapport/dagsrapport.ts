@@ -109,10 +109,19 @@ export interface BruksdagRad {
   omrade?: string;
 }
 
+/** Ett svar på «Hva var viktigst for deg i uka?» fra App Store-påminnelsen (migrasjon 072). */
+export interface ProveSvarRad {
+  /** omrader · offline · ai */
+  valg: string;
+  svart_at: string;
+}
+
 export interface RapportInn {
   brukere: BrukerRad[];
   abonnement: AbonnementRad[];
   varselabonnement: number;
+  /** Svar fra prøvestartere siste 7 dager (migrasjon 072). undefined = tabellen svarte ikke. */
+  proveSvar?: ProveSvarRad[];
   /** Radene bak tallet over — for kilde, region og aktivering. Valgfri for eldre kall. */
   varselabonnenter?: VarselAbonnentRad[];
   /** Bruksdager siste 28 dager. undefined = ikke målt (rapporten sier det). */
@@ -178,6 +187,12 @@ export interface Dagsrapport {
     gikkTilBetaling: number;
     gikkTilBetalingSiste7d: number;
     avbrutt: number;
+    /**
+     * Svar på spørsmålet i App Store-påminnelsen, siste 7 dager (migrasjon
+     * 072): hva var viktigst — områdene med begrunnelse, offline-kartet
+     * eller AI-identifikasjonen. maalt=false når tabellen ikke svarte.
+     */
+    svar7d: { maalt: boolean; omrader: number; offline: number; ai: number };
   };
   /** Rader som SIER aktiv eller prøve, men der perioden er ute. Overses de, blåses tallet opp. */
   utloptMenMarkertAktiv: number;
@@ -351,6 +366,16 @@ function kjopsdato(rad: AbonnementRad): string {
   return lesProveMerke(rad.metadata, 'forste_belastning') ?? rad.created_at;
 }
 
+/** Svarene fra App Store-påminnelsen i vinduet, per valg. Ukjente valg (fremtidige nøkler) telles ikke. */
+function tellProveSvar(rader: ProveSvarRad[] | undefined, iVinduet: (iso: string) => boolean): Dagsrapport['prover']['svar7d'] {
+  const svar = { maalt: rader !== undefined, omrader: 0, offline: 0, ai: 0 };
+  for (const r of rader ?? []) {
+    if (!iVinduet(r.svart_at)) continue;
+    if (r.valg === 'omrader' || r.valg === 'offline' || r.valg === 'ai') svar[r.valg] += 1;
+  }
+  return svar;
+}
+
 export function byggDagsrapport(inn: RapportInn): Dagsrapport {
   const naa = inn.naa.getTime();
   const time24 = 24 * 3600_000;
@@ -395,7 +420,8 @@ export function byggDagsrapport(inn: RapportInn): Dagsrapport {
       if (a.status === 'trialing') return a.cancel_at_period_end === true;
       if (a.status === 'active') return false;
       return lesProveMerke(a.metadata, 'prove_start') !== null && forsteBelastning(a) === null;
-    }).length
+    }).length,
+    svar7d: tellProveSvar(inn.proveSvar, (iso) => nyere(iso, dag7))
   };
 
   // ── Land: tidssone ved registrering ───────────────────────────────────────

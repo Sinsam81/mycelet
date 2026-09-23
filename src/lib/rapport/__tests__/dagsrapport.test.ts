@@ -356,6 +356,24 @@ describe('prøver — sju dager gratis er ikke en kunde', () => {
     expect(r.prover.lopende).toBe(0);
     expect(r.utloptMenMarkertAktiv).toBe(1);
   });
+
+  it('svar fra prøvestartere (7 d): per valg, bare siste sju dager, «ikke målt» uten tabell', () => {
+    expect(byggDagsrapport(inn()).prover.svar7d).toEqual({ maalt: false, omrader: 0, offline: 0, ai: 0 });
+    expect(byggDagsrapport(inn({ proveSvar: [] })).prover.svar7d).toEqual({ maalt: true, omrader: 0, offline: 0, ai: 0 });
+    const r = byggDagsrapport(
+      inn({
+        proveSvar: [
+          { valg: 'omrader', svart_at: dagerSiden(1) },
+          { valg: 'omrader', svart_at: dagerSiden(6) },
+          { valg: 'offline', svart_at: dagerSiden(2) },
+          { valg: 'ai', svart_at: dagerSiden(0) },
+          { valg: 'omrader', svart_at: dagerSiden(8) }, // utenfor vinduet
+          { valg: 'annet', svart_at: dagerSiden(1) } // ukjent nøkkel telles ikke
+        ]
+      })
+    );
+    expect(r.prover.svar7d).toEqual({ maalt: true, omrader: 2, offline: 1, ai: 1 });
+  });
 });
 
 describe('kilder — det annonsetesten skal leses av', () => {

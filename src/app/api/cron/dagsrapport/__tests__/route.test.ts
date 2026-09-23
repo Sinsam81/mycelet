@@ -121,6 +121,32 @@ describe('soppregistreringer, samme dato som før', () => {
   });
 });
 
+/** Én rad under Prøver: hva prøvestarterne svarte på spørsmålet i App Store-påminnelsen (migrasjon 072). */
+describe('svar fra prøvestartere', () => {
+  const lag = (over: Partial<RapportInn>) =>
+    byggRapportEpost(byggDagsrapport({ brukere: [], abonnement: [], varselabonnement: 0, regionerIDag: [], regionerIGar: [], naa: NAA, ...over }), NAA);
+  const nylig = new Date(NAA.getTime() - 2 * 86_400_000).toISOString();
+
+  it('tre tall i fast rekkefølge, i begge varianter', () => {
+    const { html, tekst } = lag({
+      proveSvar: [
+        { valg: 'omrader', svart_at: nylig },
+        { valg: 'omrader', svart_at: nylig },
+        { valg: 'ai', svart_at: nylig }
+      ]
+    });
+    for (const variant of [html, tekst]) {
+      expect(variant).toMatch(/[Ss]var fra prøvestartere \(7 d\)/);
+      expect(variant).toContain('2 områdene · 0 offline · 1 AI');
+    }
+  });
+
+  it('sier fra når tabellen ikke svarte', () => {
+    const { tekst } = lag({});
+    expect(tekst).toContain('ikke målt — tabellen prove_svar svarte ikke');
+  });
+});
+
 describe('nye kontoer (14 d) som følger et område', () => {
   it('én rad: X av N, delt på iOS og web', () => {
     const naa = NAA.getTime();
