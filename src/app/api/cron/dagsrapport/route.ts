@@ -10,6 +10,7 @@ import {
   type BruksdagRad,
   type Dagsrapport,
   type FolgerRad,
+  type ProveSvarRad,
   type VarselAbonnentRad
 } from '@/lib/rapport/dagsrapport';
 import { REGISTRERING_FORBEHOLD, fraTabellrad, kortDato, kortPeriode, prosentTekst, type SoppregistreringRad } from '@/lib/rapport/soppregistreringer';
@@ -166,6 +167,14 @@ export async function GET(request: NextRequest) {
   }
   const bruksdager = bruksdagerMaalt ? samledeBruksdager : undefined;
 
+  // ── Svar fra prøvestartere, siste 7 dager (migrasjon 072) ─────────────────
+  // Ett svar per prøve, fra lenkene i App Store-påminnelsen. Få rader; ingen
+  // paginering. Mangler tabellen, sier rapporten «ikke målt».
+  const svarGrense = new Date(naa.getTime() - 7 * 24 * 3600_000).toISOString();
+  const { data: svarRader, error: svarErr } = await db.from('prove_svar').select('valg,svart_at').gte('svart_at', svarGrense);
+  if (svarErr) log.warn('dagsrapport.prove_svar_feilet', { message: svarErr.message });
+  const proveSvar = svarErr ? undefined : ((svarRader ?? []) as ProveSvarRad[]);
+
   // ── Anonyme tellinger før konto, siste 7 dager (migrasjon 070) ───────────
   // Høyst 7 dager × 2 flater × 2 språk = 28 rader; ingen paginering nødvendig.
   // Mangler tabellen, sier rapporten «ikke målt».
@@ -219,6 +228,7 @@ export async function GET(request: NextRequest) {
     varselabonnement: varselAntall,
     varselabonnenter,
     bruksdager,
+    proveSvar,
     soppregistreringer,
     kontoerSomFolger,
     flatetellinger,
@@ -277,6 +287,10 @@ export function byggRapportEpost(r: Dagsrapport, naa: Date) {
   const tidssoneNavn = (t: string) => (t === UKJENT_KILDE ? 'ukjent' : t);
   const tidssoneTekst = r.nyeBrukere.perTidssone7d.map((t) => `${tidssoneNavn(t.tidssone)} ${t.antall}`).join(' · ') || '—';
   const p = r.prover;
+  // Svar fra App Store-påminnelsen (migrasjon 072): tre tall, eller «ikke målt».
+  const svarTekst = p.svar7d.maalt
+    ? `${p.svar7d.omrader} områdene · ${p.svar7d.offline} offline · ${p.svar7d.ai} AI`
+    : 'ikke målt — tabellen prove_svar svarte ikke';
   const v = r.varsel;
   const u = r.bruk;
   const brukRader: Array<[string, string]> = u.maalt
@@ -357,6 +371,7 @@ export function byggRapportEpost(r: Dagsrapport, naa: Date) {
     ${rad('Startet siste 7 dager', String(p.startetSiste7d))}
     ${rad('Gikk til første belastning (7 d / totalt)', `${p.gikkTilBetalingSiste7d} / ${p.gikkTilBetaling}`)}
     ${rad('Avbrutt', String(p.avbrutt))}
+    ${rad('Svar fra prøvestartere (7 d)', svarTekst)}
   </table>
 
   <h2 style="font-size:14px;color:#1A3409;margin:22px 0 6px">Før konto i appen</h2>
@@ -435,6 +450,7 @@ PRØVER
   startet (7 d) ............. ${p.startetSiste7d}
   til første belastning ..... ${p.gikkTilBetalingSiste7d} (7 d) / ${p.gikkTilBetaling} totalt
   avbrutt ................... ${p.avbrutt}
+  svar fra prøvestartere (7 d) ... ${svarTekst}
 
 FØR KONTO I APPEN
 ${tellingRader.map(([n, v]) => `  ${n.padEnd(42, '.')} ${v}`).join('\n')}

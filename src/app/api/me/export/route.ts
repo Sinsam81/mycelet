@@ -18,8 +18,9 @@ import { IDENTIFY_HISTORY_BUCKET } from '@/lib/identifications/config';
  * ONE EXCEPTION: `ai_identifications` has RLS enabled with no policies at all
  * (service-role only, so nobody can reset their own AI quota). Through the
  * session client it would always come back empty — an empty list that reads
- * like an answer. That one table is read with the admin client, filtered
- * explicitly on the caller's user_id.
+ * like an answer. That table is read with the admin client, filtered
+ * explicitly on the caller's user_id. `prove_paaminnelser` and `prove_svar`
+ * (migration 072, service-role only for the same reason) follow the same rule.
  *
  * FAIL CLOSED. Every query is checked, and a single failure aborts the whole
  * export with a 500. Earlier this endpoint did `findings.data ?? []` on each
@@ -186,6 +187,22 @@ export async function GET(request: NextRequest) {
       query: hentAlle((fra, til) =>
         supabase.from('bruksdager').select('*').eq('user_id', user.id).order('dag').order('flate').order('omrade').range(fra, til)
       )
+    },
+    // Påminnelsen før første belastning for prøver kjøpt i App Store
+    // (migrasjon 072): at vi sendte den, for hvilken prøveslutt, og når.
+    // RLS på uten policyer (kun tjenesterollen), så samme regel som
+    // ai_identifications: tjenesterollen, filtrert på brukerens egen id.
+    trialReminders: {
+      shape: 'many',
+      query: hentAlle((fra, til) =>
+        admin.from('prove_paaminnelser').select('kanal,prove_slutt,sendt_at').eq('user_id', user.id).order('prove_slutt').order('kanal').range(fra, til)
+      )
+    },
+    // Svaret på spørsmålet i den påminnelsen («hva var viktigst for deg?»),
+    // ett per prøve. Samme tabellregel som over.
+    trialAnswers: {
+      shape: 'many',
+      query: hentAlle((fra, til) => admin.from('prove_svar').select('prove_slutt,valg,svart_at').eq('user_id', user.id).order('prove_slutt').range(fra, til))
     }
   };
 
@@ -268,7 +285,10 @@ export async function GET(request: NextRequest) {
     //    account.metadata (kilde, vilkårssamtykke, brukernavn) og
     //    account.identities; flerrads-datasett pagineres nå.
     // 6: la til usageDays (bruksdager — dag og flate der soppforholdene ble vist).
-    schemaVersion: 6,
+    // 7: la til trialReminders (prove_paaminnelser — påminnelsen før første
+    //    belastning for App Store-prøver) og trialAnswers (prove_svar —
+    //    svaret på spørsmålet i den), begge lest med tjenesterollen.
+    schemaVersion: 7,
     account: {
       userId: user.id,
       email: user.email ?? null,
