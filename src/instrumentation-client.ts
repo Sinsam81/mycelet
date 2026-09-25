@@ -1,5 +1,6 @@
 import * as Sentry from '@sentry/nextjs';
 import { scrubBreadcrumb, scrubEvent } from '@/lib/sentry/scrub';
+import { erDomFeilFraOversettelse, erOversattAvNettleser } from '@/lib/sentry/oversettelse';
 
 /**
  * Sentry på klientsiden — nettleser OG WKWebView-en i iOS-appen.
@@ -170,6 +171,14 @@ Sentry.init({
 
   beforeSend(event) {
     if (sentThisPageLoad >= MAX_EVENTS_PER_PAGE_LOAD) return null;
+    // Nettleseroversettelse (Chrome, Edge …) bytter ut tekstnodene bak ryggen på
+    // React. Vi merker slike hendelser, og dropper akkurat den ene DOM-feilen
+    // oversettelsen gir (MYCELET-4) — se @/lib/sentry/oversettelse.
+    const oversetter = typeof document === 'undefined' ? null : erOversattAvNettleser(document);
+    if (oversetter) {
+      event.tags = { ...event.tags, oversatt: oversetter };
+      if (erDomFeilFraOversettelse(event)) return null;
+    }
     sentThisPageLoad += 1;
     // Belte og seler oppå dataCollection — se @/lib/sentry/scrub. Delt med
     // server og edge, slik at de tre ikke kan gli fra hverandre igjen.
