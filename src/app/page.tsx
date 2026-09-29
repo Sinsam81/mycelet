@@ -11,6 +11,7 @@ import { getStripeServerClient } from '@/lib/stripe/server';
 import { ProvGratisVedStart } from '@/components/billing/ProvGratisVedStart';
 import { ProveLofteTekst } from '@/components/billing/ProveLofteTekst';
 import { MushroomDayCard } from '@/components/home/MushroomDayCard';
+import { AiFiksetBanner } from '@/components/identify/AiFiksetBanner';
 import { BestRegionsCard } from '@/components/home/BestRegionsCard';
 import { VarselCta } from '@/components/soppforhold/VarselCta';
 import { LastTripCard } from '@/components/home/LastTripCard';
@@ -243,6 +244,10 @@ export default async function HomePage() {
         {/* «Følg området ditt» ligger inne i kortet. Serveren vet alt om
             kontoraden finnes, så et abonnent-kort slipper å hente noe. */}
         <MushroomDayCard innlogget folgerOmrade={harVarsel} />
+
+        {/* AI-identifiseringen feilet for alle fram til 29. sep 2026 (PR #280).
+            Beskjeden til de som prøvde og ga opp — til 20. oktober, lukkes per enhet. */}
+        <AiFiksetBanner medLenke />
 
         {/* Tilbudet rett under forholdene, og én gang som ark ved første innlogging —
             gratisbrukere vi betaler for å hente inn, så aldri prissiden (1 av 12 kartbrukere,

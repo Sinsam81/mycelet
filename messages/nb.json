@@ -454,6 +454,12 @@
     "quotaUpgradeLead": "Med Premium får du svar med én gang — ubegrenset AI-identifisering, hele sesongen.",
     "quotaUpgradeCta": "Få svar nå med Premium"
   },
+  "AiFiksetBanner": {
+    "title": "AI-soppkjenneren er fikset",
+    "body": "Fram til 29. september fikk alle som prøvde AI-identifiseringen en feilmelding. Feilen er rettet. Prøv igjen.",
+    "cta": "Prøv AI-soppkjenneren",
+    "dismiss": "Lukk"
+  },
   "IdentifyResult": {
     "errorNotLoggedIn": "Du må være logget inn for å lagre funn.",
     "errorMissingGps": "GPS-posisjon mangler. Trykk «Hent posisjonen min» over for å bruke posisjonen der du står.",
