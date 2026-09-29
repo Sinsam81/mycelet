@@ -454,6 +454,12 @@
     "quotaUpgradeLead": "Med Premium får du svar direkt — obegränsad AI-identifiering, hela säsongen.",
     "quotaUpgradeCta": "Få svar nu med Premium"
   },
+  "AiFiksetBanner": {
+    "title": "AI-svampkännaren är lagad",
+    "body": "Fram till den 29 september fick alla som provade AI-identifieringen ett felmeddelande. Felet är åtgärdat. Prova igen.",
+    "cta": "Prova AI-svampkännaren",
+    "dismiss": "Stäng"
+  },
   "IdentifyResult": {
     "errorNotLoggedIn": "Du måste vara inloggad för att spara fynd.",
     "errorMissingGps": "GPS-position saknas. Tryck på «Hämta min position» ovan för att använda positionen där du står.",
