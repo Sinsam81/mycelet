@@ -17,6 +17,28 @@ import { DEFAULT_LOCALE, type Locale } from '@/i18n/config';
 const PLANTID_API_URL = 'https://mushroom.kindwise.com/api/v1/identification';
 
 /**
+ * `details` og `language` er URL-PARAMETRE hos Kindwise, ikke felt i kroppen.
+ * Kroppen tar bare bildene, posisjonen og «modifiers» (similar_images).
+ *
+ * Ruta sendte begge i kroppen fra første dag, og Kindwise svarte 400
+ * «Unknown modifier: language=`no`. Available modifiers: [similar_images=true]»
+ * på hvert eneste kall — som ruta gjorde om til 502 «Identifikasjon feilet»
+ * uten å logge kroppen. Oppdaget 29. sep 2026 med 2 050 urørte kreditter:
+ * ingen bruker hadde noen gang fått et AI-svar. Testene så det ikke, fordi de
+ * mocker fetch og bare leste kroppen. kindwise-request-shape.test.ts vokter
+ * nå selve formen på forespørselen.
+ */
+const PLANTID_DETAILS = ['common_names', 'taxonomy', 'description', 'edibility'] as const;
+const PLANTID_LANGUAGE = 'no';
+
+function plantIdUrl(language: string | null): string {
+  const url = new URL(PLANTID_API_URL);
+  url.searchParams.set('details', PLANTID_DETAILS.join(','));
+  if (language) url.searchParams.set('language', language);
+  return url.toString();
+}
+
+/**
  * Feilmeldingene fra denne ruta genereres server-side, så next-intl dekker dem
  * ikke — samme felle som prediksjonstekstene og rate-limit-meldingen.
  *
@@ -231,25 +253,48 @@ export async function POST(request: NextRequest) {
       tier: capabilities.tier
     });
 
-    const plantIdResponse = await fetch(PLANTID_API_URL, {
+    const plantIdBody = JSON.stringify({
+      // Inntil tre bilder av samme sopp = ÉN identifisering og én kreditt
+      // hos Kindwise (deres SDK: «one identification composed of N images»).
+      images,
+      similar_images: true,
+      ...(coarseLocation ?? {})
+    });
+    const plantIdInit = {
       method: 'POST',
       headers: {
         'Api-Key': apiKey,
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({
-        // Inntil tre bilder av samme sopp = ÉN identifisering og én kreditt
-        // hos Kindwise (deres SDK: «one identification composed of N images»).
-        images,
-        similar_images: true,
-        language: 'no',
-        details: ['common_names', 'taxonomy', 'description', 'edibility'],
-        ...(coarseLocation ?? {})
-      })
-    });
+      body: plantIdBody
+    };
+
+    let plantIdResponse = await fetch(plantIdUrl(PLANTID_LANGUAGE), plantIdInit);
+
+    // Språkkoden er det ene parameteret vi ikke har fått bekreftet mot
+    // Kindwise sin liste. Avviser de den, koster et nytt kall uten språk
+    // ingenting (400 trekker ikke kreditter), og engelske navn er langt bedre
+    // enn en død funksjon — artsnavnene brukeren ser kommer uansett fra vår
+    // egen katalog (enrichSuggestions). Logges som warn, så vi ser det.
+    if (plantIdResponse.status === 400) {
+      const feiltekst = await plantIdResponse.clone().text().catch(() => '');
+      if (/language/i.test(feiltekst)) {
+        userLog.warn('identify.plantid_language_rejected', { language: PLANTID_LANGUAGE, body: feiltekst.slice(0, 300) });
+        plantIdResponse = await fetch(plantIdUrl(null), plantIdInit);
+      }
+    }
 
     if (!plantIdResponse.ok) {
-      userLog.error('identify.plantid_failed', undefined, { status: plantIdResponse.status });
+      // Kroppen MÅ med. Kindwise forklarer avvisningen der («Invalid API key»,
+      // «Unsupported language», «Image too large» …), og med bare statuskoden
+      // sto vi 29. sep 2026 med en 502 til brukeren og ingen anelse om hvorfor.
+      // Avkortet: den inneholder aldri nøkkelen vår, men kan være lang.
+      const feilkropp = await plantIdResponse.text().catch(() => '');
+      userLog.error('identify.plantid_failed', undefined, {
+        status: plantIdResponse.status,
+        contentType: plantIdResponse.headers.get('content-type') ?? undefined,
+        body: feilkropp.slice(0, 500)
+      });
       return errorResponse('provider_failed', 502, locale);
     }
 
@@ -400,7 +445,10 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       suggestions: ranked,
-      isPlant: plantIdData?.result?.is_plant?.binary ?? false,
+      // Mushroom.id heter feltet is_mushroom; is_plant er plant.id sitt og
+      // sto her fra før. Begge leses, så eldre mocks og et eventuelt bytte
+      // av leverandør ikke gir «alltid false».
+      isPlant: plantIdData?.result?.is_mushroom?.binary ?? plantIdData?.result?.is_plant?.binary ?? false,
       safetyDataIncomplete,
       // null = betalende (ingen kvote). Tall = gjenstående gratis i dag.
       freeQuotaRemaining,
