@@ -1,11 +1,11 @@
 // Sjekker Kindwise (mushroom.id) direkte, utenom appen. To trinn:
 //   1. GET /usage_info — er nøkkelen gyldig, og hvor mange kreditter er igjen?
 //      Koster ingen kreditter.
-//   2. (valgfritt) POST /identification med NØYAKTIG samme kropp som
+//   2. (valgfritt) POST /identification med NØYAKTIG samme forespørsel som
 //      src/app/api/identify/route.ts sender. Avviser Kindwise den, prøves
-//      varianter som skreller bort én antakelse om gangen (språk, details,
-//      similar_images), slik at utskriften sier hvilken parameter som er
-//      problemet. Hvert vellykket kall koster én kreditt.
+//      varianter som skreller bort én antakelse om gangen (språk, details),
+//      slik at utskriften sier hvilken parameter som er problemet. Hvert
+//      vellykket kall koster én kreditt; en avvisning koster ingenting.
 //
 // Kjør fra maskinen med nøkkelen (Kindwise-panelet → API keys → Detail):
 //   PLANTID_API_KEY=… node scripts/sjekk-kindwise.mjs                # bare trinn 1
@@ -61,24 +61,20 @@ if (!bildeSti) {
 const base64 = (await readFile(bildeSti)).toString('base64');
 console.log(`\nBilde: ${bildeSti} (${base64.length} base64-tegn)`);
 
-// Samme kropp som ruta. Holdes i takt med src/app/api/identify/route.ts.
-const rutensKropp = {
-  images: [base64],
-  similar_images: true,
-  language: 'no',
-  details: ['common_names', 'taxonomy', 'description', 'edibility']
-};
+// Samme forespørsel som ruta: details + language i URL-en, kroppen har bare
+// bilder og modifiers. Holdes i takt med src/app/api/identify/route.ts.
+const DETAILS = 'common_names,taxonomy,description,edibility';
+const kropp = JSON.stringify({ images: [base64], similar_images: true });
 
 const varianter = [
-  ['som ruta sender', rutensKropp],
-  ['uten language', { ...rutensKropp, language: undefined }],
-  ['language=en', { ...rutensKropp, language: 'en' }],
-  ['uten details', { ...rutensKropp, details: undefined }],
-  ['bare images', { images: [base64] }]
+  ['som ruta sender', `/identification?details=${DETAILS}&language=no`],
+  ['language=en', `/identification?details=${DETAILS}&language=en`],
+  ['uten language', `/identification?details=${DETAILS}`],
+  ['bare bildet', '/identification']
 ];
 
-for (const [navn, kropp] of varianter) {
-  const res = await kall('/identification', { method: 'POST', body: JSON.stringify(kropp) });
+for (const [navn, sti] of varianter) {
+  const res = await kall(sti, { method: 'POST', body: kropp });
   console.log(`\n2) POST /identification (${navn}) → ${res.status}`);
   if (res.ok) {
     const r = res.json?.result ?? {};
