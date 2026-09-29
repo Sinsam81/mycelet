@@ -168,3 +168,39 @@ describe('nye kontoer (14 d) som følger et område', () => {
     }
   });
 });
+
+describe('AI-identifisering i e-posten', () => {
+  const frisk = { aktiv: true, kanBruke: true, grunn: null, igjen: 2099, bruktUke: 3, bruktMaaned: 3, bruktTotalt: 3 };
+  function medAi(over: Partial<RapportInn>) {
+    const inn: RapportInn = { brukere: [], abonnement: [], varselabonnement: 0, regionerIDag: [], regionerIGar: [], naa: NAA, ...over };
+    return byggRapportEpost(byggDagsrapport(inn), NAA);
+  }
+
+  it('viser kall, feil og Kindwise-kvote i begge varianter', () => {
+    const { html, tekst } = medAi({ aiKall: { siste24t: 1, siste7d: 5 }, aiFeil: { siste24t: 0, siste7d: 1 }, kindwise: frisk });
+    for (const variant of [html, tekst]) {
+      expect(variant).toMatch(/AI-identifisering/i);
+      expect(variant).toContain('1 / 5');
+      expect(variant).toContain('0 / 1');
+      expect(variant).toContain('2099 kreditter igjen · 3 brukt siste uke');
+      expect(variant).not.toContain('⚠️ AI');
+    }
+  });
+
+  it('varselet står øverst i blokka når alle kall feiler', () => {
+    const { html, tekst } = medAi({ aiKall: { siste24t: 0, siste7d: 0 }, aiFeil: { siste24t: 3, siste7d: 12 }, kindwise: frisk });
+    for (const variant of [html, tekst]) {
+      expect(variant).toContain('alle 12 AI-kall siste 7 dager feilet — ingen fikk svar');
+      expect(variant.indexOf('⚠️ AI')).toBeLessThan(variant.indexOf('Identifiseringer (24 t / 7 d)'));
+    }
+  });
+
+  it('sier fra når tabellene og usage_info ikke svarte — og nevner tabellen', () => {
+    const { html, tekst } = medAi({});
+    for (const variant of [html, tekst]) {
+      expect(variant).toContain('ikke målt — tabellen ai_identifications svarte ikke');
+      expect(variant).toContain('ikke målt — tabellen ai_identifiseringsfeil svarte ikke');
+      expect(variant).toContain('ikke målt — usage_info svarte ikke');
+    }
+  });
+});

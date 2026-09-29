@@ -663,3 +663,53 @@ describe('tellinger før konto (anonyme flatetellinger)', () => {
     expect(r.tellinger.siste7d).toEqual({ soppforhold: { nb: 12, sv: 4 }, register: { nb: 3, sv: 0 } });
   });
 });
+
+describe('AI-identifiseringen: virker den, og bruker noen den?', () => {
+  // Fra mai til 29. september 2026 feilet hvert Kindwise-kall uten at noe sa
+  // fra. Vellykkede kall telles bare ved suksess, så «død» og «ubrukt» var
+  // samme tall. Blokka finnes for å skille dem.
+  const frisk = { aktiv: true, kanBruke: true, grunn: null, igjen: 2099, bruktUke: 3, bruktMaaned: 3, bruktTotalt: 3 };
+
+  it('«ikke målt» på alt når ingen kilder svarte, og ingen varsel', () => {
+    const r = byggDagsrapport(inn()).ai;
+    expect(r.kall.maalt).toBe(false);
+    expect(r.feil.maalt).toBe(false);
+    expect(r.kindwise).toEqual({ maalt: false, status: null });
+    expect(r.varsel).toBeNull();
+  });
+
+  it('friske tall gir ingen varsel', () => {
+    const r = byggDagsrapport(inn({ aiKall: { siste24t: 1, siste7d: 5 }, aiFeil: { siste24t: 0, siste7d: 1 }, kindwise: frisk })).ai;
+    expect(r.kall).toEqual({ maalt: true, siste24t: 1, siste7d: 5 });
+    expect(r.feil).toEqual({ maalt: true, siste24t: 0, siste7d: 1 });
+    expect(r.kindwise.status?.igjen).toBe(2099);
+    expect(r.varsel).toBeNull();
+  });
+
+  it('sommerens feil — alt feiler, ingenting lykkes — gir varsel', () => {
+    const r = byggDagsrapport(inn({ aiKall: { siste24t: 0, siste7d: 0 }, aiFeil: { siste24t: 2, siste7d: 9 }, kindwise: frisk })).ai;
+    expect(r.varsel).toBe('alle 9 AI-kall siste 7 dager feilet — ingen fikk svar');
+  });
+
+  it('flere feil enn suksesser gir varsel', () => {
+    const r = byggDagsrapport(inn({ aiKall: { siste24t: 0, siste7d: 2 }, aiFeil: { siste24t: 0, siste7d: 5 } })).ai;
+    expect(r.varsel).toBe('flere AI-kall feilet (5) enn lyktes (2) siste 7 dager');
+  });
+
+  it('null kall og null feil er stillhet, ikke feil', () => {
+    const r = byggDagsrapport(inn({ aiKall: { siste24t: 0, siste7d: 0 }, aiFeil: { siste24t: 0, siste7d: 0 }, kindwise: frisk })).ai;
+    expect(r.varsel).toBeNull();
+  });
+
+  it('Kindwise som sperrer nøkkelen går foran alt annet', () => {
+    const r = byggDagsrapport(
+      inn({ aiKall: { siste24t: 0, siste7d: 0 }, aiFeil: { siste24t: 0, siste7d: 4 }, kindwise: { ...frisk, kanBruke: false, grunn: 'no credits', igjen: 0 } })
+    ).ai;
+    expect(r.varsel).toBe('Kindwise sperrer nøkkelen (no credits) — hvert AI-kall feiler');
+  });
+
+  it('lave kreditter varsles under grensen, ikke på den', () => {
+    expect(byggDagsrapport(inn({ kindwise: { ...frisk, igjen: 199 } })).ai.varsel).toBe('bare 199 Kindwise-kreditter igjen — kjøp flere');
+    expect(byggDagsrapport(inn({ kindwise: { ...frisk, igjen: 200 } })).ai.varsel).toBeNull();
+  });
+});

@@ -28,6 +28,8 @@ export const maxDuration = 300;
 
 /** Kvotetelleren leses kun 24 timer tilbake. Marginen er for feilsøking. */
 const QUOTA_COUNTER_RETENTION_DAYS = 7;
+/** ai_identifiseringsfeil (migrasjon 073): rapporten leser 7 dager; 30 er slingringsmonn. */
+const FEIL_RETENTION_DAYS = 30;
 
 /** Én runde med sletting. Taket hindrer at en enkelt kjøring går i evig løkke. */
 const BATCH = 500;
@@ -106,11 +108,23 @@ export async function GET(request: NextRequest) {
     .lt('created_at', quotaCutoff);
   if (quotaError) feil.push(`kvoteteller: ${quotaError.message}`);
 
+  // Feilede Kindwise-kall (migrasjon 073): bare tall for dagsrapporten, og
+  // den leser høyst 7 dager tilbake. 30 dager er romslig. Mangler tabellen
+  // (42P01), er det ikke en feil i ryddingen — migrasjonen er bare ikke
+  // påført ennå, og cronen skal ikke stå rød hver natt for det.
+  const feilCutoff = new Date(Date.now() - FEIL_RETENTION_DAYS * 24 * 60 * 60 * 1000).toISOString();
+  const { error: feilRaderError, count: feilRaderSlettet } = await admin
+    .from('ai_identifiseringsfeil')
+    .delete({ count: 'exact' })
+    .lt('opprettet', feilCutoff);
+  if (feilRaderError && feilRaderError.code !== '42P01') feil.push(`feilteller: ${feilRaderError.message}`);
+
   const resultat = {
     cutoff,
     slettedeRader,
     slettedeBilder,
     slettedeKvoterader: quotaDeleted ?? 0,
+    slettedeFeilrader: feilRaderSlettet ?? 0,
     feil
   };
 

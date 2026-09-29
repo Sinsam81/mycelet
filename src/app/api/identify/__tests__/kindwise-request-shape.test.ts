@@ -34,8 +34,17 @@ vi.mock('@/lib/log/request', () => {
   return { createRequestLogger: () => logger };
 });
 
+/** Rader skrevet med tjenesterollen, per tabell — kvoteteller og feilteller. */
+const adminInserts: Array<{ tabell: string; rad: Record<string, unknown> }> = [];
 vi.mock('@/lib/supabase/admin', () => ({
-  createAdminClient: () => ({ from: () => ({ insert: async () => ({ error: null }) }) })
+  createAdminClient: () => ({
+    from: (tabell: string) => ({
+      insert: async (rad: Record<string, unknown>) => {
+        adminInserts.push({ tabell, rad });
+        return { error: null };
+      }
+    })
+  })
 }));
 
 vi.mock('@/lib/billing/subscription', () => ({
@@ -108,6 +117,7 @@ function makeRequest() {
 
 beforeEach(() => {
   kall = [];
+  adminInserts.length = 0;
   svar = [OK_SVAR];
   vi.stubEnv('PLANTID_API_KEY', 'test-key-lang-nok-til-a-passere');
   vi.stubGlobal('fetch', async (url: string, init?: RequestInit) => {
@@ -158,6 +168,20 @@ describe('forespørselen til Kindwise', () => {
     expect(res.status).toBe(502);
     expect(kall).toHaveLength(1);
     expect((await res.json()).code).toBe('provider_failed');
+  });
+
+  it('et avvist svar skriver én rad i ai_identifiseringsfeil med statusen — uten bruker-ID', async () => {
+    // Uten denne raden er «alle kall feiler» og «ingen bruker AI-en» samme
+    // tall i dagsrapporten (migrasjon 073). Kvoteraden skal IKKE skrives:
+    // kallet kostet ingenting.
+    svar = [() => new Response('Invalid image data', { status: 400 })];
+    await POST(makeRequest());
+    expect(adminInserts).toEqual([{ tabell: 'ai_identifiseringsfeil', rad: { status: 400 } }]);
+  });
+
+  it('et vellykket svar skriver kvoteraden, ikke feilraden', async () => {
+    await POST(makeRequest());
+    expect(adminInserts.map((i) => i.tabell)).toEqual(['ai_identifications']);
   });
 
   it('is_mushroom fra Mushroom.id leses som isPlant', async () => {

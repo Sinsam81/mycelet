@@ -11,6 +11,7 @@ import { coarsenLocation } from '@/lib/privacy/coarsen-location';
 import { normalizeIdentifyImages } from '@/lib/utils/identify-images';
 import { enrichSuggestions } from '@/lib/identifications/enrich';
 import { recordIdentification } from '@/lib/identifications/record';
+import { erAiNokkelSatt } from '@/lib/identifications/kindwise-status';
 import { getUserLocale } from '@/i18n/locale';
 import { DEFAULT_LOCALE, type Locale } from '@/i18n/config';
 
@@ -118,8 +119,7 @@ type IdentifyRequest = {
 };
 
 function isAiEnabled() {
-  const apiKey = process.env.PLANTID_API_KEY;
-  return Boolean(apiKey && apiKey !== 'your-api-key-here' && apiKey.length >= 20);
+  return erAiNokkelSatt(process.env.PLANTID_API_KEY);
 }
 
 export async function GET() {
@@ -295,6 +295,21 @@ export async function POST(request: NextRequest) {
         contentType: plantIdResponse.headers.get('content-type') ?? undefined,
         body: feilkropp.slice(0, 500)
       });
+      // Én rad per avvist svar (migrasjon 073), uten bruker-ID. Det er dette
+      // dagsrapporten leser for å skille «ingen bruker AI-en» fra «alle kall
+      // feiler» — ai_identifications over skrives bare ved suksess, så uten
+      // denne står begge tilfellene på null. Best effort: mangler tabellen
+      // eller tjenesterollen, logges det, og brukeren får feilsvaret som før.
+      try {
+        const { error: feilError } = await createAdminClient()
+          .from('ai_identifiseringsfeil')
+          .insert({ status: plantIdResponse.status });
+        if (feilError) userLog.warn('identify.failure_counter_failed', { message: feilError.message });
+      } catch (feilThrow) {
+        userLog.warn('identify.failure_counter_unavailable', {
+          message: feilThrow instanceof Error ? feilThrow.message : 'unknown'
+        });
+      }
       return errorResponse('provider_failed', 502, locale);
     }
 
