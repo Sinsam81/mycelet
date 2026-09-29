@@ -40,7 +40,7 @@ describe('helsesjekkens e-postsjekk', () => {
     // `npm run qa`, der RESEND aldri er satt — og e2e/public-api.e2e.ts feilet
     // hardt. En helsetest som alltid er rød blir ignorert, og da hjelper den
     // ingen. Feilen skal SYNES, ikke felle appen.
-    expect(kilde).toContain('const { epost, ...oppetidssjekker } = checks');
+    expect(kilde).toContain('const { epost, ai, ...oppetidssjekker } = checks');
     expect(kilde).toMatch(/const allOk = Object\.values\(oppetidssjekker\)\.every/);
   });
 

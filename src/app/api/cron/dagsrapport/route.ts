@@ -7,6 +7,7 @@ import {
   kontoerSomFolgerOmrade,
   UKJENT_KILDE,
   type AbonnementRad,
+  type AiKallTall,
   type BruksdagRad,
   type Dagsrapport,
   type FolgerRad,
@@ -18,6 +19,7 @@ import { osloDag } from '@/lib/bruk/bruksdag';
 import { type TellingRad } from '@/lib/bruk/tell';
 import { WEB_DIREKTE_KILDE, normaliserKilde, vaskTidssone } from '@/lib/analytics/kilde';
 import { sendEpost } from '@/lib/email/send';
+import { erAiNokkelSatt, hentKindwiseStatus } from '@/lib/identifications/kindwise-status';
 
 /**
  * Dagsrapport til eieren: hva skjedde med Mycelet i går?
@@ -209,6 +211,36 @@ export async function GET(request: NextRequest) {
     else soppregistreringer = (regRader ?? []).map((r) => fraTabellrad(r as Record<string, unknown>));
   }
 
+  // ── AI-identifiseringen: kall, feil og Kindwise sin status ────────────────
+  // Vellykkede kall skrives ved suksess (migrasjon 020), feilede ved avvist
+  // Kindwise-svar (migrasjon 073). Uten begge er «ingen bruker AI-en» og
+  // «AI-en er død» samme tall — det var sommerens feil. Mangler en tabell,
+  // står raden som «ikke målt». usage_info koster ingen kreditter.
+  const tellKall = async (tabell: string, kolonne: string): Promise<AiKallTall | undefined> => {
+    const grense = (timer: number) => new Date(naa.getTime() - timer * 3600_000).toISOString();
+    const [d1, d7] = await Promise.all([
+      db.from(tabell).select('*', { count: 'exact', head: true }).gte(kolonne, grense(24)),
+      db.from(tabell).select('*', { count: 'exact', head: true }).gte(kolonne, grense(24 * 7))
+    ]);
+    if (d1.error || d7.error) {
+      log.warn('dagsrapport.ai_telling_feilet', { tabell, message: (d1.error ?? d7.error)?.message });
+      return undefined;
+    }
+    return { siste24t: d1.count ?? 0, siste7d: d7.count ?? 0 };
+  };
+  const [aiKall, aiFeil] = await Promise.all([
+    tellKall('ai_identifications', 'created_at'),
+    tellKall('ai_identifiseringsfeil', 'opprettet')
+  ]);
+  let kindwise;
+  if (erAiNokkelSatt(process.env.PLANTID_API_KEY)) {
+    const r = await hentKindwiseStatus(process.env.PLANTID_API_KEY);
+    if (r.ok) kindwise = r.status;
+    else log.warn('dagsrapport.kindwise_status_feilet', { httpStatus: r.httpStatus, feil: r.feil });
+  } else {
+    log.warn('dagsrapport.kindwise_nokkel_mangler');
+  }
+
   // ── Regionscorer, i dag og i går ──────────────────────────────────────────
   const { data: scorer } = await db
     .from('region_daily_scores')
@@ -233,6 +265,9 @@ export async function GET(request: NextRequest) {
     kontoerSomFolger,
     flatetellinger,
     interneBrukere,
+    aiKall,
+    aiFeil,
+    kindwise,
     regionerIDag: velg(iDagDato),
     regionerIGar: velg(iGarDato),
     naa
@@ -335,6 +370,20 @@ export function byggRapportEpost(r: Dagsrapport, naa: Date) {
     ? `${nkSum.folger} av ${nkSum.nye} (iOS ${nk.perPlattform.ios.folger} av ${nk.perPlattform.ios.nye} · web ${nk.perPlattform.web.folger} av ${nk.perPlattform.web.nye}${nk.perPlattform.android.nye > 0 ? ` · Android ${nk.perPlattform.android.folger} av ${nk.perPlattform.android.nye}` : ''})`
     : 'ikke målt';
 
+  // AI-identifiseringen: vellykkede og feilede kall, og Kindwise sin kvote.
+  const ai = r.ai;
+  const kallTekst = (t: { maalt: boolean; siste24t: number; siste7d: number }, tabell: string) =>
+    t.maalt ? `${t.siste24t} / ${t.siste7d}` : `ikke målt — tabellen ${tabell} svarte ikke`;
+  const kindwiseTekst = ai.kindwise.status
+    ? `${ai.kindwise.status.igjen ?? '?'} kreditter igjen · ${ai.kindwise.status.bruktUke ?? '?'} brukt siste uke`
+    : 'ikke målt — usage_info svarte ikke';
+  const aiRader: Array<[string, string]> = [
+    ...(ai.varsel ? [['⚠️ AI', ai.varsel] as [string, string]] : []),
+    ['Identifiseringer (24 t / 7 d)', kallTekst(ai.kall, 'ai_identifications')],
+    ['Feilede Kindwise-kall (24 t / 7 d)', kallTekst(ai.feil, 'ai_identifiseringsfeil')],
+    ['Kindwise', kindwiseTekst]
+  ];
+
   const tellingRader: Array<[string, string]> = r.tellinger.maalt
     ? [
         ['Første skjerm i appen, utlogget (7 d) nb / sv', `${tl.soppforhold.nb} / ${tl.soppforhold.sv}`],
@@ -377,6 +426,11 @@ export function byggRapportEpost(r: Dagsrapport, naa: Date) {
   <h2 style="font-size:14px;color:#1A3409;margin:22px 0 6px">Før konto i appen</h2>
   <table style="width:100%;border-collapse:collapse;font-size:14px">
     ${tellingRader.map(([n, v]) => rad(n, v)).join('\n    ')}
+  </table>
+
+  <h2 style="font-size:14px;color:#1A3409;margin:22px 0 6px">AI-identifisering</h2>
+  <table style="width:100%;border-collapse:collapse;font-size:14px">
+    ${aiRader.map(([n, v]) => rad(n, v)).join('\n    ')}
   </table>
 
   <h2 style="font-size:14px;color:#1A3409;margin:22px 0 6px">I skogen</h2>
@@ -454,6 +508,9 @@ PRØVER
 
 FØR KONTO I APPEN
 ${tellingRader.map(([n, v]) => `  ${n.padEnd(42, '.')} ${v}`).join('\n')}
+
+AI-IDENTIFISERING
+${aiRader.map(([n, v]) => `  ${n.padEnd(38, '.')} ${v}`).join('\n')}
 
 I SKOGEN
   best i dag ................ ${r.toppRegioner.map((t) => `${t.region} ${t.score}`).join(', ') || '—'}

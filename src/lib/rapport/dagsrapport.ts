@@ -48,6 +48,7 @@ import { TILBUD_UTLOSERE, dagenEtter, isoUke, osloDag, type Flate } from '@/lib/
 import { summerTellinger, tomTellinger, type Tellinger, type TellingRad } from '@/lib/bruk/tell';
 import { PREDICTION_TILE_REGIONS } from '@/lib/prediction/tile-regions';
 import { byggRegistreringsblokk, type Registreringsblokk, type SoppregistreringRad } from '@/lib/rapport/soppregistreringer';
+import type { KindwiseStatus } from '@/lib/identifications/kindwise-status';
 
 export type Betalingskilde = 'stripe' | 'revenuecat' | 'manuell';
 
@@ -116,8 +117,22 @@ export interface ProveSvarRad {
   svart_at: string;
 }
 
+/** Tellinger av AI-kall, siste døgn og siste 7 dager. */
+export interface AiKallTall {
+  siste24t: number;
+  siste7d: number;
+}
+
 export interface RapportInn {
   brukere: BrukerRad[];
+  /**
+   * Vellykkede Kindwise-kall (ai_identifications, migrasjon 020) og feilede
+   * (ai_identifiseringsfeil, migrasjon 073). undefined = tabellen svarte ikke.
+   * Kindwise sin egen status (usage_info) — undefined = ikke hentet/svarte ikke.
+   */
+  aiKall?: AiKallTall;
+  aiFeil?: AiKallTall;
+  kindwise?: KindwiseStatus;
   abonnement: AbonnementRad[];
   varselabonnement: number;
   /** Svar fra prøvestartere siste 7 dager (migrasjon 072). undefined = tabellen svarte ikke. */
@@ -263,6 +278,43 @@ export interface Dagsrapport {
    * (migrasjon 070). maalt=false når tabellen ikke svarte.
    */
   tellinger: { maalt: boolean; siste7d: Tellinger };
+  /**
+   * AI-identifiseringen: virker den, og bruker noen den? Fra mai til 29.
+   * september 2026 feilet hvert Kindwise-kall uten at noe sa fra — vellykkede
+   * kall telles bare ved suksess, så «død» og «ubrukt» så identiske ut.
+   * `varsel` er satt når tallene sier at noe er galt: kall feiler uten at noe
+   * lykkes, Kindwise sperrer nøkkelen, eller kreditter nærmer seg tomt.
+   */
+  ai: {
+    kall: { maalt: boolean } & AiKallTall;
+    feil: { maalt: boolean } & AiKallTall;
+    kindwise: { maalt: boolean; status: KindwiseStatus | null };
+    varsel: string | null;
+  };
+}
+
+/** Under dette varsler rapporten om kreditter — én sesonguke for en liten base. */
+export const KINDWISE_KREDITT_VARSEL = 200;
+
+/** Ren og eksportert for testen: hva rapporten skal rope om. */
+export function byggAiBlokk(inn: Pick<RapportInn, 'aiKall' | 'aiFeil' | 'kindwise'>): Dagsrapport['ai'] {
+  const kall = inn.aiKall ? { maalt: true, ...inn.aiKall } : { maalt: false, siste24t: 0, siste7d: 0 };
+  const feil = inn.aiFeil ? { maalt: true, ...inn.aiFeil } : { maalt: false, siste24t: 0, siste7d: 0 };
+  const kindwise = inn.kindwise ? { maalt: true, status: inn.kindwise } : { maalt: false, status: null };
+
+  let varsel: string | null = null;
+  if (kindwise.status && (!kindwise.status.aktiv || !kindwise.status.kanBruke)) {
+    varsel = `Kindwise sperrer nøkkelen${kindwise.status.grunn ? ` (${kindwise.status.grunn})` : ''} — hvert AI-kall feiler`;
+  } else if (feil.maalt && feil.siste7d > 0 && kall.maalt && kall.siste7d === 0) {
+    // Nøyaktig sommerens feil: alt feiler, ingenting lykkes.
+    varsel = `alle ${feil.siste7d} AI-kall siste 7 dager feilet — ingen fikk svar`;
+  } else if (feil.maalt && kall.maalt && feil.siste7d > kall.siste7d) {
+    varsel = `flere AI-kall feilet (${feil.siste7d}) enn lyktes (${kall.siste7d}) siste 7 dager`;
+  } else if (kindwise.status?.igjen != null && kindwise.status.igjen < KINDWISE_KREDITT_VARSEL) {
+    varsel = `bare ${kindwise.status.igjen} Kindwise-kreditter igjen — kjøp flere`;
+  }
+
+  return { kall, feil, kindwise, varsel };
 }
 
 export const UKJENT_KILDE = 'ukjent';
@@ -566,7 +618,8 @@ export function byggDagsrapport(inn: RapportInn): Dagsrapport {
     registreringer: inn.soppregistreringer
       ? { maalt: true, blokk: byggRegistreringsblokk(inn.soppregistreringer) }
       : { maalt: false, blokk: null },
-    nyeKontoerFolger: { maalt: inn.kontoerSomFolger !== undefined, perPlattform }
+    nyeKontoerFolger: { maalt: inn.kontoerSomFolger !== undefined, perPlattform },
+    ai: byggAiBlokk(inn)
   };
 }
 
