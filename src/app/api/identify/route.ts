@@ -249,7 +249,16 @@ export async function POST(request: NextRequest) {
     });
 
     if (!plantIdResponse.ok) {
-      userLog.error('identify.plantid_failed', undefined, { status: plantIdResponse.status });
+      // Kroppen MÅ med. Kindwise forklarer avvisningen der («Invalid API key»,
+      // «Unsupported language», «Image too large» …), og med bare statuskoden
+      // sto vi 29. sep 2026 med en 502 til brukeren og ingen anelse om hvorfor.
+      // Avkortet: den inneholder aldri nøkkelen vår, men kan være lang.
+      const feilkropp = await plantIdResponse.text().catch(() => '');
+      userLog.error('identify.plantid_failed', undefined, {
+        status: plantIdResponse.status,
+        contentType: plantIdResponse.headers.get('content-type') ?? undefined,
+        body: feilkropp.slice(0, 500)
+      });
       return errorResponse('provider_failed', 502, locale);
     }
 
