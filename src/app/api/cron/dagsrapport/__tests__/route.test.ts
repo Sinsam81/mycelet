@@ -228,3 +228,17 @@ describe('abonnement — gavepass er ikke betalende', () => {
     expect(tekst).toMatch(/gratis tildelt \.+ 2\n/);
   });
 });
+
+describe('ukjent plan — varsellinja', () => {
+  it('står i begge varianter når en butikkrad løper uten kjent plan, og ellers ikke', () => {
+    const lag = (abonnement: RapportInn['abonnement']) =>
+      byggRapportEpost(byggDagsrapport({ brukere: [], abonnement, varselabonnement: 0, regionerIDag: [], regionerIGar: [], naa: NAA }), NAA);
+    const rad = (tier: string): RapportInn['abonnement'][number] => ({
+      user_id: 'u', tier, status: 'active', current_period_end: '2026-10-15T00:00:00Z', created_at: '2026-09-01T00:00:00Z', metadata: { provider: 'stripe' }
+    });
+    const med = lag([rad('free')]);
+    const uten = lag([rad('premium')]);
+    for (const variant of [med.html, med.tekst]) expect(variant).toMatch(/uten kjent plan/);
+    for (const variant of [uten.html, uten.tekst]) expect(variant).not.toMatch(/uten kjent plan/);
+  });
+});

@@ -259,23 +259,29 @@ describe('én regel, to flater — rapporten og /admin', () => {
     expect(r.utloptMenMarkertAktiv).toBe(t.utloptMenMarkertAktiv);
   });
 
-  it('en butikkprøve med ukjent plan (tier free) er «løpende» OG «startet» — aldri bare det ene', () => {
-    // En Stripe-rad hvis pris-ID mangler i miljøet skrives med tier `free` og
-    // status trialing. Den er fortsatt en prøve: forsvant den fra «løpende»
-    // mens «startet 7 d» talte den, ville rapporten undertelle prøver stille
-    // hver gang en pris-ID glapp.
+  it('butikkrader med ukjent plan (tier free) telles likt i prøveblokka og hos klassifisereren — og varsles', () => {
+    // En Stripe-rad hvis pris-ID mangler i miljøet skrives med tier `free`.
+    // Forsvant den fra «løpende» mens «startet 7 d» talte den, eller fra
+    // «betalende» mens «gikk til betaling» talte den, ville rapporten lyve
+    // stille hver gang en pris-ID glapp.
     const rader = [
       ab({ user_id: 'ukjent-pris', tier: 'free', status: 'trialing', created_at: dagerSiden(2), metadata: { provider: 'stripe', prove_start: dagerSiden(2) } }),
-      ab({ user_id: 'ekte-prove', status: 'trialing', created_at: dagerSiden(3), metadata: { provider: 'revenuecat', prove_start: dagerSiden(3) } })
+      ab({ user_id: 'ekte-prove', status: 'trialing', created_at: dagerSiden(3), metadata: { provider: 'revenuecat', prove_start: dagerSiden(3) } }),
+      // Samme feil en uke senere: prøven ble belastet, planen er fortsatt ukjent.
+      ab({ user_id: 'ukjent-pris-belastet', tier: 'free', created_at: dagerSiden(9), metadata: { provider: 'stripe', prove_start: dagerSiden(9), forste_belastning: dagerSiden(2) } })
     ];
     const r = byggDagsrapport(inn({ abonnement: rader }));
     expect(tellAbonnement(rader, NAA).prover).toBe(2);
     expect(r.prover.lopende).toBe(2);
     expect(r.prover.startetSiste7d).toBe(2);
     expect(r.prover.startetSiste7dPerPlan).toEqual({ pass: 0, maaned: 2 });
-    // Men «betalende» krever fortsatt betalt plan: konverterer den ukjente
-    // prisen til active med tier free, er den ikke et salg.
-    expect(r.betalende.totalt).toBe(0);
+    // Belastet = betalende, også med ukjent plan — «gikk til betaling», «nye
+    // ekte kjøp» og «betalende» sier det samme.
+    expect(r.prover.gikkTilBetaling).toBe(1);
+    expect(r.betalende.totalt).toBe(1);
+    expect(r.betalende.nyeSiste7d).toBe(1);
+    // Og begge radene med ukjent plan varsles — de får ingen Premium.
+    expect(r.ukjentPlan).toBe(2);
   });
 });
 

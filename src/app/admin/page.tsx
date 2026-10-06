@@ -369,6 +369,9 @@ export default async function AdminDashboardPage() {
               {t('expiredMarkedActive', { count: abonnement.utloptMenMarkertAktiv })}
             </p>
           )}
+          {abonnement != null && abonnement.ukjentPlan > 0 && (
+            <p className="text-xs text-amber-800">{t('unknownPlan', { count: abonnement.ukjentPlan })}</p>
+          )}
           <Grid>
             <StatCard label={t('premium')} value={billingRows ? byTier.premium : null} icon={CreditCard} />
             <StatCard label={t('seasonPass')} value={billingRows ? byTier.season_pass : null} icon={CreditCard} />

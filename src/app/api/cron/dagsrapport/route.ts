@@ -286,6 +286,7 @@ export async function GET(request: NextRequest) {
     nyeBrukere24t: rapport.nyeBrukere.siste24t,
     betalende: rapport.betalende.totalt,
     gratisTildelt: rapport.gratisTildelt,
+    ukjentPlan: rapport.ukjentPlan,
     flanker: rapport.flanker.length
   });
 
@@ -418,6 +419,7 @@ export function byggRapportEpost(r: Dagsrapport, naa: Date) {
     ${rad('Gratis tildelt (gavepass og testkontoer)', String(r.gratisTildelt))}
     ${rad('Nye ekte kjøp siste 7 dager', String(b.nyeSiste7d))}
     ${r.utloptMenMarkertAktiv > 0 ? rad('⚠️ utløpt, men merket aktiv', String(r.utloptMenMarkertAktiv)) : ''}
+    ${r.ukjentPlan > 0 ? rad('⚠️ betaler eller prøver uten kjent plan — sjekk Stripe-pris-ID-ene (kunden får ingen Premium)', String(r.ukjentPlan)) : ''}
   </table>
 
   <h2 style="font-size:14px;color:#1A3409;margin:22px 0 6px">Prøver</h2>
@@ -505,7 +507,7 @@ ABONNEMENT
     via Stripe .............. ${b.perKilde.stripe}
     via App Store ........... ${b.perKilde.revenuecat}
   gratis tildelt ............ ${r.gratisTildelt}
-  nye ekte kjøp (7 d) ....... ${b.nyeSiste7d}${r.utloptMenMarkertAktiv > 0 ? `\n  ⚠️ utløpt men merket aktiv .. ${r.utloptMenMarkertAktiv}` : ''}
+  nye ekte kjøp (7 d) ....... ${b.nyeSiste7d}${r.utloptMenMarkertAktiv > 0 ? `\n  ⚠️ utløpt men merket aktiv .. ${r.utloptMenMarkertAktiv}` : ''}${r.ukjentPlan > 0 ? `\n  ⚠️ uten kjent plan (sjekk pris-ID) ${r.ukjentPlan}` : ''}
 
 PRØVER
   løpende nå ................ ${p.lopende}

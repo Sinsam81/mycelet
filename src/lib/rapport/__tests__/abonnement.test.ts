@@ -51,15 +51,20 @@ describe('tellAbonnement — produksjonsbildet 15. september 2026', () => {
       betalendePerButikk: { stripe: 0, revenuecat: 1 },
       prover: 3,
       gratisTildelt: 3,
-      utloptMenMarkertAktiv: 1
+      utloptMenMarkertAktiv: 1,
+      ukjentPlan: 0
     });
   });
 
   it('hver rad havner i nøyaktig én bøtte', () => {
-    const rader = [...PRODUKSJON_15_SEP, rad({ status: 'canceled' }), rad({ tier: 'free' })];
+    // Inaktive: en avsluttet rad og et håndsatt pass på gratisplanen. (En
+    // BUTIKKRAD på gratisplanen er ikke inaktiv — den avgjøres av status og
+    // varsles som ukjent plan; se egen test.)
+    const rader = [...PRODUKSJON_15_SEP, rad({ status: 'canceled' }), rad({ tier: 'free', metadata: { source: 'manual_grant' } })];
     const t = tellAbonnement(rader, NAA);
     const inaktive = rader.filter((r) => klassifiserAbonnement(r, NAA) === 'inaktiv').length;
     expect(inaktive).toBe(2);
+    expect(t.ukjentPlan).toBe(0);
     expect(t.betalende + t.prover + t.gratisTildelt + t.utloptMenMarkertAktiv + inaktive).toBe(t.rader);
   });
 });
@@ -79,7 +84,10 @@ describe('klassifiserAbonnement', () => {
     for (const status of ['canceled', 'past_due', 'unpaid', 'incomplete', 'inactive']) {
       expect(klassifiserAbonnement(rad({ status }), NAA)).toBe('inaktiv');
     }
-    expect(klassifiserAbonnement(rad({ tier: 'free' }), NAA)).toBe('inaktiv');
+    // Gratisplanen er inaktiv når raden er satt inn for hånd. En butikkrad
+    // avgjøres av status — se «ukjent plan» under.
+    expect(klassifiserAbonnement(rad({ tier: 'free', metadata: { source: 'manual_grant' } }), NAA)).toBe('inaktiv');
+    expect(klassifiserAbonnement(rad({ tier: 'free', metadata: null }), NAA)).toBe('inaktiv');
   });
 
   it('en utløpt prøve er utløpt, ikke en prøve', () => {
@@ -159,15 +167,20 @@ describe('erButikkrad — radene prøveblokka teller på', () => {
     expect(erButikkrad(rad({ user_id: 'qa', metadata: { provider: 'revenuecat' } }), new Set(['qa']))).toBe(false);
   });
 
-  it('en løpende butikkprøve er en prøve selv med tier free (ukjent Stripe-pris)', () => {
+  it('en butikkrad avgjøres av status, ikke tier — og en ukjent plan telles som varsel', () => {
+    // En Stripe-pris-ID som mangler i miljøet skrives som tier free. Prøven er
+    // fortsatt en prøve, og når den belastes, er kunden fortsatt en kunde:
+    // butikken sier «active» først når penger har flyttet seg.
     const ukjentPris = rad({ tier: 'free', status: 'trialing', metadata: { provider: 'stripe' } });
+    const konvertert = rad({ tier: 'free', metadata: { provider: 'stripe', prove_start: '2026-09-01T00:00:00Z', forste_belastning: '2026-09-08T00:00:00Z' } });
     expect(erButikkrad(ukjentPris)).toBe(true);
     expect(klassifiserAbonnement(ukjentPris, NAA)).toBe('prove');
-    // … men blir den active med tier free, er det ikke et salg, og et gavepass
-    // med tier free gir ingenting.
-    expect(klassifiserAbonnement(rad({ tier: 'free', metadata: { provider: 'stripe' } }), NAA)).toBe('inaktiv');
+    expect(klassifiserAbonnement(konvertert, NAA)).toBe('betalende');
+    // Begge varsles: de får ingen Premium (hasPaidAccess krever betalt plan).
+    expect(tellAbonnement([ukjentPris, konvertert, rad()], NAA)).toMatchObject({ betalende: 2, prover: 1, ukjentPlan: 2 });
+    expect(hasPaidAccess(konvertert.status as BillingStatus, konvertert.tier as BillingTier, konvertert.current_period_end)).toBe(false);
+    // Et gavepass med tier free gir ingenting, og utløpt vinner over alt.
     expect(klassifiserAbonnement(rad({ tier: 'free', status: 'trialing', metadata: { source: 'manual_grant' } }), NAA)).toBe('inaktiv');
-    // Utløpt vinner fortsatt over prøve.
     expect(klassifiserAbonnement(rad({ tier: 'free', status: 'trialing', current_period_end: '2026-09-01T00:00:00Z', metadata: { provider: 'stripe' } }), NAA)).toBe('utlopt');
   });
 });

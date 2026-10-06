@@ -217,6 +217,8 @@ export interface Dagsrapport {
   };
   /** Rader som SIER aktiv eller prøve, men der perioden er ute. Overses de, blåses tallet opp. */
   utloptMenMarkertAktiv: number;
+  /** Butikkrader som løper uten kjent betalt plan (ukjent Stripe-pris-ID): talt i betalende/prøver, men uten Premium. Skal være 0. */
+  ukjentPlan: number;
   varselabonnement: number;
   toppRegioner: Array<{ region: string; score: number }>;
   /** Regioner som krysset varselterskelen i natt. */
@@ -424,10 +426,11 @@ export function byggDagsrapport(inn: RapportInn): Dagsrapport {
   const aktive = inn.abonnement.filter((a) => klassifiserAbonnement(a, inn.naa, inn.interneBrukere) === 'betalende');
 
   // ── Prøver ────────────────────────────────────────────────────────────────
-  // Bare butikkrader (erButikkrad, samme sett som klassifiserAbonnement teller
-  // prøver på): et gavepass med status trialing er ikke en prøve, og
+  // Bare butikkrader (erButikkrad, samme sett klassifiserAbonnement avgjør
+  // etter status): et gavepass med status trialing er ikke en prøve, og
   // QA-kontoens sandkasseprøve er ikke en kunde på vei inn. Tier spiller ingen
-  // rolle her — en ukjent Stripe-pris gir tier `free`, og prøven skal synes.
+  // rolle her, som i klassifisereren — en ukjent Stripe-pris gir tier `free`,
+  // og prøven og kunden skal synes (og varsles som `ukjentPlan`).
   const butikkRader = inn.abonnement.filter((a) => erButikkrad(a, inn.interneBrukere));
   const proveStart = (a: AbonnementRad) => lesProveMerke(a.metadata, 'prove_start') ?? (a.status === 'trialing' ? a.created_at : null);
   const forsteBelastning = (a: AbonnementRad) => {
@@ -589,6 +592,7 @@ export function byggDagsrapport(inn: RapportInn): Dagsrapport {
     gratisTildelt: abonnement.gratisTildelt,
     prover,
     utloptMenMarkertAktiv: abonnement.utloptMenMarkertAktiv,
+    ukjentPlan: abonnement.ukjentPlan,
     varselabonnement: inn.varselabonnement,
     toppRegioner: [...inn.regionerIDag].sort((a, b) => b.score - a.score).slice(0, 3),
     flanker,

@@ -97,6 +97,7 @@
     "free": "Gratis",
     "subscriptionRows": "Abonnemangsrader",
     "expiredMarkedActive": "{count} rad(er) står som aktiv eller provperiod, men perioden har gått ut — räknas inte.",
+    "unknownPlan": "⚠️ {count} rad(er) betalar eller provar utan känd plan — ett Stripe-pris-ID saknas i miljön, och kunden får ingen Premium. Ska vara 0.",
     "billingHint": "«Betalande» är köp via Stripe eller App Store med löpande period, utan provperioder — samma regel som dagsrapporten. «Gratis tilldelade» är presentpass och interna testkonton. Premium, Säsongspass och Gratis är rader per plan, oavsett status.",
     "sectionFindings": "Fynd",
     "findingsHint": "Synligheten styr hur exakt position som visas på kartan.",

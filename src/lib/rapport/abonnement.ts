@@ -20,19 +20,27 @@
  *
  *  - utlopt:        status active eller trialing, men current_period_end er
  *                   passert. Status alene lyver — målt i produksjon 2026-08-13.
- *  - inaktiv:       canceled, past_due, unpaid …, eller en gratis plan.
+ *  - inaktiv:       canceled, past_due, unpaid …, eller en rad satt inn for
+ *                   hånd med gratis plan.
  *  - gratisTildelt: løpende tilgang uten at penger har flyttet seg. Raden er
  *                   merket `metadata.source = 'manual_grant'`, mangler en
  *                   butikk-provider, eller eies av en intern konto — der er et
  *                   App Store-kjøp testing av kjøpsflyten, ikke et salg.
  *  - prove:         butikkrad med status trialing. Sju dager gratis er ikke
- *                   en kunde. Uansett tier: en ukjent Stripe-pris gir tier
- *                   `free`, og prøven skal fortsatt synes — ellers forsvinner
- *                   løpende prøver stille fra rapporten og /admin når en
- *                   pris-ID mangler i miljøet.
+ *                   en kunde.
  *  - betalende:     butikkrad (Stripe eller App Store) med status active og
  *                   løpende periode. En kunde som har sagt opp, teller til
  *                   den betalte perioden er ute.
+ *
+ * For en butikkrad avgjør STATUS, ikke tier: butikken sier «active» først når
+ * penger har flyttet seg, og «trialing» mens en prøve løper. En Stripe-pris-ID
+ * som mangler i miljøet skrives som tier `free` (webhooken beholder bare en
+ * eksisterende betalt tier), og uten denne regelen forsvant både prøven og den
+ * belastede kunden stille fra tellingen. Slike rader telles i tillegg i
+ * `ukjentPlan` (tellAbonnement), som rapporten og /admin viser som varsel:
+ * kunden har betalt eller prøver, men hasPaidAccess gir ingen Premium. Tallet
+ * skal være 0. For en rad satt inn for hånd avgjør planen (gratisTildelt eller
+ * inaktiv).
  *
  * Dette er RAPPORTERING. Tilgang til Premium avgjøres av hasPaidAccess()
  * (billing/plans.ts), der en prøve og et gavepass selvsagt gir tilgang. Ikke
@@ -69,6 +77,13 @@ export interface Abonnementstall {
   gratisTildelt: number;
   /** Rader som SIER aktiv eller prøve, men der perioden er ute. */
   utloptMenMarkertAktiv: number;
+  /**
+   * Butikkrader som løper (prøve eller betalende) uten kjent betalt plan — en
+   * Stripe-pris-ID som mangler i miljøet. Ligger i `prover`/`betalende`, men
+   * kunden får ingen Premium (hasPaidAccess). Skal være 0; alt annet er en
+   * konfigurasjonsfeil som må rettes samme dag.
+   */
+  ukjentPlan: number;
 }
 
 /** QA-brukeren og Apples demokonto ligger på eget domene. */
@@ -112,14 +127,10 @@ export function periodeLoper(rad: AbonnementRad, naa: Date): boolean {
 export function klassifiserAbonnement(rad: AbonnementRad, naa: Date, interne?: ReadonlySet<string>): AbonnementKlasse {
   if (rad.status !== 'active' && rad.status !== 'trialing') return 'inaktiv';
   if (!periodeLoper(rad, naa)) return 'utlopt';
-  // En løpende butikkprøve er en prøve før tier vurderes: en ukjent Stripe-pris
-  // skrives som tier `free` (stripe-webhook-decision.ts beholder bare en
-  // eksisterende betalt tier), og da ville prøven ellers havnet i «inaktiv»
-  // mens prøveblokka samtidig sa «startet 7 d: 1».
-  if (rad.status === 'trialing' && erButikkrad(rad, interne)) return 'prove';
-  if (!isPaidTier(rad.tier as BillingTier)) return 'inaktiv';
-  if (betalingskilde(rad, interne) === 'manuell') return 'gratisTildelt';
-  return 'betalende';
+  // Butikkrad: status avgjør, uansett hva pris-ID-en ble oversatt til (se
+  // filhodet om `ukjentPlan`). Satt inn for hånd: planen avgjør.
+  if (erButikkrad(rad, interne)) return rad.status === 'trialing' ? 'prove' : 'betalende';
+  return isPaidTier(rad.tier as BillingTier) ? 'gratisTildelt' : 'inaktiv';
 }
 
 export function tellAbonnement(rader: readonly AbonnementRad[], naa: Date, interne?: ReadonlySet<string>): Abonnementstall {
@@ -129,10 +140,12 @@ export function tellAbonnement(rader: readonly AbonnementRad[], naa: Date, inter
     betalendePerButikk: { stripe: 0, revenuecat: 0 },
     prover: 0,
     gratisTildelt: 0,
-    utloptMenMarkertAktiv: 0
+    utloptMenMarkertAktiv: 0,
+    ukjentPlan: 0
   };
   for (const rad of rader) {
     const klasse = klassifiserAbonnement(rad, naa, interne);
+    if ((klasse === 'betalende' || klasse === 'prove') && !isPaidTier(rad.tier as BillingTier)) tall.ukjentPlan += 1;
     if (klasse === 'betalende') {
       tall.betalende += 1;
       tall.betalendePerButikk[betalingskilde(rad, interne) as Butikk] += 1;
