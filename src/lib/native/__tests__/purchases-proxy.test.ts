@@ -65,7 +65,7 @@ const getOfferings = vi.fn(async () => ({
       {
         identifier: '$rc_annual',
         packageType: 'ANNUAL',
-        product: { identifier: 'no.mycelet.seasonpass.yearly', priceString: 'kr 249,00', introPrice: null }
+        product: { identifier: 'no.mycelet.seasonpass.yearly', priceString: 'kr 249,00', price: 249, currencyCode: 'NOK', introPrice: null }
       }
     ]
   }
@@ -131,6 +131,19 @@ describe('plugin-en tåler å bli hentet gjennom en async-funksjon', () => {
     const { getIapOffers } = await import('../purchases');
     const offers = await getIapOffers();
     expect(offers.find((o) => o.plan === 'season_pass')?.priceString).toBe('kr 249,00');
+  });
+
+  it('tar med butikkens tall og valuta når skallet gir dem — og null når det ikke gjør det', async () => {
+    // «Tilsvarer ca. 21 kr per måned» regnes av disse; mangler de, står kortet uten beløp.
+    vi.stubEnv('NEXT_PUBLIC_REVENUECAT_APPLE_KEY', 'appl_test');
+    const { getIapOffers } = await import('../purchases');
+    const offers = await getIapOffers();
+    const sesong = offers.find((o) => o.plan === 'season_pass');
+    expect(sesong?.price).toBe(249);
+    expect(sesong?.currencyCode).toBe('NOK');
+    const premium = offers.find((o) => o.plan === 'premium');
+    expect(premium?.price).toBeNull();
+    expect(premium?.currencyCode).toBeNull();
   });
 
   it('lover gratisuka bare på produktet som faktisk har den i butikken', async () => {

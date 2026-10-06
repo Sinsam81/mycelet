@@ -5,7 +5,6 @@ import { createRequestLogger } from '@/lib/log/request';
 import { bearerSecretMatches } from '@/lib/security/secret-compare';
 import { beregnFasit, FASIT_MODEN_ETTER_VARSEL_DAGER } from '@/lib/alerts/fasit';
 import { byggOmslagsPost, byggUkesPost, finnOmslag, type UkensFasit } from '@/lib/x/innlegg';
-import { beregnPuls, pulsKortLinje } from '@/lib/rapportpuls/puls';
 import { manglendeXKonfig, postTilX } from '@/lib/x/klient';
 import { byggPresseVarsel } from '@/lib/alerts/presse';
 import { sendEpost } from '@/lib/email/send';
@@ -114,30 +113,7 @@ export async function GET(request: NextRequest) {
   const planlagte: Array<{ type: 'omslag' | 'ukesoppsummering'; tekst: string }> = [];
 
   const omslag = finnOmslag({ iDag, iGar, lavesteUke });
-  // Rapportpuls for det første omslagsområdet — pynt, best effort.
-  let pulsLinje: string | null = null;
-  if (omslag.length > 0) {
-    const { data: pulsRad } = await db
-      .from('rapportpuls')
-      .select('fra,til,siste7,baseline,forrige_uke')
-      .eq('region', omslag[0].region)
-      .eq('dag', tileDate)
-      .maybeSingle();
-    if (pulsRad) {
-      const baseline = pulsRad.baseline === null ? null : Number(pulsRad.baseline);
-      pulsLinje = pulsKortLinje(
-        omslag[0].region,
-        beregnPuls({
-          fra: String(pulsRad.fra),
-          til: String(pulsRad.til),
-          siste7: Number(pulsRad.siste7),
-          tidligereAar: baseline === null ? [] : [baseline],
-          forrigeUke: pulsRad.forrige_uke === null ? null : Number(pulsRad.forrige_uke)
-        })
-      );
-    }
-  }
-  const omslagsTekst = byggOmslagsPost(omslag, pulsLinje);
+  const omslagsTekst = byggOmslagsPost(omslag);
   if (omslagsTekst) planlagte.push({ type: 'omslag', tekst: omslagsTekst });
 
   if (naa.getUTCDay() === 0 && iDag.size > 0) {

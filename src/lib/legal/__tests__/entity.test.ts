@@ -73,6 +73,19 @@ describe('legal text hygiene', () => {
     expect(text).toContain('arn.se');
     expect(text).toContain('forbrukerradet.no');
   });
+
+  // Migration 072 stores that we e-mailed a customer before an App Store
+  // trial converts, and their optional one-tap answer — both keyed on the
+  // user id, so the policy has to say so (Art. 13) and the export has to
+  // carry them (Art. 15).
+  it.each(['nb', 'sv'])('%s privacy policy names the pre-charge reminder and the stored answer', (locale) => {
+    const cat = (locale === 'nb' ? nb : sv) as Record<string, Record<string, string>>;
+    const desc = cat.Personvern.collectPaymentDesc;
+    expect(desc).toContain('App Store');
+    expect(desc).toMatch(/påminnelse/);
+    expect(desc).toMatch(locale === 'nb' ? /lagrer vi svaret/ : /sparar vi svaret/);
+    expect(desc).toMatch(locale === 'nb' ? /slettes med kontoen/ : /raderas med kontot/);
+  });
 });
 
 describe('mandatory pre-contractual contact information', () => {

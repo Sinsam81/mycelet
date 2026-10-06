@@ -9,8 +9,14 @@ export interface BillingStatusResult {
     paid: boolean;
     aiDailyLimit: number | null;
   };
-  /** Raden fra billing_subscriptions, eller null. En rad uten `paid` = tidligere abonnent (ingen ny prøveperiode). */
+  /** Raden fra billing_subscriptions, eller null. */
   subscription?: { stripe_customer_id?: string | null; status?: string } | null;
+  /**
+   * Får kunden gratisuka? Avgjort på serveren med samme sjekker som checkout
+   * (tidligere-abonnent.ts) — les den via kanFaaProveperiode, aldri av om
+   * `subscription` er null.
+   */
+  kanFaaProve?: boolean;
 }
 
 /**

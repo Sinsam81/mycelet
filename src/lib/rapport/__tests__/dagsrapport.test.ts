@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { tellAbonnement } from '../abonnement';
-import { byggDagsrapport, type AbonnementRad, type BrukerRad, type RapportInn, type VarselAbonnentRad } from '../dagsrapport';
+import {
+  byggDagsrapport,
+  kontoerSomFolgerOmrade,
+  type AbonnementRad,
+  type BrukerRad,
+  type FolgerRad,
+  type RapportInn,
+  type VarselAbonnentRad
+} from '../dagsrapport';
+import type { SoppregistreringRad } from '../soppregistreringer';
 
 /**
  * Testene her er skrevet mot ÉN feil: at rapporten oppgir flere kunder enn
@@ -51,24 +60,106 @@ function inn(over: Partial<RapportInn> = {}): RapportInn {
   };
 }
 
-describe('rapportpuls', () => {
-  it('viser de tre områdene med størst avvik og hopper over tynne', () => {
-    const r = byggDagsrapport(
-      inn({
-        rapportpuls: [
-          { region: 'Oslo', siste7: 84, avvikPst: 61 },
-          { region: 'Bergen', siste7: 40, avvikPst: -20 },
-          { region: 'Innlandet', siste7: 120, avvikPst: 90 },
-          { region: 'Trondheim', siste7: 50, avvikPst: 10 },
-          { region: 'Stavanger', siste7: 3, avvikPst: null }
-        ]
-      })
-    );
-    expect(r.puls.map((p) => p.region)).toEqual(['Innlandet', 'Oslo', 'Trondheim']);
+describe('soppregistreringer, samme dato som før', () => {
+  const rad = (over: Partial<SoppregistreringRad>): SoppregistreringRad => ({
+    snapshot: '2026-09-12',
+    vindu: 'sesong',
+    fra: '2026-08-01',
+    til: '2026-09-05',
+    omrade: 'Norge',
+    gruppe: 'storsopp',
+    antall: 8449,
+    normal: 9839,
+    prosent: 86,
+    tynt: false,
+    perAar: { 2023: 9982, 2024: 11891, 2025: 7644 },
+    grenser: {},
+    ...over
   });
 
-  it('tom uten data', () => {
-    expect(byggDagsrapport(inn()).puls).toEqual([]);
+  it('ikke målt når tabellen ikke svarte, og ingen blokk før første utgave', () => {
+    expect(byggDagsrapport(inn()).registreringer).toEqual({ maalt: false, blokk: null });
+    expect(byggDagsrapport(inn({ soppregistreringer: [] })).registreringer).toEqual({ maalt: true, blokk: null });
+  });
+
+  it('bygger blokken fra radene', () => {
+    const r = byggDagsrapport(inn({ soppregistreringer: [rad({}), rad({ omrade: 'Vestfold', antall: 40, normal: 530.7, prosent: 8 })] }));
+    expect(r.registreringer.maalt).toBe(true);
+    expect(r.registreringer.blokk?.sesong.storsopp?.prosent).toBe(86);
+    expect(r.registreringer.blokk?.lavest.map((c) => c.omrade)).toEqual(['Vestfold']);
+  });
+});
+
+describe('nye kontoer som følger et område', () => {
+  const folger = (over: Partial<FolgerRad>): FolgerRad => ({ user_id: null, email: null, active: true, confirmed_at: dagerSiden(1), ...over });
+
+  it('kobler på user_id og på samme e-post (uten store bokstaver og mellomrom), og svarer bare med id-er', () => {
+    const kontoer = [
+      { id: 'u-app', email: 'app@eksempel.no' },
+      { id: 'u-skjema', email: 'Skjema@Eksempel.no' },
+      { id: 'u-ingen', email: 'ingen@eksempel.no' }
+    ];
+    const sett = kontoerSomFolgerOmrade(kontoer, [folger({ user_id: 'u-app' }), folger({ email: '  skjema@eksempel.NO ' })]);
+    expect([...sett].sort()).toEqual(['u-app', 'u-skjema']);
+    expect([...sett].some((v) => v.includes('@'))).toBe(false);
+  });
+
+  it('en kontoløs påmelding teller bare når den er bekreftet og aktiv; en kontorad bare når den er aktiv', () => {
+    const kontoer = [
+      { id: 'a', email: 'a@x.no' },
+      { id: 'b', email: 'b@x.no' },
+      { id: 'c', email: 'c@x.no' }
+    ];
+    const sett = kontoerSomFolgerOmrade(kontoer, [
+      folger({ email: 'a@x.no', confirmed_at: null }),
+      folger({ email: 'b@x.no', active: false }),
+      folger({ user_id: 'c', active: false })
+    ]);
+    expect(sett.size).toBe(0);
+  });
+
+  it('teller ÉN gang når samme menneske har både kontorad og kontoløs rad — også etter adopsjonen', () => {
+    // Tre av fem som fulgte et område 17. september 2026 kom inn gjennom det
+    // kontoløse skjemaet. /api/me/soppvarsel setter user_id på slike rader
+    // (src/lib/alerts/adopsjon.ts); svaret er et Set, så verken før eller etter
+    // adopsjonen kan ett menneske telles to ganger.
+    const kontoer = [{ id: 'u', email: 'begge@eksempel.no' }];
+    const for_ = kontoerSomFolgerOmrade(kontoer, [
+      folger({ user_id: 'u' }),
+      folger({ email: 'begge@eksempel.no' })
+    ]);
+    expect([...for_]).toEqual(['u']);
+    // Etter adopsjonen: én rad, som nå bærer BÅDE user_id og adressen.
+    const etter = kontoerSomFolgerOmrade(kontoer, [folger({ user_id: 'u', email: 'begge@eksempel.no' })]);
+    expect([...etter]).toEqual(['u']);
+  });
+
+  it('konto uten e-post matcher ikke en rad uten e-post, og en rad for en slettet konto teller ikke', () => {
+    const sett = kontoerSomFolgerOmrade([{ id: 'uten', email: null }], [folger({ email: '' }), folger({ email: null }), folger({ user_id: 'slettet' })]);
+    expect(sett.size).toBe(0);
+  });
+
+  it('teller nye kontoer siste 14 dager per plattform — iOS fra user_metadata.plattform, resten nettet', () => {
+    const r = byggDagsrapport(
+      inn({
+        brukere: [
+          br({ id: 'i1', plattform: 'ios', created_at: dagerSiden(2) }),
+          br({ id: 'i2', plattform: 'ios', created_at: dagerSiden(13) }),
+          br({ id: 'w1', created_at: dagerSiden(1) }),
+          br({ id: 'w2', plattform: 'noe-rart', created_at: dagerSiden(5) }),
+          br({ id: 'gammel', plattform: 'ios', created_at: dagerSiden(20) })
+        ],
+        kontoerSomFolger: new Set(['i1', 'w2', 'gammel'])
+      })
+    );
+    expect(r.nyeKontoerFolger.maalt).toBe(true);
+    expect(r.nyeKontoerFolger.perPlattform.ios).toEqual({ folger: 1, nye: 2 });
+    expect(r.nyeKontoerFolger.perPlattform.web).toEqual({ folger: 1, nye: 2 });
+    expect(r.nyeKontoerFolger.perPlattform.android).toEqual({ folger: 0, nye: 0 });
+  });
+
+  it('ikke målt uten koblingen', () => {
+    expect(byggDagsrapport(inn({ brukere: [br({ created_at: dagerSiden(1) })] })).nyeKontoerFolger.maalt).toBe(false);
   });
 });
 
@@ -225,6 +316,22 @@ describe('prøver — sju dager gratis er ikke en kunde', () => {
     expect(r.prover.startetSiste7d).toBe(1);
   });
 
+  it('startet siste 7 dager deles på plan: sesongpass mot måned — det «sesongpass først» skal dømmes på', () => {
+    const r = byggDagsrapport(
+      inn({
+        abonnement: [
+          ab({ user_id: 'pass', tier: 'season_pass', status: 'trialing', metadata: { provider: 'revenuecat', prove_start: PROVE_START } }),
+          ab({ user_id: 'mnd-1', tier: 'premium', status: 'trialing', metadata: { provider: 'stripe', prove_start: PROVE_START } }),
+          ab({ user_id: 'mnd-2', tier: 'premium', status: 'trialing', metadata: { provider: 'revenuecat', prove_start: PROVE_START } }),
+          // En prøve startet for tolv dager siden hører ikke til uka — uansett plan.
+          ab({ user_id: 'gammel', tier: 'season_pass', status: 'trialing', metadata: { provider: 'stripe', prove_start: dagerSiden(12) } })
+        ]
+      })
+    );
+    expect(r.prover.startetSiste7d).toBe(3);
+    expect(r.prover.startetSiste7dPerPlan).toEqual({ pass: 1, maaned: 2 });
+  });
+
   it('gikk til betaling = forste_belastning etter prove_start; teller som nytt kjøp den dagen, ikke ved radens opprettelse', () => {
     const r = byggDagsrapport(
       inn({
@@ -276,6 +383,24 @@ describe('prøver — sju dager gratis er ikke en kunde', () => {
     const r = byggDagsrapport(inn({ abonnement: [ab({ status: 'trialing', current_period_end: dagerSiden(1), metadata: { provider: 'stripe' } })] }));
     expect(r.prover.lopende).toBe(0);
     expect(r.utloptMenMarkertAktiv).toBe(1);
+  });
+
+  it('svar fra prøvestartere (7 d): per valg, bare siste sju dager, «ikke målt» uten tabell', () => {
+    expect(byggDagsrapport(inn()).prover.svar7d).toEqual({ maalt: false, omrader: 0, offline: 0, ai: 0 });
+    expect(byggDagsrapport(inn({ proveSvar: [] })).prover.svar7d).toEqual({ maalt: true, omrader: 0, offline: 0, ai: 0 });
+    const r = byggDagsrapport(
+      inn({
+        proveSvar: [
+          { valg: 'omrader', svart_at: dagerSiden(1) },
+          { valg: 'omrader', svart_at: dagerSiden(6) },
+          { valg: 'offline', svart_at: dagerSiden(2) },
+          { valg: 'ai', svart_at: dagerSiden(0) },
+          { valg: 'omrader', svart_at: dagerSiden(8) }, // utenfor vinduet
+          { valg: 'annet', svart_at: dagerSiden(1) } // ukjent nøkkel telles ikke
+        ]
+      })
+    );
+    expect(r.prover.svar7d).toEqual({ maalt: true, omrader: 2, offline: 1, ai: 1 });
   });
 });
 
@@ -565,5 +690,55 @@ describe('tellinger før konto (anonyme flatetellinger)', () => {
     );
     expect(r.tellinger.maalt).toBe(true);
     expect(r.tellinger.siste7d).toEqual({ soppforhold: { nb: 12, sv: 4 }, register: { nb: 3, sv: 0 } });
+  });
+});
+
+describe('AI-identifiseringen: virker den, og bruker noen den?', () => {
+  // Fra mai til 29. september 2026 feilet hvert Kindwise-kall uten at noe sa
+  // fra. Vellykkede kall telles bare ved suksess, så «død» og «ubrukt» var
+  // samme tall. Blokka finnes for å skille dem.
+  const frisk = { aktiv: true, kanBruke: true, grunn: null, igjen: 2099, bruktUke: 3, bruktMaaned: 3, bruktTotalt: 3 };
+
+  it('«ikke målt» på alt når ingen kilder svarte, og ingen varsel', () => {
+    const r = byggDagsrapport(inn()).ai;
+    expect(r.kall.maalt).toBe(false);
+    expect(r.feil.maalt).toBe(false);
+    expect(r.kindwise).toEqual({ maalt: false, status: null });
+    expect(r.varsel).toBeNull();
+  });
+
+  it('friske tall gir ingen varsel', () => {
+    const r = byggDagsrapport(inn({ aiKall: { siste24t: 1, siste7d: 5 }, aiFeil: { siste24t: 0, siste7d: 1 }, kindwise: frisk })).ai;
+    expect(r.kall).toEqual({ maalt: true, siste24t: 1, siste7d: 5 });
+    expect(r.feil).toEqual({ maalt: true, siste24t: 0, siste7d: 1 });
+    expect(r.kindwise.status?.igjen).toBe(2099);
+    expect(r.varsel).toBeNull();
+  });
+
+  it('sommerens feil — alt feiler, ingenting lykkes — gir varsel', () => {
+    const r = byggDagsrapport(inn({ aiKall: { siste24t: 0, siste7d: 0 }, aiFeil: { siste24t: 2, siste7d: 9 }, kindwise: frisk })).ai;
+    expect(r.varsel).toBe('alle 9 AI-kall siste 7 dager feilet — ingen fikk svar');
+  });
+
+  it('flere feil enn suksesser gir varsel', () => {
+    const r = byggDagsrapport(inn({ aiKall: { siste24t: 0, siste7d: 2 }, aiFeil: { siste24t: 0, siste7d: 5 } })).ai;
+    expect(r.varsel).toBe('flere AI-kall feilet (5) enn lyktes (2) siste 7 dager');
+  });
+
+  it('null kall og null feil er stillhet, ikke feil', () => {
+    const r = byggDagsrapport(inn({ aiKall: { siste24t: 0, siste7d: 0 }, aiFeil: { siste24t: 0, siste7d: 0 }, kindwise: frisk })).ai;
+    expect(r.varsel).toBeNull();
+  });
+
+  it('Kindwise som sperrer nøkkelen går foran alt annet', () => {
+    const r = byggDagsrapport(
+      inn({ aiKall: { siste24t: 0, siste7d: 0 }, aiFeil: { siste24t: 0, siste7d: 4 }, kindwise: { ...frisk, kanBruke: false, grunn: 'no credits', igjen: 0 } })
+    ).ai;
+    expect(r.varsel).toBe('Kindwise sperrer nøkkelen (no credits) — hvert AI-kall feiler');
+  });
+
+  it('lave kreditter varsles under grensen, ikke på den', () => {
+    expect(byggDagsrapport(inn({ kindwise: { ...frisk, igjen: 199 } })).ai.varsel).toBe('bare 199 Kindwise-kreditter igjen — kjøp flere');
+    expect(byggDagsrapport(inn({ kindwise: { ...frisk, igjen: 200 } })).ai.varsel).toBeNull();
   });
 });

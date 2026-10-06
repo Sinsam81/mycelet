@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { byggDagsrapport, type BrukerRad, type RapportInn } from '@/lib/rapport/dagsrapport';
+import { REGISTRERING_FORBEHOLD, type SoppregistreringRad } from '@/lib/rapport/soppregistreringer';
 
 /**
  * Fotnoten i rapporten skal forklare radene som faktisk står i den. Da
@@ -50,6 +51,156 @@ describe('fotnoten om kilde per registrering', () => {
     const { html, tekst } = epost();
     for (const variant of [html, tekst]) {
       expect(variant).not.toMatch(/ukjent[^.]*er direkte besøk/);
+    }
+  });
+});
+
+/**
+ * Blokken som erstattet rapportpulsen: «er det mindre sopp i år, og hvor?»
+ * Tallet uten forbeholdet er det farlige — det leses som soppmengde.
+ */
+describe('soppregistreringer, samme dato som før', () => {
+  const rad = (over: Partial<SoppregistreringRad>): SoppregistreringRad => ({
+    snapshot: '2026-09-12',
+    vindu: 'sesong',
+    fra: '2026-08-01',
+    til: '2026-09-05',
+    omrade: 'Norge',
+    gruppe: 'storsopp',
+    antall: 100,
+    normal: 100,
+    prosent: 100,
+    tynt: false,
+    perAar: {},
+    grenser: {},
+    ...over
+  });
+  const rader: SoppregistreringRad[] = [
+    rad({ gruppe: 'alle', prosent: 92 }),
+    rad({ gruppe: 'storsopp', prosent: 86 }),
+    rad({ vindu: 'uke', fra: '2026-08-30', gruppe: 'alle', prosent: 91 }),
+    rad({ vindu: 'uke', fra: '2026-08-30', gruppe: 'storsopp', prosent: 95 }),
+    rad({ omrade: 'Vestfold', prosent: 8 }),
+    rad({ omrade: 'Agder', prosent: 13 }),
+    rad({ omrade: 'Østfold', prosent: 30 }),
+    rad({ omrade: 'Oslo', prosent: 138 }),
+    rad({ omrade: 'Nordland', prosent: 186, tynt: true }),
+    rad({ omrade: 'Troms', prosent: 194 })
+  ];
+  const lag = (over: Partial<RapportInn>) =>
+    byggRapportEpost(byggDagsrapport({ brukere: [], abonnement: [], varselabonnement: 0, regionerIDag: [], regionerIGar: [], naa: NAA, ...over }), NAA);
+
+  it('viser Norge, uka, lavest og høyest med stjerne, og forbeholdet ordrett — i begge varianter', () => {
+    const { html, tekst } = lag({ soppregistreringer: rader });
+    for (const variant of [html, tekst]) {
+      expect(variant).toMatch(/Soppregistreringer, samme dato som før/i);
+      expect(variant).toContain('alle 92 % · storsopp 86 %');
+      expect(variant).toContain('alle 91 % · storsopp 95 %');
+      expect(variant).toContain('1.8.–5.9.');
+      expect(variant).toContain('30.8.–5.9.');
+      expect(variant).toMatch(/Vestfold 8 %.*Agder 13 %.*Østfold 30 %/);
+      expect(variant).toMatch(/Troms 194 %.*Nordland 186 %\*.*Oslo 138 %/);
+      expect(variant).toContain(REGISTRERING_FORBEHOLD);
+      expect(variant).toContain('GBIF-utgave 12.9.');
+      expect(variant).not.toContain('12.9..');
+      expect(variant).not.toMatch(/rapportpuls/i);
+    }
+  });
+
+  it('«ikke målt ennå» før første utgave, uten forbehold uten tall', () => {
+    const { html, tekst } = lag({ soppregistreringer: [] });
+    for (const variant of [html, tekst]) {
+      expect(variant).toContain('ikke målt ennå');
+      expect(variant).not.toContain(REGISTRERING_FORBEHOLD);
+    }
+  });
+
+  it('sier fra når tabellen ikke svarte', () => {
+    const { tekst } = lag({});
+    expect(tekst).toContain('ikke målt — tabellen soppregistreringer svarte ikke');
+  });
+});
+
+/** Én rad under Prøver: hva prøvestarterne svarte på spørsmålet i App Store-påminnelsen (migrasjon 072). */
+describe('svar fra prøvestartere', () => {
+  const lag = (over: Partial<RapportInn>) =>
+    byggRapportEpost(byggDagsrapport({ brukere: [], abonnement: [], varselabonnement: 0, regionerIDag: [], regionerIGar: [], naa: NAA, ...over }), NAA);
+  const nylig = new Date(NAA.getTime() - 2 * 86_400_000).toISOString();
+
+  it('tre tall i fast rekkefølge, i begge varianter', () => {
+    const { html, tekst } = lag({
+      proveSvar: [
+        { valg: 'omrader', svart_at: nylig },
+        { valg: 'omrader', svart_at: nylig },
+        { valg: 'ai', svart_at: nylig }
+      ]
+    });
+    for (const variant of [html, tekst]) {
+      expect(variant).toMatch(/[Ss]var fra prøvestartere \(7 d\)/);
+      expect(variant).toContain('2 områdene · 0 offline · 1 AI');
+    }
+  });
+
+  it('sier fra når tabellen ikke svarte', () => {
+    const { tekst } = lag({});
+    expect(tekst).toContain('ikke målt — tabellen prove_svar svarte ikke');
+  });
+});
+
+describe('nye kontoer (14 d) som følger et område', () => {
+  it('én rad: X av N, delt på iOS og web', () => {
+    const naa = NAA.getTime();
+    const ny = (id: string, plattform: string | null) => bruker({ id, plattform, created_at: new Date(naa - 2 * 86_400_000).toISOString() });
+    const inn: RapportInn = {
+      brukere: [ny('i1', 'ios'), ny('i2', 'ios'), ny('w1', null), ny('w2', null), ny('w3', null)],
+      abonnement: [],
+      varselabonnement: 0,
+      kontoerSomFolger: new Set(['i1', 'w3']),
+      regionerIDag: [],
+      regionerIGar: [],
+      naa: NAA
+    };
+    const { html, tekst } = byggRapportEpost(byggDagsrapport(inn), NAA);
+    for (const variant of [html, tekst]) {
+      expect(variant).toMatch(/Nye kontoer \(14 d\) som følger et område/i);
+      expect(variant).toContain('2 av 5 (iOS 1 av 2 · web 1 av 3)');
+      expect(variant).not.toContain('Android');
+    }
+  });
+});
+
+describe('AI-identifisering i e-posten', () => {
+  const frisk = { aktiv: true, kanBruke: true, grunn: null, igjen: 2099, bruktUke: 3, bruktMaaned: 3, bruktTotalt: 3 };
+  function medAi(over: Partial<RapportInn>) {
+    const inn: RapportInn = { brukere: [], abonnement: [], varselabonnement: 0, regionerIDag: [], regionerIGar: [], naa: NAA, ...over };
+    return byggRapportEpost(byggDagsrapport(inn), NAA);
+  }
+
+  it('viser kall, feil og Kindwise-kvote i begge varianter', () => {
+    const { html, tekst } = medAi({ aiKall: { siste24t: 1, siste7d: 5 }, aiFeil: { siste24t: 0, siste7d: 1 }, kindwise: frisk });
+    for (const variant of [html, tekst]) {
+      expect(variant).toMatch(/AI-identifisering/i);
+      expect(variant).toContain('1 / 5');
+      expect(variant).toContain('0 / 1');
+      expect(variant).toContain('2099 kreditter igjen · 3 brukt siste uke');
+      expect(variant).not.toContain('⚠️ AI');
+    }
+  });
+
+  it('varselet står øverst i blokka når alle kall feiler', () => {
+    const { html, tekst } = medAi({ aiKall: { siste24t: 0, siste7d: 0 }, aiFeil: { siste24t: 3, siste7d: 12 }, kindwise: frisk });
+    for (const variant of [html, tekst]) {
+      expect(variant).toContain('alle 12 AI-kall siste 7 dager feilet — ingen fikk svar');
+      expect(variant.indexOf('⚠️ AI')).toBeLessThan(variant.indexOf('Identifiseringer (24 t / 7 d)'));
+    }
+  });
+
+  it('sier fra når tabellene og usage_info ikke svarte — og nevner tabellen', () => {
+    const { html, tekst } = medAi({});
+    for (const variant of [html, tekst]) {
+      expect(variant).toContain('ikke målt — tabellen ai_identifications svarte ikke');
+      expect(variant).toContain('ikke målt — tabellen ai_identifiseringsfeil svarte ikke');
+      expect(variant).toContain('ikke målt — usage_info svarte ikke');
     }
   });
 });

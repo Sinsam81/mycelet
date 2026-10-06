@@ -5,6 +5,7 @@ import { planCheckoutWrite } from '@/lib/billing/checkout-write';
 import { alreadyOnPlanMessage, billingCopy } from '@/lib/billing/copy';
 import { reusableCheckoutUrl } from '@/lib/billing/checkout-reuse';
 import { getBillingCapabilities, getUserBillingSubscription } from '@/lib/billing/subscription';
+import { harHattTilgangFor } from '@/lib/billing/tidligere-abonnent';
 import { getStripeServerClient } from '@/lib/stripe/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { checkRateLimit } from '@/lib/rate-limit';
@@ -14,27 +15,6 @@ import { getUserLocale } from '@/i18n/locale';
 import { DEFAULT_LOCALE, type Locale } from '@/i18n/config';
 
 type CheckoutPlan = 'premium' | 'season_pass';
-
-/**
- * Slett konto → registrer på nytt med samme e-post → ny gratis prøveuke:
- * raden vår er borte, men Stripe husker kunden. Best effort — feiler
- * oppslaget, får kunden prøven (som før) heller enn at kjøpet stopper.
- */
-async function harHattStripeAbonnementFor(
-  stripe: { customers: { list: (p: { email: string; limit: number }) => Promise<{ data: Array<{ id: string }> }> }; subscriptions: { list: (p: { customer: string; status: 'all'; limit: number }) => Promise<{ data: unknown[] }> } },
-  email: string
-): Promise<boolean> {
-  try {
-    const kunder = await stripe.customers.list({ email, limit: 5 });
-    for (const kunde of kunder.data) {
-      const abonnement = await stripe.subscriptions.list({ customer: kunde.id, status: 'all', limit: 1 });
-      if (abonnement.data.length > 0) return true;
-    }
-  } catch {
-    // stille: prøven er default
-  }
-  return false;
-}
 
 export const runtime = 'nodejs';
 
@@ -201,11 +181,10 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const harHattTilgangFor = Boolean(
-      existing?.stripe_subscription_id ||
-        existing?.metadata?.provider ||
-        (user.email ? await harHattStripeAbonnementFor(stripe, user.email) : false)
-    );
+    // Samme tre sjekker som /api/billing/status (kanFaaProve) og forsiden
+    // (tidligere-abonnent.ts): raden, IAP-leverandøren, og e-postens
+    // Stripe-historikk under en slettet konto.
+    const tidligereAbonnent = await harHattTilgangFor({ subscription: existing, email: user.email, stripe: () => stripe });
 
     const idempotencyKey = `checkout_${user.id}_${plan}_${Math.floor(Date.now() / (1000 * 60 * 5))}`;
 
@@ -235,7 +214,7 @@ export async function POST(request: NextRequest) {
           // IAP-leverandør, har brukeren hatt tilgangen før — og har
           // e-posten hatt et Stripe-abonnement under en SLETTET konto
           // (raden forsvinner med cascaden), teller det også.
-          ...(harHattTilgangFor ? {} : { trial_period_days: STRIPE_PROVEDAGER }),
+          ...(tidligereAbonnent ? {} : { trial_period_days: STRIPE_PROVEDAGER }),
           metadata: {
             user_id: user.id,
             tier: plan,

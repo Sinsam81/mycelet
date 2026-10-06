@@ -248,10 +248,12 @@ Hvert tall appen viser, sporet til der det beregnes. Kolonnen som gjør inventar
 
 ### Prisene «79 kr/mnd», «249 kr», «21 kr/mnd med Sesongpass»
 
+> Merknad 16.09.2026: månedsprisen er nå **99 kr** (hevet 30.08.2026, se `docs/payment-model.md`). Avsnittet beskriver situasjonen ved revisjonen 1.–2. august 2026, og selve svakheten står ved lag: beløpene er hardkodet i appen, mens Stripe belaster det prisobjektet sier.
+
 - vises: `src/app/pricing/page.tsx:91, :108, :110; src/app/page.tsx:412`
 - beregnes: `src/lib/billing/plans.ts:19-32; SEASON_PER_MONTH src/app/pricing/page.tsx:46`
 - kan være feil hvis: Beløpene er hardkodede konstanter i appen, mens Stripe belaster det Price-objektet sier — resolveTierByPriceId (plans.ts:46-51) mapper bare id-er, aldri beløp. Endres prisen i Stripe-dashboardet annonserer siden fortsatt det gamle beløpet og INGENTING feiler. På native erstattes tallet av App Store-prisen (pricing/page.tsx:441), så de to kanalene kan vise ulik pris for samme produkt.
-- bevises ved: Stripe API: GET /v1/prices/{STRIPE_PRICE_PREMIUM_MONTHLY} og {STRIPE_PRICE_SEASON_PASS}, sammenlign unit_amount mot 7900 og 24900. Og RevenueCat-tilbudets priceString.
+- bevises ved: Stripe API: GET /v1/prices/{STRIPE_PRICE_PREMIUM_MONTHLY} og {STRIPE_PRICE_SEASON_PASS}, sammenlign unit_amount mot 9900 og 24900. Og RevenueCat-tilbudets priceString.
 
 ### «5 AI-identifikasjoner per døgn» i prisplanen
 

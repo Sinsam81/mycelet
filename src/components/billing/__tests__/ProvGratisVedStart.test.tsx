@@ -16,9 +16,15 @@ import { PROVETILBUD_NOKKEL, PROVETILBUD_START_NOKKEL } from '@/lib/billing/prov
  * holder tilbudet tilbake for alltid.
  */
 
+const LOFTE = {
+  kjent: true,
+  season_pass: { plan: 'season_pass', harProve: true, proveDager: 7, pris: '249 kr' },
+  premium: { plan: 'premium', harProve: true, proveDager: 7, pris: '99 kr' }
+};
+
 vi.mock('@/lib/hooks/useProveLofte', () => ({
-  hentProveLofte: vi.fn(() => Promise.resolve({ kjent: true, harProve: true, proveDager: 7, pris: null })),
-  useProveLofte: () => ({ kjent: true, harProve: true, proveDager: 7, pris: null }),
+  hentProveLofte: vi.fn(() => Promise.resolve(LOFTE)),
+  useProveLofte: () => LOFTE,
   glemProveLofte: vi.fn()
 }));
 
@@ -34,7 +40,7 @@ vi.mock('next/link', () => ({
   )
 }));
 
-const TITTEL = nb.ProvGratisArk.tittelStart.replace('{dager}', '7');
+const TITTEL = nb.ProvGratisArk.tittelPassProve.replace('{dager}', '7');
 const fetchMock = vi.fn(() => Promise.resolve({ ok: true }));
 
 function rendrer() {

@@ -5,11 +5,14 @@ import { ProveLofteTekst } from '../ProveLofteTekst';
 import type { ProveLofte } from '@/lib/billing/prove-lofte';
 
 /**
- * Premium-knappene skal love gratisuka bare når butikken har sagt at den
- * finnes — samme regel som arket, så de to aldri motsier hverandre på samme
- * skjerm.
+ * Knappene skal love gratisuka bare når butikken har sagt at den finnes på
+ * planen knappen gjelder — samme regel som arket, så de to aldri motsier
+ * hverandre på samme skjerm. Standardplanen er sesongpasset (dit alle
+ * knappene leder); tekster som navngir Premium spør om Premium.
  */
-let lofte: ProveLofte = { kjent: true, harProve: true, proveDager: 7, pris: null };
+const PASS = { plan: 'season_pass' as const, harProve: true, proveDager: 7, pris: '249 kr' };
+const MAANED = { plan: 'premium' as const, harProve: true, proveDager: 7, pris: '99 kr' };
+let lofte: ProveLofte = { kjent: true, season_pass: PASS, premium: MAANED };
 
 vi.mock('@/lib/hooks/useProveLofte', () => ({
   useProveLofte: () => lofte,
@@ -20,22 +23,34 @@ vi.mock('@/lib/hooks/useProveLofte', () => ({
 afterEach(cleanup);
 
 describe('ProveLofteTekst', () => {
-  it('med løfte når gratisuka finnes', () => {
-    lofte = { kjent: true, harProve: true, proveDager: 7, pris: null };
-    render(<ProveLofteTekst med="Prøv gratis i 7 dager" utenProve="Se Premium" />);
-    expect(screen.getByText('Prøv gratis i 7 dager')).toBeTruthy();
+  it('med løfte når gratisuka finnes på passet', () => {
+    lofte = { kjent: true, season_pass: PASS, premium: MAANED };
+    render(<ProveLofteTekst med="Prøv Sesongpass gratis" utenProve="Se Sesongpass og Premium" />);
+    expect(screen.getByText('Prøv Sesongpass gratis')).toBeTruthy();
   });
 
   it('uten løfte før butikken har svart', () => {
     lofte = { kjent: false };
-    render(<ProveLofteTekst med="Prøv gratis i 7 dager" utenProve="Se Premium" />);
-    expect(screen.getByText('Se Premium')).toBeTruthy();
+    render(<ProveLofteTekst med="Prøv Sesongpass gratis" utenProve="Se Sesongpass og Premium" />);
+    expect(screen.getByText('Se Sesongpass og Premium')).toBeTruthy();
     expect(screen.queryByText(/gratis/)).toBeNull();
   });
 
-  it('uten løfte når butikken svarte nei', () => {
-    lofte = { kjent: true, harProve: false, proveDager: null, pris: 'kr 79,00' };
-    render(<ProveLofteTekst med="Prøv gratis i 7 dager" utenProve="Se Premium" />);
-    expect(screen.getByText('Se Premium')).toBeTruthy();
+  it('uten løfte når passet mangler gratisuka — selv om Premium har en (App Store i dag)', () => {
+    lofte = { kjent: true, season_pass: { ...PASS, harProve: false, proveDager: null }, premium: MAANED };
+    render(<ProveLofteTekst med="Prøv Sesongpass gratis" utenProve="Se Sesongpass og Premium" />);
+    expect(screen.getByText('Se Sesongpass og Premium')).toBeTruthy();
+  });
+
+  it('en tekst som navngir Premium spør om Premium-tilbudet', () => {
+    lofte = { kjent: true, season_pass: { ...PASS, harProve: false, proveDager: null }, premium: MAANED };
+    render(<ProveLofteTekst plan="premium" med="Prøv Premium gratis i 7 dager" utenProve="Premium-verktøy" />);
+    expect(screen.getByText('Prøv Premium gratis i 7 dager')).toBeTruthy();
+  });
+
+  it('uten løfte når butikken svarte uten tilbud', () => {
+    lofte = { kjent: true, season_pass: null, premium: null };
+    render(<ProveLofteTekst med="Prøv Sesongpass gratis" utenProve="Se Sesongpass og Premium" />);
+    expect(screen.getByText('Se Sesongpass og Premium')).toBeTruthy();
   });
 });

@@ -180,6 +180,24 @@ describe('GET /api/me/export', () => {
       expect(body._manifest.datasets.aiIdentifications).toBe(2);
     });
 
+    it('leser påminnelsen før første App Store-belastning og svaret på spørsmålet i den med tjenesterollen', async () => {
+      // Begge tabellene (migrasjon 072) har RLS på uten policyer, som
+      // ai_identifications. Øktklienten ville gitt [] — en tom liste som
+      // ser ut som «vi sendte deg aldri noe, og du svarte aldri».
+      tableResponses = {
+        prove_paaminnelser: { data: [{ kanal: 'revenuecat', prove_slutt: '2026-09-27', sendt_at: '2026-09-24T06:30:00Z' }], error: null },
+        prove_svar: { data: [{ prove_slutt: '2026-09-27', valg: 'offline', svart_at: '2026-09-25T10:00:00Z' }], error: null }
+      };
+      const body = JSON.parse(await (await GET(makeRequest())).text());
+      expect(queriedWithAdmin).toContain('prove_paaminnelser');
+      expect(queriedWithAdmin).toContain('prove_svar');
+      expect(queriedWithSession).not.toContain('prove_paaminnelser');
+      expect(queriedWithSession).not.toContain('prove_svar');
+      expect(body.trialReminders).toEqual([{ kanal: 'revenuecat', prove_slutt: '2026-09-27', sendt_at: '2026-09-24T06:30:00Z' }]);
+      expect(body.trialAnswers).toEqual([{ prove_slutt: '2026-09-27', valg: 'offline', svart_at: '2026-09-25T10:00:00Z' }]);
+      expect(body._manifest.datasets).toMatchObject({ trialReminders: 1, trialAnswers: 1 });
+    });
+
     it('sier fra i stedet for å levere en fil uten AI-tellerne', async () => {
       adminClientAvailable = false;
       const res = await GET(makeRequest());
@@ -202,7 +220,9 @@ describe('GET /api/me/export', () => {
       'spot_feedback',
       'account_deletion_warnings',
       'ai_identifications',
-      'identifications'
+      'identifications',
+      'prove_paaminnelser',
+      'prove_svar'
     ];
 
     it.each(tables)('%s som feiler gir 500, ikke en delvis fil', async (table) => {
@@ -311,7 +331,7 @@ describe('identifiseringshistorikken (art. 15)', () => {
 
   it('schemaVersion er bumpet, så en mottaker ser at fila har fått et datasett', async () => {
     const body = JSON.parse(await (await GET(makeRequest())).text());
-    expect(body.schemaVersion).toBe(6);
+    expect(body.schemaVersion).toBe(7);
   });
 
   it('paginerer: 1 500 funn kommer alle med, og fila er fortsatt komplett', async () => {

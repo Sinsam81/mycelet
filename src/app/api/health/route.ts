@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { getClientKey, rateLimitResponse } from '@/lib/rate-limit/route';
 import { createRequestLogger } from '@/lib/log/request';
+import { erAiNokkelSatt, hentKindwiseStatus } from '@/lib/identifications/kindwise-status';
 
 /**
  * Health check endpoint for uptime monitoring (UptimeRobot, BetterUptime,
@@ -53,6 +54,8 @@ interface HealthResponse {
   checks: {
     envVars: CheckResult;
     epost: CheckResult;
+    /** Kindwise-nøkkelen: gyldig, og med kreditter igjen? Bare uten ?fast=1. */
+    ai?: CheckResult;
     database?: CheckResult;
     auditLogTable?: CheckResult;
   };
@@ -96,6 +99,48 @@ function checkEpost(): CheckResult {
     return { ok: false, message: `E-post er ikke konfigurert — mangler: ${missing.join(', ')}. Soppvarselet sender ingenting.` };
   }
   return { ok: true };
+}
+
+/**
+ * Virker AI-identifiseringen — kan vi kalle Kindwise?
+ *
+ * Samme slags stille feil som e-posten, bare dyrere: fra mai til 29. sep 2026
+ * feilet hvert eneste Kindwise-kall, brukeren så «Identifikasjon feilet», og
+ * ingen målte det. Denne sjekken fanger det som lar seg fange uten å bruke en
+ * kreditt: nøkkel som mangler eller avvises, og tom kvote. (Et feil
+ * forespørselsformat — selve feilen fra i sommer — fanger dagsrapporten, som
+ * teller feilede kall mot vellykkede.)
+ *
+ * Kindwise spørres høyst hvert femte minutt uansett hvor ofte proben kaller;
+ * ruta er offentlig, og de skal ikke få vår trafikk. Sier bare OM nøkkelen
+ * virker og hvor mange kreditter som er igjen — aldri nøkkelen.
+ */
+const AI_CACHE_MS = 5 * 60 * 1000;
+let aiCache: { ts: number; resultat: CheckResult } | null = null;
+
+async function checkAi(): Promise<CheckResult> {
+  const apiKey = process.env.PLANTID_API_KEY;
+  if (!erAiNokkelSatt(apiKey)) {
+    return { ok: false, message: 'AI er ikke konfigurert — PLANTID_API_KEY mangler eller er plassholderen. /api/identify svarer 503.' };
+  }
+  if (aiCache && Date.now() - aiCache.ts < AI_CACHE_MS) return aiCache.resultat;
+
+  const r = await hentKindwiseStatus(apiKey);
+  let resultat: CheckResult;
+  if (!r.ok) {
+    resultat = {
+      ok: false,
+      message: r.httpStatus === 401 || r.httpStatus === 403
+        ? `Kindwise avviser nøkkelen (${r.httpStatus}). Hvert AI-kall feiler.`
+        : `Kindwise svarte ikke (${r.httpStatus ?? 'nett'}): ${r.feil}`
+    };
+  } else if (!r.status.aktiv || !r.status.kanBruke) {
+    resultat = { ok: false, message: `Kindwise: nøkkelen kan ikke brukes${r.status.grunn ? ` (${r.status.grunn})` : ''} — ${r.status.igjen ?? '?'} kreditter igjen.` };
+  } else {
+    resultat = { ok: true, message: `${r.status.igjen ?? '?'} kreditter igjen` };
+  }
+  aiCache = { ts: Date.now(), resultat };
+  return resultat;
 }
 
 async function checkDatabase(): Promise<CheckResult> {
@@ -172,9 +217,10 @@ export async function GET(request: NextRequest) {
   };
 
   if (!fast) {
-    const [database, auditLogTable] = await Promise.all([checkDatabase(), checkAuditLogTable()]);
+    const [database, auditLogTable, ai] = await Promise.all([checkDatabase(), checkAuditLogTable(), checkAi()]);
     checks.database = database;
     checks.auditLogTable = auditLogTable;
+    checks.ai = ai;
   }
 
   // E-post står i svaret, men teller IKKE mot 503.
@@ -188,7 +234,10 @@ export async function GET(request: NextRequest) {
   // Den som vil vokte utsendingen, vokter feltet `checks.epost.ok` direkte.
   // Det er hele grunnen til at sjekken finnes: å gjøre en stille feil synlig,
   // ikke å felle appen.
-  const { epost, ...oppetidssjekker } = checks;
+  // AI-sjekken står utenfor 503 av samme grunn: nøkkelen er aldri satt lokalt
+  // og i `npm run qa`, og kart, arter og betaling går uten den. Den som vil
+  // vokte AI-en, vokter `checks.ai.ok` — og dagsrapporten sier fra hver morgen.
+  const { epost, ai, ...oppetidssjekker } = checks;
   const allOk = Object.values(oppetidssjekker).every((c) => c?.ok);
   const status: 'ok' | 'degraded' = allOk ? 'ok' : 'degraded';
 
@@ -196,6 +245,9 @@ export async function GET(request: NextRequest) {
     log.warn('health.degraded', { checks });
   } else if (!fast) {
     log.debug('health.ok');
+  }
+  if (ai && !ai.ok) {
+    log.warn('health.ai_utilgjengelig', { message: ai.message });
   }
   if (!epost.ok) {
     // Egen linje, alltid — også når status er ok. Ellers er den ene feilen

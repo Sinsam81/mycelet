@@ -1,40 +1,72 @@
 import { describe, expect, it } from 'vitest';
-import { STRIPE_PROVEDAGER } from '../plans';
-import { PROVE_LOFTE_INGEN, PROVE_LOFTE_UKJENT, PROVE_LOFTE_WEB, harProveLofte, lofteFraTilbud } from '../prove-lofte';
+import { BILLING_PLANS, STRIPE_PROVEDAGER } from '../plans';
+import {
+  PROVE_LOFTE_INGEN,
+  PROVE_LOFTE_UKJENT,
+  PROVE_LOFTE_WEB,
+  harProveLofte,
+  lofteFraTilbud,
+  planLofte
+} from '../prove-lofte';
 
 /**
- * Arket selger Premium. Løftet om gratisuke og prisen det viser skal komme
- * fra Premium-tilbudet i butikken — aldri fra sesongpasset, uansett om det
- * har en gratisuke eller er det eneste tilbudet.
+ * Arket leder med sesongpasset og viser Premium som «heller måned for
+ * måned». Hver plans gratisuke og pris skal komme fra DENS tilbud i
+ * butikken — aldri fra den andre, uansett hvilken som mangler.
  */
-const premium = { plan: 'premium', harProve: true, proveDager: 7, priceString: 'kr 79,00' };
-const premiumUtenProve = { plan: 'premium', harProve: false, proveDager: null, priceString: 'kr 79,00' };
-const sesongpassMedProve = { plan: 'season_pass', harProve: true, proveDager: 14, priceString: 'kr 249,00' };
+const premium = { plan: 'premium', harProve: true, proveDager: 7, priceString: 'kr 99,00' };
+const premiumUtenProve = { plan: 'premium', harProve: false, proveDager: null, priceString: 'kr 99,00' };
+const pass = { plan: 'season_pass', harProve: true, proveDager: 7, priceString: 'kr 249,00' };
+const passUtenProve = { plan: 'season_pass', harProve: false, proveDager: null, priceString: 'kr 249,00' };
 
 describe('lofteFraTilbud', () => {
-  it('leser gratisuke, lengde og pris fra Premium-tilbudet', () => {
-    expect(lofteFraTilbud([sesongpassMedProve, premium])).toEqual({ kjent: true, harProve: true, proveDager: 7, pris: 'kr 79,00' });
+  it('leser gratisuke, lengde og pris for hver plan fra dens eget tilbud', () => {
+    expect(lofteFraTilbud([premium, pass])).toEqual({
+      kjent: true,
+      season_pass: { plan: 'season_pass', harProve: true, proveDager: 7, pris: 'kr 249,00' },
+      premium: { plan: 'premium', harProve: true, proveDager: 7, pris: 'kr 99,00' }
+    });
   });
 
-  it('Premium uten gratisuke gir pris uten løfte — selv om sesongpasset har en', () => {
-    expect(lofteFraTilbud([premiumUtenProve, sesongpassMedProve])).toEqual({ kjent: true, harProve: false, proveDager: null, pris: 'kr 79,00' });
+  it('passet uten gratisuke gir pris uten løfte — selv om Premium har en (det som er bevist i App Store i dag)', () => {
+    const lofte = lofteFraTilbud([premium, passUtenProve]);
+    expect(planLofte(lofte, 'season_pass')).toEqual({ plan: 'season_pass', harProve: false, proveDager: null, pris: 'kr 249,00' });
+    expect(harProveLofte(lofte)).toBe(false);
+    expect(harProveLofte(lofte, 'premium')).toBe(true);
   });
 
-  it('uten Premium i tilbudet loves ingenting, og sesongpasset brukes aldri som reserve', () => {
-    expect(lofteFraTilbud([sesongpassMedProve])).toBe(PROVE_LOFTE_INGEN);
+  it('en plan som mangler i butikken står som null, og den andre svarer aldri for den', () => {
+    const barePremium = lofteFraTilbud([premiumUtenProve]);
+    expect(planLofte(barePremium, 'season_pass')).toBeNull();
+    expect(planLofte(barePremium, 'premium')?.pris).toBe('kr 99,00');
+    expect(harProveLofte(barePremium)).toBe(false);
+
+    const barePass = lofteFraTilbud([pass]);
+    expect(planLofte(barePass, 'premium')).toBeNull();
+    expect(harProveLofte(barePass)).toBe(true);
+  });
+
+  it('uten noe tilbud loves ingenting', () => {
     expect(lofteFraTilbud([])).toBe(PROVE_LOFTE_INGEN);
+    expect(lofteFraTilbud([{ plan: 'ukjent', harProve: true, proveDager: 7, priceString: 'kr 1,00' }])).toBe(PROVE_LOFTE_INGEN);
   });
 });
 
 describe('harProveLofte', () => {
-  it('sant bare når butikken har svart og gratisuka finnes', () => {
+  it('sant bare når butikken har svart og gratisuka finnes på planen', () => {
     expect(harProveLofte(PROVE_LOFTE_WEB)).toBe(true);
+    expect(harProveLofte(PROVE_LOFTE_WEB, 'premium')).toBe(true);
     expect(harProveLofte(PROVE_LOFTE_UKJENT)).toBe(false);
     expect(harProveLofte(PROVE_LOFTE_INGEN)).toBe(false);
-    expect(harProveLofte(lofteFraTilbud([premiumUtenProve]))).toBe(false);
+    expect(harProveLofte(lofteFraTilbud([passUtenProve, premiumUtenProve]))).toBe(false);
   });
 
-  it('nett lover Stripe-prøveperioden fra én kilde', () => {
-    expect(PROVE_LOFTE_WEB).toEqual({ kjent: true, harProve: true, proveDager: STRIPE_PROVEDAGER, pris: null });
+  it('nett lover Stripe-prøveperioden på begge planene, med Stripe-prisene — én kilde', () => {
+    expect(PROVE_LOFTE_WEB).toEqual({
+      kjent: true,
+      season_pass: { plan: 'season_pass', harProve: true, proveDager: STRIPE_PROVEDAGER, pris: `${BILLING_PLANS.season_pass.yearlyNok} kr` },
+      premium: { plan: 'premium', harProve: true, proveDager: STRIPE_PROVEDAGER, pris: `${BILLING_PLANS.premium.monthlyNok} kr` }
+    });
+    expect(planLofte(PROVE_LOFTE_UKJENT, 'season_pass')).toBeNull();
   });
 });

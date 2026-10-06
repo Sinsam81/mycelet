@@ -10,10 +10,6 @@
       "schedule": "45 1 * * *"
     },
     {
-      "path": "/api/cron/rapportpuls",
-      "schedule": "40 4 * * *"
-    },
-    {
       "path": "/api/cron/soppvarsel",
       "schedule": "0 5 * * *"
     },
@@ -30,12 +26,20 @@
       "schedule": "30 3 * * *"
     },
     {
+      "path": "/api/cron/soppregistreringer",
+      "schedule": "45 5 * * *"
+    },
+    {
       "path": "/api/cron/purge-deleted-findings",
       "schedule": "0 4 * * *"
     },
     {
       "path": "/api/cron/dagsrapport",
       "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/cron/prove-paaminnelse-app",
+      "schedule": "30 6 * * *"
     }
   ]
 }

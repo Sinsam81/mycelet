@@ -42,10 +42,13 @@ describe('tolkProvetilbud / leggTilKartdag', () => {
 });
 
 describe('kanFaaProveperiode', () => {
-  it('ny bruker uten rad: ja · betalende: nei · avsluttet abonnement (rad uten betaling): nei · ukjent status: nei', () => {
-    expect(kanFaaProveperiode({ capabilities: { paid: false }, subscription: null })).toBe(true);
-    expect(kanFaaProveperiode({ capabilities: { paid: true }, subscription: { status: 'active' } })).toBe(false);
-    expect(kanFaaProveperiode({ capabilities: { paid: false }, subscription: { status: 'canceled' } })).toBe(false);
+  it('serverens kanFaaProve er fasiten: ja bare når den sier ja · betalende: nei · mangler feltet (eldre svar, mock): nei · ukjent status: nei', () => {
+    expect(kanFaaProveperiode({ capabilities: { paid: false }, kanFaaProve: true })).toBe(true);
+    expect(kanFaaProveperiode({ capabilities: { paid: false }, kanFaaProve: false })).toBe(false);
+    // Skulle serveren si ja til en betalende (kan ikke skje), lover vi likevel ingenting.
+    expect(kanFaaProveperiode({ capabilities: { paid: true }, kanFaaProve: true })).toBe(false);
+    // «Ingen rad» er ikke lenger et ja — en slettet konto med samme e-post har ingen rad, men får ingen uke.
+    expect(kanFaaProveperiode({ capabilities: { paid: false } })).toBe(false);
     expect(kanFaaProveperiode(undefined)).toBe(false);
   });
 

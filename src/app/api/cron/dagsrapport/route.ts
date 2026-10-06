@@ -2,12 +2,25 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createRequestLogger } from '@/lib/log/request';
 import { bearerSecretMatches } from '@/lib/security/secret-compare';
-import { byggDagsrapport, UKJENT_KILDE, type AbonnementRad, type BruksdagRad, type Dagsrapport, type VarselAbonnentRad } from '@/lib/rapport/dagsrapport';
+import {
+  byggDagsrapport,
+  kontoerSomFolgerOmrade,
+  UKJENT_KILDE,
+  type AbonnementRad,
+  type AiKallTall,
+  type BruksdagRad,
+  type Dagsrapport,
+  type FolgerRad,
+  type ProveSvarRad,
+  type VarselAbonnentRad
+} from '@/lib/rapport/dagsrapport';
+import { REGISTRERING_FORBEHOLD, fraTabellrad, kortDato, kortPeriode, prosentTekst, type SoppregistreringRad } from '@/lib/rapport/soppregistreringer';
 import { erInternKonto } from '@/lib/rapport/abonnement';
 import { osloDag } from '@/lib/bruk/bruksdag';
 import { type TellingRad } from '@/lib/bruk/tell';
 import { WEB_DIREKTE_KILDE, normaliserKilde, vaskTidssone } from '@/lib/analytics/kilde';
 import { sendEpost } from '@/lib/email/send';
+import { erAiNokkelSatt, hentKindwiseStatus } from '@/lib/identifications/kindwise-status';
 
 /**
  * Dagsrapport til eieren: hva skjedde med Mycelet i går?
@@ -76,7 +89,8 @@ export async function GET(request: NextRequest) {
     created_at: u.created_at,
     last_sign_in_at: u.last_sign_in_at ?? null,
     kilde: normaliserKilde(u.user_metadata?.kilde),
-    tidssone: vaskTidssone(u.user_metadata?.tidssone)
+    tidssone: vaskTidssone(u.user_metadata?.tidssone),
+    plattform: u.user_metadata?.plattform === 'ios' || u.user_metadata?.plattform === 'android' ? (u.user_metadata.plattform as string) : null
   }));
 
   // ── Abonnement ────────────────────────────────────────────────────────────
@@ -86,21 +100,41 @@ export async function GET(request: NextRequest) {
 
   // ── Varselabonnement ──────────────────────────────────────────────────────
   // Radene, ikke bare tallet: kilde, region og aktivering er det strategien
-  // måler på. Ingen e-postadresser hentes.
+  // måler på. E-postkolonnen hentes BARE for å koble kontoløse påmeldinger
+  // til en konto med samme adresse («nye kontoer som følger et område»):
+  // den sammenlignes i minnet og strippes før noe går videre — ingen adresse
+  // når rapporten, loggen eller JSON-svaret.
   // PostgREST kapper på 1000 rader uansett range — paginert som i
   // soppvarsel-cronen, ellers forsvinner de nyeste påmeldingene stille.
   const varselabonnenter: VarselAbonnentRad[] = [];
+  const folgerRader: FolgerRad[] = [];
+  let varselMaalt = true;
   for (let side = 0; side < 20; side += 1) {
     const fra = side * 1000;
-    const { data: varselRader } = await db
+    const { data: varselRader, error: varselErr } = await db
       .from('alert_subscriptions')
-      .select('user_id,region,active,confirmed_at,created_at,last_notified_at,forste_apnet_at,kilde')
+      .select('user_id,email,region,active,confirmed_at,created_at,last_notified_at,forste_apnet_at,kilde')
       .order('id', { ascending: true })
       .range(fra, fra + 999);
-    varselabonnenter.push(...((varselRader ?? []) as VarselAbonnentRad[]));
+    if (varselErr) {
+      log.warn('dagsrapport.varselabonnement_feilet', { message: varselErr.message });
+      varselMaalt = false;
+      break;
+    }
+    for (const rad of (varselRader ?? []) as Array<VarselAbonnentRad & { email: string | null }>) {
+      const { email, ...utenEpost } = rad;
+      folgerRader.push({ user_id: rad.user_id, email, active: rad.active, confirmed_at: rad.confirmed_at });
+      varselabonnenter.push(utenEpost);
+    }
     if ((varselRader ?? []).length < 1000) break;
   }
   const varselAntall = varselabonnenter.filter((r) => r.active).length;
+  const kontoerSomFolger = varselMaalt
+    ? kontoerSomFolgerOmrade(
+        (brukerData?.users ?? []).map((u) => ({ id: u.id, email: u.email })),
+        folgerRader
+      )
+    : undefined;
 
   // ── Bruksdager siste 28 dager ─────────────────────────────────────────────
   // Mangler tabellen (migrasjonen ikke kjørt), sier rapporten «ikke målt» i
@@ -135,6 +169,14 @@ export async function GET(request: NextRequest) {
   }
   const bruksdager = bruksdagerMaalt ? samledeBruksdager : undefined;
 
+  // ── Svar fra prøvestartere, siste 7 dager (migrasjon 072) ─────────────────
+  // Ett svar per prøve, fra lenkene i App Store-påminnelsen. Få rader; ingen
+  // paginering. Mangler tabellen, sier rapporten «ikke målt».
+  const svarGrense = new Date(naa.getTime() - 7 * 24 * 3600_000).toISOString();
+  const { data: svarRader, error: svarErr } = await db.from('prove_svar').select('valg,svart_at').gte('svart_at', svarGrense);
+  if (svarErr) log.warn('dagsrapport.prove_svar_feilet', { message: svarErr.message });
+  const proveSvar = svarErr ? undefined : ((svarRader ?? []) as ProveSvarRad[]);
+
   // ── Anonyme tellinger før konto, siste 7 dager (migrasjon 070) ───────────
   // Høyst 7 dager × 2 flater × 2 språk = 28 rader; ingen paginering nødvendig.
   // Mangler tabellen, sier rapporten «ikke målt».
@@ -146,9 +188,58 @@ export async function GET(request: NextRequest) {
   if (tellingErr) log.warn('dagsrapport.flatetellinger_feilet', { message: tellingErr.message });
   const flatetellinger = tellingErr ? undefined : ((tellingRader ?? []) as TellingRad[]);
 
-  // ── Rapportpuls i dag ─────────────────────────────────────────────────────
-  const { data: pulsRader } = await db.from('rapportpuls').select('region,siste7,avvik_pst').eq('dag', osloDag(naa));
-  const rapportpuls = (pulsRader ?? []).map((r) => ({ region: String(r.region), siste7: Number(r.siste7), avvikPst: r.avvik_pst === null ? null : Number(r.avvik_pst) }));
+  // ── Soppregistreringer, samme dato som før (migrasjon 071) ───────────────
+  // Nyeste utgave i år. [] = ikke målt ennå; undefined = tabellen svarte ikke.
+  const aarStart = `${osloDag(naa).slice(0, 4)}-01-01`;
+  let soppregistreringer: SoppregistreringRad[] | undefined;
+  const { data: utgaveRader, error: utgaveErr } = await db
+    .from('soppregistreringer')
+    .select('snapshot')
+    .gte('snapshot', aarStart)
+    .order('snapshot', { ascending: false })
+    .limit(1);
+  if (utgaveErr) {
+    log.warn('dagsrapport.soppregistreringer_feilet', { message: utgaveErr.message });
+  } else if (!utgaveRader?.length) {
+    soppregistreringer = [];
+  } else {
+    const { data: regRader, error: regErr } = await db
+      .from('soppregistreringer')
+      .select('snapshot,vindu,fra,til,omrade,gruppe,antall,normal,prosent,tynt,per_aar,grenser')
+      .eq('snapshot', utgaveRader[0].snapshot);
+    if (regErr) log.warn('dagsrapport.soppregistreringer_feilet', { message: regErr.message });
+    else soppregistreringer = (regRader ?? []).map((r) => fraTabellrad(r as Record<string, unknown>));
+  }
+
+  // ── AI-identifiseringen: kall, feil og Kindwise sin status ────────────────
+  // Vellykkede kall skrives ved suksess (migrasjon 020), feilede ved avvist
+  // Kindwise-svar (migrasjon 073). Uten begge er «ingen bruker AI-en» og
+  // «AI-en er død» samme tall — det var sommerens feil. Mangler en tabell,
+  // står raden som «ikke målt». usage_info koster ingen kreditter.
+  const tellKall = async (tabell: string, kolonne: string): Promise<AiKallTall | undefined> => {
+    const grense = (timer: number) => new Date(naa.getTime() - timer * 3600_000).toISOString();
+    const [d1, d7] = await Promise.all([
+      db.from(tabell).select('*', { count: 'exact', head: true }).gte(kolonne, grense(24)),
+      db.from(tabell).select('*', { count: 'exact', head: true }).gte(kolonne, grense(24 * 7))
+    ]);
+    if (d1.error || d7.error) {
+      log.warn('dagsrapport.ai_telling_feilet', { tabell, message: (d1.error ?? d7.error)?.message });
+      return undefined;
+    }
+    return { siste24t: d1.count ?? 0, siste7d: d7.count ?? 0 };
+  };
+  const [aiKall, aiFeil] = await Promise.all([
+    tellKall('ai_identifications', 'created_at'),
+    tellKall('ai_identifiseringsfeil', 'opprettet')
+  ]);
+  let kindwise;
+  if (erAiNokkelSatt(process.env.PLANTID_API_KEY)) {
+    const r = await hentKindwiseStatus(process.env.PLANTID_API_KEY);
+    if (r.ok) kindwise = r.status;
+    else log.warn('dagsrapport.kindwise_status_feilet', { httpStatus: r.httpStatus, feil: r.feil });
+  } else {
+    log.warn('dagsrapport.kindwise_nokkel_mangler');
+  }
 
   // ── Regionscorer, i dag og i går ──────────────────────────────────────────
   const { data: scorer } = await db
@@ -169,9 +260,14 @@ export async function GET(request: NextRequest) {
     varselabonnement: varselAntall,
     varselabonnenter,
     bruksdager,
-    rapportpuls,
+    proveSvar,
+    soppregistreringer,
+    kontoerSomFolger,
     flatetellinger,
     interneBrukere,
+    aiKall,
+    aiFeil,
+    kindwise,
     regionerIDag: velg(iDagDato),
     regionerIGar: velg(iGarDato),
     naa
@@ -227,6 +323,10 @@ export function byggRapportEpost(r: Dagsrapport, naa: Date) {
   const tidssoneNavn = (t: string) => (t === UKJENT_KILDE ? 'ukjent' : t);
   const tidssoneTekst = r.nyeBrukere.perTidssone7d.map((t) => `${tidssoneNavn(t.tidssone)} ${t.antall}`).join(' · ') || '—';
   const p = r.prover;
+  // Svar fra App Store-påminnelsen (migrasjon 072): tre tall, eller «ikke målt».
+  const svarTekst = p.svar7d.maalt
+    ? `${p.svar7d.omrader} områdene · ${p.svar7d.offline} offline · ${p.svar7d.ai} AI`
+    : 'ikke målt — tabellen prove_svar svarte ikke';
   const v = r.varsel;
   const u = r.bruk;
   const brukRader: Array<[string, string]> = u.maalt
@@ -244,6 +344,47 @@ export function byggRapportEpost(r: Dagsrapport, naa: Date) {
     : [['Bruk av soppforholdene', 'ikke målt — tabellen bruksdager svarte ikke']];
   // Før konto i appen: anonyme tellinger per språk (migrasjon 070).
   const tl = r.tellinger.siste7d;
+  // Soppregistreringer, samme dato som før. Registreringer, ikke soppmengde.
+  const reg = r.registreringer;
+  const fylkeListe = (celler: NonNullable<typeof reg.blokk>['lavest']) =>
+    celler.map((c) => `${c.omrade} ${prosentTekst(c)}`).join(' · ') || '—';
+  const registreringRader: Array<[string, string]> = !reg.maalt
+    ? [['Soppregistreringer', 'ikke målt — tabellen soppregistreringer svarte ikke']]
+    : !reg.blokk
+      ? [['Soppregistreringer', 'ikke målt ennå']]
+      : [
+          [`Norge, sesongen hittil (${kortPeriode(reg.blokk.sesong)})`, `alle ${prosentTekst(reg.blokk.sesong.alle)} · storsopp ${prosentTekst(reg.blokk.sesong.storsopp)}`],
+          [`Norge, siste hele uke (${kortPeriode(reg.blokk.uke)})`, `alle ${prosentTekst(reg.blokk.uke.alle)} · storsopp ${prosentTekst(reg.blokk.uke.storsopp)}`],
+          ['Lavest storsopp, fylker (sesongen)', fylkeListe(reg.blokk.lavest)],
+          ['Høyest storsopp, fylker (sesongen)', fylkeListe(reg.blokk.hoyest)]
+        ];
+  // «GBIF-utgave 12.9.» — datoen slutter selv på punktum.
+  const utgaveTekst = reg.blokk ? `GBIF-utgave ${kortDato(reg.blokk.snapshot)}` : '';
+
+  // Nye kontoer (14 d) som følger et område — X av N, delt på plattform.
+  const nk = r.nyeKontoerFolger;
+  const nkSum = (Object.values(nk.perPlattform) as Array<{ folger: number; nye: number }>).reduce(
+    (a, p) => ({ folger: a.folger + p.folger, nye: a.nye + p.nye }),
+    { folger: 0, nye: 0 }
+  );
+  const nkTekst = nk.maalt
+    ? `${nkSum.folger} av ${nkSum.nye} (iOS ${nk.perPlattform.ios.folger} av ${nk.perPlattform.ios.nye} · web ${nk.perPlattform.web.folger} av ${nk.perPlattform.web.nye}${nk.perPlattform.android.nye > 0 ? ` · Android ${nk.perPlattform.android.folger} av ${nk.perPlattform.android.nye}` : ''})`
+    : 'ikke målt';
+
+  // AI-identifiseringen: vellykkede og feilede kall, og Kindwise sin kvote.
+  const ai = r.ai;
+  const kallTekst = (t: { maalt: boolean; siste24t: number; siste7d: number }, tabell: string) =>
+    t.maalt ? `${t.siste24t} / ${t.siste7d}` : `ikke målt — tabellen ${tabell} svarte ikke`;
+  const kindwiseTekst = ai.kindwise.status
+    ? `${ai.kindwise.status.igjen ?? '?'} kreditter igjen · ${ai.kindwise.status.bruktUke ?? '?'} brukt siste uke`
+    : 'ikke målt — usage_info svarte ikke';
+  const aiRader: Array<[string, string]> = [
+    ...(ai.varsel ? [['⚠️ AI', ai.varsel] as [string, string]] : []),
+    ['Identifiseringer (24 t / 7 d)', kallTekst(ai.kall, 'ai_identifications')],
+    ['Feilede Kindwise-kall (24 t / 7 d)', kallTekst(ai.feil, 'ai_identifiseringsfeil')],
+    ['Kindwise', kindwiseTekst]
+  ];
+
   const tellingRader: Array<[string, string]> = r.tellinger.maalt
     ? [
         ['Første skjerm i appen, utlogget (7 d) nb / sv', `${tl.soppforhold.nb} / ${tl.soppforhold.sv}`],
@@ -277,9 +418,10 @@ export function byggRapportEpost(r: Dagsrapport, naa: Date) {
   <h2 style="font-size:14px;color:#1A3409;margin:22px 0 6px">Prøver</h2>
   <table style="width:100%;border-collapse:collapse;font-size:14px">
     ${rad('Løpende prøver nå', String(p.lopende))}
-    ${rad('Startet siste 7 dager', String(p.startetSiste7d))}
+    ${rad('Startet siste 7 dager', `${p.startetSiste7d} (${p.startetSiste7dPerPlan.pass} pass / ${p.startetSiste7dPerPlan.maaned} måned)`)}
     ${rad('Gikk til første belastning (7 d / totalt)', `${p.gikkTilBetalingSiste7d} / ${p.gikkTilBetaling}`)}
     ${rad('Avbrutt', String(p.avbrutt))}
+    ${rad('Svar fra prøvestartere (7 d)', svarTekst)}
   </table>
 
   <h2 style="font-size:14px;color:#1A3409;margin:22px 0 6px">Før konto i appen</h2>
@@ -287,19 +429,30 @@ export function byggRapportEpost(r: Dagsrapport, naa: Date) {
     ${tellingRader.map(([n, v]) => rad(n, v)).join('\n    ')}
   </table>
 
+  <h2 style="font-size:14px;color:#1A3409;margin:22px 0 6px">AI-identifisering</h2>
+  <table style="width:100%;border-collapse:collapse;font-size:14px">
+    ${aiRader.map(([n, v]) => rad(n, v)).join('\n    ')}
+  </table>
+
   <h2 style="font-size:14px;color:#1A3409;margin:22px 0 6px">I skogen</h2>
   <table style="width:100%;border-collapse:collapse;font-size:14px">
     ${rad('Best i dag', r.toppRegioner.map((t) => `${t.region} ${t.score}`).join(' · ') || '—')}
     ${rad('Snudde i natt', flankeTekst)}
     ${rad('Abonnerer på soppvarsel', String(r.varselabonnement))}
-    ${r.puls.length ? rad('Rapportpuls (GBIF, uka som gikk)', r.puls.map((p) => `${p.region} ${p.siste7} (${p.avvikPst > 0 ? '+' : ''}${p.avvikPst} %)`).join(' · ')) : ''}
   </table>
+
+  <h2 style="font-size:14px;color:#1A3409;margin:22px 0 6px">Soppregistreringer, samme dato som før</h2>
+  <table style="width:100%;border-collapse:collapse;font-size:14px">
+    ${registreringRader.map(([n, v]) => rad(n, v)).join('\n    ')}
+  </table>
+  ${reg.blokk ? `<p style="font-size:12px;color:#6b7280;margin:6px 0 0;line-height:1.5">${esc(REGISTRERING_FORBEHOLD)} ${esc(utgaveTekst)}</p>` : ''}
 
   <h2 style="font-size:14px;color:#1A3409;margin:22px 0 6px">Soppvarselet som trakt</h2>
   <table style="width:100%;border-collapse:collapse;font-size:14px">
     ${rad('Bekreftede abonnement (per rad)', String(v.bekreftede))}
     ${rad('Nye bekreftede siste 7 dager', String(v.nyeSiste7d))}
     ${rad('Klikket varsel → områdesiden', String(v.aktiverte))}
+    ${rad('Nye kontoer (14 d) som følger et område', nkTekst)}
     ${v.perKilde.slice(0, 6).map((k) => rad(`— ${kildeNavn(k.kilde)}`, `${k.bekreftede} · ${k.siste7d} siste 7 d · ${k.aktiverte} aktivert`)).join('\n    ')}
     ${v.perRegion.length ? rad('Flest abonnenter', v.perRegion.map((r) => `${r.region} ${r.bekreftede}`).join(' · ')) : ''}
   </table>
@@ -351,22 +504,30 @@ ABONNEMENT
 
 PRØVER
   løpende nå ................ ${p.lopende}
-  startet (7 d) ............. ${p.startetSiste7d}
+  startet (7 d) ............. ${p.startetSiste7d} (${p.startetSiste7dPerPlan.pass} pass / ${p.startetSiste7dPerPlan.maaned} måned)
   til første belastning ..... ${p.gikkTilBetalingSiste7d} (7 d) / ${p.gikkTilBetaling} totalt
   avbrutt ................... ${p.avbrutt}
+  svar fra prøvestartere (7 d) ... ${svarTekst}
 
 FØR KONTO I APPEN
 ${tellingRader.map(([n, v]) => `  ${n.padEnd(42, '.')} ${v}`).join('\n')}
 
+AI-IDENTIFISERING
+${aiRader.map(([n, v]) => `  ${n.padEnd(38, '.')} ${v}`).join('\n')}
+
 I SKOGEN
   best i dag ................ ${r.toppRegioner.map((t) => `${t.region} ${t.score}`).join(', ') || '—'}
   snudde i natt ............. ${flankeTekst}
-  soppvarsel-abonnenter ..... ${r.varselabonnement}${r.puls.length ? `\n  rapportpuls (uka som gikk) . ${r.puls.map((p) => `${p.region} ${p.siste7} (${p.avvikPst > 0 ? '+' : ''}${p.avvikPst} %)`).join(', ')}` : ''}
+  soppvarsel-abonnenter ..... ${r.varselabonnement}
+
+SOPPREGISTRERINGER, SAMME DATO SOM FØR
+${registreringRader.map(([n, v]) => `  ${`${n} `.padEnd(40, '.')} ${v}`).join('\n')}${reg.blokk ? `\n  ${REGISTRERING_FORBEHOLD}\n  ${utgaveTekst}` : ''}
 
 SOPPVARSELET SOM TRAKT
   bekreftede (per rad) ...... ${v.bekreftede}
   nye bekreftede (7 d) ...... ${v.nyeSiste7d}
   klikket varsel → område ... ${v.aktiverte}
+  nye kontoer (14 d) som følger et område ... ${nkTekst}
 ${v.perKilde.slice(0, 6).map((k) => `  ${kildeNavn(k.kilde).padEnd(26, '.')} ${k.bekreftede} · ${k.siste7d} siste 7 d · ${k.aktiverte} aktivert`).join('\n')}${v.perRegion.length ? `\n  flest ..................... ${v.perRegion.map((r) => `${r.region} ${r.bekreftede}`).join(', ')}` : ''}
 
 BRUK AV SOPPFORHOLDENE (INNLOGGEDE)

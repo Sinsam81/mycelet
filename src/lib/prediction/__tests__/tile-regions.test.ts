@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { NEAREST_REGION_MAX_KM, PREDICTION_TILE_REGIONS, nearestRegion, predictionTileGridCells } from '../tile-regions';
+import {
+  EKSTRA_SKOGOPPSLAG_PER_RUTE,
+  NEAREST_REGION_MAX_KM,
+  PREDICTION_TILE_REGIONS,
+  nearestRegion,
+  predictionTileGridCells
+} from '../tile-regions';
+import { SKOGPROVE_MS_PER_REGION, SKOGPROVE_SIKKERHETSMARGIN_MS } from '../skogprover';
 import { getRegion } from '@/lib/utils/region';
 
 /**
@@ -63,6 +70,30 @@ describe('PREDICTION_TILE_REGIONS', () => {
       const sekunder = (ruter * MS[land]) / 1000;
       expect(ruter, `${land} må ha regioner`).toBeGreaterThan(0);
       expect(sekunder, `${land}: ${ruter} ruter ≈ ${Math.round(sekunder)} s skogoppslag`).toBeLessThan(150);
+    }
+  });
+
+  it('holder forskyvningen innenfor maxDuration — midtpunktene pluss hele forskyvningstaket', () => {
+    // Når midtpunktet i en rute ikke er skog, prøver nattjobben inntil fire
+    // punkter til (skogprover.ts), begrenset av EKSTRA_SKOGOPPSLAG_PER_RUTE per
+    // region. Verste fall er at taket brukes helt opp i hver eneste region. Da
+    // skal det fortsatt være rom for skrivingen per region og slakken som
+    // tidsfristen i generatoren regner med, innenfor maxDuration på 300 s.
+    const MS = { NO: 29, SE: 329 } as const;
+    const MAX_DURATION_S = 300;
+    for (const land of ['NO', 'SE'] as const) {
+      const regioner = PREDICTION_TILE_REGIONS.filter((r) => r.country === land);
+      let oppslag = 0;
+      for (const r of regioner) {
+        const ruter = predictionTileGridCells(r).length;
+        oppslag += ruter + Math.min(4 * ruter, Math.round(ruter * EKSTRA_SKOGOPPSLAG_PER_RUTE[land]));
+      }
+      const sekunder = (oppslag * MS[land]) / 1000;
+      const budsjett =
+        MAX_DURATION_S - SKOGPROVE_SIKKERHETSMARGIN_MS / 1000 - (regioner.length * SKOGPROVE_MS_PER_REGION) / 1000;
+      expect(sekunder, `${land}: ${oppslag} oppslag ≈ ${Math.round(sekunder)} s mot ${Math.round(budsjett)} s`).toBeLessThan(
+        budsjett
+      );
     }
   });
 

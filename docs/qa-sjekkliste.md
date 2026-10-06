@@ -35,6 +35,7 @@ Dette er bug-klassen som rammet oss i prod (svensk kart blankt, fast i Oslo, dø
 - [ ] `/identify` laster (innlogget) med opplastingsfelt/kamera-CTA.
 - [ ] Sikkerhetsadvarsel vises (aldri spis basert på AI alene; lenke til soppkontroll).
 - [ ] Ingen krasj når siden åpnes uten bilde.
+- [ ] 🖐️ Kindwise direkte, uten appen: `PLANTID_API_KEY=… node scripts/sjekk-kindwise.mjs [bilde.jpg]` — trinn 1 (`usage_info`) er gratis og bekrefter nøkkel + kreditter; trinn 2 sender rutens eksakte kropp og prøver varianter hvis den avvises. Bruk dette FØRST når appen sier «Identifikasjon feilet» — det skiller feil nøkkel i Vercel fra en parameter Kindwise avviser.
 - [ ] 🖐️ Manuell (kvote-/kostnadsavhengig): last opp ett kjent soppbilde → får forslag + forvekslings-sjekk (look-alike). Kjøres sjelden, ikke i hver loop (Kindwise-kreditter).
 - [ ] 🖐️ Manuell lagringsflyt (skriver til prod — kjøres sjelden): bekreftelses-boksen må krysses AKTIVT (aldri forhåndskrysset), delingsnivå-velgeren er synlig og starter på forrige lokalt lagrede valg (nullstilles ved utlogging), ved manglende GPS vises notis + «Hent posisjonen min» som henter posisjon UTEN ny AI-identifisering, og etter lagring lander man på `/map?mine=1` med «Kun mine funn» på (automatisert lese-sjekk av landingen finnes i `e2e/map-geo.e2e.ts`).
 
@@ -82,7 +83,8 @@ Dette er bug-klassen som rammet oss i prod (svensk kart blankt, fast i Oslo, dø
 
 App Store-regel 3.1.1: native-appen får **ikke** vise ekstern betaling/Google-login.
 
-- [ ] **Web** `/pricing`: viser begge planer (Premium **79**, Sesongpass **249**) og «Velg …»-kjøpsknapper.
+- [ ] **Web** `/pricing`: Sesongpass **først** («Anbefalt», **249** kr, «Tilsvarer ca. 21 kr per måned», fornyelsesdato), så Premium (**99**), så Gratis — med «Velg …»-kjøpsknapper. `?plan=season_pass` gir passet fokus.
+- [ ] **Innlogget, 390×844** (`sesongpass.e2e.ts`): prøvearket leder med «Prøv Sesongpass gratis i 7 dager» og sier BEGGE datoene («Fra ca. <i dag + 7 d> koster passet 249 kr per år, og det gjelder da til <den + 1 år>»), «Heller måned for måned? 99 kr per måned» som synlig alternativ. Gratisuka loves på en plan bare når butikken gir den på akkurat den planen (nett: Stripe på begge, og bare når `/api/billing/status` svarer `kanFaaProve` — samme sjekker som checkout; app: RevenueCat per produkt). Fornyelseslinja står bare på kort som kan kjøpes (aldri på «Aktiv plan» — statuskortet har den ekte datoen), og `?plan=premium` ringer bare Premium.
 - [ ] **Web** `/auth/login`: viser «Fortsett med Google».
 - [ ] **Native (simulert)** `/pricing`: kjøpsknappene er **skjult** (ingen «Velg Premium»/«Velg Sesongpass»).
 - [ ] **Native (simulert)** `/auth/login`: «Fortsett med Google» er **skjult**.

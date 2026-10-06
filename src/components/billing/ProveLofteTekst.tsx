@@ -2,6 +2,7 @@
 
 import { useProveLofte } from '@/lib/hooks/useProveLofte';
 import { harProveLofte } from '@/lib/billing/prove-lofte';
+import type { IapPlan } from '@/lib/billing/plans';
 
 /**
  * Én tekst når gratisuka finnes, en annen når den ikke gjør det — eller vi
@@ -13,8 +14,12 @@ import { harProveLofte } from '@/lib/billing/prove-lofte';
  * en gratis uke som endte i et trekk på dag én. På nett er svaret kjent
  * synkront (Stripe gir den), så der endres ingenting; i appen står teksten
  * uten løfte til App Store har svart ja.
+ *
+ * `plan`: hvilken plans gratisuke løftet gjelder. Standard er sesongpasset,
+ * planen alle knappene leder til på prissiden; en tekst som navngir Premium
+ * («Prøv Premium gratis i 7 dager») må spørre om Premium.
  */
-export function ProveLofteTekst({ med, utenProve }: { med: string; utenProve: string }) {
+export function ProveLofteTekst({ med, utenProve, plan = 'season_pass' }: { med: string; utenProve: string; plan?: IapPlan }) {
   const lofte = useProveLofte();
-  return <>{harProveLofte(lofte) ? med : utenProve}</>;
+  return <>{harProveLofte(lofte, plan) ? med : utenProve}</>;
 }

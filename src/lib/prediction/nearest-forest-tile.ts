@@ -29,12 +29,28 @@ export interface ForestBearingTile {
   center_lat: number;
   center_lng: number;
   components?: { forest?: unknown } | null;
+  /**
+   * Punktet nattjobben faktisk målte skogen i. Når midtpunktet ligger i vann
+   * eller på et jorde, er det et kvadrantsenter inne i ruta — se
+   * skogprover.ts. Fliser fra før regelen mangler feltene; da er det midtpunktet.
+   */
+  metadata?: { skogprove_lat?: number; skogprove_lng?: number; [felt: string]: unknown } | null;
 }
 
 export interface NearestForestTile<T> {
   tile: T;
-  /** Avstand i km fra punktet det ble spurt om til flisens midtpunkt. */
+  /** Avstand i km fra punktet det ble spurt om til punktet skogen er målt i. */
   distanceKm: number;
+}
+
+/** Der skogdataene til flisa er målt: prøvepunktet hvis det er lagret, ellers midtpunktet. */
+function malepunkt(tile: ForestBearingTile): { lat: number; lng: number } {
+  const lat = tile.metadata?.skogprove_lat;
+  const lng = tile.metadata?.skogprove_lng;
+  if (typeof lat === 'number' && typeof lng === 'number' && Number.isFinite(lat) && Number.isFinite(lng)) {
+    return { lat, lng };
+  }
+  return { lat: tile.center_lat, lng: tile.center_lng };
 }
 
 /**
@@ -53,7 +69,8 @@ export function nearestForestTile<T extends ForestBearingTile>(
 
   for (const tile of tiles) {
     if (!tile.components?.forest) continue;
-    const distanceKm = occurrenceHaversineKm(lat, lon, tile.center_lat, tile.center_lng);
+    const punkt = malepunkt(tile);
+    const distanceKm = occurrenceHaversineKm(lat, lon, punkt.lat, punkt.lng);
     if (!best || distanceKm < best.distanceKm) best = { tile, distanceKm };
   }
 

@@ -56,6 +56,8 @@ import { TILBUD_UTLOSERE, dagenEtter, isoUke, osloDag, type Flate } from '@/lib/
 import { summerTellinger, tomTellinger, type Tellinger, type TellingRad } from '@/lib/bruk/tell';
 import { PREDICTION_TILE_REGIONS } from '@/lib/prediction/tile-regions';
 import { betalingskilde, klassifiserAbonnement, tellAbonnement, type AbonnementRad, type Butikk } from '@/lib/rapport/abonnement';
+import { byggRegistreringsblokk, type Registreringsblokk, type SoppregistreringRad } from '@/lib/rapport/soppregistreringer';
+import type { KindwiseStatus } from '@/lib/identifications/kindwise-status';
 
 // Abonnementsraden og regelen for den bor i abonnement.ts (delt med /admin).
 export type { AbonnementRad, Betalingskilde } from '@/lib/rapport/abonnement';
@@ -76,6 +78,11 @@ export interface BrukerRad {
    * landsignalet vi har. null/undefined = ukjent (eldre kontoer, OAuth).
    */
   tidssone?: string | null;
+  /**
+   * user_metadata.plattform: «ios» / «android» for kontoer laget i appen,
+   * ellers null (nettet). Valgfri for eldre kall.
+   */
+  plattform?: string | null;
 }
 
 /** Én rad per varselabonnement — konto- og e-postrader om hverandre. */
@@ -102,23 +109,48 @@ export interface BruksdagRad {
   omrade?: string;
 }
 
-/** Dagens rapportpuls per område (migrasjon 069). */
-export interface PulsRad {
-  region: string;
-  siste7: number;
-  avvikPst: number | null;
+/** Ett svar på «Hva var viktigst for deg i uka?» fra App Store-påminnelsen (migrasjon 072). */
+export interface ProveSvarRad {
+  /** omrader · offline · ai */
+  valg: string;
+  svart_at: string;
+}
+
+/** Tellinger av AI-kall, siste døgn og siste 7 dager. */
+export interface AiKallTall {
+  siste24t: number;
+  siste7d: number;
 }
 
 export interface RapportInn {
   brukere: BrukerRad[];
+  /**
+   * Vellykkede Kindwise-kall (ai_identifications, migrasjon 020) og feilede
+   * (ai_identifiseringsfeil, migrasjon 073). undefined = tabellen svarte ikke.
+   * Kindwise sin egen status (usage_info) — undefined = ikke hentet/svarte ikke.
+   */
+  aiKall?: AiKallTall;
+  aiFeil?: AiKallTall;
+  kindwise?: KindwiseStatus;
   abonnement: AbonnementRad[];
   varselabonnement: number;
+  /** Svar fra prøvestartere siste 7 dager (migrasjon 072). undefined = tabellen svarte ikke. */
+  proveSvar?: ProveSvarRad[];
   /** Radene bak tallet over — for kilde, region og aktivering. Valgfri for eldre kall. */
   varselabonnenter?: VarselAbonnentRad[];
   /** Bruksdager siste 28 dager. undefined = ikke målt (rapporten sier det). */
   bruksdager?: BruksdagRad[];
-  /** Rapportpuls i dag (norske områder). Tom = ikke hentet. */
-  rapportpuls?: PulsRad[];
+  /**
+   * Radene for den nyeste utgaven av soppregistreringer i år (migrasjon 071).
+   * [] = ikke målt ennå, undefined = tabellen svarte ikke.
+   */
+  soppregistreringer?: SoppregistreringRad[];
+  /**
+   * Kontoer som følger minst ett område — koblet på user_id ELLER samme
+   * e-post (se kontoerSomFolgerOmrade). Bare id-er: e-postene blir igjen i
+   * ruten. undefined = ikke målt.
+   */
+  kontoerSomFolger?: ReadonlySet<string>;
   /**
    * Anonyme flatetellinger siste 7 dager (migrasjon 070): første skjerm i
    * appen utlogget og registreringsskjemaet, per dag og språk. undefined =
@@ -166,9 +198,21 @@ export interface Dagsrapport {
   prover: {
     lopende: number;
     startetSiste7d: number;
+    /**
+     * Startet siste 7 dager, delt på plan: sesongpass mot måned. Det er dette
+     * «sesongpass først» (arket og prissiden leder med passet fra 22. sep 2026)
+     * skal dømmes på — 7 av 8 prøver før det valgte måned.
+     */
+    startetSiste7dPerPlan: { pass: number; maaned: number };
     gikkTilBetaling: number;
     gikkTilBetalingSiste7d: number;
     avbrutt: number;
+    /**
+     * Svar på spørsmålet i App Store-påminnelsen, siste 7 dager (migrasjon
+     * 072): hva var viktigst — områdene med begrunnelse, offline-kartet
+     * eller AI-identifikasjonen. maalt=false når tabellen ikke svarte.
+     */
+    svar7d: { maalt: boolean; omrader: number; offline: number; ai: number };
   };
   /** Rader som SIER aktiv eller prøve, men der perioden er ute. Overses de, blåses tallet opp. */
   utloptMenMarkertAktiv: number;
@@ -198,6 +242,18 @@ export interface Dagsrapport {
     perRegion: Array<{ region: string; bekreftede: number }>;
   };
   /**
+   * Soppregistreringer, samme dato som før (migrasjon 071): nyeste utgave i
+   * år. maalt=false når tabellen ikke svarte; blokk=null når ingen utgave er
+   * målt ennå. Registreringsaktivitet, ikke soppmengde.
+   */
+  registreringer: { maalt: boolean; blokk: Registreringsblokk | null };
+  /**
+   * Nye kontoer siste 14 dager som følger et område (soppvarsel på konto
+   * eller på samme e-post uten konto), per plattform. maalt=false når
+   * koblingen ikke ble gjort.
+   */
+  nyeKontoerFolger: { maalt: boolean; perPlattform: Record<Plattform, { folger: number; nye: number }> };
+  /**
    * Bruk av soppforholdene blant innloggede (docs/strategi-2026-2027.md § 4).
    * «Kom tilbake» = så forholdene på en SENERE dag enn registreringsdagen —
    * forsidekortet vises automatisk rett etter registrering, så samme dag
@@ -206,8 +262,6 @@ export interface Dagsrapport {
    * «steder» (Mine steder) fra migrasjon 066 — tallet vinterplanen trenger
    * for å avgjøre områdekartoteket.
    */
-  /** De tre områdene med størst avvik oppover (kan være negative i en stille uke — etiketten er nøytral). */
-  puls: Array<{ region: string; siste7: number; avvikPst: number }>;
   bruk: {
     maalt: boolean;
     brukereSiste7d: number;
@@ -229,9 +283,93 @@ export interface Dagsrapport {
    * (migrasjon 070). maalt=false når tabellen ikke svarte.
    */
   tellinger: { maalt: boolean; siste7d: Tellinger };
+  /**
+   * AI-identifiseringen: virker den, og bruker noen den? Fra mai til 29.
+   * september 2026 feilet hvert Kindwise-kall uten at noe sa fra — vellykkede
+   * kall telles bare ved suksess, så «død» og «ubrukt» så identiske ut.
+   * `varsel` er satt når tallene sier at noe er galt: kall feiler uten at noe
+   * lykkes, Kindwise sperrer nøkkelen, eller kreditter nærmer seg tomt.
+   */
+  ai: {
+    kall: { maalt: boolean } & AiKallTall;
+    feil: { maalt: boolean } & AiKallTall;
+    kindwise: { maalt: boolean; status: KindwiseStatus | null };
+    varsel: string | null;
+  };
+}
+
+/** Under dette varsler rapporten om kreditter — én sesonguke for en liten base. */
+export const KINDWISE_KREDITT_VARSEL = 200;
+
+/** Ren og eksportert for testen: hva rapporten skal rope om. */
+export function byggAiBlokk(inn: Pick<RapportInn, 'aiKall' | 'aiFeil' | 'kindwise'>): Dagsrapport['ai'] {
+  const kall = inn.aiKall ? { maalt: true, ...inn.aiKall } : { maalt: false, siste24t: 0, siste7d: 0 };
+  const feil = inn.aiFeil ? { maalt: true, ...inn.aiFeil } : { maalt: false, siste24t: 0, siste7d: 0 };
+  const kindwise = inn.kindwise ? { maalt: true, status: inn.kindwise } : { maalt: false, status: null };
+
+  let varsel: string | null = null;
+  if (kindwise.status && (!kindwise.status.aktiv || !kindwise.status.kanBruke)) {
+    varsel = `Kindwise sperrer nøkkelen${kindwise.status.grunn ? ` (${kindwise.status.grunn})` : ''} — hvert AI-kall feiler`;
+  } else if (feil.maalt && feil.siste7d > 0 && kall.maalt && kall.siste7d === 0) {
+    // Nøyaktig sommerens feil: alt feiler, ingenting lykkes.
+    varsel = `alle ${feil.siste7d} AI-kall siste 7 dager feilet — ingen fikk svar`;
+  } else if (feil.maalt && kall.maalt && feil.siste7d > kall.siste7d) {
+    varsel = `flere AI-kall feilet (${feil.siste7d}) enn lyktes (${kall.siste7d}) siste 7 dager`;
+  } else if (kindwise.status?.igjen != null && kindwise.status.igjen < KINDWISE_KREDITT_VARSEL) {
+    varsel = `bare ${kindwise.status.igjen} Kindwise-kreditter igjen — kjøp flere`;
+  }
+
+  return { kall, feil, kindwise, varsel };
 }
 
 export const UKJENT_KILDE = 'ukjent';
+
+export type Plattform = 'ios' | 'android' | 'web';
+
+/** Plattformen kontoen ble laget på. Alt uten «ios»/«android» er nettet. */
+export function plattformFor(b: Pick<BrukerRad, 'plattform'>): Plattform {
+  return b.plattform === 'ios' || b.plattform === 'android' ? b.plattform : 'web';
+}
+
+/** Det minste varselraden må ha for å avgjøre «følger et område». */
+export interface FolgerRad {
+  user_id: string | null;
+  email: string | null;
+  active: boolean;
+  confirmed_at: string | null;
+}
+
+/**
+ * Hvilke kontoer følger minst ett område? En konto kan følge på to måter:
+ * en rad med egen user_id (skrudd på i appen), eller en kontoløs påmelding
+ * på samme e-postadresse (skjemaet på /soppvarsel, ofte FØR kontoen ble
+ * laget). Kontoer laget 1.–16. september 2026: 5 av 89 fulgte et område,
+ * 3 av dem via skjemaet — uten e-postkoblingen hadde de manglet.
+ *
+ * Samme regel for «følger» som varseltrakten: aktiv, og bekreftet (en
+ * kontorad er bekreftet i kraft av kontoen). E-post sammenlignes trimmet og
+ * med små bokstaver, bare i minnet; svaret er id-er, aldri adresser.
+ */
+export function kontoerSomFolgerOmrade(
+  kontoer: ReadonlyArray<{ id: string; email: string | null | undefined }>,
+  rader: readonly FolgerRad[]
+): Set<string> {
+  const vask = (e: string | null | undefined) => (typeof e === 'string' ? e.trim().toLowerCase() : '');
+  const folger = new Set<string>();
+  const eposter = new Set<string>();
+  for (const r of rader) {
+    if (!r.active) continue;
+    if (r.user_id) folger.add(r.user_id);
+    else if (r.confirmed_at !== null && vask(r.email)) eposter.add(vask(r.email));
+  }
+  const kjente = new Set<string>();
+  for (const k of kontoer) {
+    kjente.add(k.id);
+    if (eposter.has(vask(k.email))) folger.add(k.id);
+  }
+  // Bare id-er som faktisk er kontoer: en rad kan peke på en slettet bruker.
+  return new Set([...folger].filter((id) => kjente.has(id)));
+}
 
 /**
  * Terskelen varselet bruker. Sto hardkodet som 85 og gikk ut av takt da
@@ -262,6 +400,16 @@ function kjopsdato(rad: AbonnementRad): string {
   return lesProveMerke(rad.metadata, 'forste_belastning') ?? rad.created_at;
 }
 
+/** Svarene fra App Store-påminnelsen i vinduet, per valg. Ukjente valg (fremtidige nøkler) telles ikke. */
+function tellProveSvar(rader: ProveSvarRad[] | undefined, iVinduet: (iso: string) => boolean): Dagsrapport['prover']['svar7d'] {
+  const svar = { maalt: rader !== undefined, omrader: 0, offline: 0, ai: 0 };
+  for (const r of rader ?? []) {
+    if (!iVinduet(r.svart_at)) continue;
+    if (r.valg === 'omrader' || r.valg === 'offline' || r.valg === 'ai') svar[r.valg] += 1;
+  }
+  return svar;
+}
+
 export function byggDagsrapport(inn: RapportInn): Dagsrapport {
   const naa = inn.naa.getTime();
   const time24 = 24 * 3600_000;
@@ -285,12 +433,17 @@ export function byggDagsrapport(inn: RapportInn): Dagsrapport {
     const s = lesProveMerke(a.metadata, 'prove_start');
     return b && s && new Date(b).getTime() > new Date(s).getTime() ? b : null;
   };
+  const startetSiste7d = butikkRader.filter((a) => {
+    const s = proveStart(a);
+    return s !== null && nyere(s, dag7);
+  });
   const prover = {
     lopende: abonnement.prover,
-    startetSiste7d: butikkRader.filter((a) => {
-      const s = proveStart(a);
-      return s !== null && nyere(s, dag7);
-    }).length,
+    startetSiste7d: startetSiste7d.length,
+    startetSiste7dPerPlan: {
+      pass: startetSiste7d.filter((a) => a.tier === 'season_pass').length,
+      maaned: startetSiste7d.filter((a) => a.tier !== 'season_pass').length
+    },
     gikkTilBetaling: butikkRader.filter((a) => forsteBelastning(a) !== null).length,
     gikkTilBetalingSiste7d: butikkRader.filter((a) => {
       const b = forsteBelastning(a);
@@ -302,7 +455,8 @@ export function byggDagsrapport(inn: RapportInn): Dagsrapport {
       if (a.status === 'trialing') return a.cancel_at_period_end === true;
       if (a.status === 'active') return false;
       return lesProveMerke(a.metadata, 'prove_start') !== null && forsteBelastning(a) === null;
-    }).length
+    }).length,
+    svar7d: tellProveSvar(inn.proveSvar, (iso) => nyere(iso, dag7))
   };
 
   // ── Land: tidssone ved registrering ───────────────────────────────────────
@@ -396,6 +550,19 @@ export function byggDagsrapport(inn: RapportInn): Dagsrapport {
     }
   }
 
+  // Nye kontoer (14 d) som følger et område, per plattform.
+  const perPlattform: Record<Plattform, { folger: number; nye: number }> = {
+    ios: { folger: 0, nye: 0 },
+    android: { folger: 0, nye: 0 },
+    web: { folger: 0, nye: 0 }
+  };
+  for (const b of inn.brukere) {
+    if (!nyere(b.created_at, 14 * time24)) continue;
+    const p = perPlattform[plattformFor(b)];
+    p.nye += 1;
+    if (inn.kontoerSomFolger?.has(b.id)) p.folger += 1;
+  }
+
   // Tellingene før konto: siste 7 dager i Oslo-dato, som bruksdagene.
   const tellingsGrense = osloDag(new Date(naa - 6 * 24 * 3600_000));
   const tellinger = inn.flatetellinger
@@ -427,10 +594,11 @@ export function byggDagsrapport(inn: RapportInn): Dagsrapport {
     varsel,
     bruk,
     tellinger,
-    puls: (inn.rapportpuls ?? [])
-      .filter((p): p is PulsRad & { avvikPst: number } => p.avvikPst !== null)
-      .sort((a, b) => b.avvikPst - a.avvikPst)
-      .slice(0, 3)
+    registreringer: inn.soppregistreringer
+      ? { maalt: true, blokk: byggRegistreringsblokk(inn.soppregistreringer) }
+      : { maalt: false, blokk: null },
+    nyeKontoerFolger: { maalt: inn.kontoerSomFolger !== undefined, perPlattform },
+    ai: byggAiBlokk(inn)
   };
 }
 
