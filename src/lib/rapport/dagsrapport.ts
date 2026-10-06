@@ -447,7 +447,10 @@ export function byggDagsrapport(inn: RapportInn): Dagsrapport {
     startetSiste7d: startetSiste7d.length,
     startetSiste7dPerPlan: {
       pass: startetSiste7d.filter((a) => a.tier === 'season_pass').length,
-      maaned: startetSiste7d.filter((a) => a.tier !== 'season_pass').length
+      // Bare kjente planer: en prøve med tier `free` (ukjent pris-ID) er verken
+      // pass eller måned — den står i ukjentPlan-varselet, og summen her blir
+      // da mindre enn «startet», synlig i stedet for gjettet.
+      maaned: startetSiste7d.filter((a) => a.tier === 'premium').length
     },
     gikkTilBetaling: butikkRader.filter((a) => forsteBelastning(a) !== null).length,
     gikkTilBetalingSiste7d: butikkRader.filter((a) => {

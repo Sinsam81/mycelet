@@ -274,7 +274,9 @@ describe('én regel, to flater — rapporten og /admin', () => {
     expect(tellAbonnement(rader, NAA).prover).toBe(2);
     expect(r.prover.lopende).toBe(2);
     expect(r.prover.startetSiste7d).toBe(2);
-    expect(r.prover.startetSiste7dPerPlan).toEqual({ pass: 0, maaned: 2 });
+    // Per plan telles bare kjente planer: prøven med ukjent pris er verken
+    // pass eller måned, så 1 + 0 < 2 startet — differansen er ukjentPlan.
+    expect(r.prover.startetSiste7dPerPlan).toEqual({ pass: 0, maaned: 1 });
     // Belastet = betalende, også med ukjent plan — «gikk til betaling», «nye
     // ekte kjøp» og «betalende» sier det samme.
     expect(r.prover.gikkTilBetaling).toBe(1);
