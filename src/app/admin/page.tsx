@@ -17,6 +17,7 @@ import { getTranslations } from 'next-intl/server';
 import { PageWrapper } from '@/components/layout/PageWrapper';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { hentAlleBrukere } from '@/lib/supabase/alle-brukere';
 import { erInternKonto, tellAbonnement, type AbonnementRad } from '@/lib/rapport/abonnement';
 
 /**
@@ -172,22 +173,14 @@ export default async function AdminDashboardPage() {
    * «med profil» — da blir et avvik et varsel i stedet for en skjult feil.
    */
   const fetchAccounts = async () => {
-    const perPage = 1000;
-    const createdAt: string[] = [];
+    // Samme henting som dagsrapporten (hentAlleBrukere): side for side, med
+    // et bevisst tak på 50 000 kontoer — ved den grensen skal dette uansett
+    // være en SQL-spørring mot auth.users, ikke sidevis henting i en sidevisning.
+    const alle = await hentAlleBrukere(admin.auth.admin);
+    if ('feil' in alle) return null;
+    const createdAt = alle.brukere.map((u) => u.created_at).filter((d) => Boolean(d));
     // Interne kontoer (QA, Apples demokonto) — samme regel som dagsrapporten.
-    const interne = new Set<string>();
-    // Bevisst tak: 50 000 kontoer. Ved den grensen skal dette uansett være en
-    // SQL-spørring mot auth.users, ikke sidevis henting i en sidevisning.
-    for (let page = 1; page <= 50; page++) {
-      const { data, error } = await admin.auth.admin.listUsers({ page, perPage });
-      if (error) return null;
-      const users = data?.users ?? [];
-      for (const u of users) {
-        if (u.created_at) createdAt.push(u.created_at);
-        if (erInternKonto(u.email)) interne.add(u.id);
-      }
-      if (users.length < perPage) break;
-    }
+    const interne = new Set(alle.brukere.filter((u) => erInternKonto(u.email)).map((u) => u.id));
     return {
       total: createdAt.length,
       week: createdAt.filter((d) => d >= WEEK).length,

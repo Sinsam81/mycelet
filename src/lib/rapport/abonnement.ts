@@ -26,7 +26,10 @@
  *                   butikk-provider, eller eies av en intern konto — der er et
  *                   App Store-kjøp testing av kjøpsflyten, ikke et salg.
  *  - prove:         butikkrad med status trialing. Sju dager gratis er ikke
- *                   en kunde.
+ *                   en kunde. Uansett tier: en ukjent Stripe-pris gir tier
+ *                   `free`, og prøven skal fortsatt synes — ellers forsvinner
+ *                   løpende prøver stille fra rapporten og /admin når en
+ *                   pris-ID mangler i miljøet.
  *  - betalende:     butikkrad (Stripe eller App Store) med status active og
  *                   løpende periode. En kunde som har sagt opp, teller til
  *                   den betalte perioden er ute.
@@ -90,6 +93,16 @@ export function betalingskilde(rad: AbonnementRad, interne?: ReadonlySet<string>
   return 'manuell';
 }
 
+/**
+ * Butikkrad: penger kan ha flyttet seg, eller er i ferd med det. Dagsrapportens
+ * prøveblokk (startet, gikk til betaling, avbrutt) teller på disse, og
+ * klassifiserAbonnement kaller en løpende butikkrad med status trialing en
+ * prøve uansett tier — samme sett rader i begge tellinger.
+ */
+export function erButikkrad(rad: AbonnementRad, interne?: ReadonlySet<string>): boolean {
+  return betalingskilde(rad, interne) !== 'manuell';
+}
+
 export function periodeLoper(rad: AbonnementRad, naa: Date): boolean {
   // Ingen sluttdato = løper til noe annet sier stopp. Sjeldent, men gyldig.
   if (!rad.current_period_end) return true;
@@ -99,9 +112,14 @@ export function periodeLoper(rad: AbonnementRad, naa: Date): boolean {
 export function klassifiserAbonnement(rad: AbonnementRad, naa: Date, interne?: ReadonlySet<string>): AbonnementKlasse {
   if (rad.status !== 'active' && rad.status !== 'trialing') return 'inaktiv';
   if (!periodeLoper(rad, naa)) return 'utlopt';
+  // En løpende butikkprøve er en prøve før tier vurderes: en ukjent Stripe-pris
+  // skrives som tier `free` (stripe-webhook-decision.ts beholder bare en
+  // eksisterende betalt tier), og da ville prøven ellers havnet i «inaktiv»
+  // mens prøveblokka samtidig sa «startet 7 d: 1».
+  if (rad.status === 'trialing' && erButikkrad(rad, interne)) return 'prove';
   if (!isPaidTier(rad.tier as BillingTier)) return 'inaktiv';
   if (betalingskilde(rad, interne) === 'manuell') return 'gratisTildelt';
-  return rad.status === 'trialing' ? 'prove' : 'betalende';
+  return 'betalende';
 }
 
 export function tellAbonnement(rader: readonly AbonnementRad[], naa: Date, interne?: ReadonlySet<string>): Abonnementstall {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { hasPaidAccess, type BillingStatus, type BillingTier } from '@/lib/billing/plans';
-import { betalingskilde, erInternKonto, klassifiserAbonnement, tellAbonnement, type AbonnementRad } from '../abonnement';
+import { betalingskilde, erButikkrad, erInternKonto, klassifiserAbonnement, tellAbonnement, type AbonnementRad } from '../abonnement';
 
 /**
  * Referansen er produksjonsbildet 15. september 2026, der /admin viste
@@ -143,5 +143,31 @@ describe('erInternKonto', () => {
     expect(erInternKonto('x@mycelet.com.example.no')).toBe(false);
     expect(erInternKonto(null)).toBe(false);
     expect(erInternKonto(undefined)).toBe(false);
+  });
+});
+
+describe('erButikkrad — radene prøveblokka teller på', () => {
+  it('butikkrad med betalt plan, uansett status', () => {
+    expect(erButikkrad(rad({ metadata: { provider: 'stripe' } }))).toBe(true);
+    expect(erButikkrad(rad({ status: 'trialing', metadata: { provider: 'revenuecat' } }))).toBe(true);
+    expect(erButikkrad(rad({ status: 'canceled', tier: 'season_pass', metadata: { provider: 'stripe' } }))).toBe(true);
+  });
+
+  it('ikke gavepass eller interne kontoer', () => {
+    expect(erButikkrad(rad({ metadata: { source: 'manual_grant' } }))).toBe(false);
+    expect(erButikkrad(rad({ metadata: null }))).toBe(false);
+    expect(erButikkrad(rad({ user_id: 'qa', metadata: { provider: 'revenuecat' } }), new Set(['qa']))).toBe(false);
+  });
+
+  it('en løpende butikkprøve er en prøve selv med tier free (ukjent Stripe-pris)', () => {
+    const ukjentPris = rad({ tier: 'free', status: 'trialing', metadata: { provider: 'stripe' } });
+    expect(erButikkrad(ukjentPris)).toBe(true);
+    expect(klassifiserAbonnement(ukjentPris, NAA)).toBe('prove');
+    // … men blir den active med tier free, er det ikke et salg, og et gavepass
+    // med tier free gir ingenting.
+    expect(klassifiserAbonnement(rad({ tier: 'free', metadata: { provider: 'stripe' } }), NAA)).toBe('inaktiv');
+    expect(klassifiserAbonnement(rad({ tier: 'free', status: 'trialing', metadata: { source: 'manual_grant' } }), NAA)).toBe('inaktiv');
+    // Utløpt vinner fortsatt over prøve.
+    expect(klassifiserAbonnement(rad({ tier: 'free', status: 'trialing', current_period_end: '2026-09-01T00:00:00Z', metadata: { provider: 'stripe' } }), NAA)).toBe('utlopt');
   });
 });

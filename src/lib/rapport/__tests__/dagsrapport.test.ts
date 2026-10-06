@@ -197,7 +197,7 @@ describe('betalende — den tellingen som kan lyve', () => {
       })
     );
     // Gavepassene gir tilgang, men er ikke kunder: de står for seg og ligger
-    // ikke i totalen (fram til 15. september 2026 gjorde de det).
+    // ikke i totalen (fram til PR #266 i oktober 2026 gjorde de det).
     expect(r.betalende.totalt).toBe(2);
     expect(r.betalende.perKilde).toEqual({ stripe: 1, revenuecat: 1 });
     expect(r.gratisTildelt).toBe(3);
@@ -257,6 +257,25 @@ describe('én regel, to flater — rapporten og /admin', () => {
     expect(r.prover.lopende).toBe(t.prover);
     expect(r.gratisTildelt).toBe(t.gratisTildelt);
     expect(r.utloptMenMarkertAktiv).toBe(t.utloptMenMarkertAktiv);
+  });
+
+  it('en butikkprøve med ukjent plan (tier free) er «løpende» OG «startet» — aldri bare det ene', () => {
+    // En Stripe-rad hvis pris-ID mangler i miljøet skrives med tier `free` og
+    // status trialing. Den er fortsatt en prøve: forsvant den fra «løpende»
+    // mens «startet 7 d» talte den, ville rapporten undertelle prøver stille
+    // hver gang en pris-ID glapp.
+    const rader = [
+      ab({ user_id: 'ukjent-pris', tier: 'free', status: 'trialing', created_at: dagerSiden(2), metadata: { provider: 'stripe', prove_start: dagerSiden(2) } }),
+      ab({ user_id: 'ekte-prove', status: 'trialing', created_at: dagerSiden(3), metadata: { provider: 'revenuecat', prove_start: dagerSiden(3) } })
+    ];
+    const r = byggDagsrapport(inn({ abonnement: rader }));
+    expect(tellAbonnement(rader, NAA).prover).toBe(2);
+    expect(r.prover.lopende).toBe(2);
+    expect(r.prover.startetSiste7d).toBe(2);
+    expect(r.prover.startetSiste7dPerPlan).toEqual({ pass: 0, maaned: 2 });
+    // Men «betalende» krever fortsatt betalt plan: konverterer den ukjente
+    // prisen til active med tier free, er den ikke et salg.
+    expect(r.betalende.totalt).toBe(0);
   });
 });
 

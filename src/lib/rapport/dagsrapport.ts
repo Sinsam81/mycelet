@@ -43,10 +43,11 @@
  * ── REGELEN BOR I abonnement.ts ─────────────────────────────────────────────
  *
  * Hvem som er betalende, prøve eller gratis tildelt avgjøres i
- * src/lib/rapport/abonnement.ts, som /admin også bruker. Fram til 15.
- * september 2026 lå gavepass og testkontoer i «Betalende»-totalen her (de sto
+ * src/lib/rapport/abonnement.ts, som /admin også bruker. Fram til PR #266
+ * (oktober 2026) lå gavepass og testkontoer i «Betalende»-totalen her (de sto
  * på en underlinje, men var talt med), og /admin hadde sin egen regel som i
- * tillegg talte prøver og utløpte rader.
+ * tillegg talte prøver og utløpte rader — 15. september 2026 viste den
+ * «Betalende: 8» der fasit var én.
  */
 
 import { VARSEL_MIN_SCORE } from '@/lib/alerts/decision';
@@ -55,7 +56,7 @@ import { lesProveMerke } from '@/lib/billing/prove-merke';
 import { TILBUD_UTLOSERE, dagenEtter, isoUke, osloDag, type Flate } from '@/lib/bruk/bruksdag';
 import { summerTellinger, tomTellinger, type Tellinger, type TellingRad } from '@/lib/bruk/tell';
 import { PREDICTION_TILE_REGIONS } from '@/lib/prediction/tile-regions';
-import { betalingskilde, klassifiserAbonnement, tellAbonnement, type AbonnementRad, type Butikk } from '@/lib/rapport/abonnement';
+import { erButikkrad, klassifiserAbonnement, tellAbonnement, type AbonnementRad, type Butikk } from '@/lib/rapport/abonnement';
 import { byggRegistreringsblokk, type Registreringsblokk, type SoppregistreringRad } from '@/lib/rapport/soppregistreringer';
 import type { KindwiseStatus } from '@/lib/identifications/kindwise-status';
 
@@ -421,12 +422,13 @@ export function byggDagsrapport(inn: RapportInn): Dagsrapport {
   // /admin bruker (abonnement.ts). `aktive` er bare ekte kjøp.
   const abonnement = tellAbonnement(inn.abonnement, inn.naa, inn.interneBrukere);
   const aktive = inn.abonnement.filter((a) => klassifiserAbonnement(a, inn.naa, inn.interneBrukere) === 'betalende');
-  const kildeAv = (a: AbonnementRad) => betalingskilde(a, inn.interneBrukere);
 
   // ── Prøver ────────────────────────────────────────────────────────────────
-  // Bare butikkrader: et gavepass med status trialing er ikke en prøve, og
-  // QA-kontoens sandkasseprøve er ikke en kunde på vei inn.
-  const butikkRader = inn.abonnement.filter((a) => kildeAv(a) !== 'manuell');
+  // Bare butikkrader (erButikkrad, samme sett som klassifiserAbonnement teller
+  // prøver på): et gavepass med status trialing er ikke en prøve, og
+  // QA-kontoens sandkasseprøve er ikke en kunde på vei inn. Tier spiller ingen
+  // rolle her — en ukjent Stripe-pris gir tier `free`, og prøven skal synes.
+  const butikkRader = inn.abonnement.filter((a) => erButikkrad(a, inn.interneBrukere));
   const proveStart = (a: AbonnementRad) => lesProveMerke(a.metadata, 'prove_start') ?? (a.status === 'trialing' ? a.created_at : null);
   const forsteBelastning = (a: AbonnementRad) => {
     const b = lesProveMerke(a.metadata, 'forste_belastning');

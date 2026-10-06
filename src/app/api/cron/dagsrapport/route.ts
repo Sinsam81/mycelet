@@ -16,6 +16,7 @@ import {
 } from '@/lib/rapport/dagsrapport';
 import { REGISTRERING_FORBEHOLD, fraTabellrad, kortDato, kortPeriode, prosentTekst, type SoppregistreringRad } from '@/lib/rapport/soppregistreringer';
 import { erInternKonto } from '@/lib/rapport/abonnement';
+import { MAKS_SIDER as MAKS_BRUKERSIDER, hentAlleBrukere } from '@/lib/supabase/alle-brukere';
 import { osloDag } from '@/lib/bruk/bruksdag';
 import { type TellingRad } from '@/lib/bruk/tell';
 import { WEB_DIREKTE_KILDE, normaliserKilde, vaskTidssone } from '@/lib/analytics/kilde';
@@ -74,17 +75,21 @@ export async function GET(request: NextRequest) {
   const naa = new Date();
 
   // ── Brukere ───────────────────────────────────────────────────────────────
-  // auth.users er ikke eksponert gjennom PostgREST; admin-API-et er veien inn.
-  const { data: brukerData, error: brukerErr } = await db.auth.admin.listUsers({ page: 1, perPage: 1000 });
-  if (brukerErr) {
-    log.error('dagsrapport.brukere_feilet', { message: brukerErr.message });
+  // auth.users er ikke eksponert gjennom PostgREST; admin-API-et er veien inn,
+  // side for side — samme henting som /admin (hentAlleBrukere), så de to
+  // flatene ser de samme kontoene. Fram til oktober 2026 leste rapporten bare
+  // side 1 (1000 kontoer) og ville ha mistet alle etter det, stille.
+  const alle = await hentAlleBrukere(db.auth.admin);
+  if ('feil' in alle) {
+    log.error('dagsrapport.brukere_feilet', { message: alle.feil });
     return NextResponse.json({ error: 'Kunne ikke hente brukere' }, { status: 500 });
   }
+  if (alle.avkortet) log.warn('dagsrapport.brukere_avkortet', { maksSider: MAKS_BRUKERSIDER, hentet: alle.brukere.length });
   // Interne kontoer: QA-brukeren og Apples demokonto ligger på @mycelet.com.
   // Deres App Store-kjøp er testing, ikke salg (se RapportInn.interneBrukere).
   // Samme regel som /admin: erInternKonto i rapport/abonnement.ts.
-  const interneBrukere = new Set((brukerData?.users ?? []).filter((u) => erInternKonto(u.email)).map((u) => u.id));
-  const brukere = (brukerData?.users ?? []).map((u) => ({
+  const interneBrukere = new Set(alle.brukere.filter((u) => erInternKonto(u.email)).map((u) => u.id));
+  const brukere = alle.brukere.map((u) => ({
     id: u.id,
     created_at: u.created_at,
     last_sign_in_at: u.last_sign_in_at ?? null,
@@ -131,7 +136,7 @@ export async function GET(request: NextRequest) {
   const varselAntall = varselabonnenter.filter((r) => r.active).length;
   const kontoerSomFolger = varselMaalt
     ? kontoerSomFolgerOmrade(
-        (brukerData?.users ?? []).map((u) => ({ id: u.id, email: u.email })),
+        alle.brukere.map((u) => ({ id: u.id, email: u.email })),
         folgerRader
       )
     : undefined;
