@@ -27,9 +27,9 @@
  * bruker, og sandbox-kjøpene fra testingen ser identiske ut i tabellen. Skilles
  * de ikke, ser det ut som seks kunder betaler for noe én betaler for.
  *
- * `metadata.provider` er det eneste som skiller dem: `stripe` eller
- * `revenuecat` betyr at penger har flyttet seg. Mangler feltet, er raden satt
- * inn for hånd — et gavepass, ikke et salg.
+ * `metadata.provider` skiller dem: `stripe` eller `revenuecat` betyr at penger
+ * har flyttet seg. Mangler feltet, eller er raden merket `manual_grant`, er
+ * den satt inn for hånd — et gavepass, ikke et salg.
  *
  * ── OG PRØVEN ER IKKE ET SALG ───────────────────────────────────────────────
  *
@@ -39,6 +39,15 @@
  * med løpende periode, og prøvene har sin egen blokk, lest fra
  * `metadata.prove_start` / `metadata.forste_belastning` som webhookene
  * skriver (src/lib/billing/prove-merke.ts).
+ *
+ * ── REGELEN BOR I abonnement.ts ─────────────────────────────────────────────
+ *
+ * Hvem som er betalende, prøve eller gratis tildelt avgjøres i
+ * src/lib/rapport/abonnement.ts, som /admin også bruker. Fram til PR #266
+ * (oktober 2026) lå gavepass og testkontoer i «Betalende»-totalen her (de sto
+ * på en underlinje, men var talt med), og /admin hadde sin egen regel som i
+ * tillegg talte prøver og utløpte rader — 15. september 2026 viste den
+ * «Betalende: 8» der fasit var én.
  */
 
 import { VARSEL_MIN_SCORE } from '@/lib/alerts/decision';
@@ -47,21 +56,12 @@ import { lesProveMerke } from '@/lib/billing/prove-merke';
 import { TILBUD_UTLOSERE, dagenEtter, isoUke, osloDag, type Flate } from '@/lib/bruk/bruksdag';
 import { summerTellinger, tomTellinger, type Tellinger, type TellingRad } from '@/lib/bruk/tell';
 import { PREDICTION_TILE_REGIONS } from '@/lib/prediction/tile-regions';
+import { erButikkrad, klassifiserAbonnement, tellAbonnement, type AbonnementRad, type Butikk } from '@/lib/rapport/abonnement';
 import { byggRegistreringsblokk, type Registreringsblokk, type SoppregistreringRad } from '@/lib/rapport/soppregistreringer';
 import type { KindwiseStatus } from '@/lib/identifications/kindwise-status';
 
-export type Betalingskilde = 'stripe' | 'revenuecat' | 'manuell';
-
-export interface AbonnementRad {
-  user_id: string;
-  tier: string;
-  status: string;
-  current_period_end: string | null;
-  created_at: string;
-  metadata: Record<string, unknown> | null;
-  /** Oppsagt, men løper ut perioden. Valgfri for eldre kall. */
-  cancel_at_period_end?: boolean | null;
-}
+// Abonnementsraden og regelen for den bor i abonnement.ts (delt med /admin).
+export type { AbonnementRad, Betalingskilde } from '@/lib/rapport/abonnement';
 
 export interface BrukerRad {
   id: string;
@@ -182,8 +182,14 @@ export interface Dagsrapport {
   };
   /** Registrerte som aldri kom tilbake. Den mest ærlige enkeltmålingen vi har. */
   aldriInnloggetIgjen: number;
-  /** Bare status `active` med løpende periode — prøver telles under `prover`. */
-  betalende: { totalt: number; perKilde: Record<Betalingskilde, number>; nyeSiste7d: number };
+  /**
+   * Bare ekte kjøp (Stripe eller App Store) med status `active` og løpende
+   * periode. Prøver telles under `prover`, gavepass og testkontoer under
+   * `gratisTildelt` — aldri her.
+   */
+  betalende: { totalt: number; perKilde: Record<Butikk, number>; nyeSiste7d: number };
+  /** Løpende tilgang uten kjøp: gavepass (manual_grant) og interne kontoer. */
+  gratisTildelt: number;
   /**
    * Prøveperioder (ekte butikkrader, aldri gavepass eller interne kontoer).
    * «gikk til betaling» leses av metadata.forste_belastning etter
@@ -211,6 +217,8 @@ export interface Dagsrapport {
   };
   /** Rader som SIER aktiv eller prøve, men der perioden er ute. Overses de, blåses tallet opp. */
   utloptMenMarkertAktiv: number;
+  /** Butikkrader som løper uten kjent betalt plan (ukjent Stripe-pris-ID): talt i betalende/prøver, men uten Premium. Skal være 0. */
+  ukjentPlan: number;
   varselabonnement: number;
   toppRegioner: Array<{ region: string; score: number }>;
   /** Regioner som krysset varselterskelen i natt. */
@@ -390,29 +398,6 @@ function erAktivert(rad: VarselAbonnentRad): boolean {
 /** Regionen skal være en av våre — kolonnen er fritekst uten CHECK, og eies av brukeren via RLS. */
 const KJENTE_REGIONER = new Set(PREDICTION_TILE_REGIONS.map((r) => r.name));
 
-function kilde(rad: AbonnementRad, interne?: Set<string>): Betalingskilde {
-  if (interne?.has(rad.user_id)) return 'manuell';
-  const p = rad.metadata?.provider;
-  if (p === 'stripe') return 'stripe';
-  if (p === 'revenuecat') return 'revenuecat';
-  return 'manuell';
-}
-
-function periodeLoper(rad: AbonnementRad, naa: Date): boolean {
-  // Ingen sluttdato = løper til noe annet sier stopp. Sjeldent, men gyldig.
-  if (!rad.current_period_end) return true;
-  return new Date(rad.current_period_end).getTime() > naa.getTime();
-}
-
-/** Betalende = status active OG perioden løper. `trialing` er en prøve, ikke en kunde. */
-function erBetalende(rad: AbonnementRad, naa: Date): boolean {
-  return rad.status === 'active' && periodeLoper(rad, naa);
-}
-
-function erProvende(rad: AbonnementRad, naa: Date): boolean {
-  return rad.status === 'trialing' && periodeLoper(rad, naa);
-}
-
 /** Dagen pengene faktisk flyttet seg: første belastning etter prøve, ellers radens opprettelse. */
 function kjopsdato(rad: AbonnementRad): string {
   return lesProveMerke(rad.metadata, 'forste_belastning') ?? rad.created_at;
@@ -435,15 +420,18 @@ export function byggDagsrapport(inn: RapportInn): Dagsrapport {
 
   const nyere = (iso: string, vindu: number) => naa - new Date(iso).getTime() <= vindu;
 
-  const aktive = inn.abonnement.filter((a) => erBetalende(a, inn.naa));
-  const kildeAv = (a: AbonnementRad) => kilde(a, inn.interneBrukere);
-  const perKilde: Record<Betalingskilde, number> = { stripe: 0, revenuecat: 0, manuell: 0 };
-  for (const a of aktive) perKilde[kildeAv(a)] += 1;
+  // Én regel for betalende / prøve / gratis tildelt / utløpt, den samme som
+  // /admin bruker (abonnement.ts). `aktive` er bare ekte kjøp.
+  const abonnement = tellAbonnement(inn.abonnement, inn.naa, inn.interneBrukere);
+  const aktive = inn.abonnement.filter((a) => klassifiserAbonnement(a, inn.naa, inn.interneBrukere) === 'betalende');
 
   // ── Prøver ────────────────────────────────────────────────────────────────
-  // Bare butikkrader: et gavepass med status trialing er ikke en prøve, og
-  // QA-kontoens sandkasseprøve er ikke en kunde på vei inn.
-  const butikkRader = inn.abonnement.filter((a) => kildeAv(a) !== 'manuell');
+  // Bare butikkrader (erButikkrad, samme sett klassifiserAbonnement avgjør
+  // etter status): et gavepass med status trialing er ikke en prøve, og
+  // QA-kontoens sandkasseprøve er ikke en kunde på vei inn. Tier spiller ingen
+  // rolle her, som i klassifisereren — en ukjent Stripe-pris gir tier `free`,
+  // og prøven og kunden skal synes (og varsles som `ukjentPlan`).
+  const butikkRader = inn.abonnement.filter((a) => erButikkrad(a, inn.interneBrukere));
   const proveStart = (a: AbonnementRad) => lesProveMerke(a.metadata, 'prove_start') ?? (a.status === 'trialing' ? a.created_at : null);
   const forsteBelastning = (a: AbonnementRad) => {
     const b = lesProveMerke(a.metadata, 'forste_belastning');
@@ -455,11 +443,14 @@ export function byggDagsrapport(inn: RapportInn): Dagsrapport {
     return s !== null && nyere(s, dag7);
   });
   const prover = {
-    lopende: butikkRader.filter((a) => erProvende(a, inn.naa)).length,
+    lopende: abonnement.prover,
     startetSiste7d: startetSiste7d.length,
     startetSiste7dPerPlan: {
       pass: startetSiste7d.filter((a) => a.tier === 'season_pass').length,
-      maaned: startetSiste7d.filter((a) => a.tier !== 'season_pass').length
+      // Bare kjente planer: en prøve med tier `free` (ukjent pris-ID) er verken
+      // pass eller måned — den står i ukjentPlan-varselet, og summen her blir
+      // da mindre enn «startet», synlig i stedet for gjettet.
+      maaned: startetSiste7d.filter((a) => a.tier === 'premium').length
     },
     gikkTilBetaling: butikkRader.filter((a) => forsteBelastning(a) !== null).length,
     gikkTilBetalingSiste7d: butikkRader.filter((a) => {
@@ -504,11 +495,9 @@ export function byggDagsrapport(inn: RapportInn): Dagsrapport {
     t.totalt += 1;
     if (nyere(b.created_at, dag7)) t.siste7d += 1;
   }
-  // Bare ekte kjøp — et gavepass sier ingenting om kanalen.
-  for (const a of aktive) {
-    if (kildeAv(a) === 'manuell') continue;
-    tall(kildeForBruker.get(a.user_id) ?? UKJENT_KILDE).betalende += 1;
-  }
+  // Bare ekte kjøp — et gavepass sier ingenting om kanalen, og `aktive` har
+  // ingen gavepass.
+  for (const a of aktive) tall(kildeForBruker.get(a.user_id) ?? UKJENT_KILDE).betalende += 1;
   const kilder = [...perKildeTall.entries()]
     .map(([k, t]) => ({ kilde: k, ...t }))
     .sort((x, y) => {
@@ -597,17 +586,16 @@ export function byggDagsrapport(inn: RapportInn): Dagsrapport {
     },
     aldriInnloggetIgjen: inn.brukere.filter((b) => !b.last_sign_in_at).length,
     betalende: {
-      totalt: aktive.length,
-      perKilde,
-      // Bare ekte kjøp teller som nytt salg. Et gavepass er ikke en kunde, og
-      // en prøve som konverterte teller den dagen den ble belastet — ikke
-      // dagen raden ble opprettet.
-      nyeSiste7d: aktive.filter((a) => kildeAv(a) !== 'manuell' && nyere(kjopsdato(a), dag7)).length
+      totalt: abonnement.betalende,
+      perKilde: abonnement.betalendePerButikk,
+      // En prøve som konverterte teller som nytt salg den dagen den ble
+      // belastet — ikke dagen raden ble opprettet.
+      nyeSiste7d: aktive.filter((a) => nyere(kjopsdato(a), dag7)).length
     },
+    gratisTildelt: abonnement.gratisTildelt,
     prover,
-    utloptMenMarkertAktiv: inn.abonnement.filter(
-      (a) => (a.status === 'active' || a.status === 'trialing') && !periodeLoper(a, inn.naa)
-    ).length,
+    utloptMenMarkertAktiv: abonnement.utloptMenMarkertAktiv,
+    ukjentPlan: abonnement.ukjentPlan,
     varselabonnement: inn.varselabonnement,
     toppRegioner: [...inn.regionerIDag].sort((a, b) => b.score - a.score).slice(0, 3),
     flanker,

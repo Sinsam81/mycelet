@@ -204,3 +204,41 @@ describe('AI-identifisering i e-posten', () => {
     }
   });
 });
+
+describe('abonnement — gavepass er ikke betalende', () => {
+  it('«Betalende» teller bare ekte kjøp; gavepass og testkontoer står på egen rad', () => {
+    const inn: RapportInn = {
+      brukere: [],
+      abonnement: [
+        // Ekte App Store-kunde, sagt opp, betalt ut september.
+        { user_id: 'kunde', tier: 'premium', status: 'active', current_period_end: '2026-09-30T00:00:00Z', created_at: '2026-08-01T00:00:00Z', metadata: { provider: 'revenuecat' }, cancel_at_period_end: true },
+        { user_id: 'gave', tier: 'season_pass', status: 'active', current_period_end: '2036-06-12T00:00:00Z', created_at: '2026-06-12T00:00:00Z', metadata: { source: 'manual_grant' } },
+        { user_id: 'qa', tier: 'premium', status: 'active', current_period_end: '2026-10-01T00:00:00Z', created_at: '2026-09-01T00:00:00Z', metadata: { provider: 'revenuecat' } }
+      ],
+      interneBrukere: new Set(['qa']),
+      varselabonnement: 0,
+      regionerIDag: [],
+      regionerIGar: [],
+      naa: NAA
+    };
+    const { html, tekst } = byggRapportEpost(byggDagsrapport(inn), NAA);
+    expect(html).toMatch(/Betalende \(ekte kjøp, løpende, uten prøver\)<\/td><td[^>]*>1<\/td>/);
+    expect(html).toMatch(/Gratis tildelt \(gavepass og testkontoer\)<\/td><td[^>]*>2<\/td>/);
+    expect(tekst).toMatch(/betalende \(uten prøver\) \.+ 1\n/);
+    expect(tekst).toMatch(/gratis tildelt \.+ 2\n/);
+  });
+});
+
+describe('ukjent plan — varsellinja', () => {
+  it('står i begge varianter når en butikkrad løper uten kjent plan, og ellers ikke', () => {
+    const lag = (abonnement: RapportInn['abonnement']) =>
+      byggRapportEpost(byggDagsrapport({ brukere: [], abonnement, varselabonnement: 0, regionerIDag: [], regionerIGar: [], naa: NAA }), NAA);
+    const rad = (tier: string): RapportInn['abonnement'][number] => ({
+      user_id: 'u', tier, status: 'active', current_period_end: '2026-10-15T00:00:00Z', created_at: '2026-09-01T00:00:00Z', metadata: { provider: 'stripe' }
+    });
+    const med = lag([rad('free')]);
+    const uten = lag([rad('premium')]);
+    for (const variant of [med.html, med.tekst]) expect(variant).toMatch(/uten kjent plan/);
+    for (const variant of [uten.html, uten.tekst]) expect(variant).not.toMatch(/uten kjent plan/);
+  });
+});

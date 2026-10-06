@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { tellAbonnement } from '../abonnement';
 import {
   byggDagsrapport,
   kontoerSomFolgerOmrade,
@@ -190,12 +191,16 @@ describe('betalende — den tellingen som kan lyve', () => {
           ab({ metadata: { provider: 'stripe' } }),
           ab({ metadata: { provider: 'revenuecat' } }),
           ab({ metadata: null }), // grunnleggerpasset
-          ab({ metadata: {} }) // demokontoen til Apple
+          ab({ metadata: {} }), // demokontoen til Apple
+          ab({ metadata: { source: 'manual_grant' } }) // slik SQL-editoren merker et pass
         ]
       })
     );
-    expect(r.betalende.totalt).toBe(4);
-    expect(r.betalende.perKilde).toEqual({ stripe: 1, revenuecat: 1, manuell: 2 });
+    // Gavepassene gir tilgang, men er ikke kunder: de står for seg og ligger
+    // ikke i totalen (fram til PR #266 i oktober 2026 gjorde de det).
+    expect(r.betalende.totalt).toBe(2);
+    expect(r.betalende.perKilde).toEqual({ stripe: 1, revenuecat: 1 });
+    expect(r.gratisTildelt).toBe(3);
   });
 
   it('regner ikke et nytt gavepass som et salg', () => {
@@ -212,7 +217,8 @@ describe('betalende — den tellingen som kan lyve', () => {
 
   it('gjengir hele produksjonsbildet riktig', () => {
     // Seks rader, alle med status «active». Fasit: fem løper, én er utløpt,
-    // og bare to av de fem representerer penger som har flyttet seg.
+    // og bare to av de fem representerer penger som har flyttet seg — de to
+    // er de betalende, de tre andre er gratis tildelt.
     const r = byggDagsrapport(
       inn({
         abonnement: [
@@ -225,10 +231,59 @@ describe('betalende — den tellingen som kan lyve', () => {
         ]
       })
     );
-    expect(r.betalende.totalt).toBe(5);
+    expect(r.betalende.totalt).toBe(2);
     expect(r.utloptMenMarkertAktiv).toBe(1);
-    expect(r.betalende.perKilde.manuell).toBe(3);
+    expect(r.gratisTildelt).toBe(3);
     expect(r.betalende.perKilde.revenuecat).toBe(2);
+  });
+});
+
+describe('én regel, to flater — rapporten og /admin', () => {
+  it('gir samme tall som tellAbonnement, som admin-siden bruker', () => {
+    const rader = [
+      ab({ user_id: 'kunde', metadata: { provider: 'stripe' } }),
+      ab({ user_id: 'oppsagt', cancel_at_period_end: true, metadata: { provider: 'revenuecat' } }),
+      ab({ user_id: 'prove', status: 'trialing', metadata: { provider: 'revenuecat', prove_start: dagerSiden(2) } }),
+      ab({ user_id: 'gave', metadata: { source: 'manual_grant' } }),
+      ab({ user_id: 'qa', metadata: { provider: 'revenuecat' } }),
+      ab({ user_id: 'gammel', current_period_end: '2026-07-02T00:00:00Z' })
+    ];
+    const interne = new Set(['qa']);
+    const r = byggDagsrapport(inn({ abonnement: rader, interneBrukere: interne }));
+    const t = tellAbonnement(rader, NAA, interne);
+    expect(t).toMatchObject({ betalende: 2, prover: 1, gratisTildelt: 2, utloptMenMarkertAktiv: 1 });
+    expect(r.betalende.totalt).toBe(t.betalende);
+    expect(r.betalende.perKilde).toEqual(t.betalendePerButikk);
+    expect(r.prover.lopende).toBe(t.prover);
+    expect(r.gratisTildelt).toBe(t.gratisTildelt);
+    expect(r.utloptMenMarkertAktiv).toBe(t.utloptMenMarkertAktiv);
+  });
+
+  it('butikkrader med ukjent plan (tier free) telles likt i prøveblokka og hos klassifisereren — og varsles', () => {
+    // En Stripe-rad hvis pris-ID mangler i miljøet skrives med tier `free`.
+    // Forsvant den fra «løpende» mens «startet 7 d» talte den, eller fra
+    // «betalende» mens «gikk til betaling» talte den, ville rapporten lyve
+    // stille hver gang en pris-ID glapp.
+    const rader = [
+      ab({ user_id: 'ukjent-pris', tier: 'free', status: 'trialing', created_at: dagerSiden(2), metadata: { provider: 'stripe', prove_start: dagerSiden(2) } }),
+      ab({ user_id: 'ekte-prove', status: 'trialing', created_at: dagerSiden(3), metadata: { provider: 'revenuecat', prove_start: dagerSiden(3) } }),
+      // Samme feil en uke senere: prøven ble belastet, planen er fortsatt ukjent.
+      ab({ user_id: 'ukjent-pris-belastet', tier: 'free', created_at: dagerSiden(9), metadata: { provider: 'stripe', prove_start: dagerSiden(9), forste_belastning: dagerSiden(2) } })
+    ];
+    const r = byggDagsrapport(inn({ abonnement: rader }));
+    expect(tellAbonnement(rader, NAA).prover).toBe(2);
+    expect(r.prover.lopende).toBe(2);
+    expect(r.prover.startetSiste7d).toBe(2);
+    // Per plan telles bare kjente planer: prøven med ukjent pris er verken
+    // pass eller måned, så 1 + 0 < 2 startet — differansen er ukjentPlan.
+    expect(r.prover.startetSiste7dPerPlan).toEqual({ pass: 0, maaned: 1 });
+    // Belastet = betalende, også med ukjent plan — «gikk til betaling», «nye
+    // ekte kjøp» og «betalende» sier det samme.
+    expect(r.prover.gikkTilBetaling).toBe(1);
+    expect(r.betalende.totalt).toBe(1);
+    expect(r.betalende.nyeSiste7d).toBe(1);
+    // Og begge radene med ukjent plan varsles — de får ingen Premium.
+    expect(r.ukjentPlan).toBe(2);
   });
 });
 
@@ -582,7 +637,8 @@ describe('bruk av soppforholdene — aktivering og gjenbruk', () => {
       })
     );
     expect(r.betalende.perKilde.revenuecat).toBe(0);
-    expect(r.betalende.perKilde.manuell).toBe(1);
+    expect(r.betalende.totalt).toBe(0);
+    expect(r.gratisTildelt).toBe(1);
     expect(r.betalende.nyeSiste7d).toBe(0);
   });
 

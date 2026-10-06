@@ -15,6 +15,8 @@ import {
   type VarselAbonnentRad
 } from '@/lib/rapport/dagsrapport';
 import { REGISTRERING_FORBEHOLD, fraTabellrad, kortDato, kortPeriode, prosentTekst, type SoppregistreringRad } from '@/lib/rapport/soppregistreringer';
+import { erInternKonto } from '@/lib/rapport/abonnement';
+import { MAKS_SIDER as MAKS_BRUKERSIDER, hentAlleBrukere } from '@/lib/supabase/alle-brukere';
 import { osloDag } from '@/lib/bruk/bruksdag';
 import { type TellingRad } from '@/lib/bruk/tell';
 import { WEB_DIREKTE_KILDE, normaliserKilde, vaskTidssone } from '@/lib/analytics/kilde';
@@ -73,18 +75,21 @@ export async function GET(request: NextRequest) {
   const naa = new Date();
 
   // ── Brukere ───────────────────────────────────────────────────────────────
-  // auth.users er ikke eksponert gjennom PostgREST; admin-API-et er veien inn.
-  const { data: brukerData, error: brukerErr } = await db.auth.admin.listUsers({ page: 1, perPage: 1000 });
-  if (brukerErr) {
-    log.error('dagsrapport.brukere_feilet', { message: brukerErr.message });
+  // auth.users er ikke eksponert gjennom PostgREST; admin-API-et er veien inn,
+  // side for side — samme henting som /admin (hentAlleBrukere), så de to
+  // flatene ser de samme kontoene. Fram til oktober 2026 leste rapporten bare
+  // side 1 (1000 kontoer) og ville ha mistet alle etter det, stille.
+  const alle = await hentAlleBrukere(db.auth.admin);
+  if ('feil' in alle) {
+    log.error('dagsrapport.brukere_feilet', { message: alle.feil });
     return NextResponse.json({ error: 'Kunne ikke hente brukere' }, { status: 500 });
   }
+  if (alle.avkortet) log.warn('dagsrapport.brukere_avkortet', { maksSider: MAKS_BRUKERSIDER, hentet: alle.brukere.length });
   // Interne kontoer: QA-brukeren og Apples demokonto ligger på @mycelet.com.
   // Deres App Store-kjøp er testing, ikke salg (se RapportInn.interneBrukere).
-  const interneBrukere = new Set(
-    (brukerData?.users ?? []).filter((u) => u.email?.toLowerCase().endsWith('@mycelet.com')).map((u) => u.id)
-  );
-  const brukere = (brukerData?.users ?? []).map((u) => ({
+  // Samme regel som /admin: erInternKonto i rapport/abonnement.ts.
+  const interneBrukere = new Set(alle.brukere.filter((u) => erInternKonto(u.email)).map((u) => u.id));
+  const brukere = alle.brukere.map((u) => ({
     id: u.id,
     created_at: u.created_at,
     last_sign_in_at: u.last_sign_in_at ?? null,
@@ -131,7 +136,7 @@ export async function GET(request: NextRequest) {
   const varselAntall = varselabonnenter.filter((r) => r.active).length;
   const kontoerSomFolger = varselMaalt
     ? kontoerSomFolgerOmrade(
-        (brukerData?.users ?? []).map((u) => ({ id: u.id, email: u.email })),
+        alle.brukere.map((u) => ({ id: u.id, email: u.email })),
         folgerRader
       )
     : undefined;
@@ -280,6 +285,8 @@ export async function GET(request: NextRequest) {
     sendt: res.ok,
     nyeBrukere24t: rapport.nyeBrukere.siste24t,
     betalende: rapport.betalende.totalt,
+    gratisTildelt: rapport.gratisTildelt,
+    ukjentPlan: rapport.ukjentPlan,
     flanker: rapport.flanker.length
   });
 
@@ -406,12 +413,13 @@ export function byggRapportEpost(r: Dagsrapport, naa: Date) {
 
   <h2 style="font-size:14px;color:#1A3409;margin:22px 0 6px">Abonnement</h2>
   <table style="width:100%;border-collapse:collapse;font-size:14px">
-    ${rad('Betalende (løpende, uten prøver)', String(b.totalt))}
+    ${rad('Betalende (ekte kjøp, løpende, uten prøver)', String(b.totalt))}
     ${rad('— betalt via Stripe', String(b.perKilde.stripe))}
     ${rad('— betalt via App Store', String(b.perKilde.revenuecat))}
-    ${rad('— gavepass og testkontoer', String(b.perKilde.manuell))}
+    ${rad('Gratis tildelt (gavepass og testkontoer)', String(r.gratisTildelt))}
     ${rad('Nye ekte kjøp siste 7 dager', String(b.nyeSiste7d))}
     ${r.utloptMenMarkertAktiv > 0 ? rad('⚠️ utløpt, men merket aktiv', String(r.utloptMenMarkertAktiv)) : ''}
+    ${r.ukjentPlan > 0 ? rad('⚠️ betaler eller prøver uten kjent plan — sjekk Stripe-pris-ID-ene (kunden får ingen Premium)', String(r.ukjentPlan)) : ''}
   </table>
 
   <h2 style="font-size:14px;color:#1A3409;margin:22px 0 6px">Prøver</h2>
@@ -475,8 +483,10 @@ export function byggRapportEpost(r: Dagsrapport, naa: Date) {
     så soppforholdene på en senere dag
     enn registreringsdagen (forsidekortet vises automatisk samme dag, så det
     teller ikke); «to ulike uker» = ISO-uker. Bruk måles fra 6. september 2026.
-    «Betalende» er status active med løpende periode — prøver står for seg,
-    og «til første belastning» leses av prøvemerkene webhookene skriver fra
+    «Betalende» er kjøp via Stripe eller App Store med status active og
+    løpende periode — prøver og gratis tildelte pass står for seg (samme regel
+    som /admin), og «til første belastning» leses av prøvemerkene webhookene
+    skriver fra
     14. september 2026. «Før konto i appen» er anonyme tellinger uten noen
     ID. Se kommentaren i <code>api/cron/dagsrapport</code>.
   </p>
@@ -496,8 +506,8 @@ ABONNEMENT
   betalende (uten prøver) ... ${b.totalt}
     via Stripe .............. ${b.perKilde.stripe}
     via App Store ........... ${b.perKilde.revenuecat}
-    gavepass/test ........... ${b.perKilde.manuell}
-  nye ekte kjøp (7 d) ....... ${b.nyeSiste7d}${r.utloptMenMarkertAktiv > 0 ? `\n  ⚠️ utløpt men merket aktiv .. ${r.utloptMenMarkertAktiv}` : ''}
+  gratis tildelt ............ ${r.gratisTildelt}
+  nye ekte kjøp (7 d) ....... ${b.nyeSiste7d}${r.utloptMenMarkertAktiv > 0 ? `\n  ⚠️ utløpt men merket aktiv .. ${r.utloptMenMarkertAktiv}` : ''}${r.ukjentPlan > 0 ? `\n  ⚠️ uten kjent plan (sjekk pris-ID) ${r.ukjentPlan}` : ''}
 
 PRØVER
   løpende nå ................ ${p.lopende}
@@ -539,7 +549,8 @@ kontoer fra før det (og OAuth-kontoer uten cookie fra før «web:direkte»
 fantes), «nettet, direkte» er nettregistreringer uten cookie fra 14. september
 2026. «Kom tilbake» = så forholdene en senere dag enn registreringsdagen.
 Bruk måles fra 6. september 2026. «Betalende» er
-status active med løpende periode; prøver står for seg, og «til første
+kjøp via Stripe eller App Store med status active og løpende periode; prøver
+og gratis tildelte pass (gavepass, testkontoer) står for seg, og «til første
 belastning» leses av prøvemerkene fra 14. september 2026. «Før konto i appen»
 er anonyme tellinger uten noen ID.`;
 
