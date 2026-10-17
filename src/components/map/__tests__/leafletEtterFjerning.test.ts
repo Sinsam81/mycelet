@@ -28,11 +28,11 @@ async function lastLeaflet(medVern: boolean): Promise<typeof Leaflet> {
   return L;
 }
 
-function lagKart(L: typeof Leaflet): KartInternt {
+function lagKart(L: typeof Leaflet, storrelse = { bredde: 400, hoyde: 300 }): KartInternt {
   const div = document.createElement('div');
   // jsdom har ingen layout; uten størrelse velger panBy en annen vei enn i nettleseren.
-  Object.defineProperty(div, 'clientWidth', { value: 400 });
-  Object.defineProperty(div, 'clientHeight', { value: 300 });
+  Object.defineProperty(div, 'clientWidth', { get: () => storrelse.bredde });
+  Object.defineProperty(div, 'clientHeight', { get: () => storrelse.hoyde });
   document.body.appendChild(div);
   return L.map(div, { center: [59.91, 10.75], zoom: 11 }) as KartInternt;
 }
@@ -60,6 +60,22 @@ describe('uten vern — feilene fra Sentry', () => {
     // Det requestAnimFrame-kallet i Map.Drag gjør når et sveip slippes med fart:
     expect(() => map.panBy([40, 0], { animate: true, noMoveStart: true, duration: 0.3 })).toThrow(/classList/);
   });
+
+  it('søsken: den forsinkede «moveend» etter en størrelsesendring når lytterne etter remove()', async () => {
+    const L = await lastLeaflet(false);
+    vi.useFakeTimers();
+    const storrelse = { bredde: 400, hoyde: 300 };
+    const map = lagKart(L, storrelse);
+    const moveend = vi.fn();
+    map.on('moveend', moveend);
+    // Det window-resize gjør via _onResize: telefonen roteres.
+    storrelse.bredde = 300;
+    storrelse.hoyde = 500;
+    map.invalidateSize({ debounceMoveend: true });
+    map.remove();
+    vi.advanceTimersByTime(300);
+    expect(moveend).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('med vern', () => {
@@ -83,6 +99,35 @@ describe('med vern', () => {
     map.remove();
     expect(map.panBy([40, 0], { animate: true, noMoveStart: true, duration: 0.3 })).toBe(map);
     expect(() => map.panBy([40, 0], { animate: false })).not.toThrow();
+  });
+
+  it('remove() tømmer den forsinkede «moveend» fra en størrelsesendring', async () => {
+    const L = await lastLeaflet(true);
+    vi.useFakeTimers();
+    const storrelse = { bredde: 400, hoyde: 300 };
+    const map = lagKart(L, storrelse);
+    const moveend = vi.fn();
+    map.on('moveend', moveend);
+    storrelse.bredde = 300;
+    storrelse.hoyde = 500;
+    map.invalidateSize({ debounceMoveend: true });
+    map.remove();
+    vi.advanceTimersByTime(300);
+    expect(moveend).not.toHaveBeenCalled();
+  });
+
+  it('en størrelsesendring på et levende kart sender fortsatt «moveend»', async () => {
+    const L = await lastLeaflet(true);
+    vi.useFakeTimers();
+    const storrelse = { bredde: 400, hoyde: 300 };
+    const map = lagKart(L, storrelse);
+    const moveend = vi.fn();
+    map.on('moveend', moveend);
+    storrelse.bredde = 300;
+    map.invalidateSize({ debounceMoveend: true });
+    vi.advanceTimersByTime(300);
+    expect(moveend).toHaveBeenCalledTimes(1);
+    map.remove();
   });
 
   it('setView og zoom rundt et punkt etter remove() kaster ikke (rullehjul-tidtakeren)', async () => {
@@ -168,11 +213,11 @@ describe('med vern', () => {
     const proto = L.Map.prototype as unknown as Record<string, unknown>;
     // En ny Leaflet-versjon som gir nytt navn til en av disse, gjør vernet
     // stille virkningsløst for den metoden — derfor feiler testen her.
-    for (const navn of VERNEDE_METODER) expect(typeof proto[navn], navn).toBe('function');
+    for (const navn of [...VERNEDE_METODER, 'remove']) expect(typeof proto[navn], navn).toBe('function');
 
     vernLeafletEtterFjerning(L);
-    const forste = VERNEDE_METODER.map((n) => proto[n]);
+    const forste = [...VERNEDE_METODER, 'remove'].map((n) => proto[n]);
     vernLeafletEtterFjerning(L);
-    expect(VERNEDE_METODER.map((n) => proto[n])).toEqual(forste);
+    expect([...VERNEDE_METODER, 'remove'].map((n) => proto[n])).toEqual(forste);
   });
 });

@@ -1950,6 +1950,12 @@ export function MushroomMap({
       }
 
       const onMoveEnd = () => {
+        // Leaflet kobler ikke fra lyttere ved remove(), og en «moveend» kan
+        // komme etterpå (stoppet panorering inne i remove(), eller den
+        // forsinkede etter en størrelsesendring). Da er dette kartet borte —
+        // et lagbytte her krasjet i GridLayer, og lasterne hentet data for en
+        // side brukeren har forlatt.
+        if (mapRef.current !== map) return;
         const center = map.getCenter();
         // Kartverket "Terreng" has no tiles outside Norway, so auto-switch to OSM
         // ("Kart") when the view is over Sweden / elsewhere — unless the user has
@@ -2001,11 +2007,12 @@ export function MushroomMap({
 
     return () => {
       mounted = false;
-      if (mapRef.current) {
-        mapRef.current.remove();
-      }
-      cleanupPopupRoots();
+      // Nullstill referansen FØR remove(): remove() kan selv sende «moveend»
+      // (stopper en pågående panorering), og lytterne sjekker mapRef.
+      const map = mapRef.current;
       mapRef.current = null;
+      map?.remove();
+      cleanupPopupRoots();
       clusterRef.current = null;
       heatLayerRef.current = null;
       topLayerRef.current = null;

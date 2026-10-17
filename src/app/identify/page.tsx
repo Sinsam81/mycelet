@@ -9,6 +9,7 @@ import { AiFiksetBanner } from '@/components/identify/AiFiksetBanner';
 import { PageWrapper } from '@/components/layout/PageWrapper';
 import { Button } from '@/components/ui/Button';
 import { getCurrentPositionOnce } from '@/lib/hooks/useGeolocation';
+import { useErMontert } from '@/lib/hooks/useErMontert';
 import { IdentifyError, useIdentify } from '@/lib/hooks/useIdentify';
 import { base64ToBlob, optimizeImageForIdentification, reencodeBase64ForHistory } from '@/lib/utils/image';
 import { createClient } from '@/lib/supabase/client';
@@ -52,6 +53,9 @@ export default function IdentifyPage() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const router = useRouter();
   const identify = useIdentify();
+  // Analysen tar sekunder, og menyen er brukbar imens. Har brukeren gått
+  // videre når svaret kommer, skal de ikke dras tilbake til resultatsiden.
+  const montert = useErMontert();
 
   const [error, setError] = useState<string | null>(null);
   const [aiDisabled, setAiDisabled] = useState(false);
@@ -191,7 +195,7 @@ export default function IdentifyPage() {
         const slank = { ...result, originalImageDataUrls: [result.originalImageDataUrl] };
         sessionStorage.setItem('identifyResult', JSON.stringify(slank));
       }
-      router.push('/identify/result');
+      if (montert.current) router.push('/identify/result');
     } catch (err) {
       // fetch rejects with a TypeError whose message is browser-English
       // («Load failed» in WebKit) — translate instead of surfacing it raw.
