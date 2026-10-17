@@ -113,6 +113,21 @@ export default function IdentifyPage() {
   // plass i pluginen (bildet havner i feil felt eller forsvinner).
   const senderRef = useRef(false);
   const henterBildeRef = useRef(false);
+
+  // Etter et vellykket forsøk står knappen sperret til siden byttes. Kommer
+  // brukeren tilbake og nettleseren gjenoppretter siden fra bfcache (hele
+  // JS-tilstanden bevart, f.eks. når Next falt tilbake til full navigering),
+  // ville den stått sperret for godt med «Analyserer bilde...». Forsøket er
+  // over da — slipp sperren (funnet av Codex, 17. okt 2026).
+  useEffect(() => {
+    const vedGjenoppretting = (e: PageTransitionEvent) => {
+      if (!e.persisted) return;
+      senderRef.current = false;
+      setSender(null);
+    };
+    window.addEventListener('pageshow', vedGjenoppretting);
+    return () => window.removeEventListener('pageshow', vedGjenoppretting);
+  }, []);
   // Hvilket felt neste valgte fil skal inn i.
   const targetSlotRef = useRef(0);
   const filled = photos.filter((p): p is Foto => p !== null);

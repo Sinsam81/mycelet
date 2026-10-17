@@ -139,6 +139,15 @@ describe('«Identifiser» når GPS-pluginen tier', () => {
     expect(push).toHaveBeenCalledWith('/identify/result');
     // Sperret helt til siden byttes — et trykk nå ville kostet et nytt kall.
     expect((knapp as HTMLButtonElement).disabled).toBe(true);
+
+    // … men gjenoppretter nettleseren siden fra bfcache, er forsøket over.
+    const gjenopprettet = new Event('pageshow') as PageTransitionEvent;
+    Object.defineProperty(gjenopprettet, 'persisted', { value: true });
+    act(() => {
+      window.dispatchEvent(gjenopprettet);
+    });
+    expect((knapp as HTMLButtonElement).disabled).toBe(false);
+    expect(screen.queryByText(nb.Identify.analyzing)).toBeNull();
   });
 
   it('tre trykk før React rekker å tegne på nytt, gir ett Kindwise-kall', async () => {
