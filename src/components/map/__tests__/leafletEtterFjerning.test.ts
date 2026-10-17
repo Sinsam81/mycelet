@@ -1,34 +1,57 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type * as Leaflet from 'leaflet';
+import { VERNEDE_METODER, vernLeafletEtterFjerning } from '../leafletEtterFjerning';
 
 /**
  * Sentry MYCELET-9 og MYCELET-A: Leaflets egne tidtakere og animasjonsrammer
  * kjører etter map.remove() og treffer den slettede kartflaten. Testene kaller
  * nøyaktig det tidtakeren og rammen kaller, på et kart som er fjernet.
  *
- * Hver test laster Leaflet på nytt, så vernet (som endrer Map-prototypen)
- * ikke lekker mellom «uten vern» og «med vern».
+ * To ting i oppsettet er avgjørende for at testene sier noe:
+ *
+ *  - Leaflet lastes ÉN gang. vi.resetModules() laster ikke node_modules på
+ *    nytt, så vernet ville blitt liggende på prototypen og «uten vern» ville
+ *    i praksis kjørt med vern. Originalmetodene tas derfor vare på før noe
+ *    vern legges på, og settes tilbake etter hver test (fjernVern).
+ *  - Leaflet tar vare på window.requestAnimationFrame når modulen lastes.
+ *    Animasjonsrammene går derfor via setTimeout, installert før lastingen, så
+ *    falske tidtakere driver en animert panorering helt i mål.
  */
 
 type KartInternt = Leaflet.Map & {
   _animateZoom: (center: Leaflet.LatLng, zoom: number, startAnim: boolean) => void;
   _onZoomTransitionEnd: () => void;
   _animatingZoom?: boolean;
-  _mapPane?: HTMLElement;
 };
 
-async function lastLeaflet(medVern: boolean): Promise<typeof Leaflet> {
-  vi.resetModules();
-  const L = (await import('leaflet')).default;
-  if (medVern) {
-    const { vernLeafletEtterFjerning } = await import('../leafletEtterFjerning');
-    vernLeafletEtterFjerning(L);
-  }
-  return L;
+const VERNET = Symbol.for('mycelet.leaflet.vernEtterFjerning');
+const ALLE = [...VERNEDE_METODER, 'remove'] as const;
+
+let L: typeof Leaflet;
+let proto: Record<string | symbol, unknown>;
+let originaler: Record<string, unknown>;
+
+beforeAll(async () => {
+  window.requestAnimationFrame = (cb: FrameRequestCallback) => setTimeout(() => cb(Date.now()), 16) as unknown as number;
+  window.cancelAnimationFrame = (id: number) => clearTimeout(id);
+  L = (await import('leaflet')).default;
+  proto = L.Map.prototype as unknown as Record<string | symbol, unknown>;
+  originaler = Object.fromEntries(ALLE.map((n) => [n, proto[n]]));
+});
+
+function fjernVern() {
+  for (const n of ALLE) proto[n] = originaler[n];
+  delete proto[VERNET];
 }
 
-function lagKart(L: typeof Leaflet, storrelse = { bredde: 400, hoyde: 300 }): KartInternt {
+function medVern(vern: boolean) {
+  fjernVern();
+  if (vern) vernLeafletEtterFjerning(L);
+  else expect(proto[VERNET]).toBeUndefined();
+}
+
+function lagKart(storrelse = { bredde: 400, hoyde: 300 }): KartInternt {
   const div = document.createElement('div');
   // jsdom har ingen layout; uten størrelse velger panBy en annen vei enn i nettleseren.
   Object.defineProperty(div, 'clientWidth', { get: () => storrelse.bredde });
@@ -40,32 +63,33 @@ function lagKart(L: typeof Leaflet, storrelse = { bredde: 400, hoyde: 300 }): Ka
 afterEach(() => {
   vi.useRealTimers();
   document.body.innerHTML = '';
+  fjernVern();
 });
 
 describe('uten vern — feilene fra Sentry', () => {
-  it('MYCELET-9: zoom-tidtakeren etter remove() leser _leaflet_pos på en slettet kartflate', async () => {
-    const L = await lastLeaflet(false);
+  it('MYCELET-9: zoom-tidtakeren etter remove() leser _leaflet_pos på en slettet kartflate', () => {
+    medVern(false);
     vi.useFakeTimers();
-    const map = lagKart(L);
+    const map = lagKart();
     // Det requestAnimFrame-kallet i Map._tryAnimatedZoom gjør:
     map._animateZoom(L.latLng(59.95, 10.8), 12, true);
     map.remove();
     expect(() => vi.advanceTimersByTime(300)).toThrow(/_leaflet_pos/);
   });
 
-  it('MYCELET-A: treghets-panBy etter remove() kaller addClass på en slettet kartflate', async () => {
-    const L = await lastLeaflet(false);
-    const map = lagKart(L);
+  it('MYCELET-A: treghets-panBy etter remove() kaller addClass på en slettet kartflate', () => {
+    medVern(false);
+    const map = lagKart();
     map.remove();
     // Det requestAnimFrame-kallet i Map.Drag gjør når et sveip slippes med fart:
     expect(() => map.panBy([40, 0], { animate: true, noMoveStart: true, duration: 0.3 })).toThrow(/classList/);
   });
 
-  it('søsken: den forsinkede «moveend» etter en størrelsesendring når lytterne etter remove()', async () => {
-    const L = await lastLeaflet(false);
+  it('søsken: den forsinkede «moveend» etter en størrelsesendring når lytterne etter remove()', () => {
+    medVern(false);
     vi.useFakeTimers();
     const storrelse = { bredde: 400, hoyde: 300 };
-    const map = lagKart(L, storrelse);
+    const map = lagKart(storrelse);
     const moveend = vi.fn();
     map.on('moveend', moveend);
     // Det window-resize gjør via _onResize: telefonen roteres.
@@ -79,10 +103,10 @@ describe('uten vern — feilene fra Sentry', () => {
 });
 
 describe('med vern', () => {
-  it('zoom-tidtakeren etter remove() gjør ingenting og nullstiller animasjonen', async () => {
-    const L = await lastLeaflet(true);
+  it('zoom-tidtakeren etter remove() gjør ingenting og nullstiller animasjonen', () => {
+    medVern(true);
     vi.useFakeTimers();
-    const map = lagKart(L);
+    const map = lagKart();
     const zoomend = vi.fn();
     map.on('zoomend', zoomend);
     map._animateZoom(L.latLng(59.95, 10.8), 12, true);
@@ -93,19 +117,19 @@ describe('med vern', () => {
     expect(zoomend).not.toHaveBeenCalled();
   });
 
-  it('treghets-panBy etter remove() gjør ingenting og er fortsatt kjedbar', async () => {
-    const L = await lastLeaflet(true);
-    const map = lagKart(L);
+  it('treghets-panBy etter remove() gjør ingenting og er fortsatt kjedbar', () => {
+    medVern(true);
+    const map = lagKart();
     map.remove();
     expect(map.panBy([40, 0], { animate: true, noMoveStart: true, duration: 0.3 })).toBe(map);
     expect(() => map.panBy([40, 0], { animate: false })).not.toThrow();
   });
 
-  it('remove() tømmer den forsinkede «moveend» fra en størrelsesendring', async () => {
-    const L = await lastLeaflet(true);
+  it('remove() tømmer den forsinkede «moveend» fra en størrelsesendring', () => {
+    medVern(true);
     vi.useFakeTimers();
     const storrelse = { bredde: 400, hoyde: 300 };
-    const map = lagKart(L, storrelse);
+    const map = lagKart(storrelse);
     const moveend = vi.fn();
     map.on('moveend', moveend);
     storrelse.bredde = 300;
@@ -116,108 +140,85 @@ describe('med vern', () => {
     expect(moveend).not.toHaveBeenCalled();
   });
 
-  it('en størrelsesendring på et levende kart sender fortsatt «moveend»', async () => {
-    const L = await lastLeaflet(true);
-    vi.useFakeTimers();
-    const storrelse = { bredde: 400, hoyde: 300 };
-    const map = lagKart(L, storrelse);
-    const moveend = vi.fn();
-    map.on('moveend', moveend);
-    storrelse.bredde = 300;
-    map.invalidateSize({ debounceMoveend: true });
-    vi.advanceTimersByTime(300);
-    expect(moveend).toHaveBeenCalledTimes(1);
-    map.remove();
-  });
-
-  it('setView og zoom rundt et punkt etter remove() kaster ikke (rullehjul-tidtakeren)', async () => {
-    const L = await lastLeaflet(true);
-    const map = lagKart(L);
+  it('setView og zoom rundt et punkt etter remove() kaster ikke (rullehjul-tidtakeren)', () => {
+    medVern(true);
+    const map = lagKart();
     map.remove();
     expect(() => map.setView([60.1, 11.2], 13, { animate: false })).not.toThrow();
     expect(() => map.setZoomAround(L.point(10, 10), 12, { animate: false })).not.toThrow();
   });
 
-  it('et levende kart oppfører seg som før', async () => {
-    const L = await lastLeaflet(true);
-    vi.useFakeTimers();
-    const map = lagKart(L);
-    const pane = map.getPane('mapPane') as HTMLElement;
-
-    map.panBy([10, 5], { animate: false });
-    expect(L.DomUtil.getPosition(pane)).toEqual(L.point(-10, -5));
-
-    map.setView([60.39, 5.32], 9, { animate: false });
-    expect(map.getZoom()).toBe(9);
-    expect(map.getCenter().lat).toBeCloseTo(60.39, 2);
-
-    const zoomend = vi.fn();
-    map.on('zoomend', zoomend);
-    map._animateZoom(L.latLng(60.4, 5.3), 10, true);
-    expect(map._animatingZoom).toBe(true);
-    expect(pane.classList.contains('leaflet-zoom-anim')).toBe(true);
-    vi.advanceTimersByTime(300);
-    expect(map._animatingZoom).toBe(false);
-    expect(pane.classList.contains('leaflet-zoom-anim')).toBe(false);
-    expect(map.getZoom()).toBe(10);
-    expect(zoomend).toHaveBeenCalledTimes(1);
-    map.remove();
-  });
-
-  it('samme scenario gir nøyaktig samme resultat med og uten vern', async () => {
-    // Panorering, setView, en hel zoom-animasjon og en animert panorering til
-    // slutt — tallene og hendelsene skal være identiske. Vernet skal bare
-    // virke når kartflaten er borte.
-    async function scenario(medVern: boolean) {
-      const L = await lastLeaflet(medVern);
-      vi.useFakeTimers();
-      const map = lagKart(L);
-      const pane = map.getPane('mapPane') as HTMLElement;
-      const hendelser: string[] = [];
-      for (const type of ['movestart', 'move', 'moveend', 'zoomstart', 'zoom', 'zoomend', 'zoomanim', 'viewreset']) {
-        map.on(type, () => hendelser.push(type));
-      }
-      const bilde = () => ({
-        senter: map.getCenter(),
-        zoom: map.getZoom(),
-        flate: L.DomUtil.getPosition(pane),
-        klasser: pane.className
-      });
-      const bilder = [];
-      map.panBy([10, 5], { animate: false });
-      bilder.push(bilde());
-      map.setView([60.39, 5.32], 9, { animate: false });
-      bilder.push(bilde());
-      map._animateZoom(L.latLng(60.4, 5.3), 10, true);
-      bilder.push(bilde());
-      vi.advanceTimersByTime(300);
-      bilder.push(bilde());
-      map.panBy([30, 0], { animate: true, duration: 0.1 });
-      bilder.push(bilde());
-      vi.advanceTimersByTime(500);
-      bilder.push(bilde());
-      map.remove();
-      vi.useRealTimers();
-      document.body.innerHTML = '';
-      return { bilder: JSON.parse(JSON.stringify(bilder)), hendelser };
-    }
-    const uten = await scenario(false);
-    const med = await scenario(true);
-    expect(med).toEqual(uten);
-    expect(uten.hendelser).toContain('zoomend');
-  });
-
-  it('legges på én gang, og alle metodene finnes i denne Leaflet-versjonen', async () => {
-    const L = await lastLeaflet(false);
-    const { VERNEDE_METODER, vernLeafletEtterFjerning } = await import('../leafletEtterFjerning');
-    const proto = L.Map.prototype as unknown as Record<string, unknown>;
+  it('legges på én gang, og alle metodene finnes i denne Leaflet-versjonen', () => {
     // En ny Leaflet-versjon som gir nytt navn til en av disse, gjør vernet
     // stille virkningsløst for den metoden — derfor feiler testen her.
-    for (const navn of [...VERNEDE_METODER, 'remove']) expect(typeof proto[navn], navn).toBe('function');
+    for (const navn of ALLE) expect(typeof originaler[navn], navn).toBe('function');
+    medVern(true);
+    const forste = ALLE.map((n) => proto[n]);
+    for (const n of ALLE) expect(proto[n], n).not.toBe(originaler[n]);
+    vernLeafletEtterFjerning(L);
+    expect(ALLE.map((n) => proto[n])).toEqual(forste);
+  });
+});
 
-    vernLeafletEtterFjerning(L);
-    const forste = [...VERNEDE_METODER, 'remove'].map((n) => proto[n]);
-    vernLeafletEtterFjerning(L);
-    expect([...VERNEDE_METODER, 'remove'].map((n) => proto[n])).toEqual(forste);
+describe('et levende kart er uendret', () => {
+  /**
+   * Panorering, setView, en hel zoom-animasjon, en animert panorering kjørt
+   * helt i mål og en størrelsesendring. Vernet skal bare virke når
+   * kartflaten er borte, så tallene og hendelsene skal være identiske.
+   */
+  function scenario(vern: boolean) {
+    medVern(vern);
+    vi.useFakeTimers();
+    const storrelse = { bredde: 400, hoyde: 300 };
+    const map = lagKart(storrelse);
+    const pane = map.getPane('mapPane') as HTMLElement;
+    const hendelser: string[] = [];
+    for (const type of ['movestart', 'move', 'moveend', 'zoomstart', 'zoom', 'zoomend', 'zoomanim', 'viewreset', 'resize']) {
+      map.on(type, () => hendelser.push(type));
+    }
+    const bilder: Record<string, unknown>[] = [];
+    const ta = (navn: string) =>
+      bilder.push(JSON.parse(JSON.stringify({ navn, senter: map.getCenter(), zoom: map.getZoom(), flate: L.DomUtil.getPosition(pane), klasser: pane.className })));
+
+    map.panBy([10, 5], { animate: false });
+    ta('panBy');
+    map.setView([60.39, 5.32], 9, { animate: false });
+    ta('setView');
+    map._animateZoom(L.latLng(60.4, 5.3), 10, true);
+    ta('zoom-start');
+    vi.advanceTimersByTime(300);
+    ta('zoom-slutt');
+    map.panBy([30, 0], { animate: true, duration: 0.1 });
+    ta('pan-start');
+    vi.advanceTimersByTime(500);
+    ta('pan-slutt');
+    storrelse.bredde = 300;
+    map.invalidateSize({ debounceMoveend: true });
+    vi.advanceTimersByTime(300);
+    ta('storrelse');
+    map.remove();
+    vi.useRealTimers();
+    document.body.innerHTML = '';
+    return { bilder, hendelser };
+  }
+
+  it('grunnlinja uten vern kjører animasjonene helt i mål', () => {
+    const { bilder, hendelser } = scenario(false);
+    const bilde = (navn: string) => bilder.find((b) => b.navn === navn) as { flate: { x: number }; klasser: string; zoom: number };
+    expect(bilde('zoom-start').klasser).toContain('leaflet-zoom-anim');
+    expect(bilde('zoom-slutt').klasser).not.toContain('leaflet-zoom-anim');
+    expect(bilde('zoom-slutt').zoom).toBe(10);
+    expect(bilde('pan-start').klasser).toContain('leaflet-pan-anim');
+    expect(bilde('pan-slutt').klasser).not.toContain('leaflet-pan-anim');
+    expect(bilde('pan-slutt').flate.x).toBe(bilde('zoom-slutt').flate.x - 30);
+    // setView fra zoom 11 til 9 og zoom-animasjonen til 10: to zoomend.
+    expect(hendelser.filter((h) => h === 'zoomend')).toHaveLength(2);
+    expect(hendelser.filter((h) => h === 'moveend').length).toBeGreaterThanOrEqual(4);
+  });
+
+  it('samme scenario gir nøyaktig samme resultat med vern', () => {
+    const uten = scenario(false);
+    const med = scenario(true);
+    expect(med).toEqual(uten);
   });
 });
