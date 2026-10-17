@@ -54,3 +54,14 @@ export const HISTORY_IMAGE_QUALITY = 0.72;
 export function buildHistoryImagePath(userId: string, identificationId: string): string {
   return `${userId}/${identificationId}.jpg`;
 }
+
+/**
+ * Hvor lenge «Identifiser» venter på posisjonen før bildene sendes uten.
+ *
+ * Posisjonen vekter bare artsforslagene regionalt; den er aldri verdt å la
+ * brukeren stå og se på en knapp. Fem sekunder holder for en varm GPS og for
+ * nettverksposisjon. En kald fiks som ikke rekker det, gir et svar uten
+ * regional vekting — bedre enn intet svar. Se useGeolocation.ts for hvorfor
+ * dette ikke kan stå på pluginens egen timeout.
+ */
+export const IDENTIFY_POSISJON_FRIST_MS = 5_000;

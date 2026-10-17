@@ -34,7 +34,13 @@ export type IdentifiseringsSteg =
   /** Bildene ble samlet for store før sending (klientens tak). */
   | 'for-store-bilder'
   /** Kallet til /api/identify feilet eller svarte ikke OK. */
-  | 'foresporsel';
+  | 'foresporsel'
+  /**
+   * Posisjonen kom ikke innen fristen, og identifiseringen gikk videre uten.
+   * Ikke en feil for brukeren, men det er sporet etter GPS-pluginen som tier
+   * (useGeolocation.ts) — uten denne ville det vært usynlig igjen.
+   */
+  | 'posisjon';
 
 export interface Identifiseringsfeil {
   steg: IdentifiseringsSteg;
