@@ -148,6 +148,37 @@ describe('med vern', () => {
     expect(() => map.setZoomAround(L.point(10, 10), 12, { animate: false })).not.toThrow();
   });
 
+  // Hver vernede metode kalt direkte på et fjernet kart, med argumentene den
+  // får i Leaflet. Uten vern kaster alle seks; med vern ingen. Typen tvinger
+  // fram en linje for hver metode i VERNEDE_METODER.
+  const KALL: Record<(typeof VERNEDE_METODER)[number], (map: Record<string, unknown>) => unknown> = {
+    _onZoomTransitionEnd: (map) => {
+      map._animatingZoom = true;
+      map._animateToCenter = L.latLng(59.95, 10.8);
+      map._animateToZoom = 12;
+      return (map._onZoomTransitionEnd as () => unknown).call(map);
+    },
+    _getMapPanePos: (map) => (map._getMapPanePos as () => unknown).call(map),
+    panBy: (map) => (map.panBy as (o: unknown, opt: unknown) => unknown).call(map, [40, 0], { animate: true }),
+    _rawPanBy: (map) => (map._rawPanBy as (o: unknown) => unknown).call(map, L.point(5, 5)),
+    _resetView: (map) => (map._resetView as (c: unknown, z: number) => unknown).call(map, L.latLng(60.1, 11.2), 12),
+    _onPanTransitionEnd: (map) => (map._onPanTransitionEnd as () => unknown).call(map)
+  };
+
+  // Går over KALL, ikke VERNEDE_METODER: fjernes et navn fra lista, skal
+  // testen for det fortsatt kjøre — og feile.
+  it.each(Object.keys(KALL) as (keyof typeof KALL)[])('%s på et fjernet kart: kaster uten vern, ikke med', (navn) => {
+    medVern(false);
+    const uten = lagKart();
+    uten.remove();
+    expect(() => KALL[navn](uten as unknown as Record<string, unknown>)).toThrow(TypeError);
+
+    medVern(true);
+    const med = lagKart();
+    med.remove();
+    expect(() => KALL[navn](med as unknown as Record<string, unknown>)).not.toThrow();
+  });
+
   it('legges på én gang, og alle metodene finnes i denne Leaflet-versjonen', () => {
     // En ny Leaflet-versjon som gir nytt navn til en av disse, gjør vernet
     // stille virkningsløst for den metoden — derfor feiler testen her.
