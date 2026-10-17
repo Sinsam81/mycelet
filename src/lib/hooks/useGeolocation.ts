@@ -114,12 +114,57 @@ export const NULLSTILL_WATCH_ID = 'mycelet-nullstill-posisjon';
  * og river den døde strømmen (GeolocationPlugin.swift, clearWatch), så neste
  * oppslag kobler seg til på nytt. Går en watch («Min posisjon» på kartet), gjør
  * kallet ingenting.
+ *
+ * ── NULLSTILLINGEN ER SAMORDNET ─────────────────────────────────────────────
+ *
+ * clearWatch ser bare på aktive watcher, ikke på ventende engangsoppslag, og
+ * river strømmen for alle. Nullstilte vi midt i et annet oppslag — forsidekortets
+ * stille oppslag går ut på fristen mens brukeren nettopp har trykket «Bruk min
+ * posisjon» — ville det andre oppslagets posisjon gått tapt (funnet av Codex,
+ * 17. okt 2026). Derfor: et mislykket oppslag MERKER at strømmen kan være død;
+ * selve nullstillingen kjøres først når ingen oppslag venter, og nye oppslag
+ * venter til en pågående nullstilling er ferdig. Et vellykket oppslag fjerner
+ * merket — da lever strømmen.
  */
-async function nullstillNativPosisjon(Geolocation: { clearWatch(o: { id: string }): Promise<void> }): Promise<void> {
+const nativTilstand = {
+  /** Native engangsoppslag som venter på svar akkurat nå. */
+  pagaende: 0,
+  /** Et oppslag har feilet eller gått ut på tid siden sist strømmen leverte. */
+  trengerNullstilling: false,
+  nullstilling: null as Promise<void> | null
+};
+
+type NativPlugin = Awaited<ReturnType<typeof hentGeolocation>>;
+
+function startNullstilling(Geolocation: NativPlugin): Promise<void> {
+  nativTilstand.nullstilling ??= (async () => {
+    try {
+      await medFrist(Geolocation.clearWatch({ id: NULLSTILL_WATCH_ID }), NATIV_FRIST_MARGIN_MS);
+      nativTilstand.trengerNullstilling = false;
+    } catch {
+      // Beste forsøk: merket står, og neste oppslag prøver igjen.
+    } finally {
+      nativTilstand.nullstilling = null;
+    }
+  })();
+  return nativTilstand.nullstilling;
+}
+
+async function nativtOppslag(Geolocation: NativPlugin, options: typeof POSITION_OPTIONS) {
+  // Står merket og ingen andre venter: nullstill først. Pågår en nullstilling
+  // alt, gir startNullstilling den samme, så dette oppslaget venter på den.
+  if (nativTilstand.trengerNullstilling && nativTilstand.pagaende === 0) await startNullstilling(Geolocation);
+  nativTilstand.pagaende += 1;
   try {
-    await medFrist(Geolocation.clearWatch({ id: NULLSTILL_WATCH_ID }), NATIV_FRIST_MARGIN_MS);
-  } catch {
-    // Beste forsøk: neste oppslag får uansett sin egen frist.
+    const position = await medFrist(Geolocation.getCurrentPosition(options), options.timeout + NATIV_FRIST_MARGIN_MS);
+    nativTilstand.trengerNullstilling = false;
+    return position;
+  } catch (feil) {
+    nativTilstand.trengerNullstilling = true;
+    throw feil;
+  } finally {
+    nativTilstand.pagaende -= 1;
+    if (nativTilstand.trengerNullstilling && nativTilstand.pagaende === 0) void startNullstilling(Geolocation);
   }
 }
 
@@ -127,15 +172,9 @@ async function nullstillNativPosisjon(Geolocation: { clearWatch(o: { id: string 
 async function readCurrentPosition(options: typeof POSITION_OPTIONS): Promise<Fix> {
   if (isNativePlatform()) {
     const Geolocation = await hentGeolocation();
-    try {
-      const position = await medFrist(Geolocation.getCurrentPosition(options), options.timeout + NATIV_FRIST_MARGIN_MS);
-      return { latitude: position.coords.latitude, longitude: position.coords.longitude };
-    } catch (feil) {
-      // Både en feil fra pluginen og vår frist betyr at strømmen kan være død
-      // (se over). Nullstill i bakgrunnen, så neste oppslag virker.
-      void nullstillNativPosisjon(Geolocation);
-      throw feil;
-    }
+    // Frist og samordnet nullstilling — se over.
+    const position = await nativtOppslag(Geolocation, options);
+    return { latitude: position.coords.latitude, longitude: position.coords.longitude };
   }
 
   if (!navigator.geolocation) {

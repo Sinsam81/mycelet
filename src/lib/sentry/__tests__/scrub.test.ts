@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Breadcrumb, ErrorEvent } from '@sentry/nextjs';
-import { isTileUrl, scrubBreadcrumb, scrubEvent, stripQuery } from '../scrub';
+import { cleanUrl, isTileUrl, scrubBreadcrumb, scrubEvent, stripIds, stripQuery } from '../scrub';
 
 /**
  * Disse testene er skrevet ETTER en ekte lekkasje, med de faktiske strengene.
@@ -148,5 +148,32 @@ describe('scrubEvent', () => {
 
   it('takler en hendelse uten request og uten contexts', () => {
     expect(() => scrubEvent({} as ErrorEvent)).not.toThrow();
+  });
+});
+
+/** Den ekte adressen historikkbildet lastes til etter en vellykket identifisering. */
+const HISTORIKKBILDE =
+  'https://hcjdpthyyjjhwmksdelg.supabase.co/storage/v1/object/identify-history/8e23c7b6-6d4c-4357-a118-3f3554c41caf/1f2e3d4c-5b6a-7980-a1b2-c3d4e5f60718.jpg';
+
+describe('UUID-er i stien (Codex, 17. okt 2026)', () => {
+  it('fjerner bruker- og identifiserings-ID fra historikkbildets adresse', () => {
+    expect(stripIds(HISTORIKKBILDE)).toBe('https://hcjdpthyyjjhwmksdelg.supabase.co/storage/v1/object/identify-history/:id/:id.jpg');
+  });
+
+  it('beholder tall-ID-er, som peker på innhold og ikke på en person', () => {
+    expect(cleanUrl('https://mycelet.com/species/42?x=1')).toBe('https://mycelet.com/species/42');
+  });
+
+  it('fetch-brødsmula fra opplastingen bærer ikke lenger bruker-ID-en', () => {
+    const b = scrubBreadcrumb({ category: 'fetch', data: { method: 'POST', url: HISTORIKKBILDE, status_code: 200 } } as Breadcrumb);
+    expect(JSON.stringify(b)).not.toMatch(/8e23c7b6/);
+  });
+
+  it('hendelsen renser brødsmuler den har med seg, og sidens adresse', () => {
+    const event = scrubEvent({
+      request: { url: 'https://www.mycelet.com/identifiseringer/1f2e3d4c-5b6a-7980-a1b2-c3d4e5f60718' },
+      breadcrumbs: [{ category: 'fetch', data: { url: HISTORIKKBILDE } }]
+    } as unknown as ErrorEvent);
+    expect(JSON.stringify(event)).not.toMatch(/8e23c7b6|1f2e3d4c/);
   });
 });
