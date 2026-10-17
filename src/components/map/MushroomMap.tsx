@@ -77,6 +77,7 @@ import {
   type ProvetilbudUtloser
 } from '@/lib/billing/provetilbud';
 import { foreslaaVurdering } from '@/lib/vurdering/foreslaa';
+import { vernLeafletEtterFjerning } from './leafletEtterFjerning';
 
 type LeafletType = typeof import('leaflet');
 
@@ -1799,6 +1800,10 @@ export function MushroomMap({
       if (!containerRef.current || mapRef.current || !mounted) return;
 
       const { default: L } = await import('leaflet');
+      // Før første kart: Leaflets zoom-tidtaker og treghetsramme kjører etter
+      // map.remove() og krasjet når brukeren forlot kartet midt i en zoom
+      // eller et sveip (Sentry MYCELET-9 og MYCELET-A).
+      vernLeafletEtterFjerning(L);
       await import('leaflet.markercluster');
 
       // Re-check after the async import gap. React StrictMode (dev) mounts this
