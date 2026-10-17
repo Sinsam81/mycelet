@@ -12,7 +12,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
  *    oppslag blir liggende, men en fiks når dem først etter at et nytt
  *    oppslag har koblet til på nytt.
  *
- * Rettet oppstrøms i 8.2.4 (RMET-5383). Modellen lar testene vise at appens
+ * Rettet oppstrøms i 8.2.1 (RMET-5383). Modellen lar testene vise at appens
  * frist og samordnede nullstilling får den til å virke igjen — uten å rive
  * strømmen for et annet oppslag som venter.
  */
@@ -228,29 +228,53 @@ describe('nullstillingen river aldri et annet oppslag som venter (Codex, 17. okt
   });
 });
 
-describe('getCurrentPositionWithin — posisjon som hjelp, aldri som sperre', () => {
-  it('gir opp etter fristen og sier at det var fristen', async () => {
+describe('getOptionalPosition — posisjon som hjelp, aldri som sperre', () => {
+  it('en plugin som tier, gir opp etter pluginens timeout pluss margin, og sier at det var fristen', async () => {
     plugin.t.bundet = true;
     plugin.t.dod = true;
-    const s = folg(geo.getCurrentPositionWithin(5_000));
+    const s = folg(geo.getOptionalPosition());
     await flush();
-    await vi.advanceTimersByTimeAsync(5_000);
+    await vi.advanceTimersByTimeAsync(geo.POSISJON_TIMEOUT_MS + geo.NATIV_FRIST_MARGIN_MS - 1);
+    expect(s.utfall).toBe('venter');
+    await vi.advanceTimersByTimeAsync(1);
     await flush();
     expect(s.utfall).toEqual({ fix: null, tidsavbrudd: true });
+    // Og pluginen er nullstilt med en gang — ingenting annet venter.
+    expect(plugin.clearWatch).toHaveBeenCalledTimes(1);
+  });
+
+  it('en frisk, men treg GPS (8 s) gir fortsatt koordinatene — ingen kort frist som kutter dem', async () => {
+    plugin.t.autoSvar = false;
+    const s = folg(geo.getOptionalPosition());
+    await flush();
+    await vi.advanceTimersByTimeAsync(8_000);
+    plugin.lever();
+    await flush();
+    expect(s.utfall).toEqual({ fix: { latitude: 59.91, longitude: 10.75 }, tidsavbrudd: false });
   });
 
   it('avslått tilgang: ingen oppslag, ingen frist', async () => {
     plugin.requestPermissions.mockResolvedValueOnce({ location: 'denied', coarseLocation: 'denied' });
-    await expect(geo.getCurrentPositionWithin(5_000)).resolves.toEqual({ fix: null, tidsavbrudd: false });
+    await expect(geo.getOptionalPosition()).resolves.toEqual({ fix: null, tidsavbrudd: false });
     expect(plugin.getCurrentPosition).not.toHaveBeenCalled();
   });
 
-  it('en fiks innen fristen kommer fram', async () => {
-    await expect(geo.getCurrentPositionWithin(5_000)).resolves.toEqual({ fix: { latitude: 59.91, longitude: 10.75 }, tidsavbrudd: false });
+  it('en tillatelsesdialog som aldri besvares, holder ikke knappen for alltid', async () => {
+    plugin.requestPermissions.mockImplementationOnce(() => new Promise(() => {}));
+    const s = folg(geo.getOptionalPosition());
+    await flush();
+    await vi.advanceTimersByTimeAsync(geo.TILLATELSE_FRIST_MS);
+    await flush();
+    // Et menneske som ikke svarer, er ikke pluginen som tier — meldes ikke.
+    expect(s.utfall).toEqual({ fix: null, tidsavbrudd: false });
+  });
+
+  it('en fiks kommer fram', async () => {
+    await expect(geo.getOptionalPosition()).resolves.toEqual({ fix: { latitude: 59.91, longitude: 10.75 }, tidsavbrudd: false });
   });
 
   it('en feil fra pluginen er ingen frist', async () => {
     plugin.t.nesteSvar = 'feil';
-    await expect(geo.getCurrentPositionWithin(5_000)).resolves.toEqual({ fix: null, tidsavbrudd: false });
+    await expect(geo.getOptionalPosition()).resolves.toEqual({ fix: null, tidsavbrudd: false });
   });
 });

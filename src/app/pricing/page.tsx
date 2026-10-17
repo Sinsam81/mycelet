@@ -252,7 +252,7 @@ function PricingInner() {
         // før innsending, fantes det ingenting å lete i. Feilen kan være helt
         // ufarlig (gammelt skall uten plugin), men den kan også være hele
         // grunnen til at ingen kan kjøpe. Nå vet vi forskjellen.
-        Sentry.captureException(error, { tags: { område: 'iap', grunn: 'oppsett-kastet' } });
+        Sentry.captureException(error, { tags: { omrade: 'iap', grunn: 'oppsett-kastet' } });
       } finally {
         // Uansett utfall er forsøket over. Først nå har siden lov til å si noe
         // om at kjøp ikke er tilgjengelig.

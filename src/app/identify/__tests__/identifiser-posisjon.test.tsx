@@ -9,7 +9,8 @@ import nb from '../../../../messages/nb.json';
  * «Gjenkjenningen virker ikke i appen» (eieren, 17. okt 2026): GPS-pluginen i
  * appen kunne tie for alltid etter én feil, og «Identifiser» ventet på
  * posisjonen før bildene ble sendt — knappen sto stille og ingenting skjedde.
- * Her tier posisjonen helt, og forespørselen skal likevel gå etter fristen.
+ * Her tier posisjonen helt, og forespørselen skal likevel gå etter fristen
+ * (pluginens timeout + margin).
  */
 
 const push = vi.fn();
@@ -62,6 +63,8 @@ vi.mock('@capacitor/geolocation', () => ({
 }));
 
 const { default: IdentifyPage } = await import('../page');
+const { NATIV_FRIST_MARGIN_MS, POSISJON_TIMEOUT_MS } = await import('@/lib/hooks/useGeolocation');
+const FRIST = POSISJON_TIMEOUT_MS + NATIV_FRIST_MARGIN_MS;
 // Laster GPS-pluginen én gang med ekte tidtakere (useGeolocation gjenbruker den).
 await (await import('@/lib/hooks/useGeolocation')).hasGeolocationPermission();
 const ekteSetImmediate = setImmediate;
@@ -116,10 +119,16 @@ describe('«Identifiser» når GPS-pluginen tier', () => {
     await flush();
     // Synlig fra første trykk: posisjonsfasen har egen tekst, og knappen er sperret.
     expect(screen.getByText(nb.Identify.locating)).toBeTruthy();
+    expect((knapp as HTMLButtonElement).disabled).toBe(true);
     expect(mutateAsync).not.toHaveBeenCalled();
 
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(5_000);
+      await vi.advanceTimersByTimeAsync(FRIST - 1);
+    });
+    await flush();
+    expect(mutateAsync).not.toHaveBeenCalled();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
     });
     await flush();
 
@@ -128,23 +137,42 @@ describe('«Identifiser» når GPS-pluginen tier', () => {
     // Fristen havner i Sentry, så en plugin som tier aldri er usynlig igjen.
     expect(meld).toHaveBeenCalledWith(expect.objectContaining({ steg: 'posisjon' }));
     expect(push).toHaveBeenCalledWith('/identify/result');
+    // Sperret helt til siden byttes — et trykk nå ville kostet et nytt kall.
+    expect((knapp as HTMLButtonElement).disabled).toBe(true);
   });
 
-  it('et ekstra trykk mens den jobber, gir ikke et ekstra Kindwise-kall', async () => {
+  it('tre trykk før React rekker å tegne på nytt, gir ett Kindwise-kall', async () => {
     tegn();
     await flush();
     const knapp = await leggTilBilde();
 
-    fireEvent.click(knapp);
-    fireEvent.click(knapp);
-    fireEvent.click(knapp);
+    // Alle tre i samme act: ingen ny tegning mellom dem, så bare ref-vakta stopper 2 og 3.
+    act(() => {
+      knapp.click();
+      knapp.click();
+      knapp.click();
+    });
     await flush();
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(5_000);
+      await vi.advanceTimersByTimeAsync(FRIST);
     });
     await flush();
 
     expect(mutateAsync).toHaveBeenCalledTimes(1);
+  });
+
+  it('forlater brukeren siden mens posisjonen hentes, går det ikke noe betalt kall', async () => {
+    const { unmount } = tegn();
+    await flush();
+    const knapp = await leggTilBilde();
+    fireEvent.click(knapp);
+    await flush();
+    unmount();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(FRIST);
+    });
+    await flush();
+    expect(mutateAsync).not.toHaveBeenCalled();
   });
 });
 

@@ -26,7 +26,9 @@ describe('meldIdentifiseringsfeil', () => {
     expect(melding).toBe('Identifisering feilet: foresporsel (413)');
     expect(kontekst.level).toBe('warning');
     expect(kontekst.fingerprint).toEqual(['identifisering-feilet', 'foresporsel', '413']);
-    expect(kontekst.tags).toEqual({ område: 'identifisering', steg: 'foresporsel', status: '413', json: 'false' });
+    // ASCII-nøkler: Sentry forkaster en tag-nøkkel med «å».
+    expect(kontekst.tags).toEqual({ omrade: 'identifisering', steg: 'foresporsel', status: '413', json: 'false' });
+    for (const nokkel of Object.keys(kontekst.tags)) expect(nokkel).toMatch(/^[a-zA-Z0-9_.:-]+$/);
     expect(kontekst.extra).toMatchObject({ antallBilder: 3, totaltTegn: 4_900_000 });
   });
 
@@ -35,14 +37,19 @@ describe('meldIdentifiseringsfeil', () => {
     expect(captureMessage.mock.calls[0][1].fingerprint).toEqual(['identifisering-feilet', 'foresporsel', 'unauthenticated']);
   });
 
-  it('en kastet feil (kamera, nettverk) grupperes på feilnavnet og tar med en avkortet tekst', () => {
+  it('kamerafeil grupperes på den kjente avvisningen, ikke på feilnavnet (pluginens heter alle «Error»)', () => {
+    // Slik Capacitor faktisk avviser: en vanlig Error, navn «Error».
     const feil = new Error('User denied access to camera'.padEnd(500, '.'));
-    feil.name = 'CameraError';
-    meldIdentifiseringsfeil({ steg: 'kamera', feil });
+    meldIdentifiseringsfeil({ steg: 'kamera', kode: 'kamera-avslatt', feil });
     const kontekst = captureMessage.mock.calls[0][1];
-    expect(kontekst.fingerprint).toEqual(['identifisering-feilet', 'kamera', 'CameraError']);
+    expect(kontekst.fingerprint).toEqual(['identifisering-feilet', 'kamera', 'kamera-avslatt']);
     expect(kontekst.extra.feiltekst).toHaveLength(200);
-    expect(kontekst.extra.feilnavn).toBe('CameraError');
+    expect(kontekst.extra.feilnavn).toBe('Error');
+  });
+
+  it('en ukjent kamerafeil faller tilbake til feilnavnet', () => {
+    meldIdentifiseringsfeil({ steg: 'kamera', feil: new Error('Unable to convert image to jpeg') });
+    expect(captureMessage.mock.calls[0][1].fingerprint).toEqual(['identifisering-feilet', 'kamera', 'Error']);
   });
 
   it('kvoteveggen og «AI ikke aktivert» er forventede tilstander, ikke feil', () => {

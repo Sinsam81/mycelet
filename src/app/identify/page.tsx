@@ -8,7 +8,7 @@ import { useLocale, useTranslations } from 'next-intl';
 import { AiFiksetBanner } from '@/components/identify/AiFiksetBanner';
 import { PageWrapper } from '@/components/layout/PageWrapper';
 import { Button } from '@/components/ui/Button';
-import { getCurrentPositionWithin, PosisjonTidsavbrudd } from '@/lib/hooks/useGeolocation';
+import { getOptionalPosition, NATIV_FRIST_MARGIN_MS, POSISJON_TIMEOUT_MS, PosisjonTidsavbrudd } from '@/lib/hooks/useGeolocation';
 import { useErMontert } from '@/lib/hooks/useErMontert';
 import { IdentifyError, useIdentify } from '@/lib/hooks/useIdentify';
 import { base64ToBlob, optimizeImageForIdentification, reencodeBase64ForHistory } from '@/lib/utils/image';
@@ -16,8 +16,7 @@ import { createClient } from '@/lib/supabase/client';
 import {
   HISTORY_IMAGE_MAX_DIM,
   HISTORY_IMAGE_QUALITY,
-  IDENTIFY_HISTORY_BUCKET,
-  IDENTIFY_POSISJON_FRIST_MS
+  IDENTIFY_HISTORY_BUCKET
 } from '@/lib/identifications/config';
 import { MAX_TOTAL_BASE64_CHARS } from '@/lib/utils/identify-images';
 import { isNativePlatform } from '@/lib/native/platform';
@@ -193,14 +192,18 @@ export default function IdentifyPage() {
       // arter som er sannsynlige. Feiler den, eller sier brukeren nei, går
       // identifiseringen videre uten koordinater.
       //
-      // Og den får aldri stå mellom brukeren og svaret: høyst
-      // IDENTIFY_POSISJON_FRIST_MS, så går vi videre uten. GPS-pluginen i
-      // appen kunne tie for alltid etter én feil (useGeolocation.ts), og da
-      // ble ingenting sendt — det var «gjenkjenningen virker ikke» for eieren.
-      const { fix: coords, tidsavbrudd } = await getCurrentPositionWithin(IDENTIFY_POSISJON_FRIST_MS);
+      // Og den får aldri stå mellom brukeren og svaret for alltid. GPS-pluginen
+      // i appen kunne tie etter én feil (useGeolocation.ts), og da ble
+      // ingenting sendt — det var «gjenkjenningen virker ikke» for eieren. Nå
+      // har oppslaget en frist (pluginens timeout + margin), og en frist som
+      // går ut, betyr at pluginen tidde. Det meldes, så det ikke er usynlig.
+      const { fix: coords, tidsavbrudd } = await getOptionalPosition();
       if (tidsavbrudd) {
-        meldIdentifiseringsfeil({ steg: 'posisjon', feil: new PosisjonTidsavbrudd(IDENTIFY_POSISJON_FRIST_MS) });
+        meldIdentifiseringsfeil({ steg: 'posisjon', feil: new PosisjonTidsavbrudd(POSISJON_TIMEOUT_MS + NATIV_FRIST_MARGIN_MS) });
       }
+      // Har brukeren gått videre mens posisjonen ble hentet, skal ikke et
+      // betalt Kindwise-kall gå for en side ingen ser.
+      if (!montert.current) return;
       setSender('analyse');
 
       // Data-URL-ene bygges først HER: resultat- og lagringsflyten leser dem
@@ -230,8 +233,12 @@ export default function IdentifyPage() {
         const slank = { ...result, originalImageDataUrls: [result.originalImageDataUrl] };
         sessionStorage.setItem('identifyResult', JSON.stringify(slank));
       }
+      // Knappen forblir sperret til siden er byttet: slippes vakta før
+      // navigeringen er ferdig, kan et nytt trykk koste et nytt kall.
       if (montert.current) router.push('/identify/result');
     } catch (err) {
+      senderRef.current = false;
+      setSender(null);
       // Hvert mislykket forsøk havner i Sentry med hvor det stoppet (status,
       // kode, JSON eller ikke, bildestørrelser). Før dette var alt som døde
       // før Kindwise usynlig — se meld-feil.ts.
@@ -264,9 +271,6 @@ export default function IdentifyPage() {
       } else {
         setError(message);
       }
-    } finally {
-      senderRef.current = false;
-      setSender(null);
     }
   };
 
@@ -287,8 +291,9 @@ export default function IdentifyPage() {
       const file = await captureNativePhoto(locale);
       if (file) await handleFile(file);
     } catch (err) {
-      meldIdentifiseringsfeil({ steg: 'kamera', feil: err });
       const kjent = kameraFeil(err);
+      // Pluginens avvisninger heter alle «Error»; koden skiller dem i Sentry.
+      meldIdentifiseringsfeil({ steg: 'kamera', kode: kjent ?? undefined, feil: err });
       setError(kjent ? t(KAMERA_FEIL_TEKST[kjent]) : err instanceof Error ? err.message : t('couldNotGetImage'));
     } finally {
       henterBildeRef.current = false;

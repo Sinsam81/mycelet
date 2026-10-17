@@ -10,9 +10,12 @@ interface GeolocationState {
   error: string | null;
 }
 
+/** Pluginens og nettleserens egen timeout for et vanlig oppslag. */
+export const POSISJON_TIMEOUT_MS = 10_000;
+
 const POSITION_OPTIONS = {
   enableHighAccuracy: true,
-  timeout: 10_000,
+  timeout: POSISJON_TIMEOUT_MS,
   maximumAge: 120_000
 };
 
@@ -97,9 +100,11 @@ export const NULLSTILL_WATCH_ID = 'mycelet-nullstill-posisjon';
  * sier «koblet til» står fortsatt. Hvert senere getCurrentPosition() ber om en
  * posisjon, får den, men svaret havner i den døde strømmen, og pluginens egen
  * timeout er allerede avbrutt. Løftet blir aldri avgjort: ingen posisjon, ingen
- * feil, til appen tvangslukkes. Rettet oppstrøms i 8.2.4 (16. okt 2026,
+ * feil, til appen tvangslukkes. Rettet oppstrøms i 8.2.1 (6. aug 2026,
  * RMET-5383: «A failure terminates this subscription; re-bind or later
- * callbacks are dropped»).
+ * callbacks are dropped») — package.json tillater 8.2.1 (^8.2.0), men
+ * låsefila og alle bygg står på 8.2.0. Neste native bygg bør oppgradere; denne
+ * omveien er sikkerhetsnettet for byggene som alt er ute.
  *
  * Følgen her: «Identifiser» ventet på posisjonen før bildene ble sendt, og
  * ingenting skjedde — ingen spinner, ingen feil, ingen rad, ingen logg. Det
@@ -212,25 +217,37 @@ export async function getCurrentPositionOnce(): Promise<Fix> {
   return readCurrentPosition(POSITION_OPTIONS);
 }
 
+/** Hvor lenge et menneske kan bruke på en tillatelsesdialog før vi går videre uten. */
+export const TILLATELSE_FRIST_MS = 60_000;
+
 /**
- * Posisjon som HJELP, aldri som sperre — til identifiseringen.
+ * Posisjon som HJELP, aldri som sperre — til identifiseringen. Gir aldri feil.
  *
- * Spør om tillatelse som getCurrentPositionOnce (brukeren får tid til å svare
- * på dialogen), men selve oppslaget får høyst `fristMs`. Gir aldri feil:
- * `fix` er null ved avslag, feil eller frist, og `tidsavbrudd` sier om det var
- * fristen — det er tilfellet over (pluginen tier) og skal synes i Sentry.
+ * Samme oppslag som getCurrentPositionOnce, med pluginens egen timeout: en
+ * frisk, men treg GPS gir seg etter POSISJON_TIMEOUT_MS som før, og
+ * koordinatene brukes både til artsvektingen og der funnet lagres, så de er
+ * verdt de sekundene. Bare når pluginen TIER forbi sin egen timeout pluss
+ * margin, slår vår frist til — da er `tidsavbrudd` sann, og det er nettopp
+ * 8.2.0-hengen (se over), som skal synes i Sentry. På nett er
+ * `tidsavbrudd` aldri sann: der finnes ikke den hengen.
+ *
+ * Tillatelsesdialogen (iOS eller nettleser) får TILLATELSE_FRIST_MS, så et
+ * menneske rekker å lese den, men en dialog som aldri besvares (en lukket
+ * dørhenger i Firefox) ikke kan holde knappen for alltid.
  */
-export async function getCurrentPositionWithin(fristMs: number): Promise<{ fix: Fix | null; tidsavbrudd: boolean }> {
+export async function getOptionalPosition(): Promise<{ fix: Fix | null; tidsavbrudd: boolean }> {
   try {
     if (isNativePlatform()) {
       const Geolocation = await hentGeolocation();
-      // Romslig: dette kan være iOS-dialogen, og den venter på et menneske.
-      const permission = await medFrist(Geolocation.requestPermissions(), 60_000);
-      if (permission.location === 'denied') return { fix: null, tidsavbrudd: false };
+      // En dialog som ikke besvares, er et menneske — ikke pluginen som tier.
+      const permission = await medFrist(Geolocation.requestPermissions(), TILLATELSE_FRIST_MS).catch(() => null);
+      if (!permission || permission.location === 'denied') return { fix: null, tidsavbrudd: false };
+      return { fix: await readCurrentPosition(POSITION_OPTIONS), tidsavbrudd: false };
     }
-    return { fix: await medFrist(readCurrentPosition(POSITION_OPTIONS), fristMs), tidsavbrudd: false };
+    // Nettleserens timeout teller ikke tiden dialogen står åpen; taket gjør det.
+    return { fix: await medFrist(readCurrentPosition(POSITION_OPTIONS), TILLATELSE_FRIST_MS), tidsavbrudd: false };
   } catch (feil) {
-    return { fix: null, tidsavbrudd: feil instanceof PosisjonTidsavbrudd };
+    return { fix: null, tidsavbrudd: isNativePlatform() && feil instanceof PosisjonTidsavbrudd };
   }
 }
 

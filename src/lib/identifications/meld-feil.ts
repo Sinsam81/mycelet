@@ -89,7 +89,8 @@ export function meldIdentifiseringsfeil(f: Identifiseringsfeil): void {
       level: 'warning',
       fingerprint: ['identifisering-feilet', f.steg, nokkel],
       tags: {
-        område: 'identifisering',
+        // ASCII: Sentry forkaster tag-nøkler med «å» (bare a-zA-Z0-9_.:-).
+        omrade: 'identifisering',
         steg: f.steg,
         ...(f.status != null ? { status: String(f.status) } : {}),
         ...(f.kode ? { kode: f.kode } : {}),
