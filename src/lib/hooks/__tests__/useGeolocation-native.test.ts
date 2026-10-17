@@ -35,9 +35,10 @@ vi.mock('@/lib/native/platform', () => ({ isNativePlatform: () => true }));
 vi.mock('@capacitor/geolocation', () => ({ Geolocation: new Proxy({}, { get: (_t, k) => (plugin as Record<string | symbol, unknown>)[k] }) }));
 
 const geo = await import('../useGeolocation');
-// Lastet én gang med ekte tidtakere, så den dynamiske importen inni
-// useGeolocation er hurtiglagret når de falske slås på.
-await import('@capacitor/geolocation');
+// Laster pluginen én gang med ekte tidtakere. useGeolocation gjenbruker den,
+// så under de falske tidtakerne går alt via vanlige løfter — ingen
+// modullaster som kan vente på en forfalsket tidtaker.
+await geo.hasGeolocationPermission();
 
 const ekteSetImmediate = setImmediate;
 

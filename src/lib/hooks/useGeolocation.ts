@@ -32,6 +32,25 @@ export interface Fix {
   longitude: number;
 }
 
+/**
+ * Pluginen lastes én gang og gjenbrukes. Hvert oppslag gjorde før en ny
+ * dynamisk import; nå er alt etter første lasting vanlige løfter — også det
+ * testene trenger for å styre fristene med falske tidtakere.
+ */
+let geolocationLofte: Promise<typeof import('@capacitor/geolocation').Geolocation> | null = null;
+function hentGeolocation() {
+  geolocationLofte ??= import('@capacitor/geolocation').then(
+    (m) => m.Geolocation,
+    (feil) => {
+      // En mislykket lasting (f.eks. en deploy midt i økta) skal prøves igjen
+      // neste gang, ikke huskes som en permanent feil.
+      geolocationLofte = null;
+      throw feil;
+    }
+  );
+  return geolocationLofte;
+}
+
 /** Et posisjonsoppslag fikk ikke svar innen fristen vår. */
 export class PosisjonTidsavbrudd extends Error {
   constructor(fristMs: number) {
@@ -107,7 +126,7 @@ async function nullstillNativPosisjon(Geolocation: { clearWatch(o: { id: string 
 /** Selve oppslaget, uten tillatelsesspørsmål — kalleren har avklart tillatelsen først. */
 async function readCurrentPosition(options: typeof POSITION_OPTIONS): Promise<Fix> {
   if (isNativePlatform()) {
-    const { Geolocation } = await import('@capacitor/geolocation');
+    const Geolocation = await hentGeolocation();
     try {
       const position = await medFrist(Geolocation.getCurrentPosition(options), options.timeout + NATIV_FRIST_MARGIN_MS);
       return { latitude: position.coords.latitude, longitude: position.coords.longitude };
@@ -145,7 +164,7 @@ async function readCurrentPosition(options: typeof POSITION_OPTIONS): Promise<Fi
  */
 export async function getCurrentPositionOnce(): Promise<Fix> {
   if (isNativePlatform()) {
-    const { Geolocation } = await import('@capacitor/geolocation');
+    const Geolocation = await hentGeolocation();
     const permission = await Geolocation.requestPermissions();
     if (permission.location === 'denied') {
       throw new Error('Posisjonstilgang er avslått. Slå den på i Innstillinger for å bruke kartet.');
@@ -165,7 +184,7 @@ export async function getCurrentPositionOnce(): Promise<Fix> {
 export async function getCurrentPositionWithin(fristMs: number): Promise<{ fix: Fix | null; tidsavbrudd: boolean }> {
   try {
     if (isNativePlatform()) {
-      const { Geolocation } = await import('@capacitor/geolocation');
+      const Geolocation = await hentGeolocation();
       // Romslig: dette kan være iOS-dialogen, og den venter på et menneske.
       const permission = await medFrist(Geolocation.requestPermissions(), 60_000);
       if (permission.location === 'denied') return { fix: null, tidsavbrudd: false };
@@ -190,7 +209,7 @@ export function isGeolocationAvailable(): boolean {
 export async function hasGeolocationPermission(): Promise<boolean> {
   try {
     if (isNativePlatform()) {
-      const { Geolocation } = await import('@capacitor/geolocation');
+      const Geolocation = await hentGeolocation();
       const status = await Geolocation.checkPermissions();
       return status.location === 'granted' || status.coarseLocation === 'granted';
     }
@@ -255,7 +274,7 @@ export async function watchPositionUntilAccurate(opts: WatchRefineOptions = {}):
   if (signal?.aborted) throw new Error('Posisjonssøk avbrutt.');
 
   if (isNativePlatform()) {
-    const { Geolocation } = await import('@capacitor/geolocation');
+    const Geolocation = await hentGeolocation();
     const permission = await Geolocation.requestPermissions();
     if (permission.location === 'denied') {
       throw new Error('Posisjonstilgang er avslått. Slå den på i Innstillinger for å bruke kartet.');

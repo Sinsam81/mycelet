@@ -62,7 +62,8 @@ vi.mock('@capacitor/geolocation', () => ({
 }));
 
 const { default: IdentifyPage } = await import('../page');
-await import('@capacitor/geolocation');
+// Laster GPS-pluginen én gang med ekte tidtakere (useGeolocation gjenbruker den).
+await (await import('@/lib/hooks/useGeolocation')).hasGeolocationPermission();
 const ekteSetImmediate = setImmediate;
 
 async function flush() {
