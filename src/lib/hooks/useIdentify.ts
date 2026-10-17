@@ -3,13 +3,22 @@
 import { useMutation } from '@tanstack/react-query';
 import { IdentifyResultPayload } from '@/types/identify';
 
-/** Feil fra /api/identify, med rutens `code` bevart. */
+/**
+ * Feil fra /api/identify, med rutens `code`, HTTP-statusen og om svaret var
+ * rutens JSON bevart. Status og JSON-flagget skiller «ruta sa nei» fra
+ * «forespørselen nådde aldri ruta» (Vercels 413/504 er HTML) i feilmeldingen
+ * til Sentry — se src/lib/identifications/meld-feil.ts.
+ */
 export class IdentifyError extends Error {
   readonly code?: string;
-  constructor(message: string, code?: string) {
+  readonly status?: number;
+  readonly json?: boolean;
+  constructor(message: string, code?: string, status?: number, json?: boolean) {
     super(message);
     this.name = 'IdentifyError';
     this.code = code;
+    this.status = status;
+    this.json = json;
   }
 }
 import { trackEvent } from '@/lib/analytics';
@@ -55,7 +64,7 @@ export function useIdentify() {
         // tilstanden på selve feilteksten — og en oversatt tekst matcher ikke
         // en norsk delstreng, så AI-deaktivert-panelet ville forsvunnet for
         // svenske brukere i det serveren begynte å svare på deres språk.
-        throw new IdentifyError(data?.error ?? 'Identifikasjon feilet', data?.code);
+        throw new IdentifyError(data?.error ?? 'Identifikasjon feilet', data?.code, response.status, data != null);
       }
 
       trackEvent('identify_completed', {

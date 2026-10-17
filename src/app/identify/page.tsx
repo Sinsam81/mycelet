@@ -21,6 +21,7 @@ import {
 import { MAX_TOTAL_BASE64_CHARS } from '@/lib/utils/identify-images';
 import { isNativePlatform } from '@/lib/native/platform';
 import { captureNativePhoto } from '@/lib/native/camera';
+import { meldIdentifiseringsfeil } from '@/lib/identifications/meld-feil';
 
 /**
  * Legger historikk-kopien av bilde 1 i den private bøtta.
@@ -126,6 +127,10 @@ export default function IdentifyPage() {
         photosRef.current.reduce((s, p, idx) => (p && idx !== targetSlotRef.current ? s + p.base64.length : s), 0) +
         optimizedBase64.length;
       if (sumEtter > MAX_TOTAL_BASE64_CHARS) {
+        meldIdentifiseringsfeil({
+          steg: 'for-store-bilder',
+          bildetegn: [...photosRef.current.filter((p, idx): p is Foto => p !== null && idx !== targetSlotRef.current).map((p) => p.base64.length), optimizedBase64.length]
+        });
         setError(t('photosTooLarge'));
         return;
       }
@@ -142,6 +147,7 @@ export default function IdentifyPage() {
         return neste;
       });
     } catch (err) {
+      meldIdentifiseringsfeil({ steg: 'bilde', feil: err });
       setError(err instanceof Error ? err.message : t('couldNotGetImage'));
     } finally {
       setOptimizing(false);
@@ -197,6 +203,17 @@ export default function IdentifyPage() {
       }
       if (montert.current) router.push('/identify/result');
     } catch (err) {
+      // Hvert mislykket forsøk havner i Sentry med hvor det stoppet (status,
+      // kode, JSON eller ikke, bildestørrelser). Før dette var alt som døde
+      // før Kindwise usynlig — se meld-feil.ts.
+      meldIdentifiseringsfeil({
+        steg: 'foresporsel',
+        status: err instanceof IdentifyError ? err.status : undefined,
+        kode: err instanceof IdentifyError ? err.code : undefined,
+        json: err instanceof IdentifyError ? err.json : undefined,
+        feil: err,
+        bildetegn: filled.map((p) => p.base64.length)
+      });
       // fetch rejects with a TypeError whose message is browser-English
       // («Load failed» in WebKit) — translate instead of surfacing it raw.
       const message =
@@ -233,6 +250,7 @@ export default function IdentifyPage() {
       const file = await captureNativePhoto(locale);
       if (file) await handleFile(file);
     } catch (err) {
+      meldIdentifiseringsfeil({ steg: 'kamera', feil: err });
       setError(err instanceof Error ? err.message : t('couldNotGetImage'));
     }
   };
