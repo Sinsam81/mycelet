@@ -51,16 +51,35 @@ vi.mock('@/lib/hooks/useIdentify', async (original) => ({
   useIdentify: () => ({ mutateAsync, isPending: false })
 }));
 
+/**
+ * Som Capacitors registerPlugin-proxy (@capacitor/core): ALLE ukjente
+ * egenskapsnavn — også `then` — blir en metode som avviser med «not
+ * implemented». Et vanlig objekt her skjulte feilen i PR #284, der tillegget
+ * ble gitt som verdien til et løfte og alle oppslag hang.
+ */
+function somCapacitorTillegg(navn: string, metoder: () => Record<string | symbol, unknown>) {
+  return new Proxy(
+    {},
+    {
+      get(_m, prop) {
+        if (prop === '$typeof') return undefined;
+        const kjente = metoder();
+        if (prop in kjente) return kjente[prop];
+        return () => Promise.reject(new Error(`"${navn}.${String(prop)}()" is not implemented on ios`));
+      }
+    }
+  );
+}
+
 // GPS-pluginen i 8.2.0-tilstanden: tillatelse gitt, men svaret kommer aldri.
 const getCurrentPosition = vi.fn(() => new Promise(() => {}));
-vi.mock('@capacitor/geolocation', () => ({
-  Geolocation: {
-    requestPermissions: vi.fn(async () => ({ location: 'granted' })),
-    checkPermissions: vi.fn(async () => ({ location: 'granted' })),
-    getCurrentPosition: () => getCurrentPosition(),
-    clearWatch: vi.fn(async () => {})
-  }
-}));
+const geoMetoder = {
+  requestPermissions: vi.fn(async () => ({ location: 'granted' })),
+  checkPermissions: vi.fn(async () => ({ location: 'granted' })),
+  getCurrentPosition: () => getCurrentPosition(),
+  clearWatch: vi.fn(async () => {})
+};
+vi.mock('@capacitor/geolocation', () => ({ Geolocation: somCapacitorTillegg('Geolocation', () => geoMetoder) }));
 
 const { default: IdentifyPage } = await import('../page');
 const { NATIV_FRIST_MARGIN_MS, POSISJON_TIMEOUT_MS } = await import('@/lib/hooks/useGeolocation');
