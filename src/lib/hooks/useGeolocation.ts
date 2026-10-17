@@ -10,9 +10,12 @@ interface GeolocationState {
   error: string | null;
 }
 
+/** Pluginens og nettleserens egen timeout for et vanlig oppslag. */
+export const POSISJON_TIMEOUT_MS = 10_000;
+
 const POSITION_OPTIONS = {
   enableHighAccuracy: true,
-  timeout: 10_000,
+  timeout: POSISJON_TIMEOUT_MS,
   maximumAge: 120_000
 };
 
@@ -32,11 +35,150 @@ export interface Fix {
   longitude: number;
 }
 
+/**
+ * Pluginen lastes én gang og gjenbrukes. Hvert oppslag gjorde før en ny
+ * dynamisk import; nå er alt etter første lasting vanlige løfter — også det
+ * testene trenger for å styre fristene med falske tidtakere.
+ */
+let geolocationLofte: Promise<typeof import('@capacitor/geolocation').Geolocation> | null = null;
+function hentGeolocation() {
+  geolocationLofte ??= import('@capacitor/geolocation').then(
+    (m) => m.Geolocation,
+    (feil) => {
+      // En mislykket lasting (f.eks. en deploy midt i økta) skal prøves igjen
+      // neste gang, ikke huskes som en permanent feil.
+      geolocationLofte = null;
+      throw feil;
+    }
+  );
+  return geolocationLofte;
+}
+
+/** Et posisjonsoppslag fikk ikke svar innen fristen vår. */
+export class PosisjonTidsavbrudd extends Error {
+  constructor(fristMs: number) {
+    super(`Posisjonen kom ikke innen ${fristMs} ms.`);
+    this.name = 'PosisjonTidsavbrudd';
+  }
+}
+
+/** Avvis med PosisjonTidsavbrudd hvis løftet ikke er avgjort innen fristen. */
+export function medFrist<T>(lofte: Promise<T>, fristMs: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new PosisjonTidsavbrudd(fristMs)), fristMs);
+    lofte.then(
+      (verdi) => {
+        clearTimeout(timer);
+        resolve(verdi);
+      },
+      (feil) => {
+        clearTimeout(timer);
+        reject(feil);
+      }
+    );
+  });
+}
+
+/**
+ * Margin oppå pluginens egen timeout: kommer pluginens svar (eller dens egen
+ * timeout-feil), vinner det. Vår frist slår bare til når pluginen tier.
+ */
+export const NATIV_FRIST_MARGIN_MS = 2_000;
+
+/** Watch-ID som ikke finnes — se nullstillNativPosisjon. */
+export const NULLSTILL_WATCH_ID = 'mycelet-nullstill-posisjon';
+
+/**
+ * ═══════════════════════════════════════════════════════════════════════════
+ * HVORFOR APPENS POSISJONSOPPSLAG HAR EN EGEN FRIST
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * @capacitor/geolocation 8.2.0 (i alle App Store-bygg til og med 1.0.2 / 5)
+ * kobler seg til posisjonsstrømmen ÉN gang. Første gang CoreLocation svarer med
+ * en feil (innendørs, svak dekning, appen i bakgrunnen), bytter pluginens
+ * `.catch` strømmen ut med en tom en — abonnementet er dødt, men flagget som
+ * sier «koblet til» står fortsatt. Hvert senere getCurrentPosition() ber om en
+ * posisjon, får den, men svaret havner i den døde strømmen, og pluginens egen
+ * timeout er allerede avbrutt. Løftet blir aldri avgjort: ingen posisjon, ingen
+ * feil, til appen tvangslukkes. Rettet oppstrøms i 8.2.1 (6. aug 2026,
+ * RMET-5383: «A failure terminates this subscription; re-bind or later
+ * callbacks are dropped») — package.json tillater 8.2.1 (^8.2.0), men
+ * låsefila og alle bygg står på 8.2.0. Neste native bygg bør oppgradere; denne
+ * omveien er sikkerhetsnettet for byggene som alt er ute.
+ *
+ * Følgen her: «Identifiser» ventet på posisjonen før bildene ble sendt, og
+ * ingenting skjedde — ingen spinner, ingen feil, ingen rad, ingen logg. Det
+ * rammet den som bruker appen mest (17. okt 2026: eieren hadde ett vellykket
+ * forsøk siden 29. sep, mens 13 andre iOS-brukere fikk svar). Lagring av funn,
+ * «Bruk min posisjon» på forsiden og i kalenderen, og kartets sentrering hang
+ * på samme måte.
+ *
+ * Derfor: en JS-frist rundt hvert native oppslag, og når oppslaget feiler eller
+ * fristen går ut, nullstilles pluginen med clearWatch på en watch-ID som ikke
+ * finnes. Med ingen aktive watcher setter pluginens clearWatch flagget tilbake
+ * og river den døde strømmen (GeolocationPlugin.swift, clearWatch), så neste
+ * oppslag kobler seg til på nytt. Går en watch («Min posisjon» på kartet), gjør
+ * kallet ingenting.
+ *
+ * ── NULLSTILLINGEN ER SAMORDNET ─────────────────────────────────────────────
+ *
+ * clearWatch ser bare på aktive watcher, ikke på ventende engangsoppslag, og
+ * river strømmen for alle. Nullstilte vi midt i et annet oppslag — forsidekortets
+ * stille oppslag går ut på fristen mens brukeren nettopp har trykket «Bruk min
+ * posisjon» — ville det andre oppslagets posisjon gått tapt (funnet av Codex,
+ * 17. okt 2026). Derfor: et mislykket oppslag MERKER at strømmen kan være død;
+ * selve nullstillingen kjøres først når ingen oppslag venter, og nye oppslag
+ * venter til en pågående nullstilling er ferdig. Et vellykket oppslag fjerner
+ * merket — da lever strømmen.
+ */
+const nativTilstand = {
+  /** Native engangsoppslag som venter på svar akkurat nå. */
+  pagaende: 0,
+  /** Et oppslag har feilet eller gått ut på tid siden sist strømmen leverte. */
+  trengerNullstilling: false,
+  nullstilling: null as Promise<void> | null
+};
+
+type NativPlugin = Awaited<ReturnType<typeof hentGeolocation>>;
+
+function startNullstilling(Geolocation: NativPlugin): Promise<void> {
+  nativTilstand.nullstilling ??= (async () => {
+    try {
+      await medFrist(Geolocation.clearWatch({ id: NULLSTILL_WATCH_ID }), NATIV_FRIST_MARGIN_MS);
+      nativTilstand.trengerNullstilling = false;
+    } catch {
+      // Beste forsøk: merket står, og neste oppslag prøver igjen.
+    } finally {
+      nativTilstand.nullstilling = null;
+    }
+  })();
+  return nativTilstand.nullstilling;
+}
+
+async function nativtOppslag(Geolocation: NativPlugin, options: typeof POSITION_OPTIONS) {
+  // Står merket og ingen andre venter: nullstill først. Pågår en nullstilling
+  // alt, gir startNullstilling den samme, så dette oppslaget venter på den.
+  if (nativTilstand.trengerNullstilling && nativTilstand.pagaende === 0) await startNullstilling(Geolocation);
+  nativTilstand.pagaende += 1;
+  try {
+    const position = await medFrist(Geolocation.getCurrentPosition(options), options.timeout + NATIV_FRIST_MARGIN_MS);
+    nativTilstand.trengerNullstilling = false;
+    return position;
+  } catch (feil) {
+    nativTilstand.trengerNullstilling = true;
+    throw feil;
+  } finally {
+    nativTilstand.pagaende -= 1;
+    if (nativTilstand.trengerNullstilling && nativTilstand.pagaende === 0) void startNullstilling(Geolocation);
+  }
+}
+
 /** Selve oppslaget, uten tillatelsesspørsmål — kalleren har avklart tillatelsen først. */
 async function readCurrentPosition(options: typeof POSITION_OPTIONS): Promise<Fix> {
   if (isNativePlatform()) {
-    const { Geolocation } = await import('@capacitor/geolocation');
-    const position = await Geolocation.getCurrentPosition(options);
+    const Geolocation = await hentGeolocation();
+    // Frist og samordnet nullstilling — se over.
+    const position = await nativtOppslag(Geolocation, options);
     return { latitude: position.coords.latitude, longitude: position.coords.longitude };
   }
 
@@ -66,13 +208,47 @@ async function readCurrentPosition(options: typeof POSITION_OPTIONS): Promise<Fi
  */
 export async function getCurrentPositionOnce(): Promise<Fix> {
   if (isNativePlatform()) {
-    const { Geolocation } = await import('@capacitor/geolocation');
+    const Geolocation = await hentGeolocation();
     const permission = await Geolocation.requestPermissions();
     if (permission.location === 'denied') {
       throw new Error('Posisjonstilgang er avslått. Slå den på i Innstillinger for å bruke kartet.');
     }
   }
   return readCurrentPosition(POSITION_OPTIONS);
+}
+
+/** Hvor lenge et menneske kan bruke på en tillatelsesdialog før vi går videre uten. */
+export const TILLATELSE_FRIST_MS = 60_000;
+
+/**
+ * Posisjon som HJELP, aldri som sperre — til identifiseringen. Gir aldri feil.
+ *
+ * Samme oppslag som getCurrentPositionOnce, med pluginens egen timeout: en
+ * frisk, men treg GPS gir seg etter POSISJON_TIMEOUT_MS som før, og
+ * koordinatene brukes både til artsvektingen og der funnet lagres, så de er
+ * verdt de sekundene. Bare når pluginen TIER forbi sin egen timeout pluss
+ * margin, slår vår frist til — da er `tidsavbrudd` sann, og det er nettopp
+ * 8.2.0-hengen (se over), som skal synes i Sentry. På nett er
+ * `tidsavbrudd` aldri sann: der finnes ikke den hengen.
+ *
+ * Tillatelsesdialogen (iOS eller nettleser) får TILLATELSE_FRIST_MS, så et
+ * menneske rekker å lese den, men en dialog som aldri besvares (en lukket
+ * dørhenger i Firefox) ikke kan holde knappen for alltid.
+ */
+export async function getOptionalPosition(): Promise<{ fix: Fix | null; tidsavbrudd: boolean }> {
+  try {
+    if (isNativePlatform()) {
+      const Geolocation = await hentGeolocation();
+      // En dialog som ikke besvares, er et menneske — ikke pluginen som tier.
+      const permission = await medFrist(Geolocation.requestPermissions(), TILLATELSE_FRIST_MS).catch(() => null);
+      if (!permission || permission.location === 'denied') return { fix: null, tidsavbrudd: false };
+      return { fix: await readCurrentPosition(POSITION_OPTIONS), tidsavbrudd: false };
+    }
+    // Nettleserens timeout teller ikke tiden dialogen står åpen; taket gjør det.
+    return { fix: await medFrist(readCurrentPosition(POSITION_OPTIONS), TILLATELSE_FRIST_MS), tidsavbrudd: false };
+  } catch (feil) {
+    return { fix: null, tidsavbrudd: isNativePlatform() && feil instanceof PosisjonTidsavbrudd };
+  }
 }
 
 /** Finnes det en posisjonskilde å be om i det hele tatt? I skallet alltid (Capacitor), på nett bare med navigator.geolocation. */
@@ -89,7 +265,7 @@ export function isGeolocationAvailable(): boolean {
 export async function hasGeolocationPermission(): Promise<boolean> {
   try {
     if (isNativePlatform()) {
-      const { Geolocation } = await import('@capacitor/geolocation');
+      const Geolocation = await hentGeolocation();
       const status = await Geolocation.checkPermissions();
       return status.location === 'granted' || status.coarseLocation === 'granted';
     }
@@ -154,7 +330,7 @@ export async function watchPositionUntilAccurate(opts: WatchRefineOptions = {}):
   if (signal?.aborted) throw new Error('Posisjonssøk avbrutt.');
 
   if (isNativePlatform()) {
-    const { Geolocation } = await import('@capacitor/geolocation');
+    const Geolocation = await hentGeolocation();
     const permission = await Geolocation.requestPermissions();
     if (permission.location === 'denied') {
       throw new Error('Posisjonstilgang er avslått. Slå den på i Innstillinger for å bruke kartet.');

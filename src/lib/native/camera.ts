@@ -36,6 +36,24 @@ const PROMPT_COPY: Record<Locale, { header: string; photo: string; picture: stri
   }
 };
 
+/** Kjente avvisninger fra kamerapluginen, som siden skal forklare på leserens språk. */
+export type KameraFeil = 'kamera-avslatt' | 'bilder-avslatt' | 'bilde-utilgjengelig';
+
+/**
+ * Pluginen avviser med faste engelske strenger (@capacitor/camera,
+ * CameraPlugin.swift). Siden viste dem rått — «User denied access to photos»
+ * — uten å si hva brukeren kan gjøre. Én «Ikke tillat» på dialogen står til den
+ * endres i Innstillinger, og appen sa aldri fra. «Error loading image» kommer
+ * typisk når originalen bare ligger i iCloud og ikke kan lastes ned.
+ */
+export function kameraFeil(feil: unknown): KameraFeil | null {
+  const tekst = feil instanceof Error ? feil.message : typeof feil === 'string' ? feil : '';
+  if (/denied access to camera/i.test(tekst)) return 'kamera-avslatt';
+  if (/denied access to photos/i.test(tekst)) return 'bilder-avslatt';
+  if (/error loading image/i.test(tekst)) return 'bilde-utilgjengelig';
+  return null;
+}
+
 export async function captureNativePhoto(locale: Locale | string = DEFAULT_LOCALE): Promise<File | null> {
   const copy = PROMPT_COPY[locale as Locale] ?? PROMPT_COPY[DEFAULT_LOCALE];
   const { Camera, CameraResultType, CameraSource } = await import('@capacitor/camera');

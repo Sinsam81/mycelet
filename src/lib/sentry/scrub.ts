@@ -51,6 +51,26 @@ export function stripQuery(url: string): string {
   return url.split('?')[0].split('#')[0];
 }
 
+const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
+
+/**
+ * UUID-er i SELVE STIEN er like personlige som i query-strengen. Etter en
+ * vellykket identifisering laster appen historikkbildet til
+ * `/storage/v1/object/identify-history/<bruker-ID>/<identifiserings-ID>.jpg`,
+ * og den fetch-brødsmula fulgte med i neste Sentry-hendelse fra samme økt —
+ * brukerens Supabase-ID, i data erklært «Not Linked to You» (funnet av Codex
+ * 17. okt 2026, gjenskapt med SDK-en og denne rensingen). Tall-ID-er
+ * (/species/42) beholdes: de peker på innhold, ikke på en person.
+ */
+export function stripIds(url: string): string {
+  return url.replace(UUID, ':id');
+}
+
+/** Det en adresse får lov å bære ut av appen: uten query, fragment og UUID-er. */
+export function cleanUrl(url: string): string {
+  return stripIds(stripQuery(url));
+}
+
 /**
  * Feltene en brødsmule får beholde.
  *
@@ -87,7 +107,7 @@ export function scrubBreadcrumb(breadcrumb: Breadcrumb): Breadcrumb | null {
   const cleaned: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(data)) {
     if (!ALLOWED_BREADCRUMB_FIELDS.has(key)) continue;
-    cleaned[key] = key === 'url' && typeof value === 'string' ? stripQuery(value) : value;
+    cleaned[key] = key === 'url' && typeof value === 'string' ? cleanUrl(value) : value;
   }
 
   breadcrumb.data = cleaned;
@@ -115,12 +135,21 @@ export function scrubEvent(event: ErrorEvent): ErrorEvent {
     delete event.request.data;
     delete event.request.query_string;
     // /map?lat=59.9&lng=10.7 og /api/prediction?lat=…&lon=… ER presis posisjon.
-    if (event.request.url) event.request.url = stripQuery(event.request.url);
+    if (event.request.url) event.request.url = cleanUrl(event.request.url);
   }
 
   const nextjs = event.contexts?.nextjs as { request_path?: unknown } | undefined;
   if (nextjs && typeof nextjs.request_path === 'string') {
-    nextjs.request_path = stripQuery(nextjs.request_path);
+    nextjs.request_path = cleanUrl(nextjs.request_path);
+  }
+
+  // Belte og seler: brødsmulene renses når de legges til (beforeBreadcrumb),
+  // men en brødsmule fra før en endring i rensingen, eller fra en runtime uten
+  // hooken, skal heller ikke slippe gjennom.
+  if (Array.isArray(event.breadcrumbs)) {
+    event.breadcrumbs = event.breadcrumbs
+      .map((b) => scrubBreadcrumb(b))
+      .filter((b): b is Breadcrumb => b !== null);
   }
 
   return event;

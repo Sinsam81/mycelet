@@ -8,7 +8,7 @@ import { useLocale, useTranslations } from 'next-intl';
 import { AiFiksetBanner } from '@/components/identify/AiFiksetBanner';
 import { PageWrapper } from '@/components/layout/PageWrapper';
 import { Button } from '@/components/ui/Button';
-import { getCurrentPositionOnce } from '@/lib/hooks/useGeolocation';
+import { getOptionalPosition, NATIV_FRIST_MARGIN_MS, POSISJON_TIMEOUT_MS, PosisjonTidsavbrudd } from '@/lib/hooks/useGeolocation';
 import { useErMontert } from '@/lib/hooks/useErMontert';
 import { IdentifyError, useIdentify } from '@/lib/hooks/useIdentify';
 import { base64ToBlob, optimizeImageForIdentification, reencodeBase64ForHistory } from '@/lib/utils/image';
@@ -20,7 +20,8 @@ import {
 } from '@/lib/identifications/config';
 import { MAX_TOTAL_BASE64_CHARS } from '@/lib/utils/identify-images';
 import { isNativePlatform } from '@/lib/native/platform';
-import { captureNativePhoto } from '@/lib/native/camera';
+import { captureNativePhoto, kameraFeil, type KameraFeil } from '@/lib/native/camera';
+import { meldIdentifiseringsfeil } from '@/lib/identifications/meld-feil';
 
 /**
  * Legger historikk-kopien av bilde 1 i den private bøtta.
@@ -35,6 +36,13 @@ import { captureNativePhoto } from '@/lib/native/camera';
  * selve identifiseringen er bevart uansett. Å vise en feil her ville vært å
  * avbryte brukeren for noe de ikke ba om og ikke kan gjøre noe med.
  */
+/** Meldingsnøkkel for hver kjente avvisning fra kamerapluginen. */
+const KAMERA_FEIL_TEKST: Record<KameraFeil, 'cameraDenied' | 'photosDenied' | 'photoUnavailable'> = {
+  'kamera-avslatt': 'cameraDenied',
+  'bilder-avslatt': 'photosDenied',
+  'bilde-utilgjengelig': 'photoUnavailable'
+};
+
 async function lastOppHistorikkbilde(base64: string, path: string): Promise<void> {
   try {
     const blob = await reencodeBase64ForHistory(base64, HISTORY_IMAGE_MAX_DIM, HISTORY_IMAGE_QUALITY);
@@ -95,6 +103,31 @@ export default function IdentifyPage() {
   type Foto = { base64: string; previewUrl: string };
   const [photos, setPhotos] = useState<(Foto | null)[]>([null, null, null]);
   const [optimizing, setOptimizing] = useState(false);
+  // Fra trykket på «Identifiser» til svaret: posisjon først, så analysen.
+  // identify.isPending blir først sann når forespørselen sendes, så uten denne
+  // sto knappen helt stille mens posisjonen ble hentet — og hang posisjonen
+  // (se useGeolocation.ts), skjedde ingenting synlig i det hele tatt.
+  const [sender, setSender] = useState<null | 'posisjon' | 'analyse'>(null);
+  // Ref-vakter mot doble trykk før React rekker å tegne på nytt: to trykk på
+  // «Identifiser» ville kostet to Kindwise-kall, og to kamerakall deler én
+  // plass i pluginen (bildet havner i feil felt eller forsvinner).
+  const senderRef = useRef(false);
+  const henterBildeRef = useRef(false);
+
+  // Etter et vellykket forsøk står knappen sperret til siden byttes. Kommer
+  // brukeren tilbake og nettleseren gjenoppretter siden fra bfcache (hele
+  // JS-tilstanden bevart, f.eks. når Next falt tilbake til full navigering),
+  // ville den stått sperret for godt med «Analyserer bilde...». Forsøket er
+  // over da — slipp sperren (funnet av Codex, 17. okt 2026).
+  useEffect(() => {
+    const vedGjenoppretting = (e: PageTransitionEvent) => {
+      if (!e.persisted) return;
+      senderRef.current = false;
+      setSender(null);
+    };
+    window.addEventListener('pageshow', vedGjenoppretting);
+    return () => window.removeEventListener('pageshow', vedGjenoppretting);
+  }, []);
   // Hvilket felt neste valgte fil skal inn i.
   const targetSlotRef = useRef(0);
   const filled = photos.filter((p): p is Foto => p !== null);
@@ -126,6 +159,10 @@ export default function IdentifyPage() {
         photosRef.current.reduce((s, p, idx) => (p && idx !== targetSlotRef.current ? s + p.base64.length : s), 0) +
         optimizedBase64.length;
       if (sumEtter > MAX_TOTAL_BASE64_CHARS) {
+        meldIdentifiseringsfeil({
+          steg: 'for-store-bilder',
+          bildetegn: [...photosRef.current.filter((p, idx): p is Foto => p !== null && idx !== targetSlotRef.current).map((p) => p.base64.length), optimizedBase64.length]
+        });
         setError(t('photosTooLarge'));
         return;
       }
@@ -142,6 +179,7 @@ export default function IdentifyPage() {
         return neste;
       });
     } catch (err) {
+      meldIdentifiseringsfeil({ steg: 'bilde', feil: err });
       setError(err instanceof Error ? err.message : t('couldNotGetImage'));
     } finally {
       setOptimizing(false);
@@ -149,7 +187,9 @@ export default function IdentifyPage() {
   };
 
   const handleIdentify = async () => {
-    if (filled.length === 0) return;
+    if (filled.length === 0 || senderRef.current) return;
+    senderRef.current = true;
+    setSender('posisjon');
     setError(null);
     setAiDisabled(false);
     setQuotaMessage(null);
@@ -166,7 +206,20 @@ export default function IdentifyPage() {
       // Posisjonen er en hjelp, ikke et krav: den brukes til å vekte hvilke
       // arter som er sannsynlige. Feiler den, eller sier brukeren nei, går
       // identifiseringen videre uten koordinater.
-      const coords = await getCurrentPositionOnce().catch(() => null);
+      //
+      // Og den får aldri stå mellom brukeren og svaret for alltid. GPS-pluginen
+      // i appen kunne tie etter én feil (useGeolocation.ts), og da ble
+      // ingenting sendt — det var «gjenkjenningen virker ikke» for eieren. Nå
+      // har oppslaget en frist (pluginens timeout + margin), og en frist som
+      // går ut, betyr at pluginen tidde. Det meldes, så det ikke er usynlig.
+      const { fix: coords, tidsavbrudd } = await getOptionalPosition();
+      if (tidsavbrudd) {
+        meldIdentifiseringsfeil({ steg: 'posisjon', feil: new PosisjonTidsavbrudd(POSISJON_TIMEOUT_MS + NATIV_FRIST_MARGIN_MS) });
+      }
+      // Har brukeren gått videre mens posisjonen ble hentet, skal ikke et
+      // betalt Kindwise-kall gå for en side ingen ser.
+      if (!montert.current) return;
+      setSender('analyse');
 
       // Data-URL-ene bygges først HER: resultat- og lagringsflyten leser dem
       // fra sessionStorage (blob-URL-er overlever ikke serialisering).
@@ -195,8 +248,23 @@ export default function IdentifyPage() {
         const slank = { ...result, originalImageDataUrls: [result.originalImageDataUrl] };
         sessionStorage.setItem('identifyResult', JSON.stringify(slank));
       }
+      // Knappen forblir sperret til siden er byttet: slippes vakta før
+      // navigeringen er ferdig, kan et nytt trykk koste et nytt kall.
       if (montert.current) router.push('/identify/result');
     } catch (err) {
+      senderRef.current = false;
+      setSender(null);
+      // Hvert mislykket forsøk havner i Sentry med hvor det stoppet (status,
+      // kode, JSON eller ikke, bildestørrelser). Før dette var alt som døde
+      // før Kindwise usynlig — se meld-feil.ts.
+      meldIdentifiseringsfeil({
+        steg: 'foresporsel',
+        status: err instanceof IdentifyError ? err.status : undefined,
+        kode: err instanceof IdentifyError ? err.code : undefined,
+        json: err instanceof IdentifyError ? err.json : undefined,
+        feil: err,
+        bildetegn: filled.map((p) => p.base64.length)
+      });
       // fetch rejects with a TypeError whose message is browser-English
       // («Load failed» in WebKit) — translate instead of surfacing it raw.
       const message =
@@ -222,6 +290,7 @@ export default function IdentifyPage() {
   };
 
   const handleCapture = async (slot: number) => {
+    if (henterBildeRef.current) return;
     targetSlotRef.current = slot;
     if (!isNativePlatform()) {
       fileInputRef.current?.click();
@@ -229,11 +298,21 @@ export default function IdentifyPage() {
     }
     setError(null);
     setQuotaMessage(null);
+    // Spinner og sperre fra det øyeblikket velgeren åpnes: hentingen fra
+    // iCloud og omkodingen i pluginen kan ta sekunder før handleFile starter.
+    henterBildeRef.current = true;
+    setOptimizing(true);
     try {
       const file = await captureNativePhoto(locale);
       if (file) await handleFile(file);
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('couldNotGetImage'));
+      const kjent = kameraFeil(err);
+      // Pluginens avvisninger heter alle «Error»; koden skiller dem i Sentry.
+      meldIdentifiseringsfeil({ steg: 'kamera', kode: kjent ?? undefined, feil: err });
+      setError(kjent ? t(KAMERA_FEIL_TEKST[kjent]) : err instanceof Error ? err.message : t('couldNotGetImage'));
+    } finally {
+      henterBildeRef.current = false;
+      setOptimizing(false);
     }
   };
 
@@ -426,8 +505,8 @@ export default function IdentifyPage() {
             ) : (
               <Button
                 onClick={handleIdentify}
-                loading={identify.isPending}
-                disabled={optimizing}
+                loading={sender !== null || identify.isPending}
+                disabled={optimizing || sender !== null}
                 icon={<Sparkles className="h-4 w-4" />}
               >
                 {t('identifyNow', { count: filled.length })}
@@ -439,7 +518,11 @@ export default function IdentifyPage() {
           </div>
 
           {error ? <p className="mt-3 text-sm text-red-600">{error}</p> : null}
-          {identify.isPending ? <p className="mt-3 text-sm text-gray-700">{t('analyzing')}</p> : null}
+          {sender === 'posisjon' ? (
+            <p className="mt-3 text-sm text-gray-700">{t('locating')}</p>
+          ) : sender === 'analyse' || identify.isPending ? (
+            <p className="mt-3 text-sm text-gray-700">{t('analyzing')}</p>
+          ) : null}
         </div>
 
       </section>

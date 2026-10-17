@@ -159,7 +159,8 @@ type OfferMiss = 'ikke-native' | 'ingen-nokkel' | 'ingen-aktiv-offering' | 'inge
 function meldTomtTilbud(grunn: OfferMiss, detaljer?: Record<string, unknown>) {
   Sentry.captureMessage(`iap: ingen kjøpstilbud (${grunn})`, {
     level: 'warning',
-    tags: { område: 'iap', grunn },
+    // ASCII-nøkkel: Sentry forkaster tag-nøkler med «å».
+    tags: { omrade: 'iap', grunn },
     extra: detaljer
   });
 }
@@ -237,7 +238,7 @@ async function hentKvalifisering(purchases: PurchasesPluginLike, packages: Purch
     }
     return ut;
   } catch (error) {
-    Sentry.captureException(error, { tags: { område: 'iap', grunn: 'kvalifisering-kastet' } });
+    Sentry.captureException(error, { tags: { omrade: 'iap', grunn: 'kvalifisering-kastet' } });
     return {};
   }
 }
