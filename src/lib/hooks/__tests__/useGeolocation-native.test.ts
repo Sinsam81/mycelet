@@ -64,9 +64,34 @@ function lagPlugin() {
   };
 }
 
+/**
+ * Som Capacitors registerPlugin-proxy (@capacitor/core): ALLE ukjente
+ * egenskapsnavn — også `then` — blir en metode som avviser med «not
+ * implemented». Et vanlig objekt her skjulte feilen i PR #284, der tillegget
+ * ble gitt som verdien til et løfte og alle oppslag hang.
+ */
+function somCapacitorTillegg(navn: string, metoder: () => Record<string | symbol, unknown>) {
+  return new Proxy(
+    {},
+    {
+      get(_m, prop) {
+        if (prop === '$typeof') return undefined;
+        const kjente = metoder();
+        if (prop in kjente) return kjente[prop];
+        return () => Promise.reject(new Error(`"${navn}.${String(prop)}()" is not implemented on ios`));
+      }
+    }
+  );
+}
+
 let plugin = lagPlugin();
 vi.mock('@/lib/native/platform', () => ({ isNativePlatform: () => true }));
-vi.mock('@capacitor/geolocation', () => ({ Geolocation: new Proxy({}, { get: (_t, k) => (plugin as Record<string | symbol, unknown>)[k] }) }));
+vi.mock('@capacitor/geolocation', () => ({
+  Geolocation: somCapacitorTillegg('Geolocation', () => {
+    const { requestPermissions, checkPermissions, getCurrentPosition, clearWatch } = plugin;
+    return { requestPermissions, checkPermissions, getCurrentPosition, clearWatch };
+  })
+}));
 
 let geo: typeof import('../useGeolocation');
 const ekteSetImmediate = setImmediate;
@@ -99,6 +124,16 @@ function folg<T>(lofte: Promise<T>) {
   );
   return status;
 }
+
+describe('tillegget er en Capacitor-proxy (PR #284-feilen)', () => {
+  it('oppslagene blir avgjort — tillegget gis aldri som verdien til et løfte', async () => {
+    const s = folg(geo.getCurrentPositionOnce());
+    await flush();
+    expect(s.utfall).toEqual({ latitude: 59.91, longitude: 10.75 });
+    await expect(geo.hasGeolocationPermission()).resolves.toBe(true);
+    await expect(geo.getOptionalPosition()).resolves.toEqual({ fix: { latitude: 59.91, longitude: 10.75 }, tidsavbrudd: false });
+  });
+});
 
 describe('native posisjon med frist og nullstilling', () => {
   it('et friskt oppslag svarer som før og nullstiller ingenting', async () => {
