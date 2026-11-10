@@ -24,6 +24,7 @@ import { getSpeciesDisplayName } from '@/lib/utils/species-name';
 import { baseSeasonMask, isMonthInMask, peakMask } from '@/lib/utils/season-region';
 import { intlLocale } from '@/lib/utils/intl-locale';
 import { logger } from '@/lib/log';
+import { BLOKKERINGSMARGIN, utenBlokkerte } from '@/lib/moderation/blokkering';
 import { seasonHeadline } from '@/lib/utils/season-headline';
 
 type HomeTranslator = Awaited<ReturnType<typeof getTranslations<'Home'>>>;
@@ -44,10 +45,13 @@ interface SpeciesRow {
   primary_image_url: string | null;
 }
 
+const SISTE_FUNN_ANTALL = 4;
+
 // Rows come from the public_findings VIEW (masked display coords), never the
 // findings table — direct table reads are owner-only since migration 015.
 interface RecentFindingRow {
   id: string;
+  user_id: string | null;
   found_at: string;
   location_name: string | null;
   species_id: number | null;
@@ -108,22 +112,32 @@ export default async function HomePage() {
   const abonnement = await getUserBillingSubscription(supabase, user.id);
   const betaler = getBillingCapabilities(abonnement).paid;
 
-  const [{ data }, { data: recentFindings }, tidligereAbonnent] = await Promise.all([
+  const [{ data }, { data: recentFindings }, tidligereAbonnent, { data: blokkerte }] = await Promise.all([
     supabase
       .from('mushroom_species')
       .select('id,norwegian_name,swedish_name,latin_name,edibility,season_start,season_end,peak_season_start,peak_season_end,commonality,primary_image_url')
       .order('norwegian_name', { ascending: true }),
     supabase
       .from('public_findings')
-      .select('id,found_at,location_name,species_id,norwegian_name,edibility,primary_image_url')
+      .select('id,user_id,found_at,location_name,species_id,norwegian_name,edibility,primary_image_url')
       .order('found_at', { ascending: false })
-      .limit(4),
-    betaler ? Promise.resolve(true) : harHattTilgangFor({ subscription: abonnement, email: user.email, stripe: getStripeServerClient })
+      // Noen flere enn de fire som vises, så lista er full også etter at funn
+      // fra blokkerte brukere er tatt ut under.
+      .limit(SISTE_FUNN_ANTALL * BLOKKERINGSMARGIN),
+    betaler ? Promise.resolve(true) : harHattTilgangFor({ subscription: abonnement, email: user.email, stripe: getStripeServerClient }),
+    // Egne rader via RLS. Feiler oppslaget, vises funnene ufiltrert som før.
+    supabase.from('blocked_users').select('blocked_id')
   ]);
   const kanFaaProve = !betaler && !tidligereAbonnent;
 
   const species = (data ?? []) as SpeciesRow[];
-  const findings = (recentFindings ?? []) as unknown as RecentFindingRow[];
+  // Blokkering skjuler innlegg og kommentarer via RLS, men public_findings
+  // kjenner ikke blokkeringslista — uten dette sto den blokkertes funn fortsatt
+  // under «Siste funn fra fellesskapet».
+  const findings = utenBlokkerte(
+    (recentFindings ?? []) as unknown as RecentFindingRow[],
+    ((blokkerte ?? []) as Array<{ blocked_id: string }>).map((rad) => rad.blocked_id)
+  ).slice(0, SISTE_FUNN_ANTALL);
   // Season is the part of the model that is actually validated (~0.89 AUC),
   // and it needs no location — so this is what the front page may state
   // plainly. Anything about WHICH FOREST belongs on the map, where the user has

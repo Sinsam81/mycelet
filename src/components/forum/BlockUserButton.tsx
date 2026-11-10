@@ -13,6 +13,11 @@ interface BlockUserButtonProps {
   displayName: string;
   /** Hidden entirely when the author is the signed-in user. */
   currentUserId?: string | null;
+  /**
+   * Called after a successful block. The thread page uses it to leave a thread
+   * whose author was just blocked — RLS hides that post from now on.
+   */
+  onBlocked?: () => void;
 }
 
 /**
@@ -23,7 +28,7 @@ interface BlockUserButtonProps {
  * to hit by accident next to the report button. The hiding itself is enforced by
  * RLS — see src/lib/hooks/useBlocks.ts.
  */
-export function BlockUserButton({ userId, displayName, currentUserId }: BlockUserButtonProps) {
+export function BlockUserButton({ userId, displayName, currentUserId, onBlocked }: BlockUserButtonProps) {
   const t = useTranslations('BlockUser');
   const [confirming, setConfirming] = useState(false);
   const blockUser = useBlockUser();
@@ -36,6 +41,7 @@ export function BlockUserButton({ userId, displayName, currentUserId }: BlockUse
       await blockUser.mutateAsync(userId);
       toast.success(t('blocked', { name: displayName }));
       setConfirming(false);
+      onBlocked?.();
     } catch {
       toast.error(t('failed'));
     }

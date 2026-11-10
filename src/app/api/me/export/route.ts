@@ -32,6 +32,12 @@ import { IDENTIFY_HISTORY_BUCKET } from '@/lib/identifications/config';
  * Note the distinction: an RLS policy that legitimately returns zero rows is
  * NOT an error, and still exports as []. Only a failed query aborts.
  *
+ * `forum_posts` and `comments` are also read with the admin client, filtered
+ * on the caller's id. Their SELECT policy requires `is_hidden = false` even
+ * for the author, so a post or comment a moderator has hidden — still stored,
+ * still personal data — would otherwise drop out of a file that calls itself
+ * complete.
+ *
  * Out of scope (intentionally not in the export):
  *   - Public reference data (mushroom species, look-alikes, prediction tiles)
  *   - Forum posts / comments by other users (not personal data about caller)
@@ -134,8 +140,13 @@ export async function GET(request: NextRequest) {
     // til (migrasjon 056 + /api/cron/purge-deleted-findings), og da skal det
     // stå i uttrekket — med `deleted_at` synlig, så du ser at det er slettet.
     findings: { shape: 'many', query: mange('findings', 'user_id', user.id, 'id') },
-    forumPosts: { shape: 'many', query: mange('forum_posts', 'user_id', user.id, 'id') },
-    comments: { shape: 'many', query: mange('comments', 'user_id', user.id, 'id') },
+    // Tjenesterollen, filtrert på brukerens egen id: SELECT-policyen på
+    // forum_posts og comments krever is_hidden = false, også for forfatteren
+    // (migrasjon 058). Innhold en moderator har skjult ligger fortsatt hos oss,
+    // men øktklienten ville latt det falle ut av en fil merket komplett.
+    // `is_hidden` følger med i raden, så du ser hva som er skjult.
+    forumPosts: { shape: 'many', query: mange('forum_posts', 'user_id', user.id, 'id', admin) },
+    comments: { shape: 'many', query: mange('comments', 'user_id', user.id, 'id', admin) },
     postLikes: { shape: 'many', query: mange('post_likes', 'user_id', user.id, 'post_id') },
     commentLikes: { shape: 'many', query: mange('comment_likes', 'user_id', user.id, 'comment_id') },
     savedPosts: { shape: 'many', query: mange('saved_posts', 'user_id', user.id, 'post_id') },

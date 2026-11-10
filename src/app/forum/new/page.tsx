@@ -6,7 +6,9 @@ import { useLocale, useTranslations } from 'next-intl';
 import { Camera, X } from 'lucide-react';
 import { PageWrapper } from '@/components/layout/PageWrapper';
 import { Button } from '@/components/ui/Button';
-import { checkContent, isProhibitedContentError } from '@/lib/moderation/content-filter';
+import { checkContent } from '@/lib/moderation/content-filter';
+import { ForumAuthError } from '@/lib/moderation/forum-errors';
+import { useForumErrorMessage } from '@/components/forum/useForumErrorMessage';
 import { useCreatePost, useMyFindings } from '@/lib/hooks/useForum';
 import { buildUserUploadPath } from '@/lib/storage/upload-path';
 import { createClient } from '@/lib/supabase/client';
@@ -24,6 +26,7 @@ function NewForumPostInner() {
   const t = useTranslations('ForumNew');
   const locale = useLocale();
   const tFilter = useTranslations('ContentFilter');
+  const forumError = useForumErrorMessage();
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -57,14 +60,14 @@ function NewForumPostInner() {
       data: { user }
     } = await supabase.auth.getUser();
 
-    if (!user) throw new Error(t('mustBeLoggedIn'));
+    if (!user) throw new ForumAuthError();
 
     // EXIF-stripped re-encode — forum photos must not carry GPS metadata.
     const blob = await reencodeImageForUpload(file);
     const path = buildUserUploadPath(user.id);
 
     const { error: uploadError } = await supabase.storage.from('forum-images').upload(path, blob, { upsert: false, contentType: 'image/jpeg' });
-    if (uploadError) throw new Error(uploadError.message);
+    if (uploadError) throw uploadError;
 
     const {
       data: { publicUrl }
@@ -139,12 +142,9 @@ function NewForumPostInner() {
 
       router.push(`/forum/${post.id}`);
     } catch (err) {
-      // The trigger fires for anything the client-side pattern missed.
-      if (isProhibitedContentError(err)) {
-        setError(tFilter('controlledSubstanceTrade'));
-        return;
-      }
-      setError(err instanceof Error ? err.message : t('couldNotPublish'));
+      // The trigger fires for anything the client-side pattern missed. Never
+      // the raw message: storage and PostgREST errors are English/internal.
+      setError(forumError(err, t('couldNotPublish')));
     }
   };
 
@@ -243,10 +243,14 @@ function NewForumPostInner() {
                   finding.species_name_override ||
                   t('unknownSpecies');
                 const dateLabel = new Date(finding.found_at).toLocaleDateString(intlLocale(locale));
+                // Koblingen leses gjennom public_findings, som ikke slipper ut
+                // private funn. Funnet kan fortsatt velges, men forfatteren
+                // skal vite at linja «Koblet funn» da ikke vises for noen.
                 const zoneLabel = finding.is_zone_finding ? ` • ${t('zone')}: ${finding.zone_label ?? t('unknown')} (${finding.zone_precision_km ?? 5} km)` : '';
                 return (
                   <option key={finding.id} value={finding.id}>
                     {speciesName} ({dateLabel}){zoneLabel}
+                    {finding.visibility === 'private' ? ` — ${t('privateFinding')}` : ''}
                   </option>
                 );
               })}

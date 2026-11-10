@@ -1,6 +1,6 @@
 'use client';
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { createClient } from '@/lib/supabase/client';
 
 /**
@@ -55,15 +55,33 @@ export function useBlockedUserIds() {
   return new Set((data ?? []).map((b) => b.blocked_id));
 }
 
+/**
+ * Every query whose result depends on the block list.
+ *
+ * TanStack matches query keys element by element, so ['forum-posts'] does NOT
+ * cover ['forum-posts-infinite', …]. The feed and the thread use the infinite
+ * hooks, and for a while only the plain keys were listed here: the toast said
+ * "blocked" while the blocked content stayed on screen. Keep both forms.
+ */
+export const BLOCK_INVALIDATION_KEYS: ReadonlyArray<readonly [string]> = [
+  ['blocked-users'],
+  ['forum-posts'],
+  ['forum-posts-infinite'],
+  ['forum-post'],
+  ['forum-comments'],
+  ['forum-comments-infinite']
+];
+
+/** The feed, any open thread, and the block list itself all change. */
+export function invalidateAfterBlockChange(queryClient: QueryClient) {
+  for (const queryKey of BLOCK_INVALIDATION_KEYS) {
+    void queryClient.invalidateQueries({ queryKey });
+  }
+}
+
 function useInvalidateAfterBlockChange() {
   const queryClient = useQueryClient();
-  return () => {
-    // The feed, any open thread, and the block list itself all change.
-    void queryClient.invalidateQueries({ queryKey: ['blocked-users'] });
-    void queryClient.invalidateQueries({ queryKey: ['forum-posts'] });
-    void queryClient.invalidateQueries({ queryKey: ['forum-post'] });
-    void queryClient.invalidateQueries({ queryKey: ['forum-comments'] });
-  };
+  return () => invalidateAfterBlockChange(queryClient);
 }
 
 export function useBlockUser() {

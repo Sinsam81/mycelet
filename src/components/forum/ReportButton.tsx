@@ -4,6 +4,8 @@ import { FormEvent, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Button } from '@/components/ui/Button';
 import { ReportReason } from '@/types/forum';
+import { REPORT_REASONS } from '@/lib/moderation/report-reasons';
+import { useForumErrorMessage } from '@/components/forum/useForumErrorMessage';
 
 interface ReportButtonProps {
   label?: string;
@@ -12,21 +14,10 @@ interface ReportButtonProps {
 
 export function ReportButton({ label, onSubmit }: ReportButtonProps) {
   const t = useTranslations('ReportButton');
+  const forumError = useForumErrorMessage();
   const resolvedLabel = label ?? t('report');
 
-  const reasons: Array<{ value: ReportReason; label: string }> = [
-    { value: 'spam', label: t('reasonSpam') },
-    { value: 'inappropriate', label: t('reasonInappropriate') },
-    { value: 'misinformation', label: t('reasonMisinformation') },
-    { value: 'dangerous_advice', label: t('reasonDangerousAdvice') },
-    { value: 'harassment', label: t('reasonHarassment') },
-    { value: 'illegal_content', label: t('reasonIllegalContent') },
-    { value: 'controlled_substances', label: t('reasonControlledSubstances') },
-    { value: 'privacy', label: t('reasonPrivacy') },
-    { value: 'protected_species', label: t('reasonProtectedSpecies') },
-    { value: 'sale', label: t('reasonSale') },
-    { value: 'other', label: t('reasonOther') }
-  ];
+  const reasons = REPORT_REASONS.map((item) => ({ value: item.value, label: t(item.labelKey) }));
 
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState<ReportReason>('misinformation');
@@ -47,7 +38,7 @@ export function ReportButton({ label, onSubmit }: ReportButtonProps) {
       setDescription('');
       setOpen(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('submitError'));
+      setError(forumError(err, t('submitError')));
     } finally {
       setLoading(false);
     }

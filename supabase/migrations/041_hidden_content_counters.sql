@@ -3,6 +3,21 @@
 -- ⚠️ IKKE KJØRT. Lim inn i Supabase SQL Editor når du vil ha den ute.
 -- Idempotent: trygg å lime inn på nytt.
 --
+-- ⚠️ LES FØR DU LIMER INN (lagt til 10. november 2026). Del 1 kolliderer med
+-- 056_soft_delete_findings.sql: begge erstatter get_user_stats, og ingen av
+-- dem har den andres filter. Funksjonen her mangler «deleted_at IS NULL» på
+-- funn-tellingene (fra 056), og funksjonen i 056 mangler «is_hidden = false»
+-- på innleggstellingen (herfra). Den som kjøres sist, fjerner den andres
+-- retting. Er 056 kjørt, og denne fila limes inn uendret, teller profilen
+-- slettede funn igjen. Del 2 og 3 (kommentartelleren) kolliderer ikke med noe.
+-- Det som trengs, er en ny migrasjon ETTER 056 som setter get_user_stats med
+-- begge filtrene. Til den finnes: ikke lim inn del 1.
+--
+-- HVORFOR DEN HASTER NÅ: moderasjonskonsollen (/api/admin/moderation) er den
+-- første koden som setter is_hidden = true. Del 2 er det eneste som holder
+-- comments_count riktig når en kommentar skjules eller vises igjen. Om den er
+-- kjørt i produksjon, er ikke bekreftet — se spørringen helt nederst.
+--
 -- BAKGRUNN
 -- To tellere teller ANNET enn listene rett under dem viser:
 --
@@ -118,3 +133,25 @@ commit;
 -- select (get_user_stats('<en-bruker-uuid>')).total_posts as fra_statistikk,
 --        (select count(*) from forum_posts
 --          where user_id = '<en-bruker-uuid>' and is_hidden = false) as synlige;
+--
+-- 3) ER DENNE FILA KJØRT? Kontroll 1 og 2 kan ikke svare på det før noe
+--    faktisk er skjult: uten skjulte kommentarer stemmer tellerne enten
+--    triggeren er byttet eller ikke. Denne leser definisjonene i stedet. Den
+--    leser bare, og endrer ingenting:
+--
+-- select
+--   exists (
+--     select 1 from pg_trigger
+--     where tgrelid = 'public.comments'::regclass
+--       and tgname = 'comments_count_trigger'
+--       and (tgtype & 16) <> 0   -- 16 = triggeren fyrer også på UPDATE (del 2)
+--   ) as kommentarteller_folger_skjuling,
+--   pg_get_functiondef('public.get_user_stats(uuid)'::regprocedure) ilike '%is_hidden%'
+--     as innlegg_uten_skjulte,
+--   pg_get_functiondef('public.get_user_stats(uuid)'::regprocedure) ilike '%deleted_at%'
+--     as funn_uten_slettede;
+--
+--    Alle tre skal være true. Er den første false, er del 2 ikke kjørt, og
+--    kommentartelleren følger ikke med når en moderator skjuler en kommentar.
+--    Er bare én av de to siste true, har 041 og 056 skrevet over hverandre —
+--    se advarselen øverst.

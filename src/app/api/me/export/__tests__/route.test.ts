@@ -16,6 +16,8 @@ let currentUser: { id: string; email: string; created_at: string } | null = null
 /** Hvilke tabeller ble spurt om, og med hvilken klient. */
 let queriedWithSession: string[] = [];
 let queriedWithAdmin: string[] = [];
+/** Hvert `.eq()` tjenesterollen la på: [tabell, kolonne, verdi]. */
+let adminFilters: Array<[string, string, unknown]> = [];
 /** Simulerer at SUPABASE_SERVICE_ROLE_KEY mangler. */
 let adminClientAvailable = true;
 /** Svaret fra signeringen av historikkbildene. */
@@ -29,13 +31,16 @@ let signedUrls: { data: { path: string; signedUrl: string }[] | null; error: { m
  * `await from(x).select().eq()` og `.maybeSingle()` løser til samme resultat —
  * det er nok for denne ruten, som aldri filtrerer på annet enn eier.
  */
-function makeQuery(result: TableResult) {
+function makeQuery(result: TableResult, onEq?: (column: string, value: unknown) => void) {
   // range() simulerer PostgREST-siden: svaret er utsnittet [fra, til].
   let fra: number | null = null;
   let til: number | null = null;
   const builder: Record<string, unknown> = {
     select: () => builder,
-    eq: () => builder,
+    eq: (column: string, value: unknown) => {
+      onEq?.(column, value);
+      return builder;
+    },
     or: () => builder,
     order: () => builder,
     range: (a: number, b: number) => {
@@ -71,7 +76,7 @@ vi.mock('@/lib/supabase/admin', () => ({
     return {
       from: (table: string) => {
         queriedWithAdmin.push(table);
-        return makeQuery(tableResponses[table] ?? { data: [], error: null });
+        return makeQuery(tableResponses[table] ?? { data: [], error: null }, (column, value) => adminFilters.push([table, column, value]));
       },
       storage: {
         from: () => ({
@@ -110,6 +115,7 @@ beforeEach(() => {
   tableResponses = {};
   queriedWithSession = [];
   queriedWithAdmin = [];
+  adminFilters = [];
   adminClientAvailable = true;
   signedUrls = { data: [], error: null };
 });
@@ -178,6 +184,33 @@ describe('GET /api/me/export', () => {
       expect(queriedWithAdmin).toContain('ai_identifications');
       expect(queriedWithSession).not.toContain('ai_identifications');
       expect(body._manifest.datasets.aiIdentifications).toBe(2);
+    });
+
+    it('leser egne innlegg og kommentarer med tjenesterollen, så det en moderator har skjult følger med', async () => {
+      // SELECT-policyen krever is_hidden = false, også for forfatteren. Med
+      // øktklienten ville skjulte rader falt ut av en fil merket komplett.
+      tableResponses = {
+        forum_posts: {
+          data: [
+            { id: 'p1', title: 'Synlig', is_hidden: false },
+            { id: 'p2', title: 'Skjult av moderator', is_hidden: true }
+          ],
+          error: null
+        },
+        comments: { data: [{ id: 'c1', content: 'Skjult svar', is_hidden: true }], error: null }
+      };
+      const body = JSON.parse(await (await GET(makeRequest())).text());
+      expect(queriedWithAdmin).toEqual(expect.arrayContaining(['forum_posts', 'comments']));
+      expect(queriedWithSession).not.toContain('forum_posts');
+      expect(queriedWithSession).not.toContain('comments');
+      // Tjenesterollen ser alles rader. Filteret på eieren er det eneste som
+      // holder andres innlegg ute av fila.
+      expect(adminFilters).toContainEqual(['forum_posts', 'user_id', currentUser!.id]);
+      expect(adminFilters).toContainEqual(['comments', 'user_id', currentUser!.id]);
+      expect(body.forumPosts).toHaveLength(2);
+      expect(body.forumPosts[1]).toMatchObject({ id: 'p2', is_hidden: true });
+      expect(body.comments).toEqual([{ id: 'c1', content: 'Skjult svar', is_hidden: true }]);
+      expect(body._manifest.datasets).toMatchObject({ forumPosts: 2, comments: 1 });
     });
 
     it('leser påminnelsen før første App Store-belastning og svaret på spørsmålet i den med tjenesterollen', async () => {

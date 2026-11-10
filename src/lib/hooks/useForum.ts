@@ -2,6 +2,9 @@
 
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { createClient } from '@/lib/supabase/client';
+import { hentKobledeFunn } from '@/lib/forum/koblede-funn';
+import { brukForumFilter } from '@/lib/forum/sporring';
+import { ForumAuthError, ForumPostNotFoundError, skalHenteInnleggPaaNytt } from '@/lib/moderation/forum-errors';
 import {
   ForumCategory,
   ForumComment,
@@ -12,6 +15,7 @@ import {
   ReportReason,
   UserFindingOption
 } from '@/types/forum';
+import type { AapneRapporter, ModerationAction, ModerationReportItem } from '@/lib/moderation/moderering';
 
 function normalizeImages(value: unknown) {
   return Array.isArray(value) ? value : [];
@@ -26,34 +30,22 @@ export function useForumPosts(sort: ForumSort = 'newest', category: ForumCategor
     queryFn: async () => {
       const supabase = createClient();
 
-      let query = supabase
+      const base = supabase
         .from('forum_posts')
         .select(
-          'id,user_id,title,content,category,images,likes_count,comments_count,created_at,profiles:user_id(username,avatar_url,display_name,verified_foragers(role,badge_label)),finding:finding_id(id,species_id,species_name_override,is_zone_finding,zone_label,zone_precision_km,mushroom_species:species_id(norwegian_name,swedish_name))'
+          'id,user_id,title,content,category,images,likes_count,comments_count,created_at,profiles:user_id(username,avatar_url,display_name,verified_foragers(role,badge_label)),finding_id'
         )
         .eq('is_hidden', false);
 
-      if (category) query = query.eq('category', category);
-
-      switch (sort) {
-        case 'popular':
-          query = query.order('likes_count', { ascending: false }).order('created_at', { ascending: false });
-          break;
-        case 'unanswered':
-          query = query.eq('category', 'question').eq('comments_count', 0).order('created_at', { ascending: false });
-          break;
-        default:
-          query = query.order('created_at', { ascending: false });
-      }
-
-      const { data, error } = await query.limit(30);
+      const { data, error } = await brukForumFilter(base, sort, category).limit(30);
       if (error) throw error;
 
       // Supabase types FK joins as arrays even when the relationship is
-      // 1:1 (here, finding:finding_id and profiles:user_id). The runtime
-      // shape is correct; the cast through `unknown` is the standard way
-      // to bypass the comparability check, per the TS error suggestion.
-      return (data ?? []).map((post) => ({ ...post, images: normalizeImages(post.images) })) as unknown as ForumPost[];
+      // 1:1 (here, profiles:user_id). The runtime shape is correct; the cast
+      // through `unknown` is the standard way to bypass the comparability
+      // check, per the TS error suggestion.
+      const posts = (data ?? []).map((post) => ({ ...post, images: normalizeImages(post.images) }));
+      return (await hentKobledeFunn(supabase, posts)) as unknown as ForumPost[];
     }
   });
 }
@@ -67,31 +59,19 @@ export function useForumPostsInfinite(sort: ForumSort = 'newest', category: Foru
       const from = Number(pageParam);
       const to = from + FORUM_PAGE_SIZE - 1;
 
-      let query = supabase
+      const base = supabase
         .from('forum_posts')
         .select(
-          'id,user_id,title,content,category,images,likes_count,comments_count,created_at,profiles:user_id(username,avatar_url,display_name,verified_foragers(role,badge_label)),finding:finding_id(id,species_id,species_name_override,is_zone_finding,zone_label,zone_precision_km,mushroom_species:species_id(norwegian_name,swedish_name))'
+          'id,user_id,title,content,category,images,likes_count,comments_count,created_at,profiles:user_id(username,avatar_url,display_name,verified_foragers(role,badge_label)),finding_id'
         )
         .eq('is_hidden', false);
 
-      if (category) query = query.eq('category', category);
-
-      switch (sort) {
-        case 'popular':
-          query = query.order('likes_count', { ascending: false }).order('created_at', { ascending: false });
-          break;
-        case 'unanswered':
-          query = query.eq('category', 'question').eq('comments_count', 0).order('created_at', { ascending: false });
-          break;
-        default:
-          query = query.order('created_at', { ascending: false });
-      }
-
-      const { data, error } = await query.range(from, to);
+      const { data, error } = await brukForumFilter(base, sort, category).range(from, to);
       if (error) throw error;
 
       // Same Supabase 1:1-as-array typing quirk; see useForumPosts above.
-      const items = (data ?? []).map((post) => ({ ...post, images: normalizeImages(post.images) })) as unknown as ForumPost[];
+      const posts = (data ?? []).map((post) => ({ ...post, images: normalizeImages(post.images) }));
+      const items = (await hentKobledeFunn(supabase, posts)) as unknown as ForumPost[];
 
       return {
         items,
@@ -106,6 +86,8 @@ export function useForumPost(postId: string) {
   return useQuery({
     queryKey: ['forum-post', postId],
     enabled: Boolean(postId),
+    // «Finnes ikke» prøves ikke på nytt — se skalHenteInnleggPaaNytt.
+    retry: skalHenteInnleggPaaNytt,
     queryFn: async () => {
       const supabase = createClient();
       const {
@@ -115,13 +97,15 @@ export function useForumPost(postId: string) {
       const { data: post, error: postError } = await supabase
         .from('forum_posts')
         .select(
-          'id,user_id,title,content,category,images,likes_count,comments_count,created_at,profiles:user_id(username,avatar_url,display_name,verified_foragers(role,badge_label)),finding:finding_id(id,species_id,species_name_override,is_zone_finding,zone_label,zone_precision_km,mushroom_species:species_id(norwegian_name,swedish_name))'
+          'id,user_id,title,content,category,images,likes_count,comments_count,created_at,profiles:user_id(username,avatar_url,display_name,verified_foragers(role,badge_label)),finding_id'
         )
         .eq('id', postId)
         .maybeSingle();
 
       if (postError) throw postError;
-      if (!post) throw new Error('Innlegg ikke funnet');
+      // Null rader er et svar (slettet, skjult eller blokkert forfatter), og
+      // trådsiden må kunne skille det fra en henting som feilet.
+      if (!post) throw new ForumPostNotFoundError();
 
       let isLiked = false;
       if (user) {
@@ -134,9 +118,11 @@ export function useForumPost(postId: string) {
         isLiked = Boolean(likeRow);
       }
 
+      const [withFinding] = await hentKobledeFunn(supabase, [post]);
+
       // Supabase 1:1-as-array typing quirk (see useForumPosts above).
       return {
-        ...post,
+        ...withFinding,
         images: normalizeImages(post.images),
         isLiked,
         isOwner: user?.id === post.user_id
@@ -161,7 +147,7 @@ export function useCreatePost() {
         data: { user }
       } = await supabase.auth.getUser();
 
-      if (!user) throw new Error('Ikke innlogget');
+      if (!user) throw new ForumAuthError();
 
       const { data, error } = await supabase
         .from('forum_posts')
@@ -237,7 +223,7 @@ export function useToggleLike(postId: string) {
         data: { user }
       } = await supabase.auth.getUser();
 
-      if (!user) throw new Error('Ikke innlogget');
+      if (!user) throw new ForumAuthError();
 
       if (isLiked) {
         const { error } = await supabase.from('post_likes').delete().eq('user_id', user.id).eq('post_id', postId);
@@ -266,6 +252,26 @@ export function useToggleLike(postId: string) {
         return old.map((post: any) =>
           post.id === postId ? { ...post, likes_count: Math.max(0, (post.likes_count ?? 0) + (isLiked ? -1 : 1)) } : post
         );
+      });
+
+      // Feeden på skjermen er den uendelige varianten (sider med `items`);
+      // uten denne sto tallet i kortet stille til neste henting.
+      queryClient.setQueriesData({ queryKey: ['forum-posts-infinite'] }, (old: unknown) => {
+        const data = old as { pages?: Array<{ items?: ForumPost[] }> } | undefined;
+        if (!data || !Array.isArray(data.pages)) return old;
+        return {
+          ...data,
+          pages: data.pages.map((page) =>
+            Array.isArray(page.items)
+              ? {
+                  ...page,
+                  items: page.items.map((post) =>
+                    post.id === postId ? { ...post, likes_count: Math.max(0, (post.likes_count ?? 0) + (isLiked ? -1 : 1)) } : post
+                  )
+                }
+              : page
+          )
+        };
       });
 
       return { prevDetail };
@@ -343,7 +349,7 @@ export function useCreateComment(postId: string) {
         data: { user }
       } = await supabase.auth.getUser();
 
-      if (!user) throw new Error('Ikke innlogget');
+      if (!user) throw new ForumAuthError();
 
       const { error } = await supabase.from('comments').insert({
         post_id: postId,
@@ -413,7 +419,7 @@ export function useReportContent() {
         data: { user }
       } = await supabase.auth.getUser();
 
-      if (!user) throw new Error('Ikke innlogget');
+      if (!user) throw new ForumAuthError();
 
       const { error } = await supabase.from('reports').insert({
         reporter_id: user.id,
@@ -442,7 +448,7 @@ export function useMyFindings() {
 
       const { data, error } = await supabase
         .from('findings')
-        .select('id,species_id,species_name_override,found_at,is_zone_finding,zone_label,zone_precision_km,mushroom_species:species_id(norwegian_name,swedish_name)')
+        .select('id,species_id,species_name_override,found_at,visibility,is_zone_finding,zone_label,zone_precision_km,mushroom_species:species_id(norwegian_name,swedish_name)')
         .eq('user_id', user.id)
         .eq('is_negative_observation', false)
         // Et slettet funn skal ikke kunne velges som kobling på et nytt
@@ -481,47 +487,59 @@ export function useMyReports() {
   });
 }
 
-export function useModerationReports() {
-  return useQuery({
-    queryKey: ['moderation-reports'],
-    queryFn: async () => {
-      const supabase = createClient();
-      const { data, error } = await supabase
-        .from('reports')
-        .select('id,reason,description,status,created_at,post_id,comment_id,finding_id')
-        .order('created_at', { ascending: false })
-        .limit(100);
+/** `pending` er lista «Åpne»: rapporter som venter ELLER er gjennomgått, men ikke avsluttet. */
+export type ModerationFilter = 'pending' | 'all';
 
-      if (error) throw error;
-      return (data ?? []) as ForumReport[];
+export interface ModerationReportsResponse {
+  reports: ModerationReportItem[];
+  pending: AapneRapporter;
+}
+
+/**
+ * Rapportene med det meldte innholdet, fra /api/admin/moderation.
+ *
+ * Gikk tidligere rett mot `reports` med nettleserklienten og fikk bare id-er
+ * tilbake — moderatoren så aldri hva som var meldt. Innholdet må hentes på
+ * serveren: skjulte rader er usynlige gjennom RLS.
+ */
+export function useModerationReports(filter: ModerationFilter = 'pending') {
+  return useQuery({
+    queryKey: ['moderation-reports', filter],
+    queryFn: async () => {
+      const response = await fetch(`/api/admin/moderation?status=${filter}`, { cache: 'no-store' });
+      if (!response.ok) throw new Error(`moderation_${response.status}`);
+      return (await response.json()) as ModerationReportsResponse;
     }
   });
 }
 
-export function useSetReportStatus() {
+/**
+ * Skjul / vis igjen / marker som gjennomgått / marker som løst / avvis.
+ * Serveren utleder hva som skal skjules fra rapporten, og skriver en rad i
+ * revisjonsloggen — det gjorde ikke den gamle klientskrivingen rett mot
+ * `reports`.
+ */
+export function useModerationAction() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (payload: { reportId: string; status: 'reviewed' | 'resolved' | 'dismissed' }) => {
-      const supabase = createClient();
-
-      // Stamp resolved_at when transitioning into a terminal state — the
-      // purge-resolved-reports cron uses it to delete the row 1 year
-      // later (per docs/retention-policy.md). Reviewed is non-terminal,
-      // so resolved_at stays NULL.
-      const update: { status: string; resolved_at?: string | null } = {
-        status: payload.status
-      };
-      if (payload.status === 'resolved' || payload.status === 'dismissed') {
-        update.resolved_at = new Date().toISOString();
-      }
-
-      const { error } = await supabase.from('reports').update(update).eq('id', payload.reportId);
-      if (error) throw error;
+    mutationFn: async (payload: { reportId: string; action: ModerationAction }) => {
+      const response = await fetch('/api/admin/moderation', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (!response.ok) throw new Error(`moderation_${response.status}`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['moderation-reports'] });
       queryClient.invalidateQueries({ queryKey: ['my-reports'] });
+      // Skjult eller vist igjen: feeden og åpne tråder endrer seg også.
+      queryClient.invalidateQueries({ queryKey: ['forum-posts'] });
+      queryClient.invalidateQueries({ queryKey: ['forum-posts-infinite'] });
+      queryClient.invalidateQueries({ queryKey: ['forum-post'] });
+      queryClient.invalidateQueries({ queryKey: ['forum-comments'] });
+      queryClient.invalidateQueries({ queryKey: ['forum-comments-infinite'] });
     }
   });
 }

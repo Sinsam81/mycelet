@@ -626,7 +626,7 @@ Hvert tall appen viser, sporet til der det beregnes. Kolonnen som gjør inventar
 | Applikasjonslogger (createRequestLogger + log.*) | **maskert** | src/lib/log/request.ts:57-63 binder kun `route: url.pathname` — query-strengen l |
 | Google Analytics 4 | **maskert** | src/lib/analytics.ts:trackPageView bygger `page_location` fra `window.location.o |
 | Bilde → Supabase Storage-bøtte 'finding-images' → offentlig URL lagret | **maskert** | EXIF strippet (src/lib/utils/image.ts). Bøtta er `public = true` (019_storage_bu |
-| Foruminnlegg med finding_id → embed av findings-raden | **maskert** | src/lib/hooks/useForum.ts:32 velger `finding:finding_id(id,species_id,species_na |
+| Foruminnlegg med finding_id → koblet funn via `public_findings` | **maskert** | src/lib/forum/koblede-funn.ts leser viewet (art + sone, ingen koordinater/notat). Embedet rett fra `findings` ga null til alle andre enn eieren |
 | Adminflater og moderasjon | **maskert** | src/app/admin/page.tsx:173 bruker service-rollen, men henter kun `species_id,spe |
 | Service worker / offline-cache | **maskert** | public/sw.js:66 — `if (url.pathname.startsWith('/api/')) return false;`. Bare Ka |
 | species_occurrences (GBIF) → get_occurrences_in_bounds, offentlig lesb | **eksakt** | 013_species_occurrences.sql:29 `FOR SELECT USING (true)` + GRANT til anon; 014 g |

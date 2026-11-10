@@ -9,6 +9,8 @@ import { ReportButton } from '@/components/forum/ReportButton';
 import { BlockUserButton } from '@/components/forum/BlockUserButton';
 import { SharePostButton } from '@/components/forum/SharePostButton';
 import { ForumPostDetail, ReportReason } from '@/types/forum';
+import { checkContent } from '@/lib/moderation/content-filter';
+import { useForumErrorMessage } from '@/components/forum/useForumErrorMessage';
 import { forumBadgeClass } from '@/lib/utils/forumBadge';
 import { useForumBadge } from '@/lib/hooks/useForumBadge';
 
@@ -21,10 +23,14 @@ interface PostDetailProps {
   likeLoading?: boolean;
   /** Enables the block action, and hides it on your own posts. */
   currentUserId?: string | null;
+  /** The reader blocked the post's author; the post is about to disappear. */
+  onAuthorBlocked?: () => void;
 }
 
-export function PostDetail({ post, onToggleLike, onReport, onEdit, onDelete, likeLoading, currentUserId }: PostDetailProps) {
+export function PostDetail({ post, onToggleLike, onReport, onEdit, onDelete, likeLoading, currentUserId, onAuthorBlocked }: PostDetailProps) {
   const t = useTranslations('PostDetail');
+  const tFilter = useTranslations('ContentFilter');
+  const forumError = useForumErrorMessage();
   const locale = useLocale();
   const categoryLabel: Record<ForumPostDetail['category'], string> = {
     find: t('categoryFind'),
@@ -42,17 +48,45 @@ export function PostDetail({ post, onToggleLike, onReport, onEdit, onDelete, lik
   const [content, setContent] = useState(post.content);
   const [category, setCategory] = useState(post.category);
   const [editError, setEditError] = useState<string | null>(null);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const submitEdit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setEditError(null);
     if (!onEdit) return;
 
+    // Samme vakter som når innlegget opprettes (forum/new): ingen tom tittel,
+    // og innholdsfilteret før databasen — triggeren gjelder også ved endring.
+    if (!title.trim() || !content.trim()) {
+      setEditError(t('emptyError'));
+      return;
+    }
+    if (!checkContent(title, content).ok) {
+      setEditError(tFilter('controlledSubstanceTrade'));
+      return;
+    }
+
     try {
       await onEdit({ title: title.trim(), content: content.trim(), category });
       setEditing(false);
     } catch (err) {
-      setEditError(err instanceof Error ? err.message : t('updateError'));
+      setEditError(forumError(err, t('updateError')));
+    }
+  };
+
+  // Sletting tar med seg alle svar og likes (ON DELETE CASCADE) og kan ikke
+  // angres. Ett trykk ved siden av «Rediger» var nok; nå må det bekreftes.
+  const confirmDelete = async () => {
+    if (!onDelete || deleting) return;
+    setDeleteError(null);
+    setDeleting(true);
+    try {
+      await onDelete();
+    } catch (err) {
+      setDeleteError(forumError(err, t('deleteError')));
+      setDeleting(false);
     }
   };
 
@@ -125,21 +159,47 @@ export function PostDetail({ post, onToggleLike, onReport, onEdit, onDelete, lik
         <SharePostButton postId={post.id} title={post.title} findingName={findingName} zoneLabel={zoneLabel} />
       </div>
 
-      {post.isOwner ? (
+      {post.isOwner && !confirmingDelete ? (
         <div className="mt-3 flex items-center gap-2">
           <Button size="sm" variant="outline" onClick={() => setEditing((v) => !v)} icon={<Pencil className="h-4 w-4" />}>
             {t('edit')}
           </Button>
-          <Button size="sm" variant="danger" onClick={onDelete} icon={<Trash2 className="h-4 w-4" />}>
-            {t('delete')}
-          </Button>
+          {onDelete ? (
+            <Button size="sm" variant="danger" onClick={() => setConfirmingDelete(true)} icon={<Trash2 className="h-4 w-4" />}>
+              {t('delete')}
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
+
+      {post.isOwner && confirmingDelete ? (
+        <div className="mt-3 rounded-lg border border-red-200 bg-red-50 p-3" role="alert">
+          <p className="text-sm font-medium text-red-900">{t('confirmDelete')}</p>
+          {deleteError ? <p className="mt-1 text-sm text-red-700">{deleteError}</p> : null}
+          <div className="mt-2 flex gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              type="button"
+              disabled={deleting}
+              onClick={() => {
+                setConfirmingDelete(false);
+                setDeleteError(null);
+              }}
+            >
+              {t('cancel')}
+            </Button>
+            <Button size="sm" variant="danger" type="button" loading={deleting} onClick={() => void confirmDelete()}>
+              {deleting ? t('deleting') : t('confirmDeleteYes')}
+            </Button>
+          </div>
         </div>
       ) : null}
 
       {onReport ? (
         <div className="mt-3 flex flex-wrap items-start gap-3">
           <ReportButton label={t('reportPost')} onSubmit={onReport} />
-          <BlockUserButton userId={post.user_id} displayName={author} currentUserId={currentUserId} />
+          <BlockUserButton userId={post.user_id} displayName={author} currentUserId={currentUserId} onBlocked={onAuthorBlocked} />
         </div>
       ) : null}
     </article>
