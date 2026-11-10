@@ -69,7 +69,6 @@ const consoleWriter: LoggerWriter = {
     // We always go through console.log so Next/Vercel ingest the line via
     // the same path. Level is in the structured payload, not via
     // console.warn/error which can have different formatting.
-    // eslint-disable-next-line no-console
     console.log(line);
   }
 };

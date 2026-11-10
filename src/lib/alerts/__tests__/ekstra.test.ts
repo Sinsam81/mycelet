@@ -95,6 +95,24 @@ describe('byggVarselEpost med ekstrainnhold', () => {
     expect(html).not.toContain('I sesong nå');
   });
 
+  it('bærer aldri et år-mot-år-tall fra registreringsdata, uansett hva som sendes inn', () => {
+    // Rapportpulsen ble trukket fra kundeflatene 17. september 2026. Feltet
+    // finnes ikke lenger; et objekt som likevel sendes med, skal ikke skrives ut.
+    for (const locale of ['nb', 'sv'] as const) {
+      const args = {
+        ...base,
+        locale,
+        toppdag: { dag: 'tor', score: 91, erIDag: false },
+        arter: ['kantarell'],
+        puls: { nivaa: 'under', iAar: 3, normalt: 40, fra: '2026-09-01', til: '2026-09-07', region: 'Kristiansand' }
+      } as Parameters<typeof byggVarselEpost>[0];
+      const { html, tekst } = byggVarselEpost(args);
+      for (const kropp of [html, tekst]) {
+        expect(kropp).not.toMatch(/over vanlig|under vanlig|över det vanliga|under det vanliga|Artsobservasjoner|GBIF/i);
+      }
+    }
+  });
+
   it('toppdag og arter havner i både html og ren tekst (nb)', () => {
     const { html, tekst } = byggVarselEpost({
       ...base,

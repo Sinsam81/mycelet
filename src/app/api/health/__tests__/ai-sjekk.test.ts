@@ -29,7 +29,7 @@ describe('helsesjekkens AI-sjekk', () => {
     expect(foerFastGrenen).not.toContain(', checkAi()');
     expect(foerFastGrenen).not.toContain('ai: checkAi()');
     const iFastGrenen = kilde.slice(kilde.indexOf('if (!fast)'));
-    expect(iFastGrenen).toContain(', checkAi()]');
+    expect(iFastGrenen).toMatch(/Promise\.all\(\[[^\]]*checkAi\(\)/);
   });
 
   it('spør Kindwise høyst hvert femte minutt', () => {
@@ -38,7 +38,7 @@ describe('helsesjekkens AI-sjekk', () => {
   });
 
   it('teller IKKE mot 503, men logges', () => {
-    expect(kilde).toContain('const { epost, ai, ...oppetidssjekker } = checks');
+    expect(kilde).toContain('const { epost, ai, tabeller, ...oppetidssjekker } = checks');
     expect(kilde).toContain('health.ai_utilgjengelig');
   });
 

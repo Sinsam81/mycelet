@@ -110,7 +110,7 @@ function plussDager(iso: string, dager: number): string {
   return isoDag(d);
 }
 
-/** GBIF-telling for regionboksen i [fra, til], BEGGE inkludert — kun antallet, aldri innholdet. Delt med rapportpulsen. */
+/** GBIF-telling for regionboksen i [fra, til], BEGGE inkludert — kun antallet, aldri innholdet. */
 export async function tellGbif(
   region: (typeof PREDICTION_TILE_REGIONS)[number],
   fraIso: string,

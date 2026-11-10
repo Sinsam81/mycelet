@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Stripe from 'stripe';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { erManglendeTabell } from '@/lib/supabase/tabell-finnes';
 import { BillingTier, isPaidTier, resolveTierByPriceId } from '@/lib/billing/plans';
 import { billingTierLabel } from '@/lib/billing/copy';
 import { manglendeEpostKonfig, sendEpost } from '@/lib/email/send';
@@ -369,7 +370,7 @@ export async function POST(request: NextRequest) {
       .maybeSingle();
 
     if (eventReadError) {
-      if (eventReadError.code === '42P01') {
+      if (erManglendeTabell(eventReadError)) {
         canLogEvents = false;
       } else {
         return NextResponse.json({ error: eventReadError.message }, { status: 500 });

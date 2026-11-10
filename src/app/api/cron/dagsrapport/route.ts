@@ -17,6 +17,7 @@ import {
 import { REGISTRERING_FORBEHOLD, fraTabellrad, kortDato, kortPeriode, prosentTekst, type SoppregistreringRad } from '@/lib/rapport/soppregistreringer';
 import { erInternKonto } from '@/lib/rapport/abonnement';
 import { MAKS_SIDER as MAKS_BRUKERSIDER, hentAlleBrukere } from '@/lib/supabase/alle-brukere';
+import { tellRader } from '@/lib/supabase/tabell-finnes';
 import { osloDag } from '@/lib/bruk/bruksdag';
 import { type TellingRad } from '@/lib/bruk/tell';
 import { WEB_DIREKTE_KILDE, normaliserKilde, vaskTidssone } from '@/lib/analytics/kilde';
@@ -223,15 +224,21 @@ export async function GET(request: NextRequest) {
   // står raden som «ikke målt». usage_info koster ingen kreditter.
   const tellKall = async (tabell: string, kolonne: string): Promise<AiKallTall | undefined> => {
     const grense = (timer: number) => new Date(naa.getTime() - timer * 3600_000).toISOString();
+    // HEAD mot en tabell som ikke finnes gir verken feil eller tall — se
+    // tabell-finnes.ts. `count ?? 0` ville gjort det til «0 kall».
     const [d1, d7] = await Promise.all([
-      db.from(tabell).select('*', { count: 'exact', head: true }).gte(kolonne, grense(24)),
-      db.from(tabell).select('*', { count: 'exact', head: true }).gte(kolonne, grense(24 * 7))
+      tellRader(db.from(tabell).select('*', { count: 'exact', head: true }).gte(kolonne, grense(24))),
+      tellRader(db.from(tabell).select('*', { count: 'exact', head: true }).gte(kolonne, grense(24 * 7)))
     ]);
-    if (d1.error || d7.error) {
-      log.warn('dagsrapport.ai_telling_feilet', { tabell, message: (d1.error ?? d7.error)?.message });
+    if (d1.antall === undefined || d7.antall === undefined) {
+      log.warn('dagsrapport.ai_telling_feilet', {
+        tabell,
+        mangler: Boolean(d1.mangler || d7.mangler),
+        message: d1.feil ?? d7.feil
+      });
       return undefined;
     }
-    return { siste24t: d1.count ?? 0, siste7d: d7.count ?? 0 };
+    return { siste24t: d1.antall, siste7d: d7.antall };
   };
   const [aiKall, aiFeil] = await Promise.all([
     tellKall('ai_identifications', 'created_at'),

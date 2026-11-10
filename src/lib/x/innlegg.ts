@@ -64,11 +64,11 @@ const FASIT_LOVNAD = 'Fasit publiseres når funnene er inne. 🍄';
 
 /**
  * Omslagsposten: «det snudde i natt» — dagens nyhet, når den finnes.
- * `pulsLinje` (rapportpuls for det første området, bare når folk registrerer
- * mer enn vanlig) legges inn etter forbeholdet — og er det første som ryker
- * når posten blir for lang.
+ *
+ * Tar bevisst ingen tekstlinje utenfra: et år-mot-år-tall fra
+ * registreringsdata skal aldri ut til kunder (se «Rapportpuls» i CLAUDE.md).
  */
-export function byggOmslagsPost(omslag: Omslag[], pulsLinje?: string | null): string | null {
+export function byggOmslagsPost(omslag: Omslag[]): string | null {
   if (omslag.length === 0) return null;
 
   let hode: string;
@@ -85,10 +85,6 @@ export function byggOmslagsPost(omslag: Omslag[], pulsLinje?: string | null): st
     hode = `Soppvarselet slo ut i natt: ${liste}${rest > 0 ? `, og ${rest} til` : ''}.`;
   }
 
-  if (pulsLinje) {
-    const medPuls = [hode, FORBEHOLD, pulsLinje, FASIT_LOVNAD].join(' ');
-    if (vektetLengde(medPuls) <= MAKS_TEGN) return medPuls;
-  }
   return kuttTilMaks([hode, FORBEHOLD, FASIT_LOVNAD]);
 }
 

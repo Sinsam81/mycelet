@@ -18,6 +18,7 @@ import { isRecommendableSpecies } from '@/lib/prediction/recommendable';
 import { dayOfYearOf } from '@/lib/prediction/phenology';
 import { weightedOccurrenceDensity, OCCURRENCE_FETCH_LIMIT } from '@/lib/prediction/occurrences';
 import { getElevation } from '@/lib/terrain';
+import { roundForProviderLookup } from '@/lib/privacy/provider-precision';
 import { previousDate, withinCronGraceWindow } from '@/lib/prediction/tile-freshness';
 import { createRequestLogger } from '@/lib/log/request';
 import { getUserLocale } from '@/i18n/locale';
@@ -217,6 +218,14 @@ export async function GET(request: NextRequest) {
   // Coarse (~1 km) on purpose — server logs must not hold a position trail.
   log.info('prediction.start', { lat: Number(lat.toFixed(2)), lon: Number(lon.toFixed(2)), radiusKm, speciesId });
 
+  // Punktet er enhetens GPS-posisjon eller kartsenteret — ofte nettopp der
+  // brukeren står i sitt eget soppsted. Eksterne oppslag (vær, skog, høyde)
+  // får det avrundet til ~110 m, samme regel som /api/findings og
+  // /api/spot-feedback (se provider-precision.ts). Det interne regnestykket
+  // under — boksen, nærmeste flis, funntetthet — bruker fortsatt det eksakte
+  // punktet; det forlater aldri serveren.
+  const oppslag = roundForProviderLookup(lat, lon);
+
   const latDelta = radiusKm / 111;
   const lonDelta = radiusKm / (111 * Math.cos((lat * Math.PI) / 180));
 
@@ -288,7 +297,7 @@ export async function GET(request: NextRequest) {
         p_tile_date: tileDate,
         p_species_id: speciesId
       }),
-      fetchWeatherSummary({ lat, lon }),
+      fetchWeatherSummary(oppslag),
       speciesId
         ? supabase
             .from('mushroom_species')
@@ -581,7 +590,7 @@ export async function GET(request: NextRequest) {
       // Timeout-guarded like grid/species-spots: SR16's own 8s timeout could
       // otherwise stall the whole point prediction. Forest is best-effort here
       // (null → v4_computed_neutral_fallback), so a 3s cap degrades gracefully.
-      withTimeout(getForestProperties({ lat, lon }), 3000),
+      withTimeout(getForestProperties(oppslag), 3000),
       // Real prior finds (GBIF) near the point → "observasjoner nær her" boost.
       // Pagineres forbi PostgREST-taket på 1000 rader; uten det er punktene vi
       // regner tetthet fra et vilkårlig utvalg. Se src/lib/supabase/paged-rpc.ts.
@@ -599,7 +608,7 @@ export async function GET(request: NextRequest) {
         { limit: OCCURRENCE_FETCH_LIMIT }
       ),
       // Real terrain elevation (Kartverket) → replaces the pseudo-noise proxy.
-      getElevation({ lat, lon }),
+      getElevation(oppslag),
       // Artene tallet kan gjelde når kalleren ikke har bedt om én. Samme liste
       // som rasteret bygges av, så de to banene svarer på samme spørsmål.
       speciesId == null

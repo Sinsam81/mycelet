@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createRequestLogger } from '@/lib/log/request';
+import { tellRader } from '@/lib/supabase/tabell-finnes';
 import { bearerSecretMatches } from '@/lib/security/secret-compare';
 import { NORGE, tilTabellrad, vinduerFor } from '@/lib/rapport/soppregistreringer';
 import { FristUteFeil, lagGbifKlient, lesUtgave, sjekkIndeksering, tellSoppregistreringer, type Utgave } from '@/lib/rapport/soppregistreringer-henting';
@@ -53,16 +54,20 @@ export async function GET(request: NextRequest) {
   }
 
   const db = createAdminClient();
-  const { count, error: lesFeil } = await db
-    .from('soppregistreringer')
-    .select('snapshot', { count: 'exact', head: true })
-    .eq('snapshot', snapshot);
-  if (lesFeil) {
-    // Uten tabellen (migrasjonen ikke kjørt) er 63 GBIF-kall bortkastet.
-    log.error('soppregistreringer.les_feilet', { message: lesFeil.message });
+  const lest = await tellRader(
+    db.from('soppregistreringer').select('snapshot', { count: 'exact', head: true }).eq('snapshot', snapshot)
+  );
+  if (lest.antall === undefined) {
+    // Uten tabellen (migrasjonen ikke kjørt) er 63 GBIF-kall bortkastet. Et
+    // HEAD-kall mot en manglende tabell gir verken feil eller tall, så
+    // «ikke noe tall» stopper kjøringen like sikkert som en feil.
+    log.error('soppregistreringer.les_feilet', {
+      mangler: Boolean(lest.mangler),
+      message: lest.mangler ? 'tabellen finnes ikke (migrasjon 071)' : lest.feil
+    });
     return NextResponse.json({ ok: false, grunn: 'Kunne ikke lese soppregistreringer' }, { status: 500 });
   }
-  if ((count ?? 0) > 0) {
+  if (lest.antall > 0) {
     return NextResponse.json({ ok: true, snapshot, hoppetOver: 'allerede målt' });
   }
 

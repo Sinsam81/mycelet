@@ -113,6 +113,16 @@ describe('cron/soppregistreringer', () => {
     expect(henting.tell).not.toHaveBeenCalled();
   });
 
+  it('tabellen finnes ikke: HEAD-kallet gir verken feil eller tall, og det stopper kjøringen likevel', async () => {
+    // postgrest-js gjør 404 med tom kropp om til «ingen feil», og count blir
+    // stående som null. `count ?? 0` lot alle GBIF-kallene gå før upsert feilet.
+    db.antall = null as unknown as number;
+    db.lesFeil = null;
+    expect((await kall()).status).toBe(500);
+    expect(henting.tell).not.toHaveBeenCalled();
+    expect(db.upserts).toHaveLength(0);
+  });
+
   it('fristen gikk ut eller GBIF feilet: ingenting skrives', async () => {
     henting.tell = vi.fn(async () => {
       throw new FristUteFeil(54);

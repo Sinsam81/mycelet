@@ -153,7 +153,9 @@ export default async function AdminDashboardPage() {
     let q = admin.from(table).select('*', { count: 'exact', head: true });
     if (build) q = build(q);
     const { count, error } = await q;
-    return error ? null : count ?? 0;
+    // HEAD mot en tabell som ikke finnes gir verken feil eller tall (se
+    // tabell-finnes.ts) — da er svaret «ukjent», ikke 0.
+    return error || count == null ? null : count;
   };
 
   const iso = (msAgo: number) => new Date(Date.now() - msAgo).toISOString();

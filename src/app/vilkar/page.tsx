@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import { getTranslations } from 'next-intl/server';
 import { PageWrapper } from '@/components/layout/PageWrapper';
 import { getLocale } from 'next-intl/server';
-import { entityFormSuffix, entityMessageValues } from '@/lib/legal/entity';
+import { entityMessageValues } from '@/lib/legal/entity';
 
 // Section order (keys live in the Vilkar message namespace as <key>Title / <key>Body).
 const SECTIONS = [

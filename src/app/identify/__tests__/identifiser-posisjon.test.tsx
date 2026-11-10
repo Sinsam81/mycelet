@@ -17,7 +17,6 @@ const push = vi.fn();
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push }) }));
 vi.mock('next/link', () => ({ default: ({ href, children }: { href: string; children: ReactNode }) => <a href={href}>{children}</a> }));
 vi.mock('@/components/layout/PageWrapper', () => ({ PageWrapper: ({ children }: { children: ReactNode }) => <div>{children}</div> }));
-vi.mock('@/components/identify/AiFiksetBanner', () => ({ AiFiksetBanner: () => null }));
 vi.mock('@/lib/native/platform', () => ({ isNativePlatform: () => true }));
 vi.mock('@/lib/supabase/client', () => ({ createClient: () => ({}) }));
 vi.mock('@/lib/utils/image', () => ({

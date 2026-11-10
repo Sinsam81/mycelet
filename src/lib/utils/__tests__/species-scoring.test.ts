@@ -35,7 +35,6 @@ const PIGGSOPP: SpeciesContext = {
 const PERFECT_KANTARELL_WEATHER = { temperature: 16, humidity: 85, rain3dMm: 10 };
 const PERFECT_BOLETUS_WEATHER = { temperature: 18, humidity: 75, rain3dMm: 8 };
 const DRY_HOT_WEATHER = { temperature: 28, humidity: 35, rain3dMm: 0 };
-const COLD_WET_WEATHER = { temperature: 4, humidity: 90, rain3dMm: 12 };
 
 describe('computeSpeciesAdjustment — season gating', () => {
   it('collapses to ~0.05 when month is outside species window', () => {

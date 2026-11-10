@@ -101,3 +101,127 @@ describe('docs/ inneholder ingen hemmeligheter i klartekst', () => {
     ).toEqual([]);
   });
 });
+
+/**
+ * Samme regel, bredere nett.
+ *
+ * Testen over leser bare markdown under docs/. Et skript med et passord i en
+ * konstant, eller en privat e-postadresse i en kommentar, en testfil eller en
+ * migrasjon, gikk derfor rett forbi. Denne delen leser tekstfilene i alle
+ * katalogene som sjekkes inn.
+ *
+ * To regler:
+ *   1. Ingen hemmelighet som strengkonstant i skript, tester og migrasjoner
+ *      (`const PASSWORD = '…'`). Les verdien fra miljøet.
+ *   2. Ingen adresser hos private e-postleverandører. Eksempler og testdata
+ *      skal bruke example.com / example.org — private e-postadresser hører
+ *      ikke hjemme i et offentlig repo, uansett hvem de tilhører.
+ */
+
+const ROT = process.cwd();
+const TEKSTFIL = /\.(md|mdx|mjs|cjs|js|jsx|ts|tsx|sql|json|html|txt|ya?ml)$/;
+const HOPP_OVER = new Set(['node_modules', '.next', 'worktrees', '.auth', '.temp', '.vercel']);
+
+function tekstfiler(katalog: string): string[] {
+  let navnene: string[];
+  try {
+    navnene = readdirSync(katalog);
+  } catch {
+    return [];
+  }
+  return navnene.flatMap((navn) => {
+    if (HOPP_OVER.has(navn)) return [];
+    const sti = join(katalog, navn);
+    if (statSync(sti).isDirectory()) return tekstfiler(sti);
+    return TEKSTFIL.test(navn) ? [sti] : [];
+  });
+}
+
+/** Skript, tester og migrasjoner — ikke src/ og messages/, der «passord» er UI-tekst. */
+const KODEKATALOGER = ['docs', 'scripts', '.claude', 'e2e', 'supabase', 'content'];
+/** E-postregelen gjelder også kildekoden. */
+const ALLE_KATALOGER = [...KODEKATALOGER, 'src', 'messages', 'public/landing'];
+
+const HEMMELIG_KONSTANT =
+  /(?:PASSWORD|PASSORD|PASSWD|SECRET|TOKEN)\w*\s*[:=]\s*['"`]([^'"`\s]{8,})['"`]/i;
+/** Verdier som ikke er en hemmelighet: de leses fra miljøet eller er en plassholder. */
+const IKKE_EN_VERDI = /process\.env|\$\{|<[^>]+>|^x{3,}|^\*{3,}|\.\.\.|…/i;
+
+// Bare domenenavn her — ingen hele adresser, så fila feller ikke seg selv.
+const PRIVATE_LEVERANDORER = [
+  'gmail', 'googlemail', 'yahoo', 'ymail', 'hotmail', 'outlook', 'live', 'msn',
+  'icloud', 'me', 'mac', 'online', 'telia', 'proton', 'protonmail', 'pm', 'aol', 'gmx'
+];
+const PRIVAT_ADRESSE = new RegExp(
+  `[A-Za-z0-9._%+-]+@(?:${PRIVATE_LEVERANDORER.join('|')})\\.[a-z]{2,}(?:\\.[a-z]{2,})?\\b`,
+  'i'
+);
+
+function relativ(sti: string): string {
+  return sti.slice(ROT.length + 1);
+}
+
+describe('innsjekkede filer inneholder verken hemmeligheter eller private e-postadresser', () => {
+  const kodefiler = KODEKATALOGER.flatMap((k) => tekstfiler(join(ROT, k)));
+  const allefiler = ALLE_KATALOGER.flatMap((k) => tekstfiler(join(ROT, k)));
+
+  it('finner faktisk filene — ellers tester vi ingenting', () => {
+    expect(kodefiler.length).toBeGreaterThan(50);
+    expect(allefiler.length).toBeGreaterThan(kodefiler.length);
+  });
+
+  it('mønstrene treffer det de skal, og ikke det de ikke skal', () => {
+    const konstant = (linje: string) => {
+      const m = HEMMELIG_KONSTANT.exec(linje);
+      return Boolean(m && !IKKE_EN_VERDI.test(m[1]));
+    };
+    // Satt sammen av biter, så denne fila ikke feller seg selv.
+    expect(konstant(['const PASSWORD = ', "'Eksempelverdi99'", ';'].join(''))).toBe(true);
+    expect(konstant('const PASSWORD = process.env.QA_TEST_PASSWORD;')).toBe(false);
+    expect(konstant("const TOKEN = '<lim inn her>';")).toBe(false);
+
+    const privat = ['navn.etternavn', 'gmail.com'].join('@');
+    expect(PRIVAT_ADRESSE.test(privat)).toBe(true);
+    expect(PRIVAT_ADRESSE.test('kari@example.com')).toBe(false);
+    expect(PRIVAT_ADRESSE.test('post@mycelet.com')).toBe(false);
+    // Et håndtak uten lokaldel er ikke en adresse.
+    expect(PRIVAT_ADRESSE.test(['', 'gmail.com'].join('@'))).toBe(false);
+  });
+
+  it('har ingen hemmelighet som strengkonstant', () => {
+    const funn: string[] = [];
+    for (const sti of kodefiler) {
+      readFileSync(sti, 'utf8')
+        .split('\n')
+        .forEach((linje, i) => {
+          const m = HEMMELIG_KONSTANT.exec(linje);
+          if (!m || IKKE_EN_VERDI.test(m[1])) return;
+          // Verdien skrives ikke ut — feilmeldingen havner i CI-logger.
+          funn.push(`${relativ(sti)}:${i + 1}`);
+        });
+    }
+    expect(
+      funn,
+      `\nHemmelighet som strengkonstant i et OFFENTLIG repo:\n\n${funn.join('\n')}\n\n` +
+        `Les verdien fra miljøet (process.env / .env.local), aldri fra fila.\n`
+    ).toEqual([]);
+  });
+
+  it('har ingen adresser hos private e-postleverandører', () => {
+    const funn: string[] = [];
+    for (const sti of allefiler) {
+      readFileSync(sti, 'utf8')
+        .split('\n')
+        .forEach((linje, i) => {
+          // Ingen unntak for «hendelseslinjer» her: en adresse er like synlig
+          // uansett hva resten av linja sier.
+          if (PRIVAT_ADRESSE.test(linje)) funn.push(`${relativ(sti)}:${i + 1}`);
+        });
+    }
+    expect(
+      funn,
+      `\nPrivat e-postadresse i et OFFENTLIG repo:\n\n${funn.join('\n')}\n\n` +
+        `Bruk en oppdiktet adresse på example.com / example.org, eller si hvor adressen står.\n`
+    ).toEqual([]);
+  });
+});

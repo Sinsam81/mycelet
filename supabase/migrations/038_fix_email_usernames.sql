@@ -5,8 +5,10 @@
 -- migrasjonen er «bruk det brukeren skrev i brukernavn-feltet ved
 -- registrering». To brukere hadde skrevet hele e-postadressen sin der:
 --
---   Trinesavoi@yahoo.com    (visningsnavn: Trinemor1980)
---   Moyfridovea@gmail.com   (visningsnavn: Frida)
+--   Kari.Nordmann@example.com   (visningsnavn: Kari)
+--   Olasopp@example.org         (visningsnavn: Ola)
+--
+-- (Eksemplene er oppdiktet; de viser bare formen.)
 --
 -- Brukernavn er OFFENTLIG — `public_findings` velger `p.username` (migrasjon
 -- 001, 005, 015), og navnet vises på funn, i forumet og på profilsider. Begge

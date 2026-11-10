@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import * as Sentry from '@sentry/nextjs';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { erManglendeTabell } from '@/lib/supabase/tabell-finnes';
 import {
   RevenueCatWebhookBody,
   mapRevenueCatEvent,
@@ -216,7 +217,7 @@ export async function POST(request: NextRequest) {
         .maybeSingle();
 
       if (eventReadError) {
-        if (eventReadError.code === '42P01') canLogEvents = false;
+        if (erManglendeTabell(eventReadError)) canLogEvents = false;
         else return NextResponse.json({ error: eventReadError.message }, { status: 500 });
       }
       if (canLogEvents && existingEvent?.status === 'processed') {

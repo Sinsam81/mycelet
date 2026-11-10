@@ -5,7 +5,6 @@ import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useLocale, useTranslations } from 'next-intl';
-import { AiFiksetBanner } from '@/components/identify/AiFiksetBanner';
 import { PoisonHotlineLinksClient } from '@/components/safety/PoisonHotlineLinksClient';
 import { PageWrapper } from '@/components/layout/PageWrapper';
 import { Button } from '@/components/ui/Button';
@@ -360,9 +359,6 @@ export default function IdentifyPage() {
             {t('historyLink')} →
           </Link>
         </header>
-
-        {/* Bare når AI-en faktisk virker — ellers ville «fikset» vært løgn. */}
-        {aiDisabled ? null : <AiFiksetBanner />}
 
         {aiDisabled ? (
           <div className="rounded-xl border border-amber-300 bg-amber-50 p-4">

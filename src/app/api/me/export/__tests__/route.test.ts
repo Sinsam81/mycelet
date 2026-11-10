@@ -231,6 +231,21 @@ describe('GET /api/me/export', () => {
       expect(body._manifest.datasets).toMatchObject({ trialReminders: 1, trialAnswers: 1 });
     });
 
+    it('leser verified_foragers med tjenesterollen, så merknaden følger med også etter migrasjon 074', async () => {
+      // Etter 074 har øktklienten ikke lenger SELECT på `note`; `select('*')`
+      // derfra ville gitt 42501 og en avbrutt eksport.
+      tableResponses.verified_foragers = {
+        data: { user_id: currentUser!.id, role: 'expert', badge_label: 'Soppkontrollør', note: 'intern merknad' },
+        error: null
+      };
+      const res = await GET(makeRequest());
+      expect(res.status).toBe(200);
+      const body = JSON.parse(await res.text());
+      expect(queriedWithAdmin).toContain('verified_foragers');
+      expect(queriedWithSession).not.toContain('verified_foragers');
+      expect(body.verifiedForager.note).toBe('intern merknad');
+    });
+
     it('sier fra i stedet for å levere en fil uten AI-tellerne', async () => {
       adminClientAvailable = false;
       const res = await GET(makeRequest());

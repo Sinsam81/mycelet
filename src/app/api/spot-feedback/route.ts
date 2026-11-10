@@ -95,7 +95,8 @@ export async function POST(request: NextRequest) {
     });
 
     if (error) {
-      // 42P01 = table missing (migration 021 not applied yet) — degrade politely.
+      // A missing table (migration 021 not applied) arrives as PGRST205 from
+      // PostgREST, not 42P01 — the code is logged either way.
       log.error('spot_feedback.insert_failed', { code: error.code, message: error.message });
       return NextResponse.json({ error: 'Kunne ikke lagre tilbakemeldingen' }, { status: 500 });
     }

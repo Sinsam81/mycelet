@@ -2,8 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   advanceSoilMoistureIndex,
   computeSoilMoistureIndex,
-  evapotranspirationMmPerDay,
-  SOIL_CAPACITY_MM
+  evapotranspirationMmPerDay
 } from '@/lib/weather/soil-moisture';
 
 describe('evapotranspirationMmPerDay', () => {

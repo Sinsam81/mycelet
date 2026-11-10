@@ -1,0 +1,75 @@
+-- ============================================
+-- Migrasjon 074: verified_foragers — kolonnerettigheter etter behov
+-- ============================================
+--
+-- ⚠️ KJØRES SAMME DAG SOM UTGIVELSEN DEN KOM I — ETTER DEPLOY, IKKE FØR.
+-- De fem stegene står øverst i docs/migrasjoner-a-kjore.md: deploy → last ned
+-- dataeksporten én gang → lim inn denne fila → kontroller → skriv datoen i
+-- hovedboka. Limes fila inn før den nye koden er ute, svarer /api/me/export med
+-- feil for alle brukere til utgivelsen er på plass (se «HVA SOM FORTSATT
+-- VIRKER» under).
+--
+-- BAKGRUNN
+-- Migrasjon 006 ga tabellen kolonnen `note`, som admin-siden kaller «Intern
+-- merknad». RLS avgjør hvilke RADER en rolle får lese, ikke hvilke KOLONNER,
+-- og prosjektets standardrettigheter gir nye tabeller alt til anon og
+-- authenticated. En kolonne som bare er ment for moderatorene, må derfor
+-- stenges med kolonnerettigheter — samme lærdom som i 044 og 052.
+--
+-- HVA DENNE GJØR
+-- Tar bort tabellrettighetene for anon og authenticated og gir tilbake SELECT
+-- på bare de kolonnene forumet trenger for å vise merket. Rekkefølgen er
+-- viktig: kolonnerettigheter legges OPPÅ tabellrettigheter, så en GRANT på
+-- kolonner uten REVOKE først endrer ingenting.
+--
+-- HVA SOM FORTSATT VIRKER
+--   - Forumet leser `verified_foragers(role,badge_label)` gjennom profiles —
+--     trenger bare user_id, role og badge_label.
+--   - /admin/forum-trust og /admin leser og skriver med tjenesterollen
+--     (service_role røres ikke her).
+--   - /api/me/export leser brukerens egen rad med tjenesterollen, så
+--     merknaden følger fortsatt med i art. 15-eksporten. Den koden må være
+--     deployet FØR denne migrasjonen kjøres — med øktklienten og `select('*')`
+--     ville eksporten fått 42501.
+--
+-- BIVIRKNINGER Å KJENNE TIL
+--   - Policyen «Moderators manage verified foragers» (006/058) blir uten
+--     virkning for skriving gjennom en innlogget økt, fordi rollen ikke lenger
+--     har INSERT/UPDATE/DELETE på tabellen. Ingen kode skriver den veien i dag;
+--     admin-ruten bruker tjenesterollen etter å ha sjekket moderatorrollen selv.
+--   - Enhver framtidig `select('*')` mot tabellen fra nettleseren eller en
+--     øktklient vil feile med 42501. Velg kolonnene eksplisitt.
+--   - GRANT-blokka i CLAUDE.md for gjenoppretting etter `DROP SCHEMA`
+--     (GRANT ALL ON ALL TABLES …) opphever dette stille. Kjør denne
+--     migrasjonen på nytt etter en slik gjenoppretting.
+--
+-- Idempotent: REVOKE og GRANT kan kjøres flere ganger med samme resultat.
+
+REVOKE ALL ON public.verified_foragers FROM anon;
+REVOKE ALL ON public.verified_foragers FROM authenticated;
+
+GRANT SELECT (user_id, role, badge_label, created_at, updated_at)
+  ON public.verified_foragers TO anon, authenticated;
+
+-- ── Kontroll etter kjøring ─────────────────────────────────────────────────
+-- Det avgjørende svaret — skal gi false og false. Den spør rettighetssystemet
+-- direkte, så svaret er det samme uansett hvem som kjører spørringen og
+-- hvordan rettigheten er gitt (raden 074 i hovedbokas spørring gjør det samme):
+--
+-- SELECT has_column_privilege('anon', 'public.verified_foragers', 'note', 'SELECT') AS anon_leser_merknaden,
+--        has_column_privilege('authenticated', 'public.verified_foragers', 'note', 'SELECT') AS innlogget_leser_merknaden;
+--
+-- Detaljene. Skal IKKE inneholde `note` for anon eller authenticated:
+--
+-- SELECT grantee, column_name, privilege_type
+--   FROM information_schema.column_privileges
+--  WHERE table_schema = 'public' AND table_name = 'verified_foragers'
+--    AND grantee IN ('anon', 'authenticated')
+--  ORDER BY grantee, column_name;
+--
+-- Skal gi NULL RADER (ingen tabellrettigheter igjen for de to rollene):
+--
+-- SELECT grantee, privilege_type
+--   FROM information_schema.role_table_grants
+--  WHERE table_schema = 'public' AND table_name = 'verified_foragers'
+--    AND grantee IN ('anon', 'authenticated');

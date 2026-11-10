@@ -7,7 +7,6 @@ import { kanFaaProveperiode } from '@/lib/billing/provetilbud';
 import { getPlanViewState } from '@/lib/billing/plan-state';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { useBillingStatus } from '@/lib/hooks/useBilling';
-import { useIsNative } from '@/lib/hooks/useIsNative';
 
 function getTierLabel(
   tier: 'free' | 'premium' | 'season_pass',
@@ -36,7 +35,6 @@ export function Header() {
   // «Premium» i gull — merket ville da vært en tilgangserklæring appen ikke
   // holder.
   const tier = getPlanViewState(billingQuery.data?.capabilities).activeTier;
-  const native = useIsNative();
 
   return (
     <header className="sticky top-0 z-40 bg-gradient-to-b from-forest-900 to-forest-800 pt-[env(safe-area-inset-top)] text-white shadow-md">

@@ -12,6 +12,7 @@
 - Side: `/admin/forum-trust`
 - Krever moderator/admin-rolle.
 - Brukes til å tildele, oppdatere og fjerne badge uten manuell SQL.
+- Feltet «Intern merknad» (`note`) er ment for moderatorene, men det følger med i brukerens egen dataeksport (`/api/me/export`) – skriv det slik at brukeren kan lese det. Hvem som ellers får lese kolonnen, styres av migrasjon 074; status står i `docs/migrasjoner-a-kjore.md`.
 
 ## Eksempel: gi badge
 ```sql

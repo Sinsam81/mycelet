@@ -6,8 +6,8 @@
  *   ✗ Per-instance only. State lives in module-scoped Map; a horizontally
  *     scaled deployment (Vercel auto-scales) means N instances each with
  *     their own bucket. Effective limit is roughly N * configured limit.
- *     Acceptable for the beta tester program; replace with Upstash Redis
- *     or Vercel KV before opening to general traffic.
+ *     The app is live with this trade-off; replacing it with Upstash
+ *     Redis or Vercel KV is still an open follow-up.
  *   ✗ Resets on cold start. Each new lambda invocation starts with empty
  *     state. Bursts during a deploy can briefly exceed limits.
  *   ✗ Edge runtime not supported. Module-scoped Maps don't persist across

@@ -21,6 +21,8 @@ import { IDENTIFY_HISTORY_BUCKET } from '@/lib/identifications/config';
  * like an answer. That table is read with the admin client, filtered
  * explicitly on the caller's user_id. `prove_paaminnelser` and `prove_svar`
  * (migration 072, service-role only for the same reason) follow the same rule.
+ * `verified_foragers` is read the same way since migration 074 withdrew the
+ * moderators' internal `note` column from the anon and authenticated roles.
  *
  * FAIL CLOSED. Every query is checked, and a single failure aborts the whole
  * export with a 500. Earlier this endpoint did `findings.data ?? []` on each
@@ -153,7 +155,12 @@ export async function GET(request: NextRequest) {
     reportsFiled: { shape: 'many', query: mange('reports', 'reporter_id', user.id, 'id') },
     billing: { shape: 'one', query: supabase.from('billing_subscriptions').select('*').eq('user_id', user.id).maybeSingle() },
     moderatorRole: { shape: 'one', query: supabase.from('moderator_roles').select('*').eq('user_id', user.id).maybeSingle() },
-    verifiedForager: { shape: 'one', query: supabase.from('verified_foragers').select('*').eq('user_id', user.id).maybeSingle() },
+    // Leses med tjenesterollen, filtrert på brukerens egen id: migrasjon 074
+    // tar `note` (moderatorenes interne merknad) ut av det anon og innloggede
+    // roller får lese, så `select('*')` med øktklienten ville gitt 42501 og
+    // stoppet hele eksporten. Merknaden handler om brukeren selv og hører med
+    // i en art. 15-eksport. Lesingen virker likt før og etter migrasjonen.
+    verifiedForager: { shape: 'one', query: admin.from('verified_foragers').select('*').eq('user_id', user.id).maybeSingle() },
     // Tilbakemeldingene på «Var du her? Fant du sopp?». Dette er det datasettet
     // med de mest presise koordinatene vi lagrer om en bruker: latitude og
     // longitude med fem desimaler (~1 m), utenfor visibility-modellen og
