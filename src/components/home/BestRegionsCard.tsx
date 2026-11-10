@@ -187,7 +187,7 @@ export function BestRegionsCard() {
       </div>
 
       {/* Forbeholdet hører i detaljen, ikke i overskriften — men det skal stå. */}
-      <p className="mt-2 text-[11px] leading-relaxed text-gray-400">{t('bestRegionsDisclaimer')}</p>
+      <p className="mt-2 text-[11px] leading-relaxed text-gray-600">{t('bestRegionsDisclaimer')}</p>
     </article>
   );
 }

@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useAuth } from '@/lib/hooks/useAuth';
+import { useDialogFokus } from '@/components/ui/useDialogFokus';
 
 /**
  * Three-screen first-run intro. Shows once (localStorage-versioned), can be
@@ -99,15 +100,21 @@ export function OnboardingIntro() {
     };
   }, [user, loading]);
 
-  if (!visible) return null;
-
-  const current = STEPS[step];
-  const last = step === STEPS.length - 1;
-
   function finish() {
     markDone();
     setVisible(false);
   }
+
+  // Escape betyr det samme som et trykk på sløret: «gå videre». Kroken lytter
+  // bare på tastaturet og setter aldri `inert` — introen kan fortsatt ikke
+  // sperre appen (se kommentaren ved sløret under).
+  const panelRef = useRef<HTMLDivElement>(null);
+  useDialogFokus(panelRef, { aapen: visible, onLukk: finish });
+
+  if (!visible) return null;
+
+  const current = STEPS[step];
+  const last = step === STEPS.length - 1;
 
   return (
     // Sentrert (ikke bunnforankret) med rullbar overflate og lukking ved trykk
@@ -115,16 +122,25 @@ export function OnboardingIntro() {
     // appen selv om viewporten skulle stå forskjøvet — se tastaturForstyrrer().
     // Sløret er skippbart av design, så et trykk utenfor kortet betyr «gå videre».
     <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="onboarding-intro-tittel"
       className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto bg-forest-950/70 px-4 py-8 backdrop-blur-sm"
       onClick={(e) => {
         if (e.target === e.currentTarget) finish();
       }}
     >
-      <div className="max-h-[calc(100dvh-4rem)] w-full max-w-md overflow-y-auto rounded-2xl bg-white p-6 shadow-card">
+      <div
+        ref={panelRef}
+        tabIndex={-1}
+        className="max-h-[calc(100dvh-4rem)] w-full max-w-md overflow-y-auto rounded-2xl bg-white p-6 shadow-card outline-none"
+      >
         <div className="text-5xl" aria-hidden="true">
           {current.emoji}
         </div>
-        <h2 className="mt-4 font-serif text-2xl font-semibold text-forest-950">{t(current.titleKey)}</h2>
+        <h2 id="onboarding-intro-tittel" className="mt-4 font-serif text-2xl font-semibold text-forest-950">
+          {t(current.titleKey)}
+        </h2>
         <p className="mt-2 text-sm leading-relaxed text-gray-700">{t(current.bodyKey)}</p>
 
         <div className="mt-5 flex items-center gap-1.5" aria-hidden="true">

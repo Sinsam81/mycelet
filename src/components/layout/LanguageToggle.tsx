@@ -35,7 +35,8 @@ export function LanguageToggle() {
           onClick={() => change(l)}
           disabled={pending}
           aria-pressed={l === locale}
-          className={`rounded-md px-2 py-1 font-medium transition disabled:opacity-60 ${
+          // before:-flaten gir 44 px treffhøyde uten at bryteren blir høyere å se på.
+          className={`relative rounded-md px-2 py-1 font-medium transition before:absolute before:inset-x-0 before:-inset-y-2 before:content-[''] disabled:opacity-60 ${
             l === locale ? 'bg-forest-800 text-white' : 'text-gray-700 hover:bg-gray-100'
           }`}
         >

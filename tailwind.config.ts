@@ -7,6 +7,11 @@ const config: Config = {
     extend: {
       colors: {
         forest: {
+          // 950 manglet, men ble brukt fire steder (sløret og overskriften i
+          // introen, kortoverskriftene på Mine steder og Identifiseringer).
+          // Tailwind lager ingen CSS for en ukjent farge, så sløret var
+          // gjennomsiktig. Låst i src/lib/__tests__/tailwind-farger.test.ts.
+          950: '#0F2105',
           900: '#1A3409',
           800: '#2D5016',
           700: '#3A6B1E',

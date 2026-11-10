@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { useLocale, useTranslations } from 'next-intl';
@@ -11,6 +11,7 @@ import { planLofte } from '@/lib/billing/prove-lofte';
 import { passDekning } from '@/lib/billing/sesongtekst';
 import { meldTilbudsarkApent } from '@/lib/billing/tilbudsark-apent';
 import { useProveLofte } from '@/lib/hooks/useProveLofte';
+import { LUKKEKNAPP_KLASSER, useDialogFokus } from '@/components/ui/useDialogFokus';
 
 /** Hva som fikk arket til å vises — samme verdier som bruksdag-raden «tilbud» lagrer. */
 export type TilbudUtloser = (typeof TILBUD_UTLOSERE)[number];
@@ -67,6 +68,9 @@ export function ProvGratisArk({
   const t = useTranslations('ProvGratisArk');
   const locale = useLocale();
   const lofte = useProveLofte();
+  // Escape = «Ikke nå», samme som et trykk på bakteppet — aldri «start».
+  const panelRef = useRef<HTMLDivElement>(null);
+  useDialogFokus(panelRef, { aapen: true, onLukk: onIkkeNaa });
   // Mens arket ligger her, skal ingen annen flate stille sitt eget spørsmål
   // under det (tilbudsark-apent.ts). Ett spørsmål om gangen.
   useEffect(() => meldTilbudsarkApent(), []);
@@ -143,13 +147,18 @@ export function ProvGratisArk({
     >
       {/* Passvilkårene gjør arket høyere enn før; på en liten telefon (iPhone SE, 667 px)
           skal «Ikke nå» fortsatt nås — arket ruller heller enn å skyve knappen ut. */}
-      <div onClick={(e) => e.stopPropagation()} className="max-h-[calc(100dvh-1.5rem)] w-full max-w-md overflow-y-auto rounded-2xl bg-white p-5 shadow-xl">
+      <div
+        ref={panelRef}
+        tabIndex={-1}
+        onClick={(e) => e.stopPropagation()}
+        className="max-h-[calc(100dvh-1.5rem)] w-full max-w-md overflow-y-auto rounded-2xl bg-white p-5 shadow-xl outline-none"
+      >
         <div className="flex items-start justify-between gap-3">
           <h2 id="provetilbud-tittel" className="font-serif text-xl font-semibold text-forest-900">
             {tittel}
           </h2>
-          <button type="button" aria-label={t('lukk')} onClick={onIkkeNaa} className="rounded-full p-1 text-gray-500 hover:bg-gray-100">
-            <X className="h-5 w-5" />
+          <button type="button" aria-label={t('lukk')} onClick={onIkkeNaa} className={LUKKEKNAPP_KLASSER}>
+            <X className="h-5 w-5" aria-hidden />
           </button>
         </div>
         <p className="mt-2 text-sm leading-relaxed text-gray-700">{t(begrenset ? 'tekst' : 'tekstStart')}</p>

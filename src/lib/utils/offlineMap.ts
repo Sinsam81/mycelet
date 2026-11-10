@@ -29,8 +29,37 @@ export interface OfflineArea {
 }
 
 export interface CacheAreaResult {
+  /** Fliser som ligger i cachen etterpå. Alltid minst én — se NoTilesCachedError. */
   cached: number;
   failed: number;
+}
+
+/**
+ * Kastes av cacheMapTilesForArea når ikke én eneste flis for området ligger i
+ * cachen etter forsøket: ingen dekning, et nett som ikke svarer, en flisserver
+ * som bare gir feil, full lagring — eller en nettleser uten CacheStorage.
+ *
+ * Hvorfor en feil, og ikke { cached: 0, failed: N } som før: kartets «Lagre
+ * kartområde» legger resultatet øverst i lista over lagrede områder og kaster
+ * det eldste ut når lista er full — med flisene. Et «område» uten fliser er
+ * ikke et offline-kart. På én strek byttet det ut et ekte, nedlastet område mot
+ * et tomt, akkurat der det gamle ikke kan lastes ned igjen, og hvert nytt
+ * forsøk tok ett til. Kvitteringen sa dessuten «Området ble lagret».
+ *
+ * Det var mulig også før (uten nett kastet hver fetch med en gang), men ble
+ * vanlig da lagringen fikk frist og begynte å bli ferdig på et nett som
+ * henger. Et avvist løfte kan ikke leses som en lagring: kallstedet havner i
+ * sin catch, lista og flisene står urørt.
+ */
+export class NoTilesCachedError extends Error {
+  /** Hvor mange fliser som ble forsøkt og feilet (0 når ingenting kunne forsøkes). */
+  readonly failed: number;
+
+  constructor(failed: number) {
+    super('No map tiles could be stored for the offline area');
+    this.name = 'NoTilesCachedError';
+    this.failed = failed;
+  }
 }
 
 const STORAGE_KEY = 'mycelet.offline-areas.v1';
@@ -46,6 +75,20 @@ export const SATELLITE_TILE_TEMPLATE = 'https://server.arcgisonline.com/ArcGIS/r
 const DEFAULT_TILE_TEMPLATE = TERRAIN_TILE_TEMPLATE;
 const CACHE_NAME = 'mycelet-map-tiles-v1';
 const MAX_TILES_PER_SAVE = 550;
+
+// Lagringen hentet alle flisene (opptil 550) i én Promise.all uten frist. Én
+// flis som verken svarte eller feilet — det vanlige på én strek dekning — holdt
+// «lagrer …» åpen for alltid, og området ble aldri registrert.
+//
+// Nå: en liten kø og en frist per flis. Køen er ikke pynt — med 550 samtidige
+// fetch stiller nettleseren dem bak ~6 forbindelser per vert, og en frist som
+// startet da forespørselen ble OPPRETTET ville avbrutt friske fliser som bare
+// sto i kø. Fristen starter derfor først når en arbeider faktisk sender.
+export const TILE_FETCH_CONCURRENCY = 6;
+export const TILE_FETCH_TIMEOUT_MS = 15_000;
+// Henger nettet helt, skal ikke 550 fliser × 15 s ventes ut (over 20 minutter).
+// Etter så mange frister på rad uten ett eneste svar regnes resten som feilet.
+export const TILE_TIMEOUTS_BEFORE_GIVING_UP = 12;
 
 // Match Leaflet's own subdomain distribution so the URLs we pre-cache are
 // byte-identical to the ones Leaflet requests when it later renders offline
@@ -233,18 +276,25 @@ function uniqueTileUrls(bounds: OfflineAreaBounds, zoomLevels: number[], templat
   return Array.from(merged).slice(0, MAX_TILES_PER_SAVE);
 }
 
+/**
+ * Laster ned og lagrer flisene for et område.
+ *
+ * Løses med tellingen når MINST ÉN flis ligger i cachen etterpå (også fliser
+ * som lå der fra før). Avvises med NoTilesCachedError når ingen gjør det — et
+ * område uten fliser skal ikke registreres som lagret. Se klassen over.
+ */
 export async function cacheMapTilesForArea(
   bounds: OfflineAreaBounds,
   zoomLevels: number[],
   template: string = DEFAULT_TILE_TEMPLATE
 ): Promise<CacheAreaResult> {
   if (typeof window === 'undefined' || !('caches' in window)) {
-    return { cached: 0, failed: 0 };
+    throw new NoTilesCachedError(0);
   }
 
   const urls = uniqueTileUrls(bounds, zoomLevels, template);
   if (urls.length === 0) {
-    return { cached: 0, failed: 0 };
+    throw new NoTilesCachedError(0);
   }
 
   const cache = await caches.open(CACHE_NAME);
@@ -252,29 +302,59 @@ export async function cacheMapTilesForArea(
   let cached = 0;
   let failed = 0;
 
-  await Promise.all(
-    urls.map(async (url) => {
+  let next = 0;
+  let timeoutsInARow = 0;
+
+  const worker = async () => {
+    while (next < urls.length) {
+      const url = urls[next++];
+      // Nettet svarer ikke i det hele tatt: tell resten ærlig som feilet.
+      if (timeoutsInARow >= TILE_TIMEOUTS_BEFORE_GIVING_UP) {
+        failed += 1;
+        continue;
+      }
+
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      let timedOut = false;
       try {
         const request = new Request(url, { method: 'GET' });
         const existing = await cache.match(request);
         if (existing) {
           cached += 1;
-          return;
+          continue;
         }
 
-        const response = await fetch(request);
+        // AbortController + setTimeout, ikke AbortSignal.timeout: den siste
+        // finnes ikke i eldre WKWebView. Fristen dekker også lesingen av
+        // kroppen i cache.put, derfor ryddes den først i finally.
+        const controller = new AbortController();
+        timer = setTimeout(() => {
+          timedOut = true;
+          controller.abort();
+        }, TILE_FETCH_TIMEOUT_MS);
+
+        const response = await fetch(request, { signal: controller.signal });
         if (!response.ok) {
+          timeoutsInARow = 0;
           failed += 1;
-          return;
+          continue;
         }
 
         await cache.put(request, response.clone());
+        timeoutsInARow = 0;
         cached += 1;
       } catch {
+        if (timedOut) timeoutsInARow += 1;
         failed += 1;
+      } finally {
+        if (timer !== undefined) clearTimeout(timer);
       }
-    })
-  );
+    }
+  };
+
+  await Promise.all(Array.from({ length: Math.min(TILE_FETCH_CONCURRENCY, urls.length) }, worker));
+
+  if (cached === 0) throw new NoTilesCachedError(failed);
 
   return { cached, failed };
 }

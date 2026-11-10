@@ -28,10 +28,15 @@ const labelKeys: Record<Edibility, string> = {
   unknown: 'unknown'
 };
 
-const classes: Record<Edibility, string> = {
-  edible: 'bg-emerald-600 text-white',
-  conditionally_edible: 'bg-amber-500 text-white',
-  inedible: 'bg-orange-500 text-white',
+// Kontrast mot WCAG AA (4,5:1) — merket er 12 px og ofte den eneste
+// sikkerhetsinformasjonen på skjermen. Hvit tekst på amber-500 var 2,15:1, på
+// orange-500 2,80:1 og på emerald-600 3,77:1. De to gule/oransje har derfor
+// mørk tekst i stedet for en mørkere flate: en mørk oransje ville ligget for
+// nær det røde «giftig». Låst i __tests__/edibility-badge-kontrast.test.ts.
+export const edibilityBadgeClasses: Record<Edibility, string> = {
+  edible: 'bg-emerald-700 text-white',
+  conditionally_edible: 'bg-amber-400 text-amber-950',
+  inedible: 'bg-orange-500 text-orange-950',
   toxic: 'bg-red-600 text-white',
   deadly: 'bg-red-900 text-white',
   unknown: 'bg-gray-500 text-white'
@@ -40,7 +45,7 @@ const classes: Record<Edibility, string> = {
 export function EdibilityBadge({ edibility }: EdibilityBadgeProps) {
   const t = useTranslations('EdibilityBadge');
   return (
-    <span className={cn('inline-flex rounded-full px-2.5 py-1 text-xs font-semibold shadow-sm', classes[edibility])}>
+    <span className={cn('inline-flex rounded-full px-2.5 py-1 text-xs font-semibold shadow-sm', edibilityBadgeClasses[edibility])}>
       {t(labelKeys[edibility])}
     </span>
   );

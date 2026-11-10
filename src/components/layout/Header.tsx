@@ -45,25 +45,34 @@ export function Header() {
           <MushroomMark className="h-5 w-5 text-amber-400" />
           Mycelet
         </Link>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1">
           {/* The badge links to /pricing on BOTH web and native. It used to be
               a dead span in the shell (App Store 3.1.1-era gating, when pricing
               only offered Stripe) — with IAP live, natives need the path too. */}
           {/* Merket venter til betalingsstatusen er kjent: før svaret er tier «free»,
               og et «Prøv gratis» som blinker for en betalende kunde er feil løfte. */}
           {!loading && user && !billingQuery.isLoading ? (
-            <Link
-              href="/pricing"
-              className={`rounded-full px-2.5 py-1 text-[11px] font-semibold transition-opacity hover:opacity-90 ${
-                tier === 'free' ? 'bg-white/15 text-white' : 'bg-amber-400 text-forest-900'
-              }`}
-            >
-              {tier === 'free' && kanFaaProveperiode(billingQuery.data) ? t('tryFree') : getTierLabel(tier, t)}
+            // Lenken er 44 px høy (treffflaten); selve merket er den indre
+            // spennen og ser ut som før. Merket alene var ~24 px høyt, rett
+            // ved siden av profilknappen.
+            <Link href="/pricing" className="inline-flex min-h-[44px] items-center transition-opacity hover:opacity-90">
+              <span
+                className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+                  tier === 'free' ? 'bg-white/15 text-white' : 'bg-amber-400 text-forest-900'
+                }`}
+              >
+                {tier === 'free' && kanFaaProveperiode(billingQuery.data) ? t('tryFree') : getTierLabel(tier, t)}
+              </span>
             </Link>
           ) : null}
 
-          <Link href="/profile" aria-label={t('profileAriaLabel')} className="rounded-full p-2 hover:bg-white/10">
-            <User className="h-5 w-5" />
+          {/* 44 × 44 px treffflate (var 36). -mr-1 og gap-1 holder ikonet der det sto. */}
+          <Link
+            href="/profile"
+            aria-label={t('profileAriaLabel')}
+            className="-mr-1 flex h-11 w-11 items-center justify-center rounded-full hover:bg-white/10"
+          >
+            <User className="h-5 w-5" aria-hidden />
           </Link>
         </div>
       </div>

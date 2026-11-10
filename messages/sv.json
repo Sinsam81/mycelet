@@ -1408,7 +1408,7 @@
     "generatedAreaName": "Område {date} {time}",
     "offlineCacheFailed": "Kunde inte cacha kartrutor i webbläsaren. Området sparades, men utan offlinerutor.",
     "offlineSaved": "Område sparat. {count} kartrutor klara offline.",
-    "offlineSaveError": "Fel vid sparande av offlineområde.",
+    "offlineSaveError": "Området sparades inte, eftersom inga kartrutor gick att spara. Försök igen när du har bättre täckning.",
     "promisingSpotsFor": "Lovande platser för {species}",
     "reset": "Nollställ",
     "whichMushroomToday": "🍄 Vilken svamp vill du hitta idag?",
@@ -1601,7 +1601,8 @@
     "library": "Bibliotek",
     "map": "Karta",
     "calendar": "Kalender",
-    "forum": "Forum"
+    "forum": "Forum",
+    "ariaLabel": "Huvudmeny"
   },
   "ProvGratisArk": {
     "tittel": "Se alla 12 lovande områden",

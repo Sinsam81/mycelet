@@ -20,12 +20,27 @@
  * src/lib/utils/__tests__/offline-shell.test.ts. Én av testene sammenligner
  * flis-URL-ene herfra mot dem src/lib/utils/offlineMap.ts LAGRET — de to må
  * være byte-identiske, ellers bommer oppslaget i cachen og kartet blir tomt.
+ * Oppstarten nederst (overskrift, forklaring, «prøv på nytt») kjøres mot den
+ * ekte index.html i offline-shell-dom.test.ts.
  */
 
 export const TILE_SIZE = 256;
 export const TILE_CACHE_NAME = 'mycelet-map-tiles-v1';
 export const AREAS_STORAGE_KEY = 'mycelet.offline-areas.v1';
 export const LOCALE_COOKIE = 'MYCELET_LOCALE';
+
+/**
+ * Meldingen «Prøv å laste appen på nytt» sender til service workeren. Må være
+ * lik WAIT_FOR_NETWORK_MESSAGE i public/sw.js — service-worker-offline.test.ts
+ * sender denne til den ekte workeren og feiler hvis de to glir fra hverandre.
+ */
+export const WAIT_FOR_NETWORK_MESSAGE = 'mycelet:wait-for-network';
+
+/** Adressene skallet selv bor på (se rewrites i next.config.js). */
+const SHELL_PATHS = ['/offline', '/offline/', '/offline/index.html'];
+
+/** Så lenge står «Prøv å laste appen på nytt» låst etter et trykk. */
+const RETRY_LOCK_MS = 60000;
 
 /** Så stort rutenett vi tegner. 12 × 12 fliser = 3072 px, rikelig å panorere i. */
 export const MAX_GRID_SPAN = 12;
@@ -178,6 +193,9 @@ const COPY = {
   nb: {
     headingOffline: 'Du er uten nett',
     headingOnline: 'Offline-kart',
+    headingNoResponse: 'Nettet svarer ikke',
+    noResponseNote:
+      'Siden du ba om kom ikke fram, fordi nettet ikke svarte i tide. Derfor ser du offline-kartet i stedet. Knappen nederst på siden prøver på nytt, og venter da lenger på nettet.',
     areasHeading: 'Lagrede kartområder',
     noAreas:
       'Du har ingen lagrede kartområder. Åpne kartet mens du har dekning og lagre området du skal gå i (krever Premium eller Sesongpass).',
@@ -194,11 +212,15 @@ const COPY = {
     positionOutside: 'Du står utenfor dette kartområdet.',
     positionDenied: 'Posisjon er ikke tillatt, så du vises ikke på kartet.',
     positionUnavailable: 'Fikk ikke tak i posisjonen din.',
-    retry: 'Prøv å laste appen på nytt'
+    retry: 'Prøv å laste appen på nytt',
+    retrying: 'Venter på nettet …'
   },
   sv: {
     headingOffline: 'Du är utan nät',
     headingOnline: 'Offlinekarta',
+    headingNoResponse: 'Nätet svarar inte',
+    noResponseNote:
+      'Sidan du bad om kom inte fram, eftersom nätet inte svarade i tid. Därför ser du offlinekartan i stället. Knappen längst ner på sidan försöker igen, och väntar då längre på nätet.',
     areasHeading: 'Sparade kartområden',
     noAreas:
       'Du har inga sparade kartområden. Öppna kartan medan du har täckning och spara området du ska gå i (kräver Premium eller Säsongspass).',
@@ -215,7 +237,8 @@ const COPY = {
     positionOutside: 'Du står utanför det här kartområdet.',
     positionDenied: 'Position är inte tillåten, så du visas inte på kartan.',
     positionUnavailable: 'Kunde inte hämta din position.',
-    retry: 'Försök ladda appen igen'
+    retry: 'Försök ladda appen igen',
+    retrying: 'Väntar på nätet …'
   }
 };
 
@@ -224,8 +247,61 @@ export function readLocale(cookieString) {
   return match && match[1].trim() === 'sv' ? 'sv' : 'nb';
 }
 
+/**
+ * Hvorfor ser brukeren skallet?
+ *
+ *   'offline'    — enheten sier selv at den er uten nett.
+ *   'noResponse' — enheten er påkoblet, men skallet står på en ANNEN adresse
+ *                  enn sin egen. Da har service workeren svart med det i stedet
+ *                  for siden brukeren ba om: nettet svarte ikke innen fristen
+ *                  (v6 i public/sw.js), eller forespørselen feilet.
+ *   'direct'     — brukeren åpnet /offline selv, med nett.
+ *
+ * Skillet finnes fordi skallet precaches for ALLE, ikke bare for dem som har
+ * lagret et kart. Uten 'noResponse' fikk en gratisbruker på tregt nett
+ * overskriften «Offline-kart» og «Du har ingen lagrede kartområder» i stedet
+ * for artssiden hen ba om, uten ett ord om at det var nettet som ikke svarte.
+ */
+export function shellReason(pathname, online) {
+  if (!online) return 'offline';
+  return SHELL_PATHS.includes(pathname) ? 'direct' : 'noResponse';
+}
+
+/** Overskriften, og forklaringen under den når skallet står i stedet for en annen side. */
+export function shellIntro(locale, reason) {
+  const copy = COPY[locale] || COPY.nb;
+  if (reason === 'offline') return { heading: copy.headingOffline, note: null };
+  if (reason === 'noResponse') return { heading: copy.headingNoResponse, note: copy.noResponseNote };
+  return { heading: copy.headingOnline, note: null };
+}
+
+/**
+ * «Prøv å laste appen på nytt»: si fra til service workeren, last så på nytt.
+ *
+ * Meldingen ber workeren vente på nettet uten frist denne ene gangen (v7 i
+ * public/sw.js). Før ble et nytt forsøk på tregt nett kuttet etter ti sekunder
+ * akkurat som det første, og siden kunne ikke lastes i det hele tatt. Workeren
+ * husker selv adressen som fikk skallet, men bare så lenge den lever — denne
+ * meldingen dekker brukeren som leser skallet en stund før hen trykker.
+ * Rekkefølgen er poenget: meldingen må være sendt FØR navigasjonen starter.
+ *
+ * Delene sendes inn i stedet for å leses fra window her, så rekkefølgen og
+ * fallbackene kan testes uten nettleser. `nav` er navigator: selve oppslaget
+ * av .serviceWorker kan kaste der lagring er sperret, og skal derfor skje
+ * innenfor try-blokken — knappen må laste på nytt uansett.
+ */
+export function retryWithNetworkWait(nav, href, reload) {
+  try {
+    const worker = nav && nav.serviceWorker && nav.serviceWorker.controller;
+    if (worker) worker.postMessage({ type: WAIT_FOR_NETWORK_MESSAGE, url: href });
+  } catch {
+    // Ingen worker som hører etter: da gjelder fristen som før. Last på nytt likevel.
+  }
+  reload();
+}
+
 /* ------------------------------------------------------------------ */
-/* Fra her og ned: DOM. Kjøres bare i nettleseren, aldri under test.    */
+/* Fra her og ned: DOM. Kjøres i nettleseren, og i jsdom-testen.        */
 /* ------------------------------------------------------------------ */
 
 function applyStaticCopy(locale) {
@@ -325,6 +401,7 @@ async function init() {
 
   const elements = {
     heading: document.getElementById('offline-heading'),
+    reason: document.getElementById('offline-reason'),
     list: document.getElementById('area-list'),
     empty: document.getElementById('area-empty'),
     view: document.getElementById('map-view'),
@@ -337,9 +414,38 @@ async function init() {
     retry: document.getElementById('retry')
   };
 
-  elements.heading.textContent = navigator.onLine ? copy.headingOnline : copy.headingOffline;
+  const intro = shellIntro(locale, shellReason(window.location.pathname, navigator.onLine));
+  elements.heading.textContent = intro.heading;
+  // Null-sjekken er ikke pynt: siden og dette skriptet precaches hver for seg,
+  // så et nytt skript kan en stund kjøre mot en eldre, cachet side uten
+  // elementet. Da skal resten av skallet fortsatt virke.
+  if (elements.reason && intro.note) {
+    elements.reason.textContent = intro.note;
+    elements.reason.hidden = false;
+  }
+
   elements.retry.textContent = copy.retry;
-  elements.retry.addEventListener('click', () => window.location.reload());
+  let retrying = false;
+  elements.retry.addEventListener('click', () => {
+    // Siden blir stående til den nye er på plass, og i appen finnes det ingen
+    // lastestrek. Uten et synlig tegn trykker folk en gang til — og hvert
+    // trykk starter forespørselen forfra. Derfor: ny tekst, og trykk imens
+    // gjør ingenting.
+    if (retrying) return;
+    retrying = true;
+    // aria-disabled, ikke disabled: en knapp som blir disabled mens den har
+    // fokus, mister fokuset — og skjermleseren mister stedet sitt i siden.
+    elements.retry.setAttribute('aria-disabled', 'true');
+    elements.retry.textContent = copy.retrying;
+    // Sikkerhetsnett: blir lastingen avbrutt uten at siden byttes ut, skal
+    // knappen ikke stå død resten av turen.
+    window.setTimeout(() => {
+      retrying = false;
+      elements.retry.removeAttribute('aria-disabled');
+      elements.retry.textContent = copy.retry;
+    }, RETRY_LOCK_MS);
+    retryWithNetworkWait(navigator, window.location.href, () => window.location.reload());
+  });
 
   if (!('caches' in window)) {
     elements.empty.textContent = copy.noCacheApi;

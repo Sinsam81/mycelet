@@ -1408,7 +1408,7 @@
     "generatedAreaName": "Område {date} {time}",
     "offlineCacheFailed": "Kunne ikke cache kartfliser i nettleseren. Området ble lagret, men uten offline-fliser.",
     "offlineSaved": "Område lagret. {count} kartfliser klare offline.",
-    "offlineSaveError": "Feil under lagring av offline-område.",
+    "offlineSaveError": "Området ble ikke lagret, fordi ingen kartfliser lot seg lagre. Prøv igjen når du har bedre dekning.",
     "promisingSpotsFor": "Lovende steder for {species}",
     "reset": "Nullstill",
     "whichMushroomToday": "🍄 Hvilken sopp vil du finne i dag?",
@@ -1601,7 +1601,8 @@
     "library": "Bibliotek",
     "map": "Kart",
     "calendar": "Kalender",
-    "forum": "Forum"
+    "forum": "Forum",
+    "ariaLabel": "Hovedmeny"
   },
   "ProvGratisArk": {
     "tittel": "Se alle 12 lovende områdene",

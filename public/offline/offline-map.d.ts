@@ -39,10 +39,21 @@ export interface OfflineShellArea {
   createdAt?: string;
 }
 
+/** Hvorfor skallet vises — se shellReason i offline-map.js. */
+export type OfflineShellReason = 'offline' | 'noResponse' | 'direct';
+
+/** Det skallet trenger av navigator for å si fra til service workeren før et nytt forsøk. */
+export interface OfflineShellNavigator {
+  serviceWorker?: {
+    controller?: { postMessage(message: { type: string; url: string }): void } | null;
+  } | null;
+}
+
 export const TILE_SIZE: number;
 export const TILE_CACHE_NAME: string;
 export const AREAS_STORAGE_KEY: string;
 export const LOCALE_COOKIE: string;
+export const WAIT_FOR_NETWORK_MESSAGE: string;
 export const MAX_GRID_SPAN: number;
 export const TILE_TEMPLATES: string[];
 
@@ -58,3 +69,13 @@ export function projectToGrid(
 ): { x: number; y: number; inside: boolean };
 export function parseAreas(raw: string | null | undefined): OfflineShellArea[];
 export function readLocale(cookieString: string | null | undefined): 'nb' | 'sv';
+export function shellReason(pathname: string, online: boolean): OfflineShellReason;
+export function shellIntro(
+  locale: 'nb' | 'sv',
+  reason: OfflineShellReason
+): { heading: string; note: string | null };
+export function retryWithNetworkWait(
+  nav: OfflineShellNavigator | null | undefined,
+  href: string,
+  reload: () => void
+): void;

@@ -18,6 +18,7 @@ import { perMaanedAvAarspris, seasonPriceComesFromStore, showsStorePrices } from
 import { statusLabel, tierLabel } from '@/lib/billing/labels';
 import { APPLE_ABONNEMENTER_URL, abonnementKanal, faq2Nokkel, periodelinje, periodelinjeVerdier } from '@/lib/billing/kanal';
 import { useIsNative } from '@/lib/hooks/useIsNative';
+import { rulleAtferd } from '@/lib/utils/bevegelse';
 import { RegistrerBruksdag } from '@/components/bruk/RegistrerBruksdag';
 import { NonNativeOnly } from '@/components/native/NonNativeOnly';
 import { NativeOnly } from '@/components/native/NativeOnly';
@@ -223,7 +224,7 @@ function PricingInner() {
     if (!focusedPlan) return;
     const el = cardRefs.current[focusedPlan];
     if (!el) return;
-    if (typeof el.scrollIntoView === 'function') el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    if (typeof el.scrollIntoView === 'function') el.scrollIntoView({ block: 'center', behavior: rulleAtferd() });
     el.focus({ preventScroll: true });
   }, [focusedPlan]);
 

@@ -1,9 +1,11 @@
 'use client';
 
+import { useRef } from 'react';
 import { createPortal } from 'react-dom';
 import toast from 'react-hot-toast';
 import { useTranslations } from 'next-intl';
 import { Copy, X } from 'lucide-react';
+import { LUKKEKNAPP_KLASSER, useDialogFokus } from '@/components/ui/useDialogFokus';
 
 /**
  * GPX i appskallet: WKWebView uten nedlastingsdelegat avbryter nedlastinger i
@@ -17,6 +19,8 @@ import { Copy, X } from 'lucide-react';
  */
 export function GpxKopierModal({ tittel, gpx, onClose }: { tittel: string; gpx: string; onClose: () => void }) {
   const t = useTranslations('MineSteder');
+  const panelRef = useRef<HTMLDivElement>(null);
+  useDialogFokus(panelRef, { aapen: true, onLukk: onClose });
 
   const kopier = async () => {
     try {
@@ -36,13 +40,18 @@ export function GpxKopierModal({ tittel, gpx, onClose }: { tittel: string; gpx: 
       onClick={onClose}
       className="fixed inset-0 z-[1100] flex items-end justify-center bg-black/50 p-4 sm:items-center"
     >
-      <div onClick={(e) => e.stopPropagation()} className="w-full max-w-lg rounded-2xl bg-white p-4 shadow-xl">
+      <div
+        ref={panelRef}
+        tabIndex={-1}
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-lg rounded-2xl bg-white p-4 shadow-xl outline-none"
+      >
         <div className="flex items-start justify-between gap-2">
           <h2 id="gpx-kopier-tittel" className="font-serif text-lg font-semibold text-forest-900">
             {tittel}
           </h2>
-          <button type="button" aria-label={t('gpxModalClose')} onClick={onClose}>
-            <X className="h-5 w-5 text-gray-500" />
+          <button type="button" aria-label={t('gpxModalClose')} onClick={onClose} className={LUKKEKNAPP_KLASSER}>
+            <X className="h-5 w-5" aria-hidden />
           </button>
         </div>
         <p className="mt-1 text-sm text-gray-700">{t('gpxModalBody')}</p>

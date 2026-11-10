@@ -376,7 +376,7 @@ export function MushroomDayCard({
       <div className="mt-2 flex items-center justify-between text-xs">
         <span className="text-gray-500">
           📍 {areaLabel}
-          {omtrentlig ? <span className="text-gray-400"> · {t('approximate')}</span> : null}
+          {omtrentlig ? <span className="text-gray-600"> · {t('approximate')}</span> : null}
         </span>
         <div className="flex items-center gap-3">
           {/* Også for en husket posisjon: den kan være gammel, og uten lenka her var

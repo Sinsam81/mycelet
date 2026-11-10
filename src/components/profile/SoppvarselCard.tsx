@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import toast from 'react-hot-toast';
 import { Bell, BellOff, Loader2 } from 'lucide-react';
+import { rulleAtferd } from '@/lib/utils/bevegelse';
 
 /**
  * Slå på soppvarsel for ett område.
@@ -82,7 +83,7 @@ export function SoppvarselCard() {
     if (laster) return;
     const params = new URLSearchParams(window.location.search);
     if (params.get('vis') === 'soppvarsel' || window.location.hash === '#soppvarsel') {
-      document.getElementById('soppvarsel')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      document.getElementById('soppvarsel')?.scrollIntoView({ behavior: rulleAtferd(), block: 'start' });
     }
   }, [laster]);
 

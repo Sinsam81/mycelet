@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   OSM_TILE_TEMPLATE,
   TERRAIN_TILE_TEMPLATE,
@@ -6,11 +6,15 @@ import {
 } from '../offlineMap';
 import {
   TILE_SIZE,
+  WAIT_FOR_NETWORK_MESSAGE,
   buildTileGrid,
   latLngToTile,
   parseAreas,
   projectToGrid,
   readLocale,
+  retryWithNetworkWait,
+  shellIntro,
+  shellReason,
   tileUrl
 } from '../../../../public/offline/offline-map.js';
 
@@ -102,5 +106,125 @@ describe('offline-skallet (public/offline/offline-map.js)', () => {
     expect(readLocale('')).toBe('nb');
     // Ikke la et annet cookienavn som slutter likt lure oss.
     expect(readLocale('ANNET_LOCALE=sv')).toBe('nb');
+  });
+});
+
+/**
+ * Skallet precaches for ALLE, og service workeren svarer med det når en side
+ * ikke kommer fram innen fristen. Før hadde det bare to tilstander — «uten
+ * nett» og «Offline-kart» — valgt av navigator.onLine alene. En gratisbruker på
+ * tregt nett fikk dermed «Offline-kart» og «Du har ingen lagrede kartområder»
+ * i stedet for artssiden hen ba om, uten ett ord om at det var nettet som ikke
+ * svarte.
+ */
+describe('offline-skallet: hvorfor vises det?', () => {
+  it('skiller «nettet svarte ikke» fra «du åpnet offline-kartet selv»', () => {
+    // Påkoblet, men på en annen adresse enn skallets egen: da er det service
+    // workeren som har svart med skallet i stedet for siden.
+    expect(shellReason('/species/41', true)).toBe('noResponse');
+    expect(shellReason('/', true)).toBe('noResponse');
+    expect(shellReason('/map', true)).toBe('noResponse');
+    // En side som bare LIGNER på skallets adresse er fortsatt en annen side.
+    expect(shellReason('/offline-kart', true)).toBe('noResponse');
+
+    // Skallets egne adresser (rewrite-en i next.config.js og fila bak den).
+    expect(shellReason('/offline', true)).toBe('direct');
+    expect(shellReason('/offline/', true)).toBe('direct');
+    expect(shellReason('/offline/index.html', true)).toBe('direct');
+  });
+
+  it('lar «uten nett» vinne når enheten selv sier den er frakoblet', () => {
+    expect(shellReason('/species/41', false)).toBe('offline');
+    expect(shellReason('/offline', false)).toBe('offline');
+  });
+
+  it('sier at nettet ikke svarte, og at knappen venter lenger — på norsk og svensk', () => {
+    const nb = shellIntro('nb', 'noResponse');
+    expect(nb.heading).toBe('Nettet svarer ikke');
+    expect(nb.note).toContain('kom ikke fram');
+    expect(nb.note).toContain('venter da lenger på nettet');
+
+    const sv = shellIntro('sv', 'noResponse');
+    expect(sv.heading).toBe('Nätet svarar inte');
+    expect(sv.note).toContain('kom inte fram');
+    expect(sv.note).toContain('väntar då längre på nätet');
+    // Ekte svensk, ikke den norske teksten en gang til.
+    expect(sv.note).not.toBe(nb.note);
+    expect(sv.note).not.toMatch(/\bikke\b|\bsiden\b/i);
+  });
+
+  it('lover ikke lagrede kart og krever ikke Premium i forklaringen', () => {
+    // Forklaringen vises også for dem som aldri har lagret et kart. Den skal
+    // handle om nettet, ikke om et abonnement.
+    for (const locale of ['nb', 'sv'] as const) {
+      const { note } = shellIntro(locale, 'noResponse');
+      expect(note).not.toMatch(/premium|sesongpass|säsongspass/i);
+    }
+  });
+
+  it('beholder de to gamle overskriftene, uten forklaring', () => {
+    expect(shellIntro('nb', 'offline')).toEqual({ heading: 'Du er uten nett', note: null });
+    expect(shellIntro('nb', 'direct')).toEqual({ heading: 'Offline-kart', note: null });
+    expect(shellIntro('sv', 'offline')).toEqual({ heading: 'Du är utan nät', note: null });
+    expect(shellIntro('sv', 'direct')).toEqual({ heading: 'Offlinekarta', note: null });
+  });
+});
+
+describe('offline-skallet: «Prøv å laste appen på nytt»', () => {
+  const HREF = 'https://www.mycelet.com/species/41';
+
+  it('sier fra til service workeren FØR siden lastes på nytt', () => {
+    // Rekkefølgen er hele poenget: meldingen ber workeren vente på nettet uten
+    // frist, og må være sendt før navigasjonen den gjelder starter.
+    const rekkefolge: string[] = [];
+    const postMessage = vi.fn(() => rekkefolge.push('melding'));
+    const reload = vi.fn(() => rekkefolge.push('last på nytt'));
+
+    retryWithNetworkWait({ serviceWorker: { controller: { postMessage } } }, HREF, reload);
+
+    expect(postMessage).toHaveBeenCalledWith({ type: WAIT_FOR_NETWORK_MESSAGE, url: HREF });
+    expect(rekkefolge).toEqual(['melding', 'last på nytt']);
+  });
+
+  it('laster på nytt selv om ingen service worker hører etter', () => {
+    const utenWorker = [
+      undefined,
+      null,
+      {},
+      { serviceWorker: null },
+      { serviceWorker: { controller: null } }
+    ];
+    for (const nav of utenWorker) {
+      const reload = vi.fn();
+      retryWithNetworkWait(nav, HREF, reload);
+      expect(reload).toHaveBeenCalledTimes(1);
+    }
+  });
+
+  it('laster på nytt selv om meldingen eller oppslaget kaster', () => {
+    const reload = vi.fn();
+    retryWithNetworkWait(
+      {
+        serviceWorker: {
+          controller: {
+            postMessage: () => {
+              throw new Error('InvalidStateError');
+            }
+          }
+        }
+      },
+      HREF,
+      reload
+    );
+    expect(reload).toHaveBeenCalledTimes(1);
+
+    // Der lagring er sperret kan selve oppslaget av navigator.serviceWorker kaste.
+    const sperret = {
+      get serviceWorker(): never {
+        throw new Error('SecurityError');
+      }
+    };
+    retryWithNetworkWait(sperret, HREF, reload);
+    expect(reload).toHaveBeenCalledTimes(2);
   });
 });

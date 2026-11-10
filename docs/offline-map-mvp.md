@@ -8,6 +8,10 @@
 - Kartvisning:
   - Bruker kan lagre nåværende kartområde lokalt i nettleser.
   - Området forsøker å cache kartfliser (Kartverket) for zoomnivå `z-1`, `z`, `z+1`.
+    Hver flis har 15 s frist, og lagringen gir opp etter tolv frister på rad.
+  - Ble ikke én eneste flis lagret, avvises lagringen (`NoTilesCachedError` i
+    `src/lib/utils/offlineMap.ts`): området legges ikke i lista, og ingen
+    eldre områder kastes ut for å gi plass til et tomt.
   - Lagrede områder kan åpnes igjen i kartet eller slettes.
 - Gating:
   - Offline-lagring er tilgjengelig kun for betalende brukere (Premium/Sesongpass).
@@ -34,7 +38,15 @@
 - Offline-skallet `/offline` (`public/offline/index.html` + `offline-map.js`):
   - Den ENESTE siden som kan åpnes uten dekning. Precaches av `public/sw.js`,
     og service workeren svarer med den når en navigasjon feiler fordi enheten
-    er uten nett (nett først — en påkoblet bruker får alltid den ferske siden).
+    er uten nett, eller når nettet ikke har svart på ti sekunder (nett først —
+    et svar som rekker fram vinner alltid, og ingen gammel side vises).
+  - Den precaches for ALLE besøkende, ikke bare dem med lagrede kart. Derfor
+    sier den hvorfor den vises: «Du er uten nett», «Offline-kart» (åpnet
+    direkte) eller «Nettet svarer ikke» når den står i stedet for en annen
+    side mens enheten er påkoblet. Fristen gjelder bare første forsøk: laster
+    brukeren samme adresse på nytt innen et halvt minutt, eller trykker «Prøv
+    å laste appen på nytt» (når som helst), venter service workeren på nettet
+    uten frist, så en side på tregt nett kan lastes.
   - Statisk, åpen og uten serverdata. Den viser bare det nettleseren allerede
     har: områder fra `localStorage` og fliser fra `mycelet-map-tiles-v1`.
     Derfor gjenskaper den ikke problemet fra PR #102, der precaching av det
