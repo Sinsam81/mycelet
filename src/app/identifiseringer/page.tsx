@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
 import { Camera, MapPin, Sparkles } from 'lucide-react';
 import { PageWrapper } from '@/components/layout/PageWrapper';
-import { EdibilityBadge } from '@/components/ui/EdibilityBadge';
+import { AiEdibilityBadge } from '@/components/identify/AiEdibilityBadge';
 import { SlettIdentifisering } from '@/components/identifikasjoner/SlettIdentifisering';
 import { createClient } from '@/lib/supabase/server';
 import { intlLocale } from '@/lib/utils/intl-locale';
@@ -150,7 +150,9 @@ export default async function IdentifiseringerPage() {
                           </h2>
                           <p className="truncate text-xs italic text-gray-600">{rad.top_suggestion_name}</p>
                         </div>
-                        {art?.edibility ? <EdibilityBadge edibility={art.edibility} /> : null}
+                        {/* Radene er UBEKREFTEDE AI-forslag: aldri et grønt
+                            «spiselig» her — se AiEdibilityBadge. */}
+                        {art ? <AiEdibilityBadge edibility={art.edibility} /> : null}
                       </div>
 
                       <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-gray-600">

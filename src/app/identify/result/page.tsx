@@ -22,6 +22,8 @@ import {
 import { isDangerousEdibility } from '@/lib/utils/edibility';
 import { buildUserUploadPath } from '@/lib/storage/upload-path';
 import { dataUrlToBlob } from '@/lib/utils/image';
+import { erLavBildelikhet } from '@/lib/identifications/config';
+import { merkOktresultatSomLagret } from '@/lib/identifications/okt-resultat';
 import { IdentifyResultPayload } from '@/types/identify';
 
 function IdentifyResultView() {
@@ -181,16 +183,22 @@ function IdentifyResultView() {
       // funn» i stedet for å invitere til en duplikat-lagring. Best effort:
       // funnet ER lagret, og en feilet kobling skal ikke se ut som at det ikke
       // gikk. Verste utfall er at raden kan lagres én gang til.
-      if (payload.identificationId) {
-        const lagretFunnId = (await saveResponse.json().catch(() => null))?.id;
-        if (lagretFunnId) {
-          await fetch(`/api/identifications/${encodeURIComponent(payload.identificationId)}`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ findingId: lagretFunnId })
-          }).catch(() => undefined);
-        }
+      const lagretFunnId: string | null = (await saveResponse.json().catch(() => null))?.id ?? null;
+      if (payload.identificationId && lagretFunnId) {
+        await fetch(`/api/identifications/${encodeURIComponent(payload.identificationId)}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ findingId: lagretFunnId })
+        }).catch(() => undefined);
       }
+      // Resultatet i økta merkes som lagret. Før ble det liggende urørt, så
+      // «tilbake» fra kartet ga samme side med en ny lagre-knapp — ett trykk
+      // fra et duplikatfunn. Se okt-resultat.ts.
+      merkOktresultatSomLagret(sessionStorage, {
+        identificationId: payload.identificationId,
+        findingId: lagretFunnId,
+        fraOkta: !historyId
+      });
 
       toast.success(t('saveSuccess'));
       // Gyllent øyeblikk: brukeren fotograferte, identifiserte og LAGRET et
@@ -217,6 +225,99 @@ function IdentifyResultView() {
     );
   }
 
+  // Kvotehintet vises fra og med nest siste gratis-kall — taket skal
+  // være kjent FØR veggen treffes, ikke en overraskelse på forsøk seks.
+  // /pricing er også native-paywallen (PR #91), så lenken gjelder
+  // begge plattformer — samme mønster som kvoteveggen på identify.
+  const kvotehint =
+    typeof payload.freeQuotaRemaining === 'number' && payload.freeQuotaRemaining <= 1 ? (
+      <p className="rounded-lg bg-forest-50 px-3 py-2 text-sm text-forest-900">
+        {payload.freeQuotaRemaining === 0
+          ? t('quotaHintNone')
+          : t('quotaHintSome', { remaining: payload.freeQuotaRemaining })}{' '}
+        <Link href="/pricing" className="font-semibold underline">
+          {t('quotaHintCta')}
+        </Link>
+      </p>
+    ) : null;
+
+  const bildekort = (
+    <div className="overflow-hidden rounded-2xl bg-white shadow-card">
+      {/* Bildet kan mangle når visningen er hydrert fra historikken (gammel
+          rad, eller en opplasting som aldri kom fram). En plassholder som
+          sier fra er bedre enn et knekt bilde. */}
+      {payload.originalImageDataUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={payload.originalImageDataUrl} alt={t('imageAlt')} className="h-56 w-full object-cover" />
+      ) : (
+        <div className="flex h-56 w-full flex-col items-center justify-center gap-1 bg-gray-100 text-sm text-gray-600">
+          <span aria-hidden className="text-4xl">🍄</span>
+          {t('historyImageMissing')}
+        </div>
+      )}
+      {/* Alle innsendte bilder vises — brukeren skal SE hva som ble
+          analysert (to ulike sopper i ett kall kan gi en selvsikker
+          kimære-ID; stripen gjør blandingen synlig). Hero-bildet over ER
+          bilde 1, så stripen begynner på bilde 2 — og alt-tekstene er
+          nummererte, ikke tre like på rad for en skjermleser. Feltet
+          mangler i payloads fra før flerbilde — da vises bare heroen. */}
+      {payload.originalImageDataUrls && payload.originalImageDataUrls.length > 1 ? (
+        <div className="flex gap-1 bg-white p-1">
+          {payload.originalImageDataUrls.slice(1).map((url, i) => (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              key={i}
+              src={url}
+              alt={t('photoAltIndexed', { n: i + 2, total: payload.originalImageDataUrls!.length })}
+              className="h-14 w-14 rounded object-cover"
+            />
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+
+  // Tomt svar fra bildegjenkjenningen. Før rendret siden «Velg arten som
+  // stemmer» over en tom liste, med avkrysningsboks og en lagre-knapp som ikke
+  // gjorde noe — en blindvei brukeren hadde betalt en kvoteenhet for. Her er
+  // det ingenting å velge og ingenting å lagre, så alt det skjules; igjen står
+  // forklaringen og de to veiene videre. Teksten lover ikke at forsøket var
+  // gratis: kreditten hos leverandøren er brukt.
+  if (payload.suggestions.length === 0) {
+    return (
+      <PageWrapper>
+        <section className="space-y-4">
+          <h1 className="font-serif text-3xl font-bold tracking-tight text-forest-900">{t('title')}</h1>
+          <p className="rounded-lg bg-amber-100 px-3 py-2 text-sm font-medium text-amber-900">{t('notAGuarantee')}</p>
+          {kvotehint}
+          {bildekort}
+          <div role="status" className="rounded-2xl border border-amber-300 bg-amber-50 p-4 text-amber-900">
+            <h2 className="font-serif text-lg font-bold">{t('noSuggestionsTitle')}</h2>
+            <p className="mt-1 text-sm">{t('noSuggestionsBody')}</p>
+          </div>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <Button onClick={() => router.push('/identify')}>{t('takeNewPhoto')}</Button>
+            <Button variant="outline" className="w-full" onClick={() => router.push('/forum/new')}>
+              {t('askInForum')}
+            </Button>
+          </div>
+        </section>
+      </PageWrapper>
+    );
+  }
+
+  // To beskjeder om at bildegjenkjenningen selv tviler — høyst ÉN vises.
+  //   • «Usikker på om dette er en sopp»: KUN ved et eksplisitt false fra
+  //     Kindwise. null/udefinert (historikk, gammel sessionStorage, feltet
+  //     manglet) er «ukjent» og viser ingenting.
+  //   • «Lav bildelikhet»: alle de viste forslagene ligger under terskelen.
+  // Ingen av dem sperrer lagring eller endrer forhåndsvalget — brukeren
+  // bekrefter arten gjennom porten under uansett. Og ingen av dem sier noe om
+  // spiselighet: høy bildelikhet er heller ikke en bekreftet art.
+  const visteForslag = payload.suggestions.slice(0, 3);
+  const usikkerPaaSopp = payload.isMushroom === false;
+  const lavBildelikhet = !usikkerPaaSopp && erLavBildelikhet(visteForslag);
+
   return (
     <PageWrapper>
       <section className="space-y-4">
@@ -241,58 +342,22 @@ function IdentifyResultView() {
           </p>
         ) : null}
 
-        {/* Kvotehintet vises fra og med nest siste gratis-kall — taket skal
-            være kjent FØR veggen treffes, ikke en overraskelse på forsøk seks.
-            /pricing er også native-paywallen (PR #91), så lenken gjelder
-            begge plattformer — samme mønster som kvoteveggen på identify. */}
-        {typeof payload.freeQuotaRemaining === 'number' && payload.freeQuotaRemaining <= 1 ? (
-          <p className="rounded-lg bg-forest-50 px-3 py-2 text-sm text-forest-900">
-            {payload.freeQuotaRemaining === 0
-              ? t('quotaHintNone')
-              : t('quotaHintSome', { remaining: payload.freeQuotaRemaining })}{' '}
-            <Link href="/pricing" className="font-semibold underline">
-              {t('quotaHintCta')}
-            </Link>
+        {kvotehint}
+
+        {bildekort}
+
+        {usikkerPaaSopp || lavBildelikhet ? (
+          <p
+            role="status"
+            className="rounded-xl border border-amber-400 bg-amber-50 px-3 py-2.5 text-sm font-medium text-amber-900"
+          >
+            {usikkerPaaSopp ? t('notMushroomNotice') : t('lowSimilarityNotice')}
           </p>
         ) : null}
 
-        <div className="overflow-hidden rounded-2xl bg-white shadow-card">
-          {/* Bildet kan mangle når visningen er hydrert fra historikken (gammel
-              rad, eller en opplasting som aldri kom fram). En plassholder som
-              sier fra er bedre enn et knekt bilde. */}
-          {payload.originalImageDataUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={payload.originalImageDataUrl} alt={t('imageAlt')} className="h-56 w-full object-cover" />
-          ) : (
-            <div className="flex h-56 w-full flex-col items-center justify-center gap-1 bg-gray-100 text-sm text-gray-600">
-              <span aria-hidden className="text-4xl">🍄</span>
-              {t('historyImageMissing')}
-            </div>
-          )}
-          {/* Alle innsendte bilder vises — brukeren skal SE hva som ble
-              analysert (to ulike sopper i ett kall kan gi en selvsikker
-              kimære-ID; stripen gjør blandingen synlig). Hero-bildet over ER
-              bilde 1, så stripen begynner på bilde 2 — og alt-tekstene er
-              nummererte, ikke tre like på rad for en skjermleser. Feltet
-              mangler i payloads fra før flerbilde — da vises bare heroen. */}
-          {payload.originalImageDataUrls && payload.originalImageDataUrls.length > 1 ? (
-            <div className="flex gap-1 bg-white p-1">
-              {payload.originalImageDataUrls.slice(1).map((url, i) => (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  key={i}
-                  src={url}
-                  alt={t('photoAltIndexed', { n: i + 2, total: payload.originalImageDataUrls!.length })}
-                  className="h-14 w-14 rounded object-cover"
-                />
-              ))}
-            </div>
-          ) : null}
-        </div>
-
         <p className="text-sm text-gray-700">{t('chooseSpeciesPrompt')}</p>
         <IdentifyResult
-          suggestions={payload.suggestions.slice(0, 3)}
+          suggestions={visteForslag}
           selectedIndex={selectedIndex}
           onSelect={setSelectedIndex}
         />

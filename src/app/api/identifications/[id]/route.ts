@@ -153,6 +153,9 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     // ville gjort en historisk visning til noe annet enn det de så.
     suggestions,
     isPlant: false,
+    // Ble aldri lagret. null = ukjent, så «usikker på om dette er en sopp»
+    // aldri vises på en historikkvisning på grunnlag av et felt vi ikke har.
+    isMushroom: null,
     // Flagget settes av den ferske berikelsen, ikke av den lagrede verdien:
     // det beskriver om VI klarte oppslaget nå. Var det ufullstendig den gangen
     // også, tas det med — da manglet det noe i begge ender.

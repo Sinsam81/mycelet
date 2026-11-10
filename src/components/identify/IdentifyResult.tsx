@@ -3,9 +3,7 @@
 import Link from 'next/link';
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { EdibilityBadge } from '@/components/ui/EdibilityBadge';
-import { normalizeEdibility } from '@/lib/utils/edibility';
-import { isRecommendableSpecies } from '@/lib/prediction/recommendable';
+import { AiEdibilityBadge } from '@/components/identify/AiEdibilityBadge';
 import { IdentifySuggestion } from '@/types/identify';
 
 interface IdentifyResultProps {
@@ -82,37 +80,10 @@ export function IdentifyResult({ suggestions, selectedIndex, onSelect }: Identif
             </div>
 
             <div className="mt-2 flex flex-wrap items-center gap-2">
-              {/*
-                Bevisst asymmetri, og kjernen i hele denne komponenten:
-
-                Et AI-forslag sier «bildet ligner på denne arten», ikke «dette
-                ER denne arten». Da er de to utfallene ikke likeverdige:
-
-                  • En ADVARSEL er nyttig selv når arts-ID-en er feil. Får du
-                    vite at noe i dette landskapet av forslag er dødelig,
-                    skjerper du deg — det er riktig respons uansett.
-                  • Et GRØNT «spiselig» er skadelig når arts-ID-en er feil.
-                    Det er nettopp da folk blir forgiftet.
-
-                Derfor: alt som IKKE er en invitasjon til å spise beholder det
-                tydelige merket — giftig, dødelig, uspiselig og ukjent. (Ukjent
-                må være med: normalizeEdibility gjør alt ukjent om til 'unknown',
-                og SafetyWarning behandler det allerede som farlig.) Bare de to
-                spiselige klassene mister stempelet sitt her; de får en nøytral
-                «ikke matvurdert»-merking, og spiselighet leses på artssiden,
-                der dataene er kuraterte og arten er valgt av et menneske.
-
-                Merk at predikatet er isRecommendableSpecies, ikke
-                isHazardSpecies: sistnevnte dekker bare giftig/dødelig, og ville
-                gitt «ikke matvurdert» til ukjente arter — for mykt.
-              */}
-              {!isRecommendableSpecies(suggestion.edibility) ? (
-                <EdibilityBadge edibility={normalizeEdibility(suggestion.edibility)} />
-              ) : (
-                <span className="inline-flex rounded-full bg-gray-100 px-2.5 py-1 text-xs font-semibold text-gray-700 ring-1 ring-inset ring-gray-300">
-                  {t('notFoodAssessed')}
-                </span>
-              )}
+              {/* Aldri et rått EdibilityBadge her: et AI-forslag får aldri et
+                  grønt «spiselig»-stempel. Regelen og begrunnelsen bor i
+                  AiEdibilityBadge. */}
+              <AiEdibilityBadge edibility={suggestion.edibility} />
               {suggestion.inSeason === true ? (
                 <span className="rounded-full bg-forest-100 px-2 py-0.5 text-xs font-medium text-forest-900">
                   {suggestion.peakSeason ? t('peakSeasonNow') : t('inSeasonNow')}

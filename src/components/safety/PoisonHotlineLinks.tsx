@@ -1,5 +1,6 @@
 import { Fragment } from 'react';
 import { getTranslations } from 'next-intl/server';
+import { byggGiftnummer } from './giftnummer';
 
 /**
  * Ringelenkene til giftinformasjonen.
@@ -26,12 +27,8 @@ export async function PoisonHotlineLinks({
 }) {
   const s = await getTranslations('Safety');
 
-  const acuteTel = s('poisonTel');
-  const directTel = s('poisonTelDirect');
-  const numbers = [{ tel: acuteTel, label: s('poisonAcuteLabel') }];
-  if (directTel !== acuteTel) {
-    numbers.push({ tel: directTel, label: s('poisonDirectLabel') });
-  }
+  // Delt med klienttvillingen (PoisonHotlineLinksClient) — se giftnummer.ts.
+  const numbers = byggGiftnummer(s);
 
   return (
     <>

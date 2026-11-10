@@ -216,3 +216,123 @@ describe('kamera- og bildetilgang avslått', () => {
     expect(meld).toHaveBeenCalledWith(expect.objectContaining({ steg: 'kamera' }));
   });
 });
+
+describe('forespørselen som aldri får et brukbart svar', () => {
+  async function identifiserMedFeil(feil: unknown) {
+    mutateAsync.mockRejectedValueOnce(feil);
+    tegn();
+    await flush();
+    const knapp = await leggTilBilde();
+    fireEvent.click(knapp);
+    await flush();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(FRIST);
+    });
+    await flush();
+    return knapp as HTMLButtonElement;
+  }
+
+  // Lenka i sidehodet har samme etikett og står der alltid. Den som teller
+  // her, er den som dukker opp UNDER feilteksten.
+  const historikklenker = () =>
+    screen.getAllByRole('link').filter((lenke) => lenke.getAttribute('href') === '/identifiseringer');
+
+  it('opplastingen sto stille → bildene kom aldri fram: prøv igjen, ingen omvei om historikken', async () => {
+    const { IdentifyError } = await import('@/lib/hooks/useIdentify');
+    const knapp = await identifiserMedFeil(new IdentifyError('diagnosetekst til Sentry', 'upload_stalled'));
+    expect(screen.getByText(nb.Identify.uploadStalledError)).toBeTruthy();
+    expect(screen.queryByText('diagnosetekst til Sentry')).toBeNull();
+    // Ingenting er brukt, og bildet ligger fortsatt i feltet: et nytt forsøk er ett trykk.
+    expect(knapp.disabled).toBe(false);
+    expect(historikklenker()).toHaveLength(1);
+    expect(push).not.toHaveBeenCalled();
+    expect(meld).toHaveBeenCalledWith(expect.objectContaining({ steg: 'foresporsel', kode: 'upload_stalled' }));
+  });
+
+  it.each(['timeout', 'response_lost'])(
+    'klienten ga opp etter at bildene var sendt (%s) → pek til historikken, ikke et blindt nytt forsøk',
+    async (kode) => {
+      // Serveren kan ha brukt kvoteenheten og skrevet svaret i historikken.
+      // «Prøv igjen» alene ville kostet én enhet til for samme sopp.
+      const { IdentifyError } = await import('@/lib/hooks/useIdentify');
+      const knapp = await identifiserMedFeil(new IdentifyError('diagnosetekst til Sentry', kode));
+      expect(screen.getByText(nb.Identify.timeoutError)).toBeTruthy();
+      expect(screen.queryByText('diagnosetekst til Sentry')).toBeNull();
+      // Lenka under feilteksten kommer i tillegg til den i sidehodet.
+      expect(historikklenker()).toHaveLength(2);
+      // Ikke en blindvei: fant de ingenting i historikken, kan de prøve på nytt.
+      expect(knapp.disabled).toBe(false);
+      expect(push).not.toHaveBeenCalled();
+      expect(meld).toHaveBeenCalledWith(expect.objectContaining({ steg: 'foresporsel', kode }));
+    }
+  );
+
+  it('lenka til historikken forsvinner når et nytt forsøk starter', async () => {
+    const { IdentifyError } = await import('@/lib/hooks/useIdentify');
+    const knapp = await identifiserMedFeil(new IdentifyError('timeout', 'timeout'));
+    expect(historikklenker()).toHaveLength(2);
+    fireEvent.click(knapp);
+    await flush();
+    expect(historikklenker()).toHaveLength(1);
+    expect(screen.queryByText(nb.Identify.timeoutError)).toBeNull();
+  });
+
+  it('lenka følger feilen den hører til — den blir ikke stående under en annen', async () => {
+    const { IdentifyError } = await import('@/lib/hooks/useIdentify');
+    await identifiserMedFeil(new IdentifyError('timeout', 'timeout'));
+    expect(historikklenker()).toHaveLength(2);
+    // Neste feil er en helt annen: bildetilgangen er avslått.
+    captureNativePhoto.mockRejectedValueOnce(new Error('User denied access to photos'));
+    fireEvent.click(screen.getByRole('button', { name: nb.Identify.slotUnderside }));
+    await flush();
+    expect(screen.getByText(nb.Identify.photosDenied)).toBeTruthy();
+    expect(historikklenker()).toHaveLength(1);
+  });
+
+  it('en brutt forbindelse før alt var sendt → «sjekk dekningen», som før', async () => {
+    await identifiserMedFeil(new TypeError('Network request failed'));
+    expect(screen.getByText(nb.Identify.networkError)).toBeTruthy();
+    expect(screen.queryByText('Network request failed')).toBeNull();
+    expect(historikklenker()).toHaveLength(1);
+  });
+
+  it('en ukjent kode fra klienten vises aldri som rå diagnosetekst', async () => {
+    const { IdentifyError } = await import('@/lib/hooks/useIdentify');
+    await identifiserMedFeil(new IdentifyError('diagnosetekst til Sentry', 'noe_nytt'));
+    expect(screen.getByText(nb.Identify.identifyFailed)).toBeTruthy();
+    expect(screen.queryByText('diagnosetekst til Sentry')).toBeNull();
+  });
+
+  it('rutens egne feil vises fortsatt med serverens oversatte tekst', async () => {
+    const { IdentifyError } = await import('@/lib/hooks/useIdentify');
+    await identifiserMedFeil(
+      new IdentifyError('AI-tjenesten svarer ikke akkurat nå. Prøv igjen om litt.', 'provider_timeout', 504, true)
+    );
+    expect(screen.getByText('AI-tjenesten svarer ikke akkurat nå. Prøv igjen om litt.')).toBeTruthy();
+    expect(historikklenker()).toHaveLength(1);
+  });
+
+  it('plattformens HTML-svar (413/504) vises med katalogens tekst, ikke feilens egen', async () => {
+    // Reserveteksten i useIdentify var hardkodet norsk og ble vist ordrett —
+    // også til svenske brukere. Siden skal velge den oversatte selv.
+    const { IdentifyError } = await import('@/lib/hooks/useIdentify');
+    await identifiserMedFeil(new IdentifyError('rå tekst som ikke skal vises', undefined, 504, false));
+    expect(screen.getByText(nb.Identify.identifyFailed)).toBeTruthy();
+    expect(screen.queryByText('rå tekst som ikke skal vises')).toBeNull();
+  });
+});
+
+describe('filfeltet på nett', () => {
+  it('tvinger ikke kameraet — bildebiblioteket skal kunne velges', async () => {
+    // capture="environment" åpner kameraet direkte på mobil og hopper over
+    // velgeren. Knappen heter «Ta bilde / velg bilde»; begge halvdeler må være sanne.
+    const { container } = tegn();
+    await flush();
+    const felt = container.querySelector('input[type="file"]');
+    expect(felt).not.toBeNull();
+    expect(felt!.getAttribute('accept')).toBe('image/*');
+    expect(felt!.hasAttribute('capture')).toBe(false);
+    // Ett bilde per felt — handleFile og feltindeksen er bygget rundt det.
+    expect(felt!.hasAttribute('multiple')).toBe(false);
+  });
+});

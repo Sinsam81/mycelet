@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useLocale, useTranslations } from 'next-intl';
 import { AiFiksetBanner } from '@/components/identify/AiFiksetBanner';
+import { PoisonHotlineLinksClient } from '@/components/safety/PoisonHotlineLinksClient';
 import { PageWrapper } from '@/components/layout/PageWrapper';
 import { Button } from '@/components/ui/Button';
 import { getOptionalPosition, NATIV_FRIST_MARGIN_MS, POSISJON_TIMEOUT_MS, PosisjonTidsavbrudd } from '@/lib/hooks/useGeolocation';
@@ -65,7 +66,14 @@ export default function IdentifyPage() {
   // videre når svaret kommer, skal de ikke dras tilbake til resultatsiden.
   const montert = useErMontert();
 
-  const [error, setError] = useState<string | null>(null);
+  // Feilteksten under knappene. `sjekkHistorikk` følger MED teksten, ikke i en
+  // egen tilstand: klienten ga opp etter at bildene var sendt, svaret kan
+  // ligge i historikken, og lenka dit vises under teksten (se handleIdentify).
+  // Som ett objekt kan lenka aldri bli stående igjen under en annen feil.
+  const [feil, setFeil] = useState<{ tekst: string; sjekkHistorikk: boolean } | null>(null);
+  const error = feil?.tekst ?? null;
+  const setError = (tekst: string | null, sjekkHistorikk = false) =>
+    setFeil(tekst == null ? null : { tekst, sjekkHistorikk });
   const [aiDisabled, setAiDisabled] = useState(false);
   // Kvoteveggen får sin egen tilstand fordi den er det motsatte av en feil:
   // brukeren har gjort alt riktig og skal videre et sted. Som rød tekstlinje
@@ -265,14 +273,35 @@ export default function IdentifyPage() {
         feil: err,
         bildetegn: filled.map((p) => p.base64.length)
       });
-      // fetch rejects with a TypeError whose message is browser-English
-      // («Load failed» in WebKit) — translate instead of surfacing it raw.
+      // En brutt forbindelse er en TypeError med nettleser-engelsk tekst
+      // («Load failed» i WebKit) — oversett i stedet for å vise den rå.
+      //
+      // Klientens egne utfall (useIdentify.ts) har heller ingen brukbar tekst
+      // i selve feilen, og de to gruppene skal IKKE ha samme råd:
+      //   • 'upload_stalled' — bildene kom aldri fram. Ingenting er brukt, og
+      //     de ligger fortsatt i feltene: et nytt forsøk er ett trykk.
+      //   • 'timeout' / 'response_lost' — hele kroppen var sendt før klienten
+      //     ga opp. Serveren kan ha gjort jobben: kvoteenheten er brukt og
+      //     svaret ligger i historikken. Et blindt nytt forsøk ville kostet én
+      //     enhet til for samme sopp, så teksten sender brukeren til «Mine
+      //     identifiseringer» først, og lenka dit vises under den.
+      // Alt annet som ikke er rutens JSON (Vercels 413/504 er HTML) får
+      // katalogens tekst. Teksten i selve feilen er da hardkodet norsk og ment
+      // for Sentry — vist rått fikk svenske brukere norsk.
+      const svarKanLigge =
+        err instanceof IdentifyError && (err.code === 'timeout' || err.code === 'response_lost');
       const message =
         err instanceof TypeError
           ? t('networkError')
-          : err instanceof Error
-            ? err.message
-            : t('identifyFailed');
+          : svarKanLigge
+            ? t('timeoutError')
+            : err instanceof IdentifyError && err.code === 'upload_stalled'
+              ? t('uploadStalledError')
+              : err instanceof IdentifyError && err.json !== true
+                ? t('identifyFailed')
+                : err instanceof Error
+                  ? err.message
+                  : t('identifyFailed');
       // Forgrener på kode, ikke på tekst. Den forrige varianten leste
       // `message.toLowerCase().includes('ikke aktivert')` — den virket bare så
       // lenge serveren alltid svarte norsk, og ville stille sluttet å virke i
@@ -284,7 +313,7 @@ export default function IdentifyPage() {
         // inneholder det faktiske tallet fra FREE_DAILY_AI_LIMIT.
         setQuotaMessage(message);
       } else {
-        setError(message);
+        setError(message, svarKanLigge);
       }
     }
   };
@@ -404,7 +433,10 @@ export default function IdentifyPage() {
             <a href={s('controlUrl')} target="_blank" rel="noreferrer" className="underline">
               {t('soppkontrollen')}
             </a>
-            {t('safetyPhonePrefix')} <strong>{s('poisonNumber')}</strong>.
+            {/* Ringelenker (én for norsk, to for svensk) — ikke ren tekst.
+                safetyPhonePrefix navngir allerede giftinformasjonen. */}
+            {t('safetyPhonePrefix')}{' '}
+            <PoisonHotlineLinksClient className="font-bold underline" />.
           </p>
         </div>
 
@@ -416,11 +448,16 @@ export default function IdentifyPage() {
             <p className="mt-1 text-xs font-medium text-amber-800">{t('sameMushroomHint')}</p>
           </div>
 
+          {/* Ingen capture-attributt, med vilje. Med den åpner mobil-Safari og
+              Chrome på Android kameraet direkte og hopper over velgeren — da
+              var «velg bilde» i knappeteksten usann, og bilder tatt tidligere
+              (i en skog uten dekning) kunne ikke identifiseres på nett. Uten
+              den tilbyr systemet både kamera og bildebibliotek, som de andre
+              filfeltene i appen. Ikke `multiple`: ett bilde per felt. */}
           <input
             ref={fileInputRef}
             type="file"
             accept="image/*"
-            capture="environment"
             className="hidden"
             onChange={(event) => {
               const file = event.target.files?.[0];
@@ -518,6 +555,13 @@ export default function IdentifyPage() {
           </div>
 
           {error ? <p className="mt-3 text-sm text-red-600">{error}</p> : null}
+          {/* Samme etikett som lenka i sidehodet, men HER: feilen står nederst
+              på en lang side, og teksten over ber brukeren se der først. */}
+          {feil?.sjekkHistorikk ? (
+            <Link href="/identifiseringer" className="mt-2 inline-block text-sm font-semibold text-forest-800 underline">
+              {t('historyLink')} →
+            </Link>
+          ) : null}
           {sender === 'posisjon' ? (
             <p className="mt-3 text-sm text-gray-700">{t('locating')}</p>
           ) : sender === 'analyse' || identify.isPending ? (

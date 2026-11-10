@@ -1,8 +1,10 @@
 'use client';
 
+import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { AlertTriangle } from 'lucide-react';
+import { AiEdibilityBadge } from '@/components/identify/AiEdibilityBadge';
 import { EdibilityBadge } from '@/components/ui/EdibilityBadge';
 import { PhotoCredit } from '@/components/ui/PhotoCredit';
 import { IdentifySuggestion, PhotoCreditInfo } from '@/types/identify';
@@ -29,14 +31,20 @@ function PhotoCard({
   name,
   imageUrl,
   imageCredit,
-  edibility,
+  badge,
   tone
 }: {
   label: string;
   name: string;
   imageUrl: string | null | undefined;
   imageCredit: PhotoCreditInfo | null | undefined;
-  edibility: Edibility | null;
+  /**
+   * Merket under navnet. Et spor, ikke en spiselighetsverdi, med vilje: de to
+   * kortene har ULIKE regler. «Ditt forslag» er et AI-forslag og får aldri et
+   * grønt «spiselig» (AiEdibilityBadge); den farlige forvekslingsarten er
+   * kuratert look_alikes-data og en advarsel, og beholder det rå merket.
+   */
+  badge: ReactNode;
   tone: 'chosen' | 'danger';
 }) {
   return (
@@ -56,7 +64,7 @@ function PhotoCard({
           {label}
         </p>
         <p className="text-sm font-semibold leading-tight text-gray-900">{name}</p>
-        {edibility ? <EdibilityBadge edibility={edibility} /> : null}
+        {badge}
         {/* Artsbildene er Commons-filer under CC BY / CC BY-SA. Krediteringen
             hører til akkurat det bildet som vises — se kallstedet: den følger
             aldri med når kortet faller tilbake på et AI-bilde. */}
@@ -84,6 +92,7 @@ export function LookAlikeCheck({ suggestion }: { suggestion: IdentifySuggestion 
   // på reservebildet, krediterer vi feil fotograf for et helt annet bilde.
   const chosenImageUrl = suggestion.imageUrl ?? suggestion.similarImages?.[0] ?? null;
   const chosenImageCredit = suggestion.imageUrl ? suggestion.imageCredit : null;
+  const dangerEdibility = asEdibility(lookAlike.edibility);
 
   return (
     <section
@@ -109,7 +118,7 @@ export function LookAlikeCheck({ suggestion }: { suggestion: IdentifySuggestion 
           name={chosenName}
           imageUrl={chosenImageUrl}
           imageCredit={chosenImageCredit}
-          edibility={asEdibility(suggestion.edibility)}
+          badge={<AiEdibilityBadge edibility={suggestion.edibility} />}
           tone="chosen"
         />
         <PhotoCard
@@ -117,7 +126,7 @@ export function LookAlikeCheck({ suggestion }: { suggestion: IdentifySuggestion 
           name={lookAlike.name}
           imageUrl={lookAlike.imageUrl}
           imageCredit={lookAlike.imageCredit}
-          edibility={asEdibility(lookAlike.edibility)}
+          badge={dangerEdibility ? <EdibilityBadge edibility={dangerEdibility} /> : null}
           tone="danger"
         />
       </div>

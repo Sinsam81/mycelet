@@ -89,4 +89,62 @@ describe('bekreftelses-porten på AI-resultatsiden', () => {
       expect(ns.locationFailed.length).toBeGreaterThan(10);
     }
   });
+
+  it('tomt svar: ingen artsliste, ingen avkrysning og ingen lagre-knapp — men to veier videre', () => {
+    // Før sto «Velg arten som stemmer» over en tom liste, med en lagre-knapp
+    // som ikke gjorde noe. Tomtilstanden returnerer FØR resten av siden.
+    const start = source.indexOf('if (payload.suggestions.length === 0) {');
+    expect(start).toBeGreaterThan(-1);
+    const slutt = source.indexOf('const visteForslag', start);
+    const tom = source.slice(start, slutt);
+    expect(tom).toContain("t('noSuggestionsTitle')");
+    expect(tom).toContain("t('noSuggestionsBody')");
+    expect(tom).toContain("router.push('/identify')");
+    expect(tom).toContain("router.push('/forum/new')");
+    // Rammen «et forslag, aldri en garanti» står også her.
+    expect(tom).toContain("t('notAGuarantee')");
+    for (const skjult of ['handleSave', 'acknowledged', 'chooseSpeciesPrompt', '<IdentifyResult', 'sharingLevel']) {
+      expect(tom).not.toContain(skjult);
+    }
+  });
+
+  it('«usikker på om dette er en sopp» vises bare ved et eksplisitt false', () => {
+    // isPlant faller tilbake på false når Kindwise utelater feltet, og
+    // historikkvisninger har aldri verdien. Streng likhet mot isMushroom er
+    // det som hindrer at beskjeden står på hvert eneste resultat.
+    expect(source).toContain('payload.isMushroom === false');
+    expect(source).not.toMatch(/payload\.isPlant/);
+    expect(source).not.toMatch(/!payload\.isMushroom/);
+  });
+
+  it('usikkerhetsbeskjedene sperrer ikke lagring og endrer ikke forhåndsvalget', () => {
+    // Å blokkere ville vært en ny produktregel. Porten er bekreftelsen.
+    expect(source).toMatch(/const \[selectedIndex, setSelectedIndex\] = useState\(0\)/);
+    expect(source).not.toMatch(/disabled=\{[^}]*(usikkerPaaSopp|lavBildelikhet)/);
+  });
+
+  it('usikkerhetstekstene finnes på begge språk og sier ingenting om spiselighet', () => {
+    for (const locale of ['nb', 'sv'] as const) {
+      const ns = JSON.parse(
+        fs.readFileSync(new URL(`../../../../messages/${locale}.json`, import.meta.url), 'utf8')
+      ).IdentifyResult;
+      for (const key of ['noSuggestionsTitle', 'noSuggestionsBody', 'notMushroomNotice', 'lowSimilarityNotice']) {
+        expect(ns[key].length, `${locale}.${key}`).toBeGreaterThan(5);
+        expect(ns[key], `${locale}.${key}`).not.toMatch(/spis|ätlig|ätbar|trygg|säker att/i);
+      }
+      // Tomtilstanden lover ikke at forsøket var gratis — kreditten er brukt.
+      expect(ns.noSuggestionsBody).not.toMatch(/gratis|kostnadsfri/i);
+    }
+  });
+
+  it('etter en vellykket lagring merkes øktresultatet som lagret — FØR navigeringen', () => {
+    // Uten dette ga «tilbake» fra kartet samme resultat med en ny lagre-knapp
+    // (duplikatfunn). Logikken er testet i okt-resultat.test.ts; her låses
+    // det at lagringsflyten faktisk kaller den, og i riktig rekkefølge.
+    const merk = source.indexOf('merkOktresultatSomLagret(sessionStorage');
+    const svarOk = source.indexOf('if (!saveResponse.ok)');
+    const videre = source.indexOf("router.push('/map?mine=1')");
+    expect(merk).toBeGreaterThan(svarOk);
+    expect(merk).toBeLessThan(videre);
+  });
 });
