@@ -7,6 +7,9 @@ import { getStripeServerClient } from '@/lib/stripe/server';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { getClientKey, rateLimitResponse } from '@/lib/rate-limit/route';
 import { logger } from '@/lib/log';
+import { billingCopy } from '@/lib/billing/copy';
+import { getUserLocale } from '@/i18n/locale';
+import { DEFAULT_LOCALE, type Locale } from '@/i18n/config';
 
 // Called frequently from the client to render subscription state — logging
 // every successful call would just be noise. We log only failures.
@@ -19,7 +22,14 @@ export async function GET(request: NextRequest) {
     } = await supabase.auth.getUser();
 
     if (!user) {
-      return NextResponse.json({ error: 'Ikke autentisert' }, { status: 401 });
+      // Samme tekst og språk som checkout og portalen (src/lib/billing/copy.ts).
+      let locale: Locale = DEFAULT_LOCALE;
+      try {
+        locale = await getUserLocale();
+      } catch {
+        locale = DEFAULT_LOCALE;
+      }
+      return NextResponse.json({ error: billingCopy('unauthenticated', locale) }, { status: 401 });
     }
 
     // Read endpoint, called from layouts/headers — generous limit so normal

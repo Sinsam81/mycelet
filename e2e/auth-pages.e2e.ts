@@ -19,6 +19,19 @@ test.describe('Innlogging og glemt passord', () => {
     await expect(page.getByRole('button', { name: /Send lenke/i })).toBeVisible();
   });
 
+  // Lenker vi sender selv bærer ?token_hash= og skal vise skjemaet uansett
+  // nettleser. Skjemaet sendes ALDRI inn her — det ville brukt et ekte token.
+  test('/auth/reset?token_hash=… viser passordskjemaet', async ({ page }) => {
+    await page.goto('/auth/reset?token_hash=x');
+    await expect(page.locator('input[type="password"]')).toHaveCount(2);
+    await expect(page.getByRole('button', { name: /Lagre nytt passord/i })).toBeVisible();
+  });
+
+  test('/auth/reset uten lenke ender på «ugyldig» med vei til ny lenke', async ({ page }) => {
+    await page.goto('/auth/reset');
+    await expect(page.getByRole('link', { name: /Be om ny lenke/i })).toBeVisible({ timeout: 10_000 });
+  });
+
   test('registreringssiden laster med skjemafelt', async ({ page }) => {
     await page.goto('/auth/register');
     await expect(page.locator('input').first()).toBeVisible();

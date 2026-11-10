@@ -31,8 +31,8 @@ export type BillingMessageKey =
 
 const COPY: Record<BillingMessageKey, Record<Locale, string>> = {
   unauthenticated: {
-    nb: 'Ikke autentisert',
-    sv: 'Inte autentiserad'
+    nb: 'Logg inn for å fortsette',
+    sv: 'Logga in för att fortsätta'
   },
   invalidPlan: {
     nb: 'Ugyldig plan',
@@ -61,12 +61,14 @@ const COPY: Record<BillingMessageKey, Record<Locale, string>> = {
     sv: 'Du måste avsluta den nuvarande planen först'
   },
   planChangeBlockedDetails: {
-    nb: 'Du har allerede et aktivt abonnement. Vi kan ikke sette i gang et nytt før det er avsluttet, fordi du da ville blitt belastet for begge. Avslutt abonnementet under kontoinnstillinger — du beholder tilgangen ut perioden du har betalt for — og kjøp den nye planen etterpå.',
-    sv: 'Du har redan en aktiv prenumeration. Vi kan inte starta en ny innan den är avslutad, eftersom du då skulle debiteras för båda. Avsluta prenumerationen under kontoinställningar — du behåller åtkomsten perioden ut som du redan har betalat för — och köp den nya planen efteråt.'
+    nb: 'Du har allerede et aktivt abonnement. Vi kan ikke sette i gang et nytt før det er avsluttet, fordi du da ville blitt belastet for begge. Avslutt abonnementet først: kjøpte du det på mycelet.com, bruker du «Administrer abonnement» på prissiden; kjøpte du det i appen, gjør du det på iPhone under Innstillinger → navnet ditt øverst → Abonnementer. Du beholder tilgangen ut perioden du har betalt for, og kan kjøpe den nye planen etterpå.',
+    sv: 'Du har redan en aktiv prenumeration. Vi kan inte starta en ny innan den är avslutad, eftersom du då skulle debiteras för båda. Avsluta prenumerationen först: köpte du den på mycelet.com använder du ”Hantera prenumeration” på prissidan; köpte du den i appen gör du det på iPhone under Inställningar → ditt namn högst upp → Prenumerationer. Du behåller åtkomsten perioden ut som du redan har betalat för, och kan köpa den nya planen efteråt.'
   },
   portalNoCustomer: {
-    nb: 'Vi fant ingen aktiv betalingskonto å administrere.',
-    sv: 'Vi hittade inget aktivt betalkonto att hantera.'
+    // Kan treffe en App Store-kunde (ingen Stripe-kunde bak raden): si hvor
+    // abonnementet deres faktisk administreres.
+    nb: 'Vi fant ingen betalingskonto å administrere her. Kjøpte du abonnementet i appen, endrer eller avslutter du det på iPhone under Innstillinger → navnet ditt øverst → Abonnementer.',
+    sv: 'Vi hittade inget betalkonto att hantera här. Köpte du prenumerationen i appen ändrar eller avslutar du den på iPhone under Inställningar → ditt namn högst upp → Prenumerationer.'
   },
   portalFailed: {
     nb: 'Vi fikk ikke åpnet kundesiden. Prøv igjen om litt.',

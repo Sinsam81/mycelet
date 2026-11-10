@@ -8,13 +8,21 @@ import { Button } from '@/components/ui/Button';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { NonNativeOnly } from '@/components/native/NonNativeOnly';
 import { trackEvent } from '@/lib/analytics';
+import { PassordFelt } from '@/components/auth/PassordFelt';
 import { readSafeNext } from '@/lib/auth/safe-redirect';
+import { authFeilNokkel, varsleUkjentAuthFeil, type AuthFeilNokkel } from '@/lib/auth/auth-feil';
+import { glemRegistrertEpost, lesRegistrertEpost } from '@/lib/auth/registrert-epost';
+import { isNativePlatform } from '@/lib/native/platform';
+
+/** Minste tid mellom to «send bekreftelsen på nytt» fra samme skjerm. */
+const SEND_PA_NYTT_VENT_SEKUNDER = 60;
 
 // Next 15+ requires useSearchParams() to be inside a Suspense boundary.
 // Inner form rendered by LoginForm; default export wraps it in Suspense.
 
 function LoginForm() {
   const t = useTranslations('AuthLogin');
+  const tFeil = useTranslations('AuthErrors');
   const searchParams = useSearchParams();
   // Validert mot åpen redirect — se src/lib/auth/safe-redirect.ts. Verdien
   // brukes både til navigasjonen etter innlogging og til OAuth-callbackens next-param.
@@ -31,12 +39,70 @@ function LoginForm() {
     return null;
   }, [searchParams]);
 
-  const { signIn, signInWithGoogle, user, loading: authLoading } = useAuth();
+  const { signIn, signInWithGoogle, user, loading: authLoading, supabase } = useAuth();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [feilNokkel, setFeilNokkel] = useState<AuthFeilNokkel | null>(null);
+
+  // Rett fra registreringen: vis HVILKEN adresse e-posten gikk til (tastefeil
+  // var den vanligste grunnen til at kontoer aldri ble bekreftet) og fyll ut
+  // feltet. Leses i en effekt — sessionStorage finnes ikke under SSR.
+  const kommerFraRegistrering = notice === 'noticeConfirm' || notice === 'noticeConfirmApp';
+  const [registrertEpost, setRegistrertEpost] = useState<string | null>(null);
+  useEffect(() => {
+    if (!kommerFraRegistrering) return;
+    const husket = lesRegistrertEpost();
+    if (!husket) return;
+    setRegistrertEpost(husket);
+    setEmail((naa) => naa || husket);
+  }, [kommerFraRegistrering]);
+
+  // «Send bekreftelsen på nytt». Aldri automatisk — bare når brukeren trykker.
+  const [ventSekunder, setVentSekunder] = useState(0);
+  const [sendPaNyttMelding, setSendPaNyttMelding] = useState<string | null>(null);
+  useEffect(() => {
+    if (ventSekunder <= 0) return;
+    const id = setTimeout(() => setVentSekunder((v) => v - 1), 1000);
+    return () => clearTimeout(id);
+  }, [ventSekunder]);
+  const visSendPaNytt = kommerFraRegistrering || feilNokkel === 'emailNotConfirmed';
+
+  const handleSendPaNytt = async () => {
+    const adresse = email.trim();
+    if (!adresse) {
+      setSendPaNyttMelding(t('resendNeedsEmail'));
+      return;
+    }
+    setVentSekunder(SEND_PA_NYTT_VENT_SEKUNDER);
+    setSendPaNyttMelding(null);
+    try {
+      // ⚠️ AVHENGER AV E-POSTMALEN I SUPABASE. resend() sender ingen
+      // code_challenge (auth-js), så den nye lenka er IKKE en PKCE-lenke som
+      // den første fra signUp. Det går bra fordi malen «Confirm signup» skal
+      // peke på {{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=signup
+      // — den ruten løser inn begge slag i hvilken som helst nettleser (se
+      // auth/confirm/route.ts). Settes malen tilbake til {{ .ConfirmationURL }},
+      // ender denne lenka med økten i URL-fragmentet på en side som aldri
+      // leser det (samme felle som purre-cronen beskriver). Da må utsendingen
+      // flyttes til serveren: generateLink + egen e-post til /auth/confirm.
+      const { error: sendFeil } = await supabase.auth.resend({
+        type: 'signup',
+        email: adresse,
+        // Samme landingssted som den første e-posten fikk i signUp (useAuth).
+        ...(isNativePlatform() ? { options: { emailRedirectTo: `${window.location.origin}/auth/callback` } } : {})
+      });
+      if (sendFeil) throw sendFeil;
+      setSendPaNyttMelding(t('resendDone'));
+    } catch (err) {
+      const k = authFeilNokkel(err);
+      // Samme nøytrale tekst uansett om kontoen finnes — bare grense og
+      // nettverk er verdt å si noe eget om.
+      setSendPaNyttMelding(k === 'rateLimited' || k === 'network' ? tFeil(k) : t('resendDone'));
+    }
+  };
 
   // En allerede innlogget besøkende skal ikke se innloggingsskjemaet — send
   // dem dit de var på vei. Dette er også SELVHELBREDELSEN for appskallet:
@@ -65,11 +131,13 @@ function LoginForm() {
     // utenfor skjermen — det var App Review-avvisningen 21.08.2026 (2.1a).
     (document.activeElement as HTMLElement | null)?.blur?.();
     setError(null);
+    setFeilNokkel(null);
     setLoading(true);
 
     try {
       await signIn(email, password);
       trackEvent('login', { method: 'password' });
+      glemRegistrertEpost();
       // Full sidelast i stedet for router.push: klientnavigasjonen kunne bli
       // avvist av middleware i appskallet (kapsel-synkroniseringen over) og
       // lande stille tilbake på skjemaet. En full last konvergerer: skulle
@@ -77,7 +145,12 @@ function LoginForm() {
       // og prøver igjen.
       window.location.assign(redirectPath);
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('signInFailed'));
+      // Aldri den rå Supabase-meldingen: den er engelsk («Invalid login
+      // credentials») for både norske og svenske brukere.
+      const k = authFeilNokkel(err);
+      if (!k) varsleUkjentAuthFeil('login', err);
+      setFeilNokkel(k);
+      setError(k ? tFeil(k) : t('signInFailed'));
       setLoading(false);
     }
     // Merk: ved suksess får loading stå — siden er på vei bort, og en aktiv
@@ -92,7 +165,9 @@ function LoginForm() {
       const callback = `${window.location.origin}/auth/callback?next=${encodeURIComponent(redirectPath)}`;
       await signInWithGoogle(callback);
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('googleSignInFailed'));
+      const k = authFeilNokkel(err);
+      if (!k) varsleUkjentAuthFeil('login.google', err);
+      setError(k ? tFeil(k) : t('googleSignInFailed'));
       setLoading(false);
     }
   };
@@ -117,28 +192,42 @@ function LoginForm() {
           </p>
         ) : null}
 
+        {kommerFraRegistrering && registrertEpost ? (
+          <p className="mt-2 text-sm text-gray-700">
+            {t.rich('sentTo', {
+              email: registrertEpost,
+              strong: (chunks) => <span className="break-all font-medium text-gray-900">{chunks}</span>,
+              link: (chunks) => (
+                <Link
+                  href={`/auth/register?next=${encodeURIComponent(redirectPath)}`}
+                  className="font-semibold text-forest-800 underline"
+                >
+                  {chunks}
+                </Link>
+              )
+            })}
+          </p>
+        ) : null}
+
         <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
           <label className="block text-sm font-medium text-gray-800">
             {t('emailLabel')}
             <input
               type="email"
               required
-              className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2"
+              autoComplete="email"
+              className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-base"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
             />
           </label>
 
-          <label className="block text-sm font-medium text-gray-800">
-            {t('passwordLabel')}
-            <input
-              type="password"
-              required
-              className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
-          </label>
+          <PassordFelt
+            label={t('passwordLabel')}
+            value={password}
+            onChange={setPassword}
+            autoComplete="current-password"
+          />
 
           <div className="-mt-1 text-right">
             <Link href="/auth/forgot" className="text-sm font-medium text-forest-800 hover:underline">
@@ -152,6 +241,25 @@ function LoginForm() {
             {t('signInButton')}
           </Button>
         </form>
+
+        {visSendPaNytt ? (
+          <div className="mt-4 rounded-lg border border-gray-200 bg-gray-50 px-3 py-3">
+            <p className="text-sm text-gray-700">{t('resendHint')}</p>
+            <button
+              type="button"
+              onClick={handleSendPaNytt}
+              disabled={ventSekunder > 0}
+              className="mt-1 min-h-[44px] text-sm font-semibold text-forest-800 underline disabled:text-gray-500 disabled:no-underline"
+            >
+              {ventSekunder > 0 ? t('resendWait', { seconds: ventSekunder }) : t('resendButton')}
+            </button>
+            {sendPaNyttMelding ? (
+              <p className="mt-1 text-sm text-gray-700" role="status">
+                {sendPaNyttMelding}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
 
         <NonNativeOnly>
           <Button type="button" variant="outline" className="mt-3 w-full" onClick={handleGoogle} disabled={loading}>

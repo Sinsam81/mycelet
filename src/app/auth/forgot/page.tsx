@@ -1,18 +1,25 @@
 'use client';
 
-import { FormEvent, useMemo, useState } from 'react';
+import { FormEvent, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { Button } from '@/components/ui/Button';
 import { createClient } from '@/lib/supabase/client';
+import { authFeilNokkel, varsleUkjentAuthFeil } from '@/lib/auth/auth-feil';
 
 export default function ForgotPasswordPage() {
   const t = useTranslations('AuthForgot');
+  const tFeil = useTranslations('AuthErrors');
   const supabase = useMemo(() => createClient(), []);
   const [email, setEmail] = useState('');
   const [sent, setSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  // Satt når ruten vår har laget en lenke uten å få sendt e-posten. Hvert kall
+  // dit stempler `recovery_sent_at` hos Supabase, og Supabases egen e-post er
+  // da sperret i 60 s. Neste forsøk går derfor RETT til Supabase — et nytt
+  // kall til ruten ville stemplet på nytt og holdt reserven sperret for alltid.
+  const hoppOverRuten = useRef(false);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -20,16 +27,58 @@ export default function ForgotPasswordPage() {
     setLoading(true);
 
     try {
-      // Recovery link lands on /auth/reset, where the browser client auto-detects
-      // the code and the user sets a new password. redirectTo must be in Supabase's
-      // allow-list (www.mycelet.com/** + mycelet.com/** are configured).
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/auth/reset`
-      });
-      if (error) throw error;
+      // Vår egen rute sender en lenke med token_hash, som /auth/reset løser inn
+      // i HVILKEN SOM HELST nettleser. Supabases egen e-post er en PKCE-kode som
+      // bare virker der den ble bestilt — fra appen åpner lenka alltid i Safari,
+      // og da endte brukeren på «lenken er ugyldig».
+      //
+      //  · sendt     — ruten tok seg av det (eller adressen er ukjent).
+      //  · ikkeSendt — lenka ble laget, men e-posten kom ikke ut (`sendFailed`).
+      //  · reserve   — ruten laget ingen lenke (`fallback`: ikke satt opp lokalt
+      //                og i preview), eller svarte ikke i det hele tatt.
+      let utfall: 'sendt' | 'ikkeSendt' | 'reserve' = 'reserve';
+      if (!hoppOverRuten.current) {
+        try {
+          const res = await fetch('/api/auth/glemt-passord', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email })
+          });
+          if (res.ok) {
+            const svar = (await res.json().catch(() => null)) as { fallback?: boolean; sendFailed?: boolean } | null;
+            utfall = svar?.sendFailed === true ? 'ikkeSendt' : svar?.fallback === true ? 'reserve' : 'sendt';
+          }
+        } catch {
+          utfall = 'reserve';
+        }
+      }
+
+      if (utfall === 'ikkeSendt') {
+        // Supabases e-post kan ikke sendes før minuttet er gått (den ville
+        // svart 429), så si det som det er i stedet for å prøve.
+        hoppOverRuten.current = true;
+        setError(t('sendFailedRetry'));
+        return;
+      }
+
+      // Reserve: Supabase sender sin egen e-post, som før. redirectTo må stå i
+      // Supabases tillatelsesliste (www.mycelet.com/** + mycelet.com/**).
+      if (utfall === 'reserve') {
+        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+          redirectTo: `${window.location.origin}/auth/reset`
+        });
+        if (error) {
+          // 429 herfra betyr at adressen nettopp er stemplet — typisk av ruten
+          // vår i et kall som aldri rakk å svare. Ikke stemple én gang til.
+          if (authFeilNokkel(error) === 'rateLimited') hoppOverRuten.current = true;
+          throw error;
+        }
+      }
       setSent(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('sendError'));
+      const k = authFeilNokkel(err);
+      if (!k) varsleUkjentAuthFeil('forgot', err);
+      setError(k ? tFeil(k) : t('sendError'));
     } finally {
       setLoading(false);
     }
@@ -62,7 +111,8 @@ export default function ForgotPasswordPage() {
               <input
                 type="email"
                 required
-                className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2"
+                autoComplete="email"
+                className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-base"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
               />

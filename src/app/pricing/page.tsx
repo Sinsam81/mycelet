@@ -16,6 +16,7 @@ import { kanFaaProveperiode } from '@/lib/billing/provetilbud';
 import { prisSesonglinje } from '@/lib/billing/sesongtekst';
 import { perMaanedAvAarspris, seasonPriceComesFromStore, showsStorePrices } from '@/lib/billing/store-pricing';
 import { statusLabel, tierLabel } from '@/lib/billing/labels';
+import { APPLE_ABONNEMENTER_URL, abonnementKanal, faq2Nokkel, periodelinje, periodelinjeVerdier } from '@/lib/billing/kanal';
 import { useIsNative } from '@/lib/hooks/useIsNative';
 import { RegistrerBruksdag } from '@/components/bruk/RegistrerBruksdag';
 import { NonNativeOnly } from '@/components/native/NonNativeOnly';
@@ -30,7 +31,6 @@ import {
   purchaseIapOffer,
   restoreIapPurchases
 } from '@/lib/native/purchases';
-import { intlLocale } from '@/lib/utils/intl-locale';
 
 type BillingStatusResponse = {
   subscription: {
@@ -41,6 +41,9 @@ type BillingStatusResponse = {
     // Kundeportalen krever en Stripe-kunde; uten denne svarer /api/billing/portal
     // 400, så knappen skal ikke vises.
     stripe_customer_id?: string | null;
+    // Hvor abonnementet ble kjøpt leses av disse to (src/lib/billing/kanal.ts).
+    stripe_subscription_id?: string | null;
+    metadata?: Record<string, unknown> | null;
   } | null;
   capabilities: {
     tier: 'free' | 'premium' | 'season_pass';
@@ -95,6 +98,10 @@ function PricingInner() {
   const [openingPortal, setOpeningPortal] = useState(false);
   const [status, setStatus] = useState<BillingStatusResponse | null>(null);
   const [statusError, setStatusError] = useState<string | null>(null);
+  // Satt når /api/billing/status svarer 401: besøkende uten konto. På nett
+  // betyr det at kjøpsknappene går til registrering i stedet for til en
+  // checkout som bare kan svare 401.
+  const [anonym, setAnonym] = useState(false);
   // Distance-selling consent: the customer must accept immediate delivery + that
   // the 14-day withdrawal right then lapses, before checkout (angrerettloven /
   // distansavtalslagen digital-content exception). Without it, the right extends.
@@ -137,6 +144,10 @@ function PricingInner() {
   }, []);
 
   const iapReady = (iapOffers?.length ?? 0) > 0;
+
+  // Hvor abonnementet ble KJØPT (Stripe, App Store, gavepass) — ikke hvilken
+  // flate kunden står på. Styrer hvilken vei til «endre/avslutt» som vises.
+  const kanal = abonnementKanal(status?.subscription);
 
   // Er det App Store som setter prisen, kan ikke teksten rundt kortet fortsette
   // å love Stripe-prisen i norske kroner. Da hadde det stått «kr 269,00 /år» i
@@ -223,7 +234,8 @@ function PricingInner() {
     },
     {
       q: t('faq2Q'),
-      a: t('faq2A')
+      // Veien ut avhenger av hvor abonnementet ble kjøpt — se faq2Nokkel.
+      a: t(faq2Nokkel(kanal, native))
     },
     {
       q: t('faq3Q'),
@@ -387,6 +399,7 @@ function PricingInner() {
           },
           kanFaaProve: true
         };
+        setAnonym(true);
         setStatus(anonymous);
         return anonymous;
       }
@@ -397,6 +410,7 @@ function PricingInner() {
       }
 
       const parsed = data as BillingStatusResponse;
+      setAnonym(false);
       setStatus(parsed);
       return parsed;
     } catch {
@@ -409,6 +423,11 @@ function PricingInner() {
     void loadStatus();
   }, []);
 
+  // Tilbake til prissiden med planen i fokus etter registrering/innlogging.
+  // readSafeNext godtar `next`, og spørrestrengen overlever når den er kodet.
+  const kontoLenke = (sti: '/auth/register' | '/auth/login', plan: 'premium' | 'season_pass' | null) =>
+    `${sti}?next=${encodeURIComponent(plan ? `/pricing?plan=${plan}` : '/pricing')}`;
+
   const startCheckout = async (plan: 'premium' | 'season_pass') => {
     try {
       setLoadingPlan(plan);
@@ -419,6 +438,12 @@ function PricingInner() {
         // refuses the purchase (angrerettloven — see /kjopsvilkar punkt 4).
         body: JSON.stringify({ plan, immediateDeliveryConsent: true, consentVersion: PURCHASE_CONSENT_VERSION })
       });
+      // Økten har gått ut siden siden ble lastet: til innlogging, og tilbake
+      // til samme plan etterpå. (Login, ikke registrering — de hadde en konto.)
+      if (response.status === 401) {
+        window.location.assign(kontoLenke('/auth/login', plan));
+        return;
+      }
       const data = await response.json();
       // Ta med `details` når den finnes. Ruta legger forklaringen der — for
       // eksempel hvorfor et planbytte er sperret og hva brukeren skal gjøre —
@@ -474,8 +499,29 @@ function PricingInner() {
   const kanFaaProve = kanFaaProveperiode(status);
   // Ved betalingsproblem er «oppdater kortet» den korteste veien tilbake; da
   // finnes det allerede en Stripe-kunde å sende dem til.
+  //
+  // Bare for abonnement kjøpt hos Stripe, og bare når det finnes en Stripe-
+  // kunde: knappen sto for ALLE betalende på nett, så en App Store-kunde eller
+  // et gavepass fikk «fant ingen betalingskonto» uten et ord om Apple.
+  const harPlan = Boolean(status?.capabilities.paid) || planView.lapsed;
   const canOpenPortal =
-    !native && (status?.capabilities.paid || (planView.lapsed && Boolean(status?.subscription?.stripe_customer_id)));
+    !native && kanal === 'stripe' && Boolean(status?.subscription?.stripe_customer_id) && harPlan;
+  // Hva datoen på kortet betyr: fornyes, sagt opp, første belastning …
+  const periodeNokkel = periodelinje({
+    status: status?.subscription?.status,
+    cancelAtPeriodEnd: status?.subscription?.cancel_at_period_end,
+    periodeSlutt: status?.subscription?.current_period_end,
+    kanal,
+    // rc_event_type: en App Store-rad med betalingsproblem har samme flagg
+    // som en oppsagt, men skal ikke loves «du belastes ikke igjen».
+    metadata: status?.subscription?.metadata,
+    // «Nå» avgjør om perioden er ute og om Apple-fristen ligger foran; status
+    // finnes først etter fetch, så det er ingen hydreringsrisiko.
+    naa: new Date()
+  });
+  // Uinnlogget på nett. Alltid sammen med !native: useIsNative er false ved
+  // første render, og skallet skal aldri få en registrerings-/Stripe-vei.
+  const anonymWeb = !native && anonym;
 
   return (
     <PageWrapper>
@@ -547,14 +593,25 @@ function PricingInner() {
         ) : null}
         {iapNotice ? <p className="rounded-lg bg-forest-50 px-3 py-2 text-sm text-forest-900">{iapNotice}</p> : null}
 
-        {status ? (
+        {anonymWeb ? (
+          // Uten konto finnes det ingen plan å vise — «Din plan: Gratis ·
+          // Inaktiv · AI-kvote» leste som kontostatus for en som ikke har konto.
+          <NonNativeOnly>
+            <p className="rounded-2xl border border-gray-200 bg-white p-4 text-sm text-gray-700 shadow-card">
+              {t('anonCreateFirst')}{' '}
+              <Link href={kontoLenke('/auth/login', focusedPlan)} className="font-semibold text-forest-800 underline">
+                {t('anonLoginLink')}
+              </Link>
+            </p>
+          </NonNativeOnly>
+        ) : status ? (
           <article className="rounded-2xl border border-gray-200 bg-white p-4 shadow-card">
             <p className="text-xs uppercase tracking-wide text-gray-500">{t('yourPlan')}</p>
             <p className="mt-1 text-lg font-semibold text-forest-900">{TIER_LABELS[planView.activeTier]}</p>
             <p className="text-sm text-gray-700">
               {statusLabel(status.capabilities.status, t)}
-              {status.subscription?.current_period_end
-                ? ` • ${t('renewsEnds', { date: new Date(status.subscription.current_period_end).toLocaleDateString(intlLocale(locale)) })}`
+              {periodeNokkel && status.subscription?.current_period_end
+                ? ` • ${t(periodeNokkel, periodelinjeVerdier(status.subscription.current_period_end, locale))}`
                 : ''}
             </p>
             {/* Abonnementet finnes, men gir ikke tilgang. Si det rett ut og pek
@@ -583,12 +640,37 @@ function PricingInner() {
                 {t('manageSubscription')}
               </button>
             ) : null}
+            {/* Kjøpt i App Store: der endres og avsluttes det — også når kunden
+                står på nettsiden, der Stripe-portalen ikke har noe å vise. */}
+            {harPlan && kanal === 'apple' ? (
+              <p className="mt-3 text-sm text-gray-700">
+                {t('manageAppleNote')}{' '}
+                <a
+                  href={APPLE_ABONNEMENTER_URL}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="font-medium text-forest-800 underline"
+                >
+                  {t('iapManageOnApple')}
+                </a>
+              </p>
+            ) : null}
+            {/* Kjøpt på nett, men står i appen: ren tekst, ingen lenke ut
+                (App Store 3.1.1) — samme praksis som iapPlanChangeBlocked. */}
+            {native && harPlan && kanal === 'stripe' ? (
+              <NativeOnly>
+                <p className="mt-3 text-sm text-gray-700">{t('manageOnWebNote')}</p>
+              </NativeOnly>
+            ) : null}
           </article>
         ) : (
           <p className="text-sm text-gray-600">{t('loadingStatus')}</p>
         )}
 
-        {!native ? (
+        {/* Uinnlogget: ingen avkrysning. Samtykket skal gis ved selve kjøpet,
+            etter innlogging, der det lagres på serveren — og krysset ville
+            uansett gått tapt på veien via registreringen. */}
+        {!native && !anonymWeb ? (
           <NonNativeOnly>
           <label className="flex items-start gap-2 rounded-lg border border-gray-200 bg-white p-3 text-sm text-gray-700">
             <input
@@ -760,9 +842,13 @@ function PricingInner() {
                     type="button"
                     onClick={() => {
                       if (native && planOffer) void startIapPurchase(planOffer);
+                      // Uten konto: opprett den først, og kom tilbake til
+                      // denne planen. Kjøpet starter aldri av seg selv etterpå
+                      // — kunden krysser av for vilkårene og trykker selv.
+                      else if (anonymWeb && checkoutPlan) window.location.assign(kontoLenke('/auth/register', checkoutPlan));
                       else if (!native && checkoutPlan) void startCheckout(checkoutPlan);
                     }}
-                    disabled={native ? iapBusy !== null : isLoading || !agreedToPurchaseTerms}
+                    disabled={native ? iapBusy !== null : isLoading || (!anonymWeb && !agreedToPurchaseTerms)}
                     className={`mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-sm font-semibold transition ${
                       plan.highlight
                         ? 'bg-forest-800 text-white shadow-sm hover:bg-forest-700'
@@ -794,14 +880,19 @@ function PricingInner() {
               {iapBusy === 'restore' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Undo2 className="h-4 w-4" />}
               {t('iapRestore')}
             </button>
-            <a
-              href="https://apps.apple.com/account/subscriptions"
-              target="_blank"
-              rel="noreferrer"
-              className="text-xs font-medium text-forest-800 underline"
-            >
-              {t('iapManageOnApple')}
-            </a>
+            {/* Ikke for abonnement kjøpt på mycelet.com — hos Apple finnes det
+                ingenting å administrere for dem. «Gjenopprett kjøp» blir stående
+                for alle (3.1.2). */}
+            {kanal !== 'stripe' ? (
+              <a
+                href={APPLE_ABONNEMENTER_URL}
+                target="_blank"
+                rel="noreferrer"
+                className="text-xs font-medium text-forest-800 underline"
+              >
+                {t('iapManageOnApple')}
+              </a>
+            ) : null}
           </div>
         ) : null}
 

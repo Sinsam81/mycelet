@@ -1,26 +1,80 @@
 'use client';
 
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
+import { CheckCircle2, Smartphone } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
+import { PassordFelt } from '@/components/auth/PassordFelt';
 import { createClient } from '@/lib/supabase/client';
+import { isNativePlatform } from '@/lib/native/platform';
+import { authFeilNokkel, erForbigaaendeAuthFeil, varsleUkjentAuthFeil } from '@/lib/auth/auth-feil';
 
-type Status = 'verifying' | 'ready' | 'invalid' | 'done';
+// 'doneApp': passordet er byttet, men kontoen hører hjemme i appen og siden
+// står i Safari — da er «åpne appen» det eneste riktige neste steget.
+type Status = 'verifying' | 'ready' | 'invalid' | 'done' | 'doneApp';
+
+const TOKEN_LAGER = 'mycelet:reset-token';
+
+function glemToken() {
+  try {
+    window.sessionStorage.removeItem(TOKEN_LAGER);
+  } catch {
+    // Ingenting å rydde.
+  }
+}
 
 export default function ResetPasswordPage() {
   const t = useTranslations('AuthReset');
-  const router = useRouter();
+  const tFeil = useTranslations('AuthErrors');
   const supabase = useMemo(() => createClient(), []);
   const [status, setStatus] = useState<Status>('verifying');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  // Lenker vi sender selv (/api/auth/glemt-passord) bærer ?token_hash=. Det
+  // løses inn med verifyOtp og virker i enhver nettleser — i motsetning til
+  // Supabases PKCE-kode (?code=), som bare virker der den ble bestilt.
+  const tokenHash = useRef<string | null>(null);
+  // Tokenet er til engangsbruk. Feiler passordbyttet ETTER en vellykket
+  // innløsning (f.eks. samme passord som før), må neste forsøk ikke løse inn
+  // det brukte tokenet på nytt.
+  const verifisert = useRef(false);
 
   useEffect(() => {
     let active = true;
+
+    // Leses fra adressen her, ikke med useSearchParams (som krever Suspense).
+    // Skjemaet vises med en gang, og tokenet løses inn først ved innsending:
+    // e-postskannere som henter lenka skal ikke få brukt opp engangstokenet.
+    //
+    // Tokenet tas ut av adressen straks (det skal ikke bli liggende i
+    // historikken eller følge med i sidevisningsmålingen) og huskes i fanens
+    // sessionStorage, så en omlasting av siden ikke gjør lenka «ugyldig».
+    const params = new URLSearchParams(window.location.search);
+    let hash = params.get('token_hash');
+    if (hash) {
+      try {
+        window.sessionStorage.setItem(TOKEN_LAGER, hash);
+      } catch {
+        // Privat modus i WKWebView kan kaste — da virker lenka uten omlasting.
+      }
+      window.history.replaceState(null, '', window.location.pathname);
+    } else if (!params.get('code')) {
+      try {
+        hash = window.sessionStorage.getItem(TOKEN_LAGER);
+      } catch {
+        hash = null;
+      }
+    }
+    if (hash) {
+      tokenHash.current = hash;
+      setStatus('ready');
+      return () => {
+        active = false;
+      };
+    }
 
     // The browser client auto-detects the recovery code in the URL on load,
     // exchanges it, and fires onAuthStateChange with a recovery session.
@@ -62,15 +116,69 @@ export default function ResetPasswordPage() {
 
     setLoading(true);
     try {
-      const { error } = await supabase.auth.updateUser({ password });
+      if (tokenHash.current && !verifisert.current) {
+        const { error: otpError } = await supabase.auth.verifyOtp({
+          token_hash: tokenHash.current,
+          type: 'recovery'
+        });
+        if (otpError) {
+          // Nettverksbrudd, 429 og 5xx kommer også hit som `error`, og sier
+          // ingenting om tokenet. Da blir skjemaet stående med tokenet i
+          // behold, så brukeren kan trykke én gang til — «lenken er ugyldig»
+          // ville sendt dem ut etter en ny e-post de ikke trenger.
+          if (erForbigaaendeAuthFeil(otpError)) {
+            const k = authFeilNokkel(otpError);
+            if (!k) varsleUkjentAuthFeil('reset.verify', otpError);
+            setError(k ? tFeil(k) : t('errorTryAgain'));
+            setLoading(false);
+            return;
+          }
+          // Serveren avviste tokenet: brukt, utløpt eller erstattet av en nyere lenke.
+          glemToken();
+          tokenHash.current = null;
+          setStatus('invalid');
+          setLoading(false);
+          return;
+        }
+        verifisert.current = true;
+        // Tokenet er brukt opp, og økten ligger i kapslene. Glem det NÅ, ikke
+        // først når passordet er lagret: feiler updateUser under og siden
+        // lastes på nytt, skal den finne gjenopprettingsøkten (getSession i
+        // effekten over) — ikke hente fram det brukte tokenet og ende på
+        // «ugyldig» ved neste innsending.
+        glemToken();
+      }
+
+      const { data, error } = await supabase.auth.updateUser({ password });
       if (error) throw error;
+      glemToken();
+
+      // Kontoer opprettet i appen: e-postlenka åpner i Safari, men innloggingen
+      // skal skje i appen. Å sende dem til nettsidens kart ville vært feil vei —
+      // samme resonnement som /auth/bekreftet-app.
+      const plattform = data.user?.user_metadata?.plattform;
+      if ((plattform === 'ios' || plattform === 'android') && !isNativePlatform()) {
+        // Ikke la en løs nettøkt ligge igjen i Safari.
+        try {
+          await supabase.auth.signOut();
+        } catch {
+          // Passordet er uansett byttet.
+        }
+        setStatus('doneApp');
+        return;
+      }
+
       setStatus('done');
       setTimeout(() => {
-        router.push('/map');
-        router.refresh();
+        // Full sidelast, ikke klientnavigasjon: i appskallet henger kapsel-
+        // synkroniseringen etter, og middleware kunne avvise en router.push
+        // (samme feilklasse som innloggingen, PR #191).
+        window.location.assign('/map');
       }, 1500);
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('errorUpdateFailed'));
+      const k = authFeilNokkel(err);
+      if (!k) varsleUkjentAuthFeil('reset', err);
+      setError(k ? tFeil(k) : t('errorUpdateFailed'));
       setLoading(false);
     }
   };
@@ -99,31 +207,43 @@ export default function ResetPasswordPage() {
           </p>
         ) : null}
 
+        {status === 'doneApp' ? (
+          <div className="mt-4 space-y-4 text-center">
+            <CheckCircle2 className="mx-auto h-12 w-12 text-forest-700" aria-hidden="true" />
+            <p className="text-base font-semibold text-forest-900">{t('doneAppTitle')}</p>
+            <div className="rounded-2xl border border-forest-200 bg-forest-50 p-4 text-left">
+              <p className="flex items-start gap-2 text-sm text-forest-900">
+                <Smartphone className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+                <span>{t('doneAppSteps')}</span>
+              </p>
+            </div>
+            <p className="text-sm text-gray-600">
+              {t('doneAppWebInstead')}{' '}
+              <Link href="/auth/login" className="font-semibold text-forest-800 underline">
+                {t('doneAppWebLink')}
+              </Link>
+            </p>
+          </div>
+        ) : null}
+
         {status === 'ready' ? (
           <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
             <p className="text-sm text-gray-700">{t('choosePassword')}</p>
 
-            <label className="block text-sm font-medium text-gray-800">
-              {t('newPasswordLabel')}
-              <input
-                type="password"
-                required
-                className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
-            </label>
+            <PassordFelt
+              label={t('newPasswordLabel')}
+              value={password}
+              onChange={setPassword}
+              autoComplete="new-password"
+              minLength={8}
+            />
 
-            <label className="block text-sm font-medium text-gray-800">
-              {t('confirmPasswordLabel')}
-              <input
-                type="password"
-                required
-                className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2"
-                value={confirm}
-                onChange={(e) => setConfirm(e.target.value)}
-              />
-            </label>
+            <PassordFelt
+              label={t('confirmPasswordLabel')}
+              value={confirm}
+              onChange={setConfirm}
+              autoComplete="new-password"
+            />
 
             {error ? <p className="text-sm text-red-600">{error}</p> : null}
 

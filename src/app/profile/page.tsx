@@ -15,6 +15,7 @@ import type { Edibility } from '@/types/species';
 import { intlLocale } from '@/lib/utils/intl-locale';
 import { formatMemberSince } from '@/lib/utils/member-since';
 import { statusLabel, tierLabel } from '@/lib/billing/labels';
+import { abonnementKanal, periodelinje, periodelinjeVerdier } from '@/lib/billing/kanal';
 import { logger } from '@/lib/log';
 
 interface UserStats {
@@ -113,6 +114,16 @@ export default async function ProfilePage() {
   const findings = (findingsRes.data ?? []) as unknown as FindingRow[];
   const posts = (postsRes.data ?? []) as PostRow[];
   const billing = getBillingCapabilities(subscription);
+  // Samme kanalregel og samme datolinje som prissiden (src/lib/billing/kanal.ts).
+  const kanal = abonnementKanal(subscription);
+  const periodeNokkel = periodelinje({
+    status: subscription?.status,
+    cancelAtPeriodEnd: subscription?.cancel_at_period_end,
+    periodeSlutt: subscription?.current_period_end,
+    kanal,
+    metadata: subscription?.metadata,
+    naa: new Date()
+  });
   const isAdmin = roleRes.data?.role === 'admin' || roleRes.data?.role === 'moderator';
 
   // Kontoens dato, ikke profilradens — se src/lib/utils/member-since.ts.
@@ -165,6 +176,13 @@ export default async function ProfilePage() {
             <span className="text-gray-500">·</span>
             <span className="text-gray-700">{statusLabel(billing.status, tPricing)}</span>
           </div>
+          {/* Fornyes, sagt opp eller første belastning — med dato (Oslo-tid,
+              samme verdier som prissiden; siden rendres på en UTC-server). */}
+          {periodeNokkel && subscription?.current_period_end ? (
+            <p className="mt-1 text-xs text-gray-600">
+              {tPricing(periodeNokkel, periodelinjeVerdier(subscription.current_period_end, locale))}
+            </p>
+          ) : null}
           {!billing.paid && billing.aiDailyLimit !== null ? (
             <p className="mt-1 text-xs text-gray-600">{t('aiQuota', { limit: billing.aiDailyLimit })}</p>
           ) : null}
@@ -264,13 +282,8 @@ export default async function ProfilePage() {
         <BlockedUsersList />
 
         <AccountDataActions
-          abonnementKanal={
-            subscription?.metadata?.provider === 'revenuecat'
-              ? 'apple'
-              : subscription?.stripe_subscription_id
-                ? 'stripe'
-                : null
-          }
+          // Gavepass har ingen butikk å advare om ved sletting.
+          abonnementKanal={kanal === 'tildelt' ? null : kanal}
         />
 
         {/* Terms, privacy and contact must be reachable from inside the app —

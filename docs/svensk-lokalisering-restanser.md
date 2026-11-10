@@ -25,13 +25,23 @@ får norsk e-post.
 
 **Hvor:** Supabase Dashboard → Authentication → Emails → Templates.
 
+> **Oppdatert:** «Glemt passord»-e-posten sender vi nå selv, på ett språk per
+> leser (`POST /api/auth/glemt-passord` → Resend, tekst i
+> [`src/lib/auth/glemt-passord-epost.ts`](../src/lib/auth/glemt-passord-epost.ts)).
+> Lenka bærer `token_hash` og virker i enhver nettleser — også når den ble
+> bestilt fra appen og åpnes i Safari, noe Supabases PKCE-lenke aldri gjorde.
+> Supabases **Reset Password**-mal er dermed bare *reserven*: den brukes når
+> ruten mangler nøkler (lokalt, preview), og ved brukerens neste forsøk når
+> Resend ikke fikk sendt e-posten. Hold den likevel tospråklig som beskrevet
+> under.
+
 ### Hvilke maler som faktisk er i bruk
 
 Jeg sjekket hvilke Auth-kall appen gjør. Bare disse to kan trigges:
 
 | Mal | I bruk? | Trigges av |
 |---|---|---|
-| **Reset Password** | ✅ Ja, sikkert | `resetPasswordForEmail()` i [auth/forgot](../src/app/auth/forgot/page.tsx) → lander på `/auth/reset` |
+| **Reset Password** | ⚠️ Bare som reserve | `resetPasswordForEmail()` i [auth/forgot](../src/app/auth/forgot/page.tsx) når `/api/auth/glemt-passord` svarer `fallback` (med en gang) eller `sendFailed` (ved neste forsøk) → lander på `/auth/reset` |
 | **Confirm signup** | ⚠️ Bare hvis e-postbekreftelse er PÅ | [auth/register](../src/app/auth/register/page.tsx) håndterer begge tilfeller |
 | Magic Link / Invite / Change Email / Reauthentication | ❌ Nei | Ingen kall i koden |
 

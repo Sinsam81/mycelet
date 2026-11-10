@@ -29,6 +29,22 @@ describe('billingCopy', () => {
     expect(billingCopy('planChangeBlockedDetails', 'sv')).toContain('prenumeration');
   });
 
+  it('planbytte-sperren peker på veier som finnes — ikke «kontoinnstillinger»', () => {
+    const nb = billingCopy('planChangeBlockedDetails', 'nb');
+    const sv = billingCopy('planChangeBlockedDetails', 'sv');
+    expect(nb).not.toMatch(/kontoinnstillinger/);
+    expect(sv).not.toMatch(/kontoinställningar/);
+    expect(nb).toContain('«Administrer abonnement» på prissiden');
+    expect(nb).toContain('Innstillinger → navnet ditt øverst → Abonnementer');
+    expect(sv).toContain('Inställningar → ditt namn högst upp → Prenumerationer');
+    expect(nb + sv).not.toMatch(/Apple-ID/i);
+  });
+
+  it('401-teksten er en setning et menneske kan handle på', () => {
+    expect(billingCopy('unauthenticated', 'nb')).toBe('Logg inn for å fortsette');
+    expect(billingCopy('unauthenticated', 'sv')).toBe('Logga in för att fortsätta');
+  });
+
   it('bruker aldri samme streng på nb og sv der språkene faktisk skiller seg', () => {
     for (const key of KEYS) {
       expect(billingCopy(key, 'sv')).not.toBe(billingCopy(key, 'nb'));

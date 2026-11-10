@@ -10,17 +10,24 @@ import { useIsNative } from '@/lib/hooks/useIsNative';
 import { NativeOnly } from '@/components/native/NativeOnly';
 import { TellFlate } from '@/components/bruk/TellFlate';
 import { trackEvent } from '@/lib/analytics';
+import { PassordFelt } from '@/components/auth/PassordFelt';
 import { readSafeNext } from '@/lib/auth/safe-redirect';
 import { ensureProfile } from '@/lib/auth/ensure-profile';
+import { authFeilNokkel, varsleUkjentAuthFeil, type AuthFeilNokkel } from '@/lib/auth/auth-feil';
+import { huskRegistrertEpost } from '@/lib/auth/registrert-epost';
 
 // Next 15+ requires useSearchParams() to be inside a Suspense boundary so the
 // page can prerender. We wrap the inner form-rendering component below.
 
-// Supabase errors (PostgrestError, AuthError) are plain objects, NOT Error
-// instances, so `err instanceof Error` misses them and the user only ever saw a
-// generic fallback. Read `.message` defensively and map the common cases to
-// friendly Norwegian copy.
-function toRegisterErrorMessage(err: unknown, t: (key: string) => string): string {
+// Feil herfra kan være både AuthError (en Error med `code`) og PostgrestError
+// (et rent objekt), så meldingen leses defensivt. Brukernavn-kollisjonen er
+// særegen for registreringen og sjekkes først; resten går gjennom den delte
+// oversetteren. Den rå (engelske) meldingen vises aldri.
+function toRegisterErrorMessage(
+  err: unknown,
+  t: (key: string) => string,
+  tFeil: (key: AuthFeilNokkel) => string
+): string {
   const raw =
     typeof err === 'object' && err !== null && 'message' in err
       ? String((err as { message: unknown }).message)
@@ -33,17 +40,20 @@ function toRegisterErrorMessage(err: unknown, t: (key: string) => string): strin
   ) {
     return t('errorUsernameTaken');
   }
-  if (lower.includes('already registered') || lower.includes('already been registered')) {
-    return t('errorEmailRegistered');
-  }
-  if (lower.includes('password') && (lower.includes('least') || lower.includes('short'))) {
+
+  const k = authFeilNokkel(err);
+  if (k === 'emailRegistered') return t('errorEmailRegistered');
+  if (k === 'weakPassword' || (lower.includes('password') && (lower.includes('least') || lower.includes('short')))) {
     return t('errorPasswordShort');
   }
-  return raw || t('errorGeneric');
+  if (k) return tFeil(k);
+  varsleUkjentAuthFeil('register', err);
+  return t('errorGeneric');
 }
 
 function RegisterForm() {
   const t = useTranslations('AuthRegister');
+  const tFeil = useTranslations('AuthErrors');
   const router = useRouter();
   const searchParams = useSearchParams();
   // Validert mot åpen redirect — se src/lib/auth/safe-redirect.ts.
@@ -92,12 +102,21 @@ function RegisterForm() {
           return;
         }
 
-        router.push(redirectPath);
+        // Full sidelast, ikke klientnavigasjon: økten er helt fersk, og i
+        // appskallet henger kapsel-synkroniseringen etter — middleware kunne
+        // avvise en router.push og sende brukeren stille tilbake (PR #191,
+        // samme grep som innloggingen). Gjelder den dagen e-postbekreftelse
+        // slås av; i dag går registreringen via else-grenen under.
+        window.location.assign(redirectPath);
+        return;
       } else {
+        // Innloggingssiden viser hvilken adresse e-posten gikk til. Via
+        // sessionStorage, aldri i URL-en.
+        huskRegistrertEpost(email.trim());
         router.push(`/auth/login?next=${encodeURIComponent(redirectPath)}&confirm=1${native ? '&app=1' : ''}`);
       }
     } catch (err) {
-      setError(toRegisterErrorMessage(err, t));
+      setError(toRegisterErrorMessage(err, t, tFeil));
     } finally {
       setLoading(false);
     }
@@ -120,7 +139,11 @@ function RegisterForm() {
               type="text"
               required
               minLength={3}
-              className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2"
+              autoComplete="nickname"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
+              className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-base"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
             />
@@ -130,7 +153,8 @@ function RegisterForm() {
             {t('displayNameLabel')}
             <input
               type="text"
-              className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2"
+              autoComplete="off"
+              className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-base"
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
             />
@@ -141,23 +165,20 @@ function RegisterForm() {
             <input
               type="email"
               required
-              className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2"
+              autoComplete="email"
+              className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-base"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
             />
           </label>
 
-          <label className="block text-sm font-medium text-gray-800">
-            {t('passwordLabel')}
-            <input
-              type="password"
-              required
-              minLength={8}
-              className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
-          </label>
+          <PassordFelt
+            label={t('passwordLabel')}
+            value={password}
+            onChange={setPassword}
+            autoComplete="new-password"
+            minLength={8}
+          />
 
           <label className="flex items-start gap-2 text-sm text-gray-700">
             <input
