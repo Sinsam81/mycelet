@@ -3,7 +3,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { BILLING_STATUS_KEY } from '@/lib/hooks/useBilling';
 import * as Sentry from '@sentry/nextjs';
-import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useLocale, useTranslations } from 'next-intl';
@@ -13,6 +13,7 @@ import { BILLING_PLANS, FREE_DAILY_AI_LIMIT, STRIPE_PROVEDAGER } from '@/lib/bil
 import { canPurchasePlan, getBlockingPaidPlan, getPlanViewState } from '@/lib/billing/plan-state';
 import { fornyelsesTekst, forsteBelastningsTekst } from '@/lib/billing/fornyelse';
 import { kanFaaProveperiode } from '@/lib/billing/provetilbud';
+import { prisSesonglinje } from '@/lib/billing/sesongtekst';
 import { perMaanedAvAarspris, seasonPriceComesFromStore, showsStorePrices } from '@/lib/billing/store-pricing';
 import { statusLabel, tierLabel } from '@/lib/billing/labels';
 import { useIsNative } from '@/lib/hooks/useIsNative';
@@ -61,6 +62,9 @@ const PURCHASE_CONSENT_VERSION = 'v2-2026-07-30';
 
 const SEASON_PER_MONTH = Math.round(SEASON_YEARLY / 12);
 
+/** Datoen har ingen hendelse å abonnere på; sesonglinja leses én gang per montering. */
+const ingenAbonnering = () => () => {};
+
 // Next 15+ requires useSearchParams() inside a Suspense boundary; default
 // export at the bottom wraps PricingInner.
 function PricingInner() {
@@ -75,6 +79,17 @@ function PricingInner() {
     premium: tierLabel('premium', t),
     season_pass: tierLabel('season_pass', t)
   };
+
+  // Sesonglinja under overskriften følger datoen (sesongtekst.ts). Lest gjennom
+  // useSyncExternalStore med `null` som serverbilde: siden er en klientkomponent
+  // som kan være forhåndstegnet ved bygg, og en måned regnet i render ville da
+  // gitt HTML fra byggemåneden og hydreringsfeil måneden etter. Øyeblikksbildet
+  // er en streng eller null, så det er stabilt mellom kall.
+  const sesonglinje = useSyncExternalStore(
+    ingenAbonnering,
+    () => prisSesonglinje(new Date()),
+    () => null
+  );
 
   const [loadingPlan, setLoadingPlan] = useState<'premium' | 'season_pass' | null>(null);
   const [openingPortal, setOpeningPortal] = useState(false);
@@ -141,8 +156,9 @@ function PricingInner() {
 
   // Sesongpasset FØRST, på alle bredder, som anbefalt valg. Det var det tredje
   // kortet — under bretten på en telefon — og 7 av 8 prøver siden 12. sep 2026
-  // valgte måned. Ærlig ramme: 99 kr dekker resten av høsten; passet gjelder
-  // neste sesong fram til fornyelsesdatoen, som står på kortet.
+  // valgte måned. Ærlig ramme: måneden dekker én måned; passet gjelder ett år
+  // fram til fornyelsesdatoen, som står på kortet. (Rammen sto som «99 kr dekker
+  // resten av høsten» — sant i september, ikke i januar; se sesongtekst.ts.)
   const planCards = [
     {
       id: 'season_pass',
@@ -474,11 +490,19 @@ function PricingInner() {
           <p className="mx-auto mt-2 max-w-md text-sm text-gray-700">
             {t('subheading')}
           </p>
-          {/* Ærlig sesong-urgency: september–oktober ER toppen. Ingen falske
-              nedtellinger — bare det fenologimodellen selv sier. */}
-          <p className="mx-auto mt-2 max-w-md text-sm font-medium text-amber-900">
-            {t('seasonUrgency')}
-          </p>
+          {/* Ærlig sesonglinje: «høysesongen er i gang» BARE i september–oktober,
+              som er månedene teksten navngir. Linja sto ubetinget og sa det
+              samme i januar. Desember–mai sier den i stedet det som er sant
+              da; juni–august og november sier den ingenting (sesongtekst.ts). */}
+          {sesonglinje ? (
+            <p
+              className={`mx-auto mt-2 max-w-md text-sm font-medium ${
+                sesonglinje === 'seasonUrgency' ? 'text-amber-900' : 'text-forest-800'
+              }`}
+            >
+              {t(sesonglinje)}
+            </p>
+          ) : null}
           <div className="mt-3 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs text-gray-600">
             {/* "Sikker betaling med Stripe" må ikke vises i den native appen —
                 der går kjøp via Apple (3.1.1), og Stripe-omtale kan flagges i review. */}

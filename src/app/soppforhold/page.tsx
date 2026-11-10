@@ -9,12 +9,14 @@ import { NativeOnly } from '@/components/native/NativeOnly';
 import { TellFlate } from '@/components/bruk/TellFlate';
 import { getUserLocale } from '@/i18n/locale';
 import { regionSlug } from '@/lib/prediction/region-slug';
+import { sesongtilstand } from '@/lib/sesong/sesongtilstand';
 import {
   farge,
   hentRegioner,
-  innledningsRegion,
+  innledningsTilstand,
   lokalDato,
   regionerPerLand,
+  visArtslinje,
   type SoppforholdRegion
 } from './hent-regioner';
 
@@ -141,8 +143,22 @@ export default async function SoppforholdPage() {
   // det beste totalt. «Ikke klar» vises bare når det ikke finnes tall
   // overhodet — NO-rastret skrives en halvtime før SE-rastret, og i det
   // vinduet sa svensk innledning «inte klar» over en full norsk liste.
-  const { region: beste, egetLandMangler } = innledningsRegion(regions, locale);
+  //
+  // Tilstanden avgjør ordlyden: «ligger best an … er i sesong» sto ubetinget, og
+  // sa det også når kortet rett under leste «Lite kantarell i skogen nå» — og om
+  // vinteren, ved 3 av 100. Se innledningsTilstand i hent-regioner.ts.
+  const {
+    region: beste,
+    egetLandMangler,
+    tilstand
+  } = innledningsTilstand(regions, locale, sesongtilstand(new Date()).iHovedsesong);
   const fet = (chunks: React.ReactNode) => <strong>{chunks}</strong>;
+  // En tekstlenke, ikke en varselboks til — se kommentaren ved varselseksjonen under.
+  const varsel = (chunks: React.ReactNode) => (
+    <Link href="/soppvarsel" className="underline">
+      {chunks}
+    </Link>
+  );
 
   const jsonLd = {
     '@context': 'https://schema.org',
@@ -173,14 +189,18 @@ export default async function SoppforholdPage() {
           </h1>
           {beste ? (
             <p className="text-lg text-gray-700">
-              {beste.leadingSpecies
-                ? t.rich('leadWithSpecies', {
-                    region: beste.name,
-                    species: beste.leadingSpecies.toLowerCase(),
-                    count: regions.length,
-                    strong: fet
-                  })
-                : t.rich('lead', { region: beste.name, count: regions.length, strong: fet })}
+              {tilstand === 'utenomSesong'
+                ? t.rich('leadOffSeason', { count: regions.length, varsel })
+                : tilstand === 'stille'
+                  ? t.rich('leadQuiet', { region: beste.name, count: regions.length, strong: fet, varsel })
+                  : visArtslinje(beste) && beste.leadingSpecies
+                    ? t.rich('leadWithSpecies', {
+                        region: beste.name,
+                        species: beste.leadingSpecies.toLowerCase(),
+                        count: regions.length,
+                        strong: fet
+                      })
+                    : t.rich('lead', { region: beste.name, count: regions.length, strong: fet })}
             </p>
           ) : (
             <p className="text-lg text-gray-700">{t('notReady')}</p>
@@ -210,6 +230,24 @@ export default async function SoppforholdPage() {
               {t('whyRain')}
             </Link>
           </div>
+          {/* Utenom sesongen har lista under lite å by på. Da pekes det også på
+              det som faktisk har innhold nå — uten å fjerne hovedhandlingen. */}
+          {tilstand === 'utenomSesong' ? (
+            <p className="mt-3 text-sm text-gray-600">
+              {t.rich('offSeasonLinks', {
+                kalender: (chunks) => (
+                  <Link href="/calendar" className="underline">
+                    {chunks}
+                  </Link>
+                ),
+                arter: (chunks) => (
+                  <Link href="/species" className="underline">
+                    {chunks}
+                  </Link>
+                )
+              })}
+            </p>
+          ) : null}
         </section>
 
         {/* Leserens eget land først (regionerPerLand). Områdesidene selv har

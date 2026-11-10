@@ -8,6 +8,7 @@ import { X } from 'lucide-react';
 import type { TILBUD_UTLOSERE } from '@/lib/bruk/bruksdag';
 import { fornyelsesTekst, forsteBelastningsTekst } from '@/lib/billing/fornyelse';
 import { planLofte } from '@/lib/billing/prove-lofte';
+import { passDekning } from '@/lib/billing/sesongtekst';
 import { meldTilbudsarkApent } from '@/lib/billing/tilbudsark-apent';
 import { useProveLofte } from '@/lib/hooks/useProveLofte';
 
@@ -103,17 +104,24 @@ export function ProvGratisArk({
         : pass.proveDager === null
           ? t('tittelPassProveUkjentLengde')
           : t('tittelPassProve', { dager: pass.proveDager });
+  // Hva passet dekker følger sesongen: «resten av høsten nå» sto ubetinget og
+  // ble vist også i januar. Bare dette leddet varierer — første belastning,
+  // pris, fornyelse og avslutning står likt i alle varianter (sesongtekst.ts).
+  // Trygt å regne i render: komponenten returnerer null uten document (over)
+  // og tegnes gjennom en portal, så ingenting av dette er servertegnet.
+  const dekning = t(passDekning(new Date()));
   const vilkaar = !pass
     ? t('vilkaarUtenProve')
     : !pass.harProve
-      ? t('passVilkaar', { dato: passDato })
+      ? t('passVilkaar', { dato: passDato, dekning })
       : passProveDager === null
-        ? t('passVilkaarProveUkjentLengde', { pris: pass.pris })
+        ? t('passVilkaarProveUkjentLengde', { pris: pass.pris, dekning })
         : t('passVilkaarProve', {
             dager: passProveDager,
             forsteBelastning: forsteBelastningsTekst(passProveDager, locale),
             pris: pass.pris,
-            dato: passDato
+            dato: passDato,
+            dekning
           });
   const start = !pass ? t('sePass') : pass.harProve ? t('provPass') : t('kjopPass');
   // «Heller måned for måned?» — bare med butikkens pris, og med gratisuke bare når Premium har en.

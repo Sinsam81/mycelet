@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useLocale, useTranslations } from 'next-intl';
-import { regionBandHex } from '@/lib/prediction/region-score';
+import { regionBandHex, regionScoreToCondition } from '@/lib/prediction/region-score';
 
 /**
  * «Hvor i landet er det best i dag?»
@@ -83,13 +83,20 @@ export function BestRegionsCard() {
   if (feilet || (regions && regions.length === 0)) return null;
 
   const vist = regions ? (utvidet ? iLandet : iLandet.slice(0, 5)) : [];
+  // Ingen av landets områder over laveste bånd (vinteren, en tørr uke): da er
+  // «der de er best» en rangering av støy, og undertittelen sier det i stedet.
+  // Samme stige som prikken og dommen. Kortet skjules IKKE — det er eneste vei
+  // til /soppforhold og varselpåmeldingen inne fra appen (se lenkene under).
+  const alleStille = iLandet.length > 0 && iLandet.every((r) => regionScoreToCondition(r.score) === 'poor');
 
   return (
     <article className="rounded-xl bg-white p-4 shadow-sm">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h2 className="text-sm font-semibold text-gray-900">{t('bestRegionsTitle')}</h2>
-          <p className="mt-0.5 text-xs text-gray-500">{t('bestRegionsSubtitle')}</p>
+          <p className="mt-0.5 text-xs text-gray-500">
+            {alleStille ? t('bestRegionsQuiet') : t('bestRegionsSubtitle')}
+          </p>
         </div>
         {tilgjengeligeLand.length > 1 ? (
           <div className="flex shrink-0 gap-1 rounded-full bg-gray-100 p-0.5" role="group">

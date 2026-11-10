@@ -1,5 +1,6 @@
 import { VARSEL_MIN_OKNING, VARSEL_MIN_SCORE } from '@/lib/alerts/decision';
 import { fasitDato } from '@/lib/alerts/email';
+import { REGION_CONDITION_THRESHOLDS } from '@/lib/prediction/region-score';
 
 /**
  * Tekstene @mycelet publiserer — rene funksjoner, testet i __tests__/.
@@ -107,6 +108,21 @@ export interface UkensFasit {
 /** Søndagsposten: ukas beste områder + fasit for et modent varsel når vi har en. */
 export function byggUkesPost(topp: UkensTopp[], fasit: UkensFasit | null): string | null {
   if (topp.length === 0) return null;
+  // Ingenting verdt å si → ingen post. Uten denne porten gikk «Ukas
+  // soppforhold: best an ligger Bergen (4 av 100) …» ut hver søndag hele
+  // vinteren: eneste vilkår var at lista ikke var tom. Under medianen for et
+  // regiondøgn finnes det ikke noe «best an» å hevde, og taushet slår et
+  // ukentlig «4 av 100» på en kanal som lever av etterprøvbare påstander.
+  //
+  // Terskelen er REGIONSTIGENS `moderate` — aldri et tall skrevet inn her og
+  // aldri punktskalaens FORECAST_*-bånd (se «Three distributions» i CLAUDE.md).
+  // Maks, ikke topp[0], så funksjonen ikke avhenger av kallerens sortering.
+  //
+  // Kjent følge: en middelmådig søndag MIDT i sesongen blir også stille, og en
+  // fasit som modnes etter at tallene har falt, kommer ikke på X (den står
+  // fortsatt på /apenhet). En egen fasit-post er ny offentlig tekst og en
+  // eierbeslutning.
+  if (Math.max(...topp.map((t) => t.score)) < REGION_CONDITION_THRESHOLDS.moderate) return null;
 
   const navngitte = topp.slice(0, MAKS_REGIONER).map((t, i) => `${t.region} (${t.score}${i === 0 ? ' av 100' : ''})`);
   const liste =

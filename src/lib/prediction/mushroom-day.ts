@@ -16,6 +16,7 @@
 import { buildExplanation, type ExplanationWeather } from '@/lib/utils/prediction-explanation';
 import { FORECAST_GREEN_MIN } from '@/lib/utils/forecast-scale';
 import { DEFAULT_LOCALE, type Locale } from '@/i18n/config';
+import { utenomSesongTekst } from '@/lib/sesong/utenom-sesong-tekst';
 
 export interface MushroomDayAssessment {
   /** True only inside the broad mushroom season and when the score clears the bar. */
@@ -136,8 +137,8 @@ interface DayCopy {
   messageDrySoil: string;
   titleLittleRain: string;
   messageLittleRain: string;
-  titleOffSeason: string;
-  messageOffSeason: string;
+  // Utenom sesongen: teksten ligger i src/lib/sesong/utenom-sesong-tekst.ts,
+  // delt med flush.ts, så de to ikke kan skille lag igjen.
 }
 
 /**
@@ -183,9 +184,7 @@ const COPY: Record<Locale, DayCopy> = {
       'Vær og sesong er på plass, men marka er fortsatt for tørr etter tørkeperioden. Den trenger et skikkelig regn, så følger soppen på 1–2 uker.',
     titleLittleRain: 'Mildt nok — men det har regnet for lite',
     messageLittleRain:
-      'Temperatur og sesong stemmer, men det har kommet lite nedbør de siste to ukene. Første ordentlige regnværet setter det i gang.',
-    titleOffSeason: 'Utenom soppsesongen',
-    messageOffSeason: 'Det er utenfor hovedsesongen. Kom tilbake fra sensommeren.'
+      'Temperatur og sesong stemmer, men det har kommet lite nedbør de siste to ukene. Første ordentlige regnværet setter det i gang.'
   },
   sv: {
     titleOptimal: '🍄 Perfekt svampdag i dag!',
@@ -197,9 +196,7 @@ const COPY: Record<Locale, DayCopy> = {
       'Väder och säsong är på plats, men marken är fortfarande för torr efter torkan. Den behöver ett ordentligt regn, sedan följer svampen om 1–2 veckor.',
     titleLittleRain: 'Milt nog — men det har regnat för lite',
     messageLittleRain:
-      'Temperatur och säsong stämmer, men det har kommit lite nederbörd de senaste två veckorna. Första ordentliga regnet sätter i gång det.',
-    titleOffSeason: 'Utanför svampsäsongen',
-    messageOffSeason: 'Det är utanför högsäsongen. Kom tillbaka i slutet av sommaren.'
+      'Temperatur och säsong stämmer, men det har kommit lite nederbörd de senaste två veckorna. Första ordentliga regnet sätter i gång det.'
   }
 };
 
@@ -262,7 +259,11 @@ export function assessMushroomDay(
   }): { title: string; message: string } {
     const { copy: c, optimal: ok, score: s, inSeasonWindow: iw, rain: r, moistNow: m } = input;
     if (ok) return { title: c.titleOptimal, message: c.messageOptimal };
-    if (!iw) return { title: c.titleOffSeason, message: c.messageOffSeason };
+    // Vinter og vår har hver sin tekst, og ingen av dem sier «kom tilbake» —
+    // se utenom-sesong-tekst.ts. `month` er dagens egen måned: buildWeek
+    // sender hver prognosedags måned, så en uke over 31. mai → 1. juni bytter
+    // tekst på riktig dag.
+    if (!iw) return utenomSesongTekst(month, locale);
     // Bare når tallet er høyt nok til at brukeren undrer seg over avviket.
     // Under det er «ikke helt optimalt» en dekkende beskrivelse i seg selv.
     // NB: EXPLAIN_SCORE_MIN, ikke OPTIMAL_SCORE_MIN — se kommentaren ved dem.
@@ -277,7 +278,10 @@ export function assessMushroomDay(
   // if a freak-warm-and-wet day would otherwise score high. A genuinely good day
   // also needs a real moisture base — a dry spell never fruits, however mild or
   // in-season it is.
-  const inSeasonWindow = month >= 6 && month <= 11;
+  //
+  // Samme port som flush.ts og sesongtilstand.ts — utledet av vekttabellen, ikke
+  // skrevet ned en gang til (sto som `month >= 6 && month <= 11`).
+  const inSeasonWindow = isInMushroomSeason(month);
 
   // A 14-day rain SUM stays high for two weeks after one old downpour, so on its
   // own it will celebrate a day when the ground has long since dried out. When

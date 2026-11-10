@@ -12,8 +12,9 @@ import { intlLocale } from '@/lib/utils/intl-locale';
  * abonnement» viser den datoen. Arket og prissiden sier begge datoene rett ut
  * — «gratis i 7 dager, fra ca. 29. september 2026 koster passet 249 kr per år,
  * gjelder da til ca. 29. september 2027» — fordi datoen ER argumentet for
- * passet: 99 kr dekker resten av denne høsten, passet dekker neste sesong
- * fram til da. Første utgave av arket regnet passet fra kjøpsdagen og nevnte
+ * passet: måneden dekker én måned, passet dekker et helt år fram til da.
+ * (HVA det året rommer — «resten av høsten nå» eller «hele neste sesong» —
+ * følger kjøpsmåneden og avgjøres i sesongtekst.ts, ikke her.) Første utgave av arket regnet passet fra kjøpsdagen og nevnte
  * aldri når de 249 kronene ble trukket; det leste som «gratis til september
  * 2027», og en kunde belastet på dag åtte er en refusjon og en anmeldelse.
  *

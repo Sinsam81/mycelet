@@ -239,7 +239,7 @@ const BEKREFT_COPY = {
     emne: (region: string) => `Bekreft soppvarselet ditt for ${region}`,
     tittel: 'Ett trykk igjen',
     brodtekst: (region: string) =>
-      `Du (eller noen med adressen din) ba om soppvarsel for <strong>${region}</strong>. Trykk på knappen for å bekrefte — så sier vi fra når forholdene snur, maks én e-post i uka.`,
+      `Du (eller noen med adressen din) ba om soppvarsel for <strong>${region}</strong>. Trykk på knappen for å bekrefte — så sier vi fra når forholdene snur, maks én e-post i uka. Utenom sesongen kan det gå måneder mellom e-postene.`,
     knapp: 'Bekreft soppvarselet',
     ikkeDeg: 'Var det ikke deg? Da kan du trygt ignorere denne e-posten — uten bekreftelse sendes ingenting.',
     signatur: 'Mycelet — soppvarsel for Norge og Sverige'
@@ -248,7 +248,7 @@ const BEKREFT_COPY = {
     emne: (region: string) => `Bekräfta din svampvarning för ${region}`,
     tittel: 'Ett tryck kvar',
     brodtekst: (region: string) =>
-      `Du (eller någon med din adress) bad om svampvarning för <strong>${region}</strong>. Tryck på knappen för att bekräfta — så säger vi till när förhållandena vänder, max ett mejl i veckan.`,
+      `Du (eller någon med din adress) bad om svampvarning för <strong>${region}</strong>. Tryck på knappen för att bekräfta — så säger vi till när förhållandena vänder, max ett mejl i veckan. Utanför säsongen kan det gå månader mellan mejlen.`,
     knapp: 'Bekräfta svampvarningen',
     ikkeDeg: 'Var det inte du? Då kan du tryggt ignorera det här mejlet — utan bekräftelse skickas ingenting.',
     signatur: 'Mycelet — svampvarning för Norge och Sverige'

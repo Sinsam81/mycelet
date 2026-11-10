@@ -10,6 +10,7 @@ import { createRequestLogger } from '@/lib/log/request';
 import { getUserLocale } from '@/i18n/locale';
 import { DEFAULT_LOCALE, isLocale, type Locale } from '@/i18n/config';
 import { REGION_CONDITION_THRESHOLDS, regionScore } from '@/lib/prediction/region-score';
+import { erArtISesong } from '@/lib/sesong/art-i-sesong';
 
 /**
  * «Hvor i landet er det best akkurat nå?»
@@ -138,11 +139,35 @@ export async function GET(request: NextRequest) {
   const { data: arter } = artsIder.length
     ? await supabase
         .from('mushroom_species')
-        .select('id,norwegian_name,swedish_name')
+        .select('id,norwegian_name,swedish_name,edibility,season_start,season_end')
         .in('id', artsIder)
     : { data: [] };
   const navnPerArt = new Map<number, string>();
+  // Er arten i sesong i rasterdatoens måned? `null` når basen ikke har sesong
+  // for arten — ukjent, ikke «utenfor».
+  //
+  // `leadingSpecies` under er bare arten på ruta med høyest tall. Rasteret
+  // skriver en rad per art også utenfor sesong, så sidene kan ikke skrive
+  // «er i sesong her nå» på det grunnlaget alene — de leser dette feltet.
+  //
+  // Vinduet er kalenderens og artssidenes (erArtISesong → baseSeasonMask), IKKE
+  // katalogmånedene alene: de er for smale, og sa «utenfor sesong» om piggsopp
+  // i august mens dommen ved siden av leste «Nå er det piggsopp 🍄».
+  const rasterManed = Number(tileDate.slice(5, 7));
+  const iSesongPerArt = new Map<number, boolean | null>();
   for (const s of arter ?? []) {
+    iSesongPerArt.set(
+      s.id as number,
+      erArtISesong(
+        {
+          id: s.id as number,
+          edibility: s.edibility as string | null,
+          season_start: s.season_start as number | null,
+          season_end: s.season_end as number | null
+        },
+        rasterManed
+      )
+    );
     navnPerArt.set(
       s.id as number,
       getSpeciesDisplayName(
@@ -167,6 +192,7 @@ export async function GET(request: NextRequest) {
         lat: konfig ? (konfig.minLat + konfig.maxLat) / 2 : beste.center_lat,
         lng: konfig ? (konfig.minLng + konfig.maxLng) / 2 : beste.center_lng,
         leadingSpecies: beste.species_id != null ? navnPerArt.get(beste.species_id) ?? null : null,
+        leadingInSeason: beste.species_id != null ? iSesongPerArt.get(beste.species_id) ?? null : null,
         // Regionstigen, ikke rutestigen: dette tallet er p90 OVER ruter og
         // ligger systematisk høyere enn en enkelt rute. Se
         // REGION_CONDITION_THRESHOLDS.

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { VARSEL_MIN_OKNING, VARSEL_MIN_SCORE } from '@/lib/alerts/decision';
+import { REGION_CONDITION_THRESHOLDS } from '@/lib/prediction/region-score';
 import { byggOmslagsPost, byggUkesPost, finnOmslag, vektetLengde } from '../innlegg';
 
 const OVER = VARSEL_MIN_SCORE + VARSEL_MIN_OKNING; // kvalifiserer alltid
@@ -115,6 +116,37 @@ describe('byggUkesPost', () => {
 
   it('null uten regioner', () => {
     expect(byggUkesPost([], null)).toBeNull();
+  });
+
+  describe('ingenting verdt å si → ingen post', () => {
+    const TERSKEL = REGION_CONDITION_THRESHOLDS.moderate;
+    const fasit = { region: 'Oslo', dato: '2026-08-18', ukenEtter: 214, ukenFor: 87 };
+
+    it('null når beste område er under regionstigens «moderate» — vintersøndagene', () => {
+      const vinter = [
+        { region: 'Bergen', score: 4 },
+        { region: 'Stavanger', score: 3 },
+        { region: 'Kristiansand', score: 3 }
+      ];
+      expect(byggUkesPost(vinter, null)).toBeNull();
+      expect(byggUkesPost([{ region: 'Bergen', score: TERSKEL - 1 }], null)).toBeNull();
+    });
+
+    it('en fasit alene bærer ikke posten', () => {
+      expect(byggUkesPost([{ region: 'Bergen', score: TERSKEL - 1 }], fasit)).toBeNull();
+    });
+
+    it('poster når beste område er nøyaktig på terskelen', () => {
+      expect(byggUkesPost([{ region: 'Bergen', score: TERSKEL }], null)).toContain(`Bergen (${TERSKEL} av 100)`);
+    });
+
+    it('ser på høyeste tall, ikke på rekkefølgen kalleren sendte', () => {
+      const usortert = [
+        { region: 'Oslo', score: 20 },
+        { region: 'Bergen', score: TERSKEL + 5 }
+      ];
+      expect(byggUkesPost(usortert, null)).not.toBeNull();
+    });
   });
 
   it('lister toppregionene med score', () => {

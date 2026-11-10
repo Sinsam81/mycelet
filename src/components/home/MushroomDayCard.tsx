@@ -1,6 +1,7 @@
 'use client';
 
 import { FolgOmrade } from '@/components/home/FolgOmrade';
+import { erUtenomSesongFlush } from '@/components/home/utenom-sesong-flush';
 import { RegistrerBruksdag } from '@/components/bruk/RegistrerBruksdag';
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
@@ -31,6 +32,8 @@ interface Flush {
   daysUntil: number | null;
   title: string;
   message: string;
+  /** Hvorfor status er 'dormant' (flush.ts). Mangler i svar cachet før feltet kom. */
+  reason?: 'offSeason' | 'cold' | 'speciesOffSeason';
 }
 
 interface Forecast {
@@ -240,6 +243,9 @@ export function MushroomDayCard({
   const r = 46;
   const circumference = 2 * Math.PI * r;
   const offset = circumference * (1 - today.score / 100);
+  // Desember–mai: dommen over og flush-banneret er samme tekst. Vis den én
+  // gang, og bruk plassen på veien videre — se utenom-sesong-flush.ts.
+  const utenomSesong = erUtenomSesongFlush(data.flush, today.title);
 
   return (
     <article className="min-h-[15rem] rounded-xl bg-white p-4 shadow-sm">
@@ -298,7 +304,21 @@ export function MushroomDayCard({
         omrade={folgbartOmrade}
       />
 
-      {data.flush ? (
+      {utenomSesong ? (
+        // Ingen ny påstand om funn: bare hvor appen faktisk har noe å vise nå —
+        // kalenderen (artene som har sesong om vinteren og våren) og, for
+        // innloggede, stedene fra deres egen sesong.
+        <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-xs">
+          <Link href="/calendar" className="font-medium text-forest-800 hover:underline">
+            {t('offSeasonCalendar')} →
+          </Link>
+          {innlogget ? (
+            <Link href="/mine-steder" className="font-medium text-forest-800 hover:underline">
+              {t('offSeasonMyPlaces')} →
+            </Link>
+          ) : null}
+        </div>
+      ) : data.flush ? (
         <div className={`mt-3 rounded-xl border px-3 py-2 ${FLUSH_TINT[data.flush.status]}`}>
           <p className="text-sm font-semibold">{data.flush.title}</p>
           <p className="mt-0.5 text-xs opacity-90">{data.flush.message}</p>

@@ -14,11 +14,14 @@ import { alleRegionSlugs, regionFromSlug } from '@/lib/prediction/region-slug';
 import { computeRegionWeek, type RegionWeek } from '@/lib/prediction/region-week';
 import { fetchWeatherSummary } from '@/lib/weather';
 import { fetchDailyForecast } from '@/lib/weather/forecast';
+import { sesongtilstand } from '@/lib/sesong/sesongtilstand';
 import {
   SOPPFORHOLD_BASE,
   datoTekst,
   farge,
   hentRegioner,
+  omradeTilstand,
+  visArtslinje,
   type SoppforholdRegion
 } from '../hent-regioner';
 
@@ -60,6 +63,10 @@ const COPY = {
       </>
     ),
     plassering: (nr: number, av: number) => `Nummer ${nr} av ${av} områder i Norge i dag.`,
+    // Når ingen av landets områder er over laveste bånd, er en rangering støy.
+    stille: 'Det er stille i alle områdene i Norge nå.',
+    utenomSesong:
+      'Det er utenom hovedsesongen, og det er stille i alle områdene i Norge nå. Tallet regnes fortsatt ut på nytt hver natt.',
     heleOversikten: 'Se hele oversikten',
     oversiktenLenke: 'hele oversikten',
     ikkeKlar: 'Beregningen for i dag er ikke klar ennå. Prøv igjen om en liten stund — eller se',
@@ -70,7 +77,7 @@ const COPY = {
     alleOmradene: 'Alle områdene',
     pameldtTittel: (navn: string) => `Du er påmeldt soppvarselet for ${navn}`,
     pameldtTekst:
-      'Under ser du dagens forhold og uka fremover. Neste e-post kommer den dagen forholdene krysser fra under til over terskelen etter en reell bedring — aldri oftere enn én gang i uka. Er det stille, er det fordi det ikke har snudd.',
+      'Under ser du dagens forhold og uka fremover. Neste e-post kommer den dagen forholdene krysser fra under til over terskelen etter en reell bedring — aldri oftere enn én gang i uka. Er det stille, er det fordi det ikke har snudd. Utenom sesongen kan det gå måneder mellom hver e-post — påmeldingen står til det snur.',
     kilder:
       'Datagrunnlag: MET Norway og SMHI (vær), NIBIO og CORINE (skog), GBIF og Artsdatabanken (funn). Se',
     kilderLenke: 'datakilder',
@@ -92,6 +99,9 @@ const COPY = {
       </>
     ),
     plassering: (nr: number, av: number) => `Nummer ${nr} av ${av} områden i Sverige idag.`,
+    stille: 'Det är stilla i alla områden i Sverige nu.',
+    utenomSesong:
+      'Det är utanför högsäsongen, och det är stilla i alla områden i Sverige nu. Siffran räknas fortfarande om varje natt.',
     heleOversikten: 'Se hela översikten',
     oversiktenLenke: 'hela översikten',
     ikkeKlar: 'Dagens beräkning är inte klar ännu. Försök igen om en liten stund, eller se',
@@ -102,7 +112,7 @@ const COPY = {
     alleOmradene: 'Alla områden',
     pameldtTittel: (navn: string) => `Du är anmäld till svampvarningen för ${navn}`,
     pameldtTekst:
-      'Nedan ser du dagens läge och veckan framöver. Nästa mejl kommer den dag förhållandena korsar tröskeln efter en verklig förbättring — aldrig oftare än en gång i veckan. Är det tyst är det för att det inte har vänt.',
+      'Nedan ser du dagens läge och veckan framöver. Nästa mejl kommer den dag förhållandena korsar tröskeln efter en verklig förbättring — aldrig oftare än en gång i veckan. Är det tyst är det för att det inte har vänt. Utanför säsongen kan det gå månader mellan mejlen — anmälan står kvar tills det vänder.',
     kilder:
       'Dataunderlag: MET Norway och SMHI (väder), NIBIO och CORINE (skog), GBIF och Artdatabanken (fynd). Se',
     kilderLenke: 'datakällor',
@@ -244,6 +254,11 @@ export default async function OmradePage({ params, searchParams }: SideProps) {
   // Bare regiontallene ventes på her. Ukestripen strømmes (UkeStripeSeksjon).
   const { tileDate, regions } = await hentRegioner(land === 'SE' ? 'sv' : 'nb');
   const region = regions.find((r) => r.name === regionDef.name) ?? null;
+  // Stille i hele landet → ingen rangering; i tillegg desember–mai → ingen
+  // ukestripe med «ser best ut på torsdag». Se omradeTilstand i hent-regioner.ts.
+  const { landStille, utenomSesong } = region
+    ? omradeTilstand(region, regions, sesongtilstand(new Date()).iHovedsesong)
+    : { landStille: false, utenomSesong: false };
 
   // Strukturerte data: dateModified = rasterdatoen gjør ferskheten maskin-
   // lesbar for søkemotorer og AI-crawlere — «i dag»-påstanden får en dato.
@@ -305,14 +320,16 @@ export default async function OmradePage({ params, searchParams }: SideProps) {
               <div className={`h-full rounded-full ${farge(region.score)}`} style={{ width: `${region.score}%` }} />
             </div>
             {region.verdict ? <p className="mt-3 text-gray-700">{region.verdict}</p> : null}
-            {region.leadingSpecies ? (
+            {/* «er i sesong her nå» bare når det er sant: området over laveste
+                bånd og arten innenfor sin egen sesong (visArtslinje). */}
+            {visArtslinje(region) && region.leadingSpecies ? (
               <p className="mt-1 text-sm text-gray-700">{t.artslinje(region.leadingSpecies.toLowerCase())}</p>
             ) : null}
             {(() => {
               const { nr, av } = plassering(region, regions);
               return (
                 <p className="mt-3 text-sm text-gray-500">
-                  {t.plassering(nr, av)}{' '}
+                  {utenomSesong ? t.utenomSesong : landStille ? t.stille : t.plassering(nr, av)}{' '}
                   <Link href="/soppforhold" className="underline">
                     {t.heleOversikten}
                   </Link>
@@ -334,9 +351,15 @@ export default async function OmradePage({ params, searchParams }: SideProps) {
         {/* Strømmes: resten av siden vises straks, stripen skyves inn i samme
             svar når været er hentet. Ingen skjelett-plassholder — en stripe
             som uteblir skal ikke etterlate et hull. */}
-        <Suspense fallback={null}>
-          <UkeStripeSeksjon regionDef={regionDef} land={land} />
-        </Suspense>
+        {/* Utenom sesongen rangerer stripen sju dager som alle er nær null, og
+            navngir likevel en «beste dag». Da utelates den — på sidens egen
+            tilstand (tall + kalender), ikke ved å porte computeRegionWeek på
+            måned, som også ville blanket en god maiuke. */}
+        {utenomSesong ? null : (
+          <Suspense fallback={null}>
+            <UkeStripeSeksjon regionDef={regionDef} land={land} />
+          </Suspense>
+        )}
 
         {/* Ikke «meld deg på» rett under «du er påmeldt» — og en ny innsending
             av samme adresse ville svart «sjekk innboksen» uten å sende noe. */}

@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { getUserLocale } from '@/i18n/locale';
 import { PageWrapper } from '@/components/layout/PageWrapper';
 import { PREDICTION_TILE_REGIONS } from '@/lib/prediction/tile-regions';
+import { sesongtilstand } from '@/lib/sesong/sesongtilstand';
 
 /**
  * Offentlig påmeldingsside for soppvarselet — UTEN konto og UTEN klient-JS.
@@ -16,6 +17,14 @@ import { PREDICTION_TILE_REGIONS } from '@/lib/prediction/tile-regions';
  * vi lover flanken («vi sier fra når det snur»), aldri funn. COPY-tabell i
  * stedet for next-intl fordi siden er en ren serverkomponent — samme
  * dokumenterte mønster som prediksjonstekstene.
+ *
+ * FORVENTNINGEN UTENOM SESONGEN. Varselet fyrer bare når et område krysser
+ * terskelen, og det skjer i praksis ikke om vinteren. Den som melder seg på i
+ * januar fikk likevel bare «neste gang forholdene snur, hører du fra oss» — og
+ * så stillhet i månedsvis. Nå står det én alltid-sann setning i «Slik virker
+ * det» (ingen datologikk), og kvitteringen etter bekreftelse får i tillegg en
+ * setning når kalenderen sier desember–mai (sesongtilstand). Ingen ny e-post
+ * sendes, og ingenting loves om NÅR det snur.
  */
 
 const COPY = {
@@ -25,7 +34,7 @@ const COPY = {
       'Én e-post når forholdene snur i ditt område — aldri mer enn én i uka, og ingen støy imellom. Vi følger vær, sesong og skogtype hver natt, og sier fra den dagen det faktisk er nytt.',
     slikVirker: 'Slik virker det',
     punkt1: 'Hver natt regner vi ut soppforholdene (0–100) for 22 områder i Norge og Sverige.',
-    punkt2: 'Du får e-post når området ditt krysser fra dårlige til gode forhold — selve omslaget, ikke en daglig rapport.',
+    punkt2: 'Du får e-post når området ditt krysser fra dårlige til gode forhold — selve omslaget, ikke en daglig rapport. Utenom sesongen kan det gå måneder mellom hver e-post.',
     punkt3: 'Maks én e-post i uka. Avmeldingslenke i hver eneste e-post.',
     forbehold:
       'Tallet gjelder et område, ikke skogen der du står — og vi lover aldri funn, bare at forholdene ligger til rette.',
@@ -39,6 +48,8 @@ const COPY = {
       'Du bekrefter påmeldingen med en lenke vi sender deg på e-post, og kan melde deg av når som helst. Adressen brukes kun til soppvarselet.',
     statusSendt: '📬 Sjekk innboksen! Vi har sendt deg en bekreftelseslenke — trykk på den, så er du påmeldt.',
     statusBekreftet: '✅ Da er du påmeldt! Neste gang forholdene snur i området ditt, hører du fra oss.',
+    statusBekreftetUtenomSesong:
+      'Akkurat nå er det utenom hovedsesongen, så det kan gå måneder før den første e-posten kommer — påmeldingen står til det snur.',
     statusUgyldig: 'Noe manglet — sjekk at e-postadressen er riktig og at du har valgt et område.',
     statusUgyldigLenke: 'Lenken er ugyldig eller allerede brukt. Meld deg på på nytt, så sender vi en fersk.',
     statusFeil: 'Noe gikk galt hos oss. Prøv igjen om et øyeblikk.',
@@ -54,7 +65,7 @@ const COPY = {
       'Ett mejl när förhållandena vänder i ditt område — aldrig mer än ett i veckan, och inget brus däremellan. Vi följer väder, säsong och skogstyp varje natt, och säger till den dag det faktiskt är nytt.',
     slikVirker: 'Så fungerar det',
     punkt1: 'Varje natt räknar vi ut svampförhållandena (0–100) för 22 områden i Norge och Sverige.',
-    punkt2: 'Du får mejl när ditt område korsar från dåliga till goda förhållanden — själva omslaget, inte en daglig rapport.',
+    punkt2: 'Du får mejl när ditt område korsar från dåliga till goda förhållanden — själva omslaget, inte en daglig rapport. Utanför säsongen kan det gå månader mellan mejlen.',
     punkt3: 'Max ett mejl i veckan. Avregistreringslänk i varje mejl.',
     forbehold:
       'Talet gäller ett område, inte skogen där du står — och vi lovar aldrig fynd, bara att förhållandena ligger rätt.',
@@ -68,6 +79,8 @@ const COPY = {
       'Du bekräftar anmälan med en länk vi mejlar dig, och kan avregistrera dig när som helst. Adressen används bara till svampvarningen.',
     statusSendt: '📬 Kolla inkorgen! Vi har mejlat dig en bekräftelselänk — tryck på den, så är du anmäld.',
     statusBekreftet: '✅ Då är du anmäld! Nästa gång förhållandena vänder i ditt område hör du från oss.',
+    statusBekreftetUtenomSesong:
+      'Just nu är det utanför högsäsongen, så det kan dröja månader innan det första mejlet kommer — anmälan står kvar tills det vänder.',
     statusUgyldig: 'Något saknades — kolla att e-postadressen stämmer och att du valt ett område.',
     statusUgyldigLenke: 'Länken är ogiltig eller redan använd. Anmäl dig igen så skickar vi en färsk.',
     statusFeil: 'Något gick fel hos oss. Försök igen om en stund.',
@@ -103,7 +116,10 @@ export default async function SoppvarselSide({
     status === 'sendt'
       ? t.statusSendt
       : status === 'bekreftet'
-        ? t.statusBekreftet
+        ? // Siden er dynamisk (leser searchParams), så datoen er alltid dagens.
+          sesongtilstand(new Date()).iHovedsesong
+          ? t.statusBekreftet
+          : `${t.statusBekreftet} ${t.statusBekreftetUtenomSesong}`
         : status === 'ugyldig'
           ? t.statusUgyldig
           : status === 'ugyldig-lenke'

@@ -14,6 +14,7 @@ import type { DailyForecast } from '@/lib/weather/forecast';
 import { dayOfYearFromMonth, phenologyFactor } from '@/lib/prediction/phenology';
 import { isInMushroomSeason } from '@/lib/prediction/mushroom-day';
 import { DEFAULT_LOCALE, type Locale } from '@/i18n/config';
+import { utenomSesongTekst } from '@/lib/sesong/utenom-sesong-tekst';
 
 export type FlushStatus = 'fruiting' | 'soon' | 'building' | 'dry' | 'dormant';
 
@@ -23,6 +24,13 @@ export interface FlushAssessment {
   daysUntil: number | null;
   title: string;
   message: string;
+  /**
+   * Hvorfor status er 'dormant' — bare satt da. 'offSeason' er den generelle
+   * sesongporten (desember–mai), og er den forsidekortet IKKE gjentar: dagens
+   * dom over sier allerede nøyaktig det samme. 'cold' og 'speciesOffSeason' er
+   * egne opplysninger og vises alltid.
+   */
+  reason?: 'offSeason' | 'cold' | 'speciesOffSeason';
 }
 
 export interface FlushInput {
@@ -98,8 +106,7 @@ function clamp01(v: number): number {
  * Swedish user gets Norwegian text (the bug this table fixes).
  */
 interface FlushCopy {
-  offSeasonTitle: string;
-  offSeasonMessage: string;
+  // Utenom sesongen: se src/lib/sesong/utenom-sesong-tekst.ts (delt med mushroom-day.ts).
   tooColdTitle: string;
   tooColdMessage: string;
   speciesOffSeasonTitle: string;
@@ -116,8 +123,6 @@ interface FlushCopy {
 
 const COPY: Record<Locale, FlushCopy> = {
   nb: {
-    offSeasonTitle: 'Utenom soppsesongen',
-    offSeasonMessage: 'Det er utenfor hovedsesongen. Kom tilbake fra sensommeren.',
     tooColdTitle: 'For kaldt akkurat nå',
     tooColdMessage: 'For kaldt for soppvekst. Vent på mildere vær.',
     speciesOffSeasonTitle: 'Utenom artens sesong',
@@ -134,8 +139,6 @@ const COPY: Record<Locale, FlushCopy> = {
     dryMessage: 'Lite fukt og ingen regn i sikte. Sjansene er små inntil det kommer nedbør.'
   },
   sv: {
-    offSeasonTitle: 'Utanför svampsäsongen',
-    offSeasonMessage: 'Det är utanför högsäsongen. Kom tillbaka i slutet av sommaren.',
     tooColdTitle: 'För kallt just nu',
     tooColdMessage: 'För kallt för svamptillväxt. Vänta på mildare väder.',
     speciesOffSeasonTitle: 'Utanför artens säsong',
@@ -180,7 +183,8 @@ export function assessFlush(
       status: 'dormant',
       daysUntil: null,
       title: copy.speciesOffSeasonTitle,
-      message: copy.speciesOffSeasonMessage
+      message: copy.speciesOffSeasonMessage,
+      reason: 'speciesOffSeason'
     };
   }
 
@@ -198,8 +202,8 @@ export function assessFlush(
     return {
       status: 'dormant',
       daysUntil: null,
-      title: copy.offSeasonTitle,
-      message: copy.offSeasonMessage
+      ...utenomSesongTekst(month, locale),
+      reason: 'offSeason'
     };
   }
 
@@ -209,7 +213,8 @@ export function assessFlush(
       status: 'dormant',
       daysUntil: null,
       title: copy.tooColdTitle,
-      message: copy.tooColdMessage
+      message: copy.tooColdMessage,
+      reason: 'cold'
     };
   }
 

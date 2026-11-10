@@ -69,7 +69,9 @@ describe('assessMushroomDay — language', () => {
     // sesongen, og teksten navngir nå den porten.
     const result = assessMushroomDay(base, 1, 'sv');
     expect(result.title).toBe('Utanför svampsäsongen');
-    expect(result.message).toContain('högsäsongen');
+    // «Svampsäsongen», ikke «Högsäsongen»: juni er sesongstart, og högsäsong
+    // bruker appen om august–oktober (se utenom-sesong-tekst.ts).
+    expect(result.message).toContain('Svampsäsongen börjar i juni');
   });
 
   it('defaults to Norwegian when no locale is given', () => {

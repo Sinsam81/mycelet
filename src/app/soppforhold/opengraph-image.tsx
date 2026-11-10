@@ -1,5 +1,6 @@
 import { ImageResponse } from 'next/og';
-import { fargeHex, hentRegioner, lokalDato } from './hent-regioner';
+import { sesongtilstand } from '@/lib/sesong/sesongtilstand';
+import { fargeHex, hentRegioner, innledningsTilstand, lokalDato } from './hent-regioner';
 
 /**
  * Delingsbildet for samlesiden: dagens beste norske område + tallet. Samme
@@ -18,6 +19,10 @@ export const alt = 'Dagens soppforhold i Norge og Sverige, oppdatert daglig';
 export default async function OgBilde() {
   const { tileDate, regions } = await hentRegioner();
   const beste = regions.filter((r) => r.country === 'NO')[0] ?? null;
+  // Samme regel som siden: utenom sesongen er «Best akkurat nå: Bergen 4» en
+  // plakat for støy. Da sier bildet det som er sant i stedet.
+  const utenomSesong =
+    innledningsTilstand(regions, 'nb', sesongtilstand(new Date()).iHovedsesong).tilstand === 'utenomSesong';
 
   return new ImageResponse(
     (
@@ -46,7 +51,11 @@ export default async function OgBilde() {
           <div style={{ display: 'flex', fontSize: 72, lineHeight: 1.15 }}>
             Soppforhold i Norge i dag
           </div>
-          {beste ? (
+          {utenomSesong ? (
+            <div style={{ display: 'flex', fontSize: 40, color: '#cfe0c2', marginTop: 6 }}>
+              Utenom hovedsesongen — stille i alle områdene nå
+            </div>
+          ) : beste ? (
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 14, marginTop: 6 }}>
               <div style={{ display: 'flex', fontSize: 40, color: '#cfe0c2' }}>Best akkurat nå:</div>
               <div style={{ display: 'flex', fontSize: 56 }}>{beste.name}</div>
