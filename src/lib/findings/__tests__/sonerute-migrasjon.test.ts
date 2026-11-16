@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { sonerute042, sonerute075 } from '../sonerute';
 
 /**
  * Sone-ruta — utregningen i migrasjon 075, og regnestykkene delingsendring.ts
@@ -35,32 +36,12 @@ const sql = raa
 const rad = (grader: number) => (grader * Math.PI) / 180;
 const grader = (r: number) => (r * 180) / Math.PI;
 
-interface Stempel {
-  lat: number;
-  lng: number;
-  /** Rutas utstrekning i grader. */
-  stegLat: number;
-  stegLng: number;
-}
-
 /**
- * Sone-grenen i set_display_location slik den sto i 005 og 042.
- * (Postgres runder en halv til nærmeste partall, JS runder den opp. For et
- * tilfeldig punkt skjer det aldri, så modellene skiller ikke på det.)
+ * Modellene bor i src/lib/findings/sonerute.ts, der sonevakta i POST
+ * /api/findings bruker 075-utregningen. Testen under holder den opp mot SQL-en.
  */
-function stempel042(lat: number, lng: number, km: number): Stempel {
-  const stegLat = Math.max(km, 1) / 111.32;
-  const stegLng = Math.max(km, 1) / (111.32 * Math.max(Math.cos(rad(lat)), 0.2));
-  return { lat: Math.round(lat / stegLat) * stegLat, lng: Math.round(lng / stegLng) * stegLng, stegLat, stegLng };
-}
-
-/** zone_grid_location i 075 — linjene står i MODELLENS_LINJER under. */
-function stempel075(lat: number, lng: number, km: number): Stempel {
-  const stegLat = Math.max(km, 1) / 111.32;
-  const zoneLat = Math.round(lat / stegLat) * stegLat;
-  const stegLng = Math.max(km, 1) / (111.32 * Math.max(Math.cos(rad(zoneLat)), 0.2));
-  return { lat: zoneLat, lng: Math.round(lng / stegLng) * stegLng, stegLat, stegLng };
-}
+const stempel042 = sonerute042;
+const stempel075 = sonerute075;
 
 const MODELLENS_LINJER = [
   'step_lat := GREATEST(precision_km, 1) / 111.32;',

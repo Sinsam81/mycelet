@@ -31,6 +31,12 @@ export const FUNN_FEIL = {
   zone_requires_approximate: { nb: 'Sonefunn må være omtrentlige', sv: 'Zonfynd måste vara ungefärliga' },
   invalid_ai_confidence: { nb: 'Ugyldig AI-konfidens', sv: 'Ogiltig AI-konfidens' },
   ai_response_too_large: { nb: 'AI-responsen er for stor', sv: 'AI-svaret är för stort' },
+  // Sonevakta fikk ikke gjort funnet privat, og fjernet det i stedet — se
+  // sonevakt.ts. Ingenting er delt; brukeren må lagre på nytt.
+  zone_not_saved: {
+    nb: 'Funnet er IKKE lagret. Sone-deling er midlertidig utilgjengelig. Lagre det som privat eller omtrentlig i stedet.',
+    sv: 'Fyndet har INTE sparats. Zondelning är tillfälligt otillgänglig. Spara det som privat eller ungefärligt i stället.'
+  },
 
   // ── Endring av eget funn ──────────────────────────────────────────────────
   update_failed: { nb: 'Kunne ikke lagre endringen. Prøv igjen.', sv: 'Kunde inte spara ändringen. Försök igen.' },
@@ -88,6 +94,27 @@ export type FunnFeilKode = keyof typeof FUNN_FEIL;
 
 export function funnFeilTekst(kode: FunnFeilKode, locale: Locale): string {
   return FUNN_FEIL[kode][locale] ?? FUNN_FEIL[kode][DEFAULT_LOCALE];
+}
+
+/**
+ * Beskjeder til et VELLYKKET kall — lagringen gikk, men ikke helt slik
+ * brukeren ba om. Svaret bærer dem som `notice: { code, message }`, og
+ * klientene viser `message` (resultatsiden etter AI-identifisering, og
+ * funnskjemaet på kartet).
+ */
+export const FUNN_BESKJED = {
+  // Sonevakta (sonevakt.ts): sone-ruta ville røpet mer enn ruta, så funnet ble
+  // lagret som privat. Teksten forklarer ikke hullet — bare hva som skjedde.
+  zone_saved_private: {
+    nb: 'Funnet ble lagret som privat, fordi sone-deling er midlertidig utilgjengelig. Du kan endre delingen senere under Mine steder.',
+    sv: 'Fyndet sparades som privat, eftersom zondelning är tillfälligt otillgänglig. Du kan ändra delningen senare under Mina platser.'
+  }
+} as const satisfies Record<string, Record<Locale, string>>;
+
+export type FunnBeskjedKode = keyof typeof FUNN_BESKJED;
+
+export function funnBeskjedTekst(kode: FunnBeskjedKode, locale: Locale): string {
+  return FUNN_BESKJED[kode][locale] ?? FUNN_BESKJED[kode][DEFAULT_LOCALE];
 }
 
 /**

@@ -87,3 +87,29 @@ export function slettFunn(id: string, reserve: string): Promise<void> {
 export function gjenopprettFunn(id: string, reserve: string): Promise<void> {
   return kall(`${sti(id)}/restore`, { method: 'POST' }, reserve);
 }
+
+/**
+ * En beskjed på et VELLYKKET lagre-svar fra POST /api/findings: funnet er
+ * lagret, men ikke helt slik brukeren ba om. I dag bare sonevakta
+ * (`zone_saved_private`, se src/lib/findings/sonevakt.ts): sone-funnet ble
+ * lagret som privat. `message` er på leserens språk og vises som den er.
+ */
+export interface LagreBeskjed {
+  code: string;
+  message: string;
+}
+
+/**
+ * Leser svaret på POST /api/findings. Tåler et svar som ikke er JSON (null inn
+ * gir null ut), så en lagring som gikk, aldri ser ut som en som feilet.
+ */
+export function lesLagreSvar(body: unknown): { id: string | null; notice: LagreBeskjed | null } {
+  const b = (body && typeof body === 'object' ? body : {}) as { id?: unknown; notice?: unknown };
+  const id = typeof b.id === 'string' && b.id !== '' ? b.id : null;
+  const n = (b.notice && typeof b.notice === 'object' ? b.notice : null) as { code?: unknown; message?: unknown } | null;
+  const notice =
+    n && typeof n.code === 'string' && typeof n.message === 'string' && n.message.trim() !== ''
+      ? { code: n.code, message: n.message }
+      : null;
+  return { id, notice };
+}

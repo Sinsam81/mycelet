@@ -17,7 +17,7 @@ const source = fs.readFileSync(new URL('../result/page.tsx', import.meta.url), '
 
 describe('bekreftelses-porten på AI-resultatsiden', () => {
   it('lagre-knappen er død til brukeren aktivt har bekreftet', () => {
-    expect(source).toMatch(/disabled=\{!acknowledged \|\| fetchingPosition\}/);
+    expect(source).toMatch(/disabled=\{!acknowledged \|\| /);
   });
 
   it('porten holder også inne i handleSave — nye kallsteder kan ikke gå utenom', () => {
@@ -60,7 +60,10 @@ describe('bekreftelses-porten på AI-resultatsiden', () => {
   it('GPS-redningen henter posisjon på nytt — aldri en ny AI-identifisering', () => {
     // «Ta nytt bilde»-blindveien kostet en AI-kvoteenhet. Redningsknappen
     // skal bruke geolokasjon direkte og aldri kalle identify-API-et.
-    expect(source).toContain('getCurrentPositionOnce');
+    // Og målingen er FERSK: getCurrentPositionOnce kan gi en posisjon opptil
+    // to minutter gammel (eldre i iOS-skallet). Se resultatposisjon.ts.
+    expect(source).toContain('finnFerskPosisjon');
+    expect(source).not.toContain('getCurrentPositionOnce');
     expect(source).not.toContain('/api/identify');
   });
 

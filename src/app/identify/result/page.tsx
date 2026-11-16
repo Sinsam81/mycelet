@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useEffect, useMemo, useState } from 'react';
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import Link from 'next/link';
@@ -13,7 +13,7 @@ import { Button } from '@/components/ui/Button';
 import toast from 'react-hot-toast';
 import { foreslaaVurdering } from '@/lib/vurdering/foreslaa';
 import { createClient } from '@/lib/supabase/client';
-import { getCurrentPositionOnce } from '@/lib/hooks/useGeolocation';
+import { finnFerskPosisjon } from '@/lib/map/fersk-posisjon';
 import {
   lagreDelingsnivaStandard,
   lesDelingsnivaStandard,
@@ -24,7 +24,30 @@ import { buildUserUploadPath } from '@/lib/storage/upload-path';
 import { dataUrlToBlob } from '@/lib/utils/image';
 import { erLavBildelikhet } from '@/lib/identifications/config';
 import { merkOktresultatSomLagret } from '@/lib/identifications/okt-resultat';
+import { lesLagreSvar } from '@/lib/findings/funn-kall';
+import {
+  erOmtrentligMaaletid,
+  maaltTidspunkt,
+  posisjonsalder,
+  velgResultatposisjon,
+  type NaaMaaling,
+  type Posisjonsvalg
+} from '@/lib/findings/resultatposisjon';
 import { IdentifyResultPayload } from '@/types/identify';
+
+/**
+ * Resultatet slik siden holder det. To felt utover det identifiseringen ga,
+ * begge for å vite hvor gammel posisjonen er (se resultatposisjon.ts):
+ * `posisjonSettMs` settes her første gang et ferskt resultat leses, og
+ * `createdAt` kommer med når visningen er hydrert fra historikken.
+ */
+type Resultat = IdentifyResultPayload & { posisjonSettMs?: number; createdAt?: string };
+
+/** Hvor ofte alderen på posisjonen regnes på nytt mens siden står åpen. */
+const ALDER_TIKK_MS = 30_000;
+
+/** Klokka, lest i hendelser og effekter — aldri under rendring. */
+const klokke = () => Date.now();
 
 function IdentifyResultView() {
   const t = useTranslations('IdentifyResult');
@@ -38,26 +61,37 @@ function IdentifyResultView() {
   const searchParams = useSearchParams();
   const historyId = searchParams.get('id');
 
-  const [payload, setPayload] = useState<IdentifyResultPayload | null>(null);
+  const [payload, setPayload] = useState<Resultat | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedIndex, setSelectedIndex] = useState(0);
   // Synligheten var hardkodet til 'approximate' uten at brukeren ble spurt
   // eller fikk vite det. Et AI-funn tatt på det hemmelige stedet havnet altså
   // som en markør innenfor ±500 m, knyttet til brukernavnet og lesbar for
-  // enhver besøkende — og funn kan ikke slettes i appen, så valget var
-  // endelig. Standardverdien starter nå på brukerens forrige valg (kun lagret
-  // lokalt på enheten — se delingsniva.ts for hvorfor aldri server-side), men
-  // velgeren er fortsatt alltid synlig og mulig å endre. Sone-funn krever
+  // enhver besøkende — uten at noen hadde valgt det. (Delingen kan endres og
+  // funnet slettes senere under Mine steder, men et punkt som først har vært
+  // offentlig, kan andre alt ha sett.) Standardverdien starter nå på
+  // brukerens forrige valg (kun lagret lokalt på enheten — se delingsniva.ts
+  // for hvorfor aldri server-side), men velgeren er fortsatt alltid synlig og
+  // mulig å endre. Sone-funn krever
   // navn + presisjon og bor derfor fortsatt bare i AddFindingSheet.
   const [visibility, setVisibility] = useState<'public' | 'approximate' | 'private'>(() =>
     somSynlighet(lesDelingsnivaStandard())
   );
-  // GPS-redningen: posisjonen hentes i det stille når bildet tas, og et
-  // avslag oppdages først her. Før var eneste råd «ta nytt bilde» — som
-  // brenner en ny AI-kvoteenhet. Nå kan posisjonen hentes på nytt uten ny
-  // identifisering. Ærlig ramme: det er posisjonen der du STÅR nå.
+  // Hvor funnet lagres. Posisjonen identifiseringssiden målte, brukes uten
+  // spørsmål bare mens den er fersk; ellers velger brukeren mellom den og
+  // «der jeg står nå» (målt på nytt). Reglene står i resultatposisjon.ts.
+  //
+  // GPS-redningen er det samme valget når posisjonen mangler helt: før var
+  // eneste råd «ta nytt bilde» — som brenner en ny AI-kvoteenhet. Målingen er
+  // FERSK (finnFerskPosisjon), ikke det vanlige engangsoppslaget i
+  // useGeolocation.ts, som kan gi en posisjon opptil to minutter gammel — og
+  // eldre i iOS-skallet.
+  const [posisjonsvalg, setPosisjonsvalg] = useState<Posisjonsvalg | null>(null);
+  const [naaMaaling, setNaaMaaling] = useState<NaaMaaling | null>(null);
   const [fetchingPosition, setFetchingPosition] = useState(false);
+  const maalingRef = useRef<AbortController | null>(null);
+  const [naaMs, setNaaMs] = useState(klokke);
   // The user must actively acknowledge that the AI result is not an edibility
   // guarantee before logging a find — strengthens the duty-of-care posture and
   // stops the result from reading as an authoritative "this is safe to eat".
@@ -89,11 +123,84 @@ function IdentifyResultView() {
     }
 
     try {
-      setPayload(JSON.parse(raw) as IdentifyResultPayload);
+      const lest = JSON.parse(raw) as Resultat;
+      // Første gang resultatet leses, stemples tiden — siden åpnes rett etter
+      // svaret, så det er omtrent da posisjonen ble målt. Skrives tilbake, så
+      // en ny lasting senere ikke gjør en gammel posisjon fersk igjen.
+      if (lest.posisjonSettMs === undefined && lest.location?.latitude != null) {
+        lest.posisjonSettMs = klokke();
+        try {
+          sessionStorage.setItem('identifyResult', JSON.stringify(lest));
+        } catch {
+          // Full sessionStorage: alderen gjelder da bare denne visningen.
+        }
+      }
+      setPayload(lest);
     } catch {
       router.replace('/identify');
     }
   }, [router, historyId]);
+
+  // Alderen regnes på nytt mens siden står åpen: en posisjon som var fersk da
+  // siden åpnet, skal ikke lagres i stillhet en time senere.
+  useEffect(() => {
+    const tikk = setInterval(() => setNaaMs(klokke()), ALDER_TIKK_MS);
+    return () => clearInterval(tikk);
+  }, []);
+
+  // En måling som pågår når siden forlates, stoppes.
+  useEffect(() => () => maalingRef.current?.abort(), []);
+
+  const identifiseringsposisjon =
+    payload && payload.location.latitude != null && payload.location.longitude != null
+      ? { lat: payload.location.latitude, lng: payload.location.longitude, maaltMs: maaltTidspunkt(payload) }
+      : null;
+  const posisjon = velgResultatposisjon({
+    identifisering: identifiseringsposisjon,
+    naa: naaMaaling,
+    maalerNaa: fetchingPosition,
+    valg: posisjonsvalg,
+    naaMs
+  });
+
+  const maalNaa = async () => {
+    maalingRef.current?.abort();
+    const kontroll = new AbortController();
+    maalingRef.current = kontroll;
+    setPosisjonsvalg('naa');
+    setNaaMaaling(null);
+    setError(null);
+    setFetchingPosition(true);
+    try {
+      const fix = await finnFerskPosisjon({ signal: kontroll.signal });
+      if (kontroll.signal.aborted) return;
+      setNaaMaaling({ lat: fix.latitude, lng: fix.longitude, accuracy: fix.accuracy });
+      if (!identifiseringsposisjon) toast.success(t('locationSet'));
+      // Rydd en eventuell «velg posisjon»-feil fra et lagre-forsøk.
+      setError(null);
+    } catch {
+      if (!kontroll.signal.aborted) setError(t('locationFailed'));
+    } finally {
+      if (maalingRef.current === kontroll) setFetchingPosition(false);
+    }
+  };
+
+  const velgIdentifiseringsposisjon = () => {
+    maalingRef.current?.abort();
+    maalingRef.current = null;
+    setFetchingPosition(false);
+    setPosisjonsvalg('identifisering');
+    setError(null);
+  };
+
+  const alderTekst = (maaltMs: number | null) => {
+    const alder = posisjonsalder(maaltMs, naaMs);
+    if (!alder) return t('positionAgeUnknown');
+    if (alder.enhet === 'naa') return t('positionAgeNow');
+    if (alder.enhet === 'minutter') return t('positionAgeMinutes', { count: alder.antall });
+    if (alder.enhet === 'timer') return t('positionAgeHours', { count: alder.antall });
+    return t('positionAgeDays', { count: alder.antall });
+  };
 
   const topSuggestion = payload?.suggestions?.[0];
   // Treat unknown/unmapped edibility as dangerous too: a Kindwise suggestion
@@ -120,8 +227,19 @@ function IdentifyResultView() {
         throw new Error(t('errorNotLoggedIn'));
       }
 
-      if (payload.location.latitude == null || payload.location.longitude == null) {
-        throw new Error(t('errorMissingGps'));
+      // Regnet på nytt med klokka NÅ, ikke den siste tikken: en posisjon som
+      // ble gammel siden sist, skal ikke slippe gjennom i stillhet.
+      const lagreNaa = klokke();
+      const lagresHer = velgResultatposisjon({
+        identifisering: identifiseringsposisjon,
+        naa: naaMaaling,
+        maalerNaa: fetchingPosition,
+        valg: posisjonsvalg,
+        naaMs: lagreNaa
+      });
+      if (lagresHer.status !== 'klar') {
+        setNaaMs(lagreNaa);
+        throw new Error(t(lagresHer.status === 'mangler' ? 'errorMissingGps' : 'positionChooseFirst'));
       }
 
       // The user confirms which suggestion is correct (defaults to the AI's top).
@@ -158,8 +276,8 @@ function IdentifyResultView() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          latitude: payload.location.latitude,
-          longitude: payload.location.longitude,
+          latitude: lagresHer.punkt.lat,
+          longitude: lagresHer.punkt.lng,
           speciesId: chosen.speciesId ?? null,
           speciesNameOverride: chosen.name,
           aiUsed: true,
@@ -186,7 +304,7 @@ function IdentifyResultView() {
       // funn» i stedet for å invitere til en duplikat-lagring. Best effort:
       // funnet ER lagret, og en feilet kobling skal ikke se ut som at det ikke
       // gikk. Verste utfall er at raden kan lagres én gang til.
-      const lagretFunnId: string | null = (await saveResponse.json().catch(() => null))?.id ?? null;
+      const { id: lagretFunnId, notice } = lesLagreSvar(await saveResponse.json().catch(() => null));
       if (payload.identificationId && lagretFunnId) {
         await fetch(`/api/identifications/${encodeURIComponent(payload.identificationId)}`, {
           method: 'PATCH',
@@ -203,7 +321,11 @@ function IdentifyResultView() {
         fraOkta: !historyId
       });
 
-      toast.success(t('saveSuccess'));
+      // Lagret, men ikke helt som bedt om (i dag: sonevakta gjorde et sone-funn
+      // privat). Serverens tekst er på leserens språk, og den skal ikke
+      // forsvinne bak en grønn «lagret!» — derfor lenger synlig.
+      if (notice) toast(notice.message, { duration: 8000 });
+      else toast.success(t('saveSuccess'));
       // Gyllent øyeblikk: brukeren fotograferte, identifiserte og LAGRET et
       // funn. Spør (maks én gang noensinne, kun i appskallet) om en
       // App Store-vurdering — reglene bor i lib/vurdering.
@@ -379,49 +501,108 @@ function IdentifyResultView() {
 
         {error ? <p className="text-sm text-red-600">{error}</p> : null}
 
-        {/* GPS-redningen vises PROAKTIVT — før var manglende posisjon en
-            blindvei som først ble oppdaget etter «Lagre», med «ta nytt bilde»
-            (= ny AI-kvoteenhet) som eneste råd. Kopien er ærlig om at dette er
-            posisjonen der brukeren STÅR, ikke nødvendigvis der bildet ble
-            tatt (EXIF strippes bevisst før opplasting). */}
-        {payload.location.latitude == null || payload.location.longitude == null ? (
-          <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
-            <p>{t('missingGpsNotice')}</p>
-            <Button
-              variant="outline"
-              className="mt-2"
-              loading={fetchingPosition}
-              onClick={async () => {
-                setError(null);
-                setFetchingPosition(true);
-                try {
-                  const coords = await getCurrentPositionOnce();
-                  const updated = {
-                    ...payload,
-                    location: { latitude: coords.latitude, longitude: coords.longitude }
-                  };
-                  setPayload(updated);
-                  // Rydd en eventuell «GPS mangler»-feil fra et lagre-forsøk
-                  // som rakk å skje mens hentingen pågikk.
-                  setError(null);
-                  // Overlever en reload — samme kilde resultatsiden leser fra.
-                  try {
-                    sessionStorage.setItem('identifyResult', JSON.stringify(updated));
-                  } catch {
-                    // Kun et bekvemmelighetslager; selve lagringen bruker state.
-                  }
-                  toast.success(t('locationSet'));
-                } catch {
-                  setError(t('locationFailed'));
-                } finally {
-                  setFetchingPosition(false);
-                }
-              }}
-            >
-              {t('fetchLocation')}
-            </Button>
-          </div>
-        ) : null}
+        {/* Hvor funnet lagres — alltid synlig, så ingen posisjon brukes uten at
+            brukeren har sett den og omtrent hvor gammel den er. Vanlig
+            tilfelle (bildet tatt og identifisert på stedet) er én linje og
+            ingen ekstra trykk. Er posisjonen gammel eller av ukjent alder, må
+            brukeren velge. Mangler den, er GPS-redningen her — vist PROAKTIVT,
+            ikke først etter «Lagre», og uten å koste en ny AI-kvoteenhet.
+            Bildets egen posisjon finnes ikke: EXIF strippes bevisst før
+            opplasting. Se src/lib/findings/resultatposisjon.ts. */}
+        <div
+          className={`rounded-lg border p-3 text-sm ${
+            posisjon.status === 'klar'
+              ? 'border-gray-200 bg-white text-gray-800'
+              : 'border-amber-300 bg-amber-50 text-amber-900'
+          }`}
+        >
+          <p className="font-medium">{t('positionHeading')}</p>
+          {identifiseringsposisjon === null ? (
+            <>
+              <p className="mt-1">{t('missingGpsNotice')}</p>
+              {naaMaaling ? (
+                <p className="mt-2">
+                  {t('positionHereAccuracy', { accuracy: Math.round(naaMaaling.accuracy) })}{' '}
+                  <span className="text-gray-600">
+                    {naaMaaling.lat.toFixed(5)}, {naaMaaling.lng.toFixed(5)}
+                  </span>
+                </p>
+              ) : (
+                <Button variant="outline" className="mt-2" loading={fetchingPosition} onClick={maalNaa}>
+                  {t('fetchLocation')}
+                </Button>
+              )}
+            </>
+          ) : posisjonsvalg === null && posisjon.status === 'klar' ? (
+            <p className="mt-1">
+              {/* Uten fixets egen tid er alderen bare tiden siden siden så
+                  resultatet: iOS kan ha gitt en lagret, eldre posisjon. Da
+                  lover ikke teksten en presis alder. Se maaltTidspunkt. */}
+              {t(payload && erOmtrentligMaaletid(payload) ? 'positionFromIdentifyApprox' : 'positionFromIdentify', {
+                age: alderTekst(identifiseringsposisjon.maaltMs)
+              })}{' '}
+              <span className="text-gray-600">
+                {identifiseringsposisjon.lat.toFixed(5)}, {identifiseringsposisjon.lng.toFixed(5)}
+              </span>
+            </p>
+          ) : (
+            <fieldset className="mt-1">
+              <legend>{t('positionChooseQuestion')}</legend>
+              <label className="mt-2 flex min-h-11 items-start gap-2">
+                <input
+                  type="radio"
+                  name="funnposisjon"
+                  className="mt-1 h-4 w-4 shrink-0"
+                  checked={posisjonsvalg === 'identifisering'}
+                  onChange={velgIdentifiseringsposisjon}
+                />
+                <span>
+                  {t('positionChooseIdentify', { age: alderTekst(identifiseringsposisjon.maaltMs) })}{' '}
+                  <span className="text-gray-600">
+                    {identifiseringsposisjon.lat.toFixed(5)}, {identifiseringsposisjon.lng.toFixed(5)}
+                  </span>
+                </span>
+              </label>
+              <label className="flex min-h-11 items-start gap-2">
+                <input
+                  type="radio"
+                  name="funnposisjon"
+                  className="mt-1 h-4 w-4 shrink-0"
+                  checked={posisjonsvalg === 'naa'}
+                  onChange={() => void maalNaa()}
+                />
+                <span>
+                  {t('positionChooseHere')}
+                  {posisjonsvalg === 'naa' && fetchingPosition ? (
+                    <span className="block text-gray-600" role="status">
+                      {t('positionMeasuring')}
+                    </span>
+                  ) : null}
+                  {posisjonsvalg === 'naa' && !fetchingPosition && !naaMaaling ? (
+                    // Målingen feilet. Radioknappen står alt valgt, så et nytt
+                    // trykk på den gjør ingenting — derfor en egen knapp.
+                    <Button variant="outline" className="mt-1" onClick={maalNaa}>
+                      {t('fetchLocation')}
+                    </Button>
+                  ) : null}
+                  {posisjonsvalg === 'naa' && naaMaaling ? (
+                    <span className="block text-gray-600">
+                      {t('positionHereAccuracy', { accuracy: Math.round(naaMaaling.accuracy) })}{' '}
+                      {naaMaaling.lat.toFixed(5)}, {naaMaaling.lng.toFixed(5)}
+                    </span>
+                  ) : null}
+                </span>
+              </label>
+            </fieldset>
+          )}
+          <p className="mt-2 text-xs text-gray-700">
+            {t('positionOtherPlace')}{' '}
+            <Link href="/map" className="font-semibold underline">
+              {t('positionOnMap')}
+            </Link>
+            . {t('positionOnMapNote')}
+          </p>
+        </div>
 
         <label className="flex items-start gap-2 rounded-lg border border-gray-200 bg-white p-3 text-sm text-gray-800">
           <input
@@ -464,7 +645,7 @@ function IdentifyResultView() {
               {t('alreadySaved')}
             </Button>
           ) : (
-            <Button onClick={handleSave} loading={saving} disabled={!acknowledged || fetchingPosition}>
+            <Button onClick={handleSave} loading={saving} disabled={!acknowledged || fetchingPosition || posisjon.status !== 'klar'}>
               {t('saveAsFinding')}
             </Button>
           )}

@@ -13,7 +13,10 @@ import { checkRateLimit } from '@/lib/rate-limit';
 import { getClientKey, rateLimitResponse } from '@/lib/rate-limit/route';
 import { createRequestLogger } from '@/lib/log/request';
 import { ensureProfile } from '@/lib/auth/ensure-profile';
-import { funnFeilSvar } from './svar';
+import { sikreSonefunn, sonevaktGjelder, SONEVAKT_KOLONNER, type SonevaktKlient } from '@/lib/findings/sonevakt';
+import { JITTERVAKT_TILTAK } from '@/lib/findings/jittervakt';
+import { funnBeskjedTekst } from '@/lib/findings/feil';
+import { funnFeilSvar, lesSprak } from './svar';
 
 export const runtime = 'nodejs';
 export const maxDuration = 15;
@@ -80,7 +83,9 @@ export async function POST(request: NextRequest) {
           ai_raw_response: finding.aiRawResponse,
           user_confirmed_species: finding.userConfirmedSpecies
         })
-        .select('id')
+        // Punktet triggeren stemplet, leses tilbake i samme kall — sonevakta
+        // under trenger det for sone-funn (se src/lib/findings/sonevakt.ts).
+        .select(SONEVAKT_KOLONNER)
         .single();
 
     let { data, error } = await insertFinding();
@@ -109,18 +114,60 @@ export async function POST(request: NextRequest) {
       return funnFeilSvar('save_failed', 500);
     }
 
-    log.info('findings.saved', {
-      negative: finding.isNegativeObservation,
+    const instrumentation = {
       weatherCaptured: weather !== null,
       habitatCaptured: forest !== null
+    };
+
+    // Sonevakta. Står den gamle triggeren (075 er ikke limt inn), røper sone-
+    // punktet funnets eksakte breddegrad — da gjøres funnet privat med en gang,
+    // eller slettes om det ikke går. Aldri for private funn eller vanlige funn.
+    if (sonevaktGjelder(finding)) {
+      const vakt = await sikreSonefunn(supabase as unknown as SonevaktKlient, {
+        id: data.id,
+        userId: user.id,
+        rad: data
+      });
+      if (vakt.utfall !== 'stemmer') {
+        // Én advarsel, uten koordinater: det er nettopp dem vi skjuler.
+        log.warn('findings.zone_stamp_unsafe', { grunn: vakt.grunn, utfall: vakt.utfall, tiltak: JITTERVAKT_TILTAK });
+      }
+      if (vakt.utfall === 'gjort_privat') {
+        const locale = await lesSprak();
+        log.info('findings.saved', { ...instrumentation, negative: finding.isNegativeObservation, zoneMadePrivate: true });
+        return NextResponse.json({
+          ok: true,
+          id: data.id,
+          instrumentation,
+          notice: { code: 'zone_saved_private', message: funnBeskjedTekst('zone_saved_private', locale) }
+        });
+      }
+      if (vakt.utfall === 'slettet') {
+        log.error('findings.zone_private_failed', { privatFeil: vakt.privatFeil, slettet: true });
+        return funnFeilSvar('zone_not_saved', 500);
+      }
+      if (vakt.utfall === 'sto_igjen') {
+        // Verken privat eller sletting gikk. Raden kan stå med et røpende
+        // punkt; id-en er med så driften kan rydde den for hånd.
+        log.error('findings.zone_private_failed', {
+          findingId: data.id,
+          privatFeil: vakt.privatFeil,
+          slettFeil: vakt.slettFeil,
+          slettet: false,
+          tiltak: JITTERVAKT_TILTAK
+        });
+        return funnFeilSvar('save_failed', 500);
+      }
+    }
+
+    log.info('findings.saved', {
+      negative: finding.isNegativeObservation,
+      ...instrumentation
     });
     return NextResponse.json({
       ok: true,
       id: data.id,
-      instrumentation: {
-        weatherCaptured: weather !== null,
-        habitatCaptured: forest !== null
-      }
+      instrumentation
     });
   } catch (error) {
     log.error('findings.failed', error);

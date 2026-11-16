@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { LOCALES, type Locale } from '@/i18n/config';
-import { FUNN_FEIL, delingKaranteneTekst, funnFeilTekst, type FunnFeilKode } from '../feil';
+import { FUNN_BESKJED, FUNN_FEIL, delingKaranteneTekst, funnBeskjedTekst, funnFeilTekst, type FunnFeilKode } from '../feil';
 
 /**
  * Feiltekstene lages på serveren, så next-intl dekker dem ikke — og
@@ -68,6 +68,30 @@ describe('feiltekstene til /api/findings', () => {
         expect(funnFeilTekst(kode, locale)).not.toMatch(/breddegrad|latitud|migrasjon|migrering|075/i);
       }
     }
+  });
+});
+
+describe('beskjedene til et vellykket kall', () => {
+  const KODER_B = Object.keys(FUNN_BESKJED) as (keyof typeof FUNN_BESKJED)[];
+
+  it('finnes på hvert språk, oversatt og uten norske ord i den svenske', () => {
+    for (const kode of KODER_B) {
+      for (const locale of LOCALES) expect(funnBeskjedTekst(kode, locale).trim()).not.toBe('');
+      expect(FUNN_BESKJED[kode].sv).not.toBe(FUNN_BESKJED[kode].nb);
+      expect(FUNN_BESKJED[kode].sv).not.toMatch(/\bfunn(et|ene)?\b|\bikke\b|\bkunne\b|\bslett/i);
+    }
+  });
+
+  /** Sonevakta skal si hva som skjedde og hvor det kan endres — ikke hvordan hullet virker. */
+  it('sier at sone-funnet ble privat og hvor det kan endres, uten å forklare hullet', () => {
+    expect(funnBeskjedTekst('zone_saved_private', 'nb')).toMatch(/privat.*Mine steder/);
+    expect(funnBeskjedTekst('zone_saved_private', 'sv')).toMatch(/privat.*Mina platser/);
+    for (const locale of LOCALES) {
+      expect(funnBeskjedTekst('zone_saved_private', locale)).not.toMatch(/breddegrad|latitud|migrasjon|migrering|075/i);
+      expect(funnFeilTekst('zone_not_saved', locale)).not.toMatch(/breddegrad|latitud|migrasjon|migrering|075/i);
+    }
+    expect(funnFeilTekst('zone_not_saved', 'nb')).toContain('IKKE lagret');
+    expect(funnFeilTekst('zone_not_saved', 'sv')).toContain('INTE sparats');
   });
 });
 

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { FunnKallFeil, endreFunn, gjenopprettFunn, slettFunn, utdatertGrunn } from '../funn-kall';
+import { FunnKallFeil, endreFunn, gjenopprettFunn, lesLagreSvar, slettFunn, utdatertGrunn } from '../funn-kall';
 
 /**
  * Nettleserens kall mot /api/findings/:id. fetch er mocket: et ekte kall ville
@@ -110,5 +110,23 @@ describe('utdatertGrunn', () => {
     expect(utdatertGrunn(new FunnKallFeil('x'))).toBeNull();
     expect(utdatertGrunn(new Error('not_found'))).toBeNull();
     expect(utdatertGrunn(null)).toBeNull();
+  });
+});
+
+describe('lesLagreSvar', () => {
+  it('leser id og beskjeden sonevakta legger på', () => {
+    expect(
+      lesLagreSvar({ ok: true, id: 'funn-1', notice: { code: 'zone_saved_private', message: 'Lagret som privat.' } })
+    ).toEqual({ id: 'funn-1', notice: { code: 'zone_saved_private', message: 'Lagret som privat.' } });
+  });
+
+  it('gir ingen beskjed når svaret ikke har en', () => {
+    expect(lesLagreSvar({ ok: true, id: 'funn-1' })).toEqual({ id: 'funn-1', notice: null });
+  });
+
+  it('tåler et svar som ikke lot seg lese, og en beskjed uten tekst', () => {
+    expect(lesLagreSvar(null)).toEqual({ id: null, notice: null });
+    expect(lesLagreSvar('tekst')).toEqual({ id: null, notice: null });
+    expect(lesLagreSvar({ id: 7, notice: { code: 'x', message: '  ' } })).toEqual({ id: null, notice: null });
   });
 });
