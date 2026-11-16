@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
 import { PageWrapper } from '@/components/layout/PageWrapper';
 import { SpeciesCard } from '@/components/species/SpeciesCard';
+import { TrenerInngang } from '@/components/species/forvekslinger/TrenerInngang';
 import { SpeciesSearch } from '@/components/species/SpeciesSearch';
 import { SafetyNote } from '@/components/safety/SafetyNote';
 import { useDebouncedValue } from '@/lib/hooks/useDebouncedValue';
@@ -61,6 +62,7 @@ export default function SpeciesPage() {
             <p className="text-sm text-gray-700">{t('countSummary', { count })}</p>
           ) : null}
         </header>
+        <TrenerInngang />
 
         <SpeciesSearch value={query} onChange={setQuery} />
 

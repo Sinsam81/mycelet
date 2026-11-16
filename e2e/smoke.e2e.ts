@@ -10,9 +10,14 @@ test.describe('Offentlige sider', () => {
     await expect(page.getByText('Mycelet').first()).toBeVisible();
   });
 
+  // Lenka til forvekslingstreneren står over artskortene og begynner også på
+  // /species/ — uten unntaket ville «første artslenke» vært treneren, og de to
+  // testene under ville blitt grønne uten å ha sett en eneste art.
+  const ARTSKORT = 'a[href^="/species/"]:not([href="/species/forvekslinger"])';
+
   test('artsoversikten viser arter', async ({ page }) => {
     await page.goto('/species');
-    await expect(page.locator('a[href^="/species/"]').first()).toBeVisible();
+    await expect(page.locator(ARTSKORT).first()).toBeVisible();
   });
 
   // Søket går i nettleseren og leser også svenske navn og eldre latinske navn.
@@ -51,9 +56,53 @@ test.describe('Offentlige sider', () => {
 
   test('en art kan åpnes og viser detaljer', async ({ page }) => {
     await page.goto('/species');
-    await page.locator('a[href^="/species/"]').first().click();
-    await expect(page).toHaveURL(/\/species\/.+/);
+    await page.locator(ARTSKORT).first().click();
+    await expect(page).toHaveURL(/\/species\/\d+/);
     await expect(page.getByRole('heading').first()).toBeVisible();
+  });
+
+  test('forvekslingstreneren er åpen uten innlogging og viser sikkerhetslinja', async ({ page }) => {
+    await page.goto('/species/forvekslinger');
+    // Ikke sendt til innlogging, og ikke tolket som en art med id «forvekslinger».
+    await expect(page).toHaveURL(/\/species\/forvekslinger$/);
+    await expect(page.getByRole('heading', { level: 1, name: 'Kjenn forvekslingen' })).toBeVisible();
+    // Den faste linja og giftinformasjonen står der uansett hva treneren har å vise.
+    await expect(page.getByText('Et bilde er aldri nok.').first()).toBeVisible();
+    await expect(page.getByText('22 59 13 00').first()).toBeVisible();
+    // En runde å starte, eller tom-tilstanden — aldri en feilmelding eller en tom flate.
+    await expect(
+      page
+        .getByRole('button', { name: 'Start en runde' })
+        .or(page.getByRole('heading', { name: 'Ingen par å øve på akkurat nå' }))
+    ).toBeVisible();
+  });
+
+  test('forvekslingstreneren: krediterte bilder før svaret, kjennetegnene etter', async ({ page }) => {
+    await page.goto('/species/forvekslinger');
+    const start = page.getByRole('button', { name: 'Start en runde' });
+    await expect(start.or(page.getByRole('heading', { name: 'Ingen par å øve på akkurat nå' }))).toBeVisible();
+    test.skip(!(await start.isVisible()), 'ingen par i treneren akkurat nå — tom-tilstanden er dekket over');
+
+    // Leser bare: svaret lagres i nettleserens lokale lagring, aldri i databasen.
+    // Knappen står i HTML-en fra serveren før React har koblet seg på, og et
+    // trykk i det vinduet går tapt — derfor trykkes det til spørsmålet kommer.
+    const sporsmal = page.getByRole('heading', { name: /Hvilken av disse to er giftsoppen\?/ });
+    await expect(async () => {
+      await start.click({ timeout: 2_000 });
+      await expect(sporsmal).toBeVisible({ timeout: 2_000 });
+    }).toPass({ timeout: 20_000 });
+    const kort = page.locator('main figure');
+    await expect(kort).toHaveCount(2);
+    await expect(kort.nth(0).getByText(/^Foto: /).first()).toBeVisible();
+    await expect(kort.nth(1).getByText(/^Foto: /).first()).toBeVisible();
+
+    await kort.nth(0).getByRole('button').click();
+    await expect(page.getByText('er giftsoppen av de to.')).toBeVisible();
+    await expect(page.getByText('Slik skiller du dem:')).toBeVisible();
+    await expect(page.getByRole('link', { name: /^Les alt om / })).toHaveCount(2);
+    // Sikkerhetslinja står en gang til, rett under kjennetegnene.
+    await expect(page.getByText('Et bilde er aldri nok.')).toHaveCount(2);
+    await expect(page.getByRole('button', { name: /Neste par|Se resultatet/ })).toBeVisible();
   });
 
   test('kalenderen laster', async ({ page }) => {
