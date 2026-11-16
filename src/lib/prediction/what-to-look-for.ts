@@ -28,7 +28,12 @@
  * NB: modulen sier bare HVOR arten vokser — den vurderer ikke spiselighet, og
  * lager like gjerne en linje for grønn fluesopp som for kantarell. Kallstedet
  * må filtrere med `isRecommendableSpecies` (recommendable.ts) før linja vises
- * som et «dra hit og let»-råd.
+ * som et «dra hit og let»-råd. Andre halvdel av setningen ER et søkeråd («gå
+ * sakte langs stier …»), så en nøytral overskrift gjør den ikke nøytral.
+ *
+ * KALLSTED: artssiden, gjennom `byggSeEtterLinje` (src/lib/species/se-etter.ts),
+ * som er porten: bare matsopp får linja. Koble aldri en ny flate rett på
+ * `buildWhatToLookFor` uten samme port.
  *
  * Ren funksjon, og teksten genereres server-side (fliser, /api/prediction), så
  * kopien ligger i en per-språk-tabell her i modulen — samme mønster som
@@ -37,6 +42,7 @@
  */
 
 import { DEFAULT_LOCALE, type Locale } from '@/i18n/config';
+import { VERTSTRE_NB, VERTSTRE_SV } from '@/lib/species/vertstraer';
 import { getSpeciesDisplayName } from '@/lib/utils/species-name';
 
 /**
@@ -107,14 +113,10 @@ interface WhatToLookForCopy {
 
 const COPY: Record<Locale, WhatToLookForCopy> = {
   nb: {
-    // Verdiene i basen er allerede norske; tabellen retter bare opp skrivemåte
-    // og gir prosa-formen av et par tagger.
-    partnerTerms: {
-      bjork: 'bjørk',
-      bok: 'bøk',
-      lerk: 'lerk',
-      contorta: 'contortafuru'
-    },
+    // Verdiene i basen er allerede norske; tabellene retter bare opp skrivemåte
+    // og gir prosa-formen av et par tagger. Tretabellen deles med artssidens
+    // faktaliste (src/lib/species/vertstraer.ts) — én kilde, ikke en kopi til.
+    partnerTerms: VERTSTRE_NB,
     placeTerms: {
       lauvskog: 'løvskog',
       lovskog: 'løvskog',
@@ -143,8 +145,11 @@ const COPY: Record<Locale, WhatToLookForCopy> = {
       Hydnum: 'den står ofte i rekker og buer, så let videre langs samme linje når du har funnet den første',
       // Steinsopp og slekten står gjerne der kronedekket åpner seg.
       Boletus: 'se i halvåpne partier under vertstrærne: bestandskanter, stikanter og gamle skogsveier',
-      // Rørsoppene i Suillus følger furu, og er vanligst i unge, glisne bestand og langs kanter.
-      Suillus: 'den står gjerne i unge, glisne furubestand og langs stikanter',
+      // Rørsoppene i Suillus er vanligst i unge, glisne bestand og langs kanter.
+      // Rådet navngir ikke treet: det står i første halvdel, fra artens egen
+      // rad. «Furubestand» sto her, og lerkesopp fikk setningen «står i
+      // symbiose med lerk — den står gjerne i unge, glisne furubestand».
+      Suillus: 'den står gjerne i unge, glisne bestand og langs stikanter',
       // Skrubbene står enkeltvis i halvåpen skog, ikke i klynger.
       Leccinum: 'den står gjerne enkeltvis i halvåpen skog og i kantsoner',
       // Parasollsopp er høy nok til å ses på avstand og danner ringer på åpen mark.
@@ -162,31 +167,15 @@ const COPY: Record<Locale, WhatToLookForCopy> = {
       burn: 'se etter brannfelt og annen forstyrret mark',
       deadwood: 'se på stubber, nedfalne stammer og døde greiner, ofte står flere sammen på samme ved',
       moss: 'se i mosebunnen, der hatten så vidt kan stikke opp gjennom mosen',
-      wet: 'se langs myrkanter og i fuktige partier',
+      // Dekker alle de fuktige taggene, ikke bare myr: vanlig morkel står med
+      // «elvebredder», og fikk rådet «se langs myrkanter».
+      wet: 'se i fuktige partier: langs bekker, elvebredder og myrkanter',
       forest: 'gå sakte langs stier, bestandskanter og små åpninger, der du ser bakken best',
       open: 'gå sakte over den åpne marka, og se også i kantene mot kratt og skog'
     }
   },
   sv: {
-    partnerTerms: {
-      gran: 'gran',
-      furu: 'tall',
-      bjørk: 'björk',
-      bjork: 'björk',
-      eik: 'ek',
-      bøk: 'bok',
-      bok: 'bok',
-      ask: 'ask',
-      alm: 'alm',
-      osp: 'asp',
-      or: 'al',
-      selje: 'sälg',
-      rogn: 'rönn',
-      hassel: 'hassel',
-      lind: 'lind',
-      lerk: 'lärk',
-      contorta: 'contortatall'
-    },
+    partnerTerms: VERTSTRE_SV,
     placeTerms: {
       skog: 'skog',
       barskog: 'barrskog',
@@ -228,7 +217,7 @@ const COPY: Record<Locale, WhatToLookForCopy> = {
       Craterellus: 'den växer i täta grupper i mossan, så hittar du en står det oftast fler runt omkring',
       Hydnum: 'den står ofta i rader och bågar, så sök vidare längs samma linje när du hittat den första',
       Boletus: 'leta i halvöppna partier under värdträden: beståndskanter, stigkanter och gamla skogsvägar',
-      Suillus: 'den står gärna i unga, glesa tallbestånd och längs stigkanter',
+      Suillus: 'den står gärna i unga, glesa bestånd och längs stigkanter',
       Leccinum: 'den står gärna ensam i halvöppen skog och i kantzoner',
       Macrolepiota: 'den står ensam eller i ring på öppen mark och är hög nog att synas på avstånd',
       Marasmius: 'den bildar bågar och häxringar i kortvuxet gräs',
@@ -240,7 +229,7 @@ const COPY: Record<Locale, WhatToLookForCopy> = {
       burn: 'leta efter brandfält och annan störd mark',
       deadwood: 'leta på stubbar, liggande stammar och döda grenar, ofta står flera tillsammans på samma ved',
       moss: 'leta i mossan, där hatten nätt och jämnt kan sticka upp',
-      wet: 'leta längs myrkanter och i fuktiga partier',
+      wet: 'leta i fuktiga partier: längs bäckar, älvstränder och myrkanter',
       forest: 'gå långsamt längs stigar, beståndskanter och små gläntor, där du ser marken bäst',
       open: 'gå långsamt över den öppna marken, och titta även i kanterna mot buskage och skog'
     }

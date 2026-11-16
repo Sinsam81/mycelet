@@ -95,6 +95,33 @@ const VORTEROYKSOPP: WhatToLookForSpecies = {
   substrate: 'jord'
 };
 
+const LERKESOPP: WhatToLookForSpecies = {
+  norwegian_name: 'Lerkesopp',
+  swedish_name: 'Lärksopp',
+  genus: 'Suillus',
+  mycorrhizal_partners: ['lerk'],
+  habitat: ['lerkeskog', 'blandingsskog'],
+  substrate: 'jord'
+};
+
+const SMORSOPP: WhatToLookForSpecies = {
+  norwegian_name: 'Smørsopp',
+  swedish_name: 'Smörsopp',
+  genus: 'Suillus',
+  mycorrhizal_partners: ['furu'],
+  habitat: ['barskog'],
+  substrate: 'jord'
+};
+
+const VANLIG_MORKEL: WhatToLookForSpecies = {
+  norwegian_name: 'Vanlig morkel',
+  swedish_name: 'Rundmurkla',
+  genus: 'Morchella',
+  mycorrhizal_partners: ['ask', 'alm', 'osp'],
+  habitat: ['løvskog', 'blandingsskog', 'elvebredder'],
+  substrate: 'jord'
+};
+
 describe('setningen er avledet av artens egne felt', () => {
   it('navngir vertstrærne fra mycorrhizal_partners', () => {
     const line = buildWhatToLookFor(TRAKTKANTARELL, 'nb');
@@ -166,7 +193,7 @@ describe('søkerådet velges per slekt, ellers per habitattype', () => {
 
   it('lar fuktig skog og myr styre rådet foran den generelle skogen', () => {
     expect(buildWhatToLookFor(GROVRISKE, 'nb')).toBe(
-      'Grovriske står i symbiose med gran og bjørk — se langs myrkanter og i fuktige partier.'
+      'Grovriske står i symbiose med gran og bjørk — se i fuktige partier: langs bekker, elvebredder og myrkanter.'
     );
   });
 
@@ -186,13 +213,40 @@ describe('søkerådet velges per slekt, ellers per habitattype', () => {
   });
 });
 
+describe('søkerådet motsier aldri første halvdel', () => {
+  it('navngir ikke et annet tre enn artens eget', () => {
+    // Suillus-rådet sa «furubestand». Lerkesopp følger lerk, og setningen ble
+    // «står i symbiose med lerk — den står gjerne i unge, glisne furubestand».
+    expect(buildWhatToLookFor(LERKESOPP, 'nb')).toBe(
+      'Lerkesopp står i symbiose med lerk — den står gjerne i unge, glisne bestand og langs stikanter.'
+    );
+    expect(buildWhatToLookFor(LERKESOPP, 'sv')).toBe(
+      'Lärksopp lever i symbios med lärk — den står gärna i unga, glesa bestånd och längs stigkanter.'
+    );
+    // Og furuartene i samme slekt har treet sitt fra raden, som før.
+    expect(buildWhatToLookFor(SMORSOPP, 'nb')).toBe(
+      'Smørsopp står i symbiose med furu — den står gjerne i unge, glisne bestand og langs stikanter.'
+    );
+  });
+
+  it('sender ikke en art fra elvebredden ut på myra', () => {
+    // «elvebredder» er en fuktig tagg, og rådet for fuktige steder sa bare
+    // «myrkanter».
+    const linje = buildWhatToLookFor(VANLIG_MORKEL, 'nb');
+    expect(linje).toBe(
+      'Vanlig morkel står i symbiose med ask, alm og osp — se i fuktige partier: langs bekker, elvebredder og myrkanter.'
+    );
+    expect(buildWhatToLookFor(VANLIG_MORKEL, 'sv')).toContain('längs bäckar, älvstränder och myrkanter');
+  });
+});
+
 describe('svensk', () => {
   it('oversetter både artsnavn, vertstrær og søkeråd', () => {
     expect(buildWhatToLookFor(KANTARELL, 'sv')).toBe(
       'Kantarell lever i symbios med bland annat gran, tall och björk — leta i kanten mot gläntor och längs stigar, sällan inne i tät, mörk skog.'
     );
     expect(buildWhatToLookFor(GROVRISKE, 'sv')).toBe(
-      'Pepparriska lever i symbios med gran och björk — leta längs myrkanter och i fuktiga partier.'
+      'Pepparriska lever i symbios med gran och björk — leta i fuktiga partier: längs bäckar, älvstränder och myrkanter.'
     );
   });
 
@@ -252,7 +306,10 @@ describe('robusthet', () => {
       NELLIKHATT,
       SKOGSJAMPINJONG,
       SPISS_MORKEL,
-      VORTEROYKSOPP
+      VORTEROYKSOPP,
+      LERKESOPP,
+      SMORSOPP,
+      VANLIG_MORKEL
     ];
     for (const locale of ['nb', 'sv'] as const) {
       for (const row of rows) {

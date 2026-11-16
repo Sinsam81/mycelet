@@ -47,7 +47,14 @@ const HABITAT_VALUES_IN_DB: Record<string, number> = {
   hage: 1,
   sti: 1,
   'myr-kant': 1,
-  park: 1
+  park: 1,
+  // Kom inn med de åtte forvekslingsartene i migrasjon 049 (to dager etter
+  // lesingen over). Lest fra basen 2026-11-10 — bare disse fire radene; tallene
+  // over er fortsatt 2. august-lesingen.
+  gammelskog: 2,
+  edelløvskog: 1,
+  hogstflate: 1,
+  'plantet skog': 1
 };
 
 /** Hver «art» er bare habitatlista si — det er alt filteret ser på. */
@@ -69,13 +76,14 @@ describe('matchesHabitat', () => {
 
   it('finner løvskog og lauvskog uansett hvilken av dem brukeren skriver', () => {
     // Basen bruker begge skrivemåtene. Steinsopp ligger på «lauvskog» og var
-    // usynlig for et søk på «løvskog».
-    expect(hits('løvskog')).toBe(30);
-    expect(hits('lauvskog')).toBe(30);
-    expect(hits('lövskog')).toBe(30);
+    // usynlig for et søk på «løvskog». 31 = 28 + 2 + pantermusserongens
+    // «edelløvskog», som er en løvskog uansett hvordan man staver den.
+    expect(hits('løvskog')).toBe(31);
+    expect(hits('lauvskog')).toBe(31);
+    expect(hits('lövskog')).toBe(31);
   });
 
-  it('dekker alle 33 habitatverdiene på svensk', () => {
+  it('dekker alle habitatverdiene på svensk', () => {
     for (const term of HABITAT_TERMS) {
       if (!(term.nb in HABITAT_VALUES_IN_DB)) continue;
       expect(matchesHabitat([term.nb], term.sv), `${term.sv} → ${term.nb}`).toBe(true);
