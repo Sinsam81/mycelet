@@ -1,11 +1,11 @@
 # Migrasjoner — hovedbok
 
-> Oppdatert 10. november 2026. Filene ligger i `supabase/migrations/`, og de
+> Oppdatert 16. november 2026. Filene ligger i `supabase/migrations/`, og de
 > limes inn for hånd i Supabase → SQL Editor, én om gangen, i nummerrekkefølge.
 
 > ⚠️ **STATUS ER IKKE BEKREFTET — EIEREN MÅ BEKREFTE.**
 > Det eneste dette dokumentet vet sikkert, er at alle til og med **038** var
-> kjørt i produksjon 2. august 2026. For 039–074 står det under hva repoet
+> kjørt i produksjon 2. august 2026. For 039–075 står det under hva repoet
 > *tyder på*, ikke hva som er sant i databasen. Ingen rad skal leses som
 > «kjørt» før eieren har bekreftet den — bruk spørringen under
 > [«Én spørring som svarer for alle»](#én-spørring-som-svarer-for-alle) og
@@ -23,6 +23,37 @@ Statusverdier:
   avhengig av den. Det er en indikasjon, ikke en bekreftelse.
 - **ukjent – må bekreftes** — repoet sier ingenting om den er kjørt.
 - **ikke kjørt** — ny, venter.
+
+## 075 haster — lim den inn før noen lagrer sitt første sone-funn
+
+Et sone-funn («hemmeligsted-vennlig») skal bare vise hvilken rute funnet ligger
+i. Slik ruta ble regnet ut, kan den **eksakte breddegraden** til funnet regnes
+ut av tallene kartet gir til alle — ruta skjulte bare øst–vest. Regnestykket
+står øverst i fila.
+
+**Ingenting har lekket ennå.** 16. november 2026 fantes det ingen offentlige
+sone-funn i databasen (`public_findings` der `is_zone_finding` er sann: 0 av 19
+offentlige funn, lest med den åpne nøkkelen). Hullet åpner seg med det første
+sone-funnet noen lagrer fra kartet — derfor haster det likevel.
+
+075 er ikke avhengig av noen utgivelse av appen eller av de andre radene i
+lista. Den kan limes inn i dag, før alt annet:
+
+1. **Lim inn `075_sonerute_uten_breddegradslekkasje.sql`** i SQL Editor — hele
+   fila, uten å merke noe av teksten først — og kjør.
+2. **Kontroller.** Kjør spørringen under «Én spørring som svarer for alle» —
+   raden `075` skal stå som `true`. Kontroll 3 nederst i fila skal gi `0`.
+3. **Skriv datoen** i statuskolonnen for 075 i tabellen under.
+4. **Si fra at 075 er kjørt.** Til da lar «Endre deling» på Mine steder ingen
+   funn bli sone-funn: bryteren `SONE_OMGJORING_AAPEN` i
+   `src/lib/findings/delingsendring.ts` står av, og en test nekter den å stå
+   på før raden 075 under er merket «kjørt». Å slå den på er én linje kode.
+
+Fila retter triggeren og stempler sone-funn som måtte finnes, på nytt. Det
+den ikke kan gjøre, er å ta tilbake breddegrader noen alt har hentet ut — så
+lim den inn mens tallet over fortsatt er 0.
+
+**Lim aldri inn 042 etter 075** — se «Når en tidlig migrasjon kjøres sent».
 
 ## 074 hører til utgivelsen den kom i — gjøres samme dag
 
@@ -61,11 +92,11 @@ forbehold: 041 og 043 oppfører seg annerledes når en senere migrasjon (056 og
 | 039 | `039_fix_hvit_traktsopp_spelling.sql` | Retter «Hvit trakttsopp» → «Hvit traktsopp» på art 59 (giftig) | Ingen — én tekstretting | ukjent – må bekreftes |
 | 040 | `040_purge_orphan_findings.sql` | Sletter eierløse funn som overlevde en kontosletting | Sletter data, men bare rader uten eier | ukjent – må bekreftes |
 | 041 | `041_hidden_content_counters.sql` | Tellerne slutter å telle innhold ingen får se | Ingen — trigger + omregning | ukjent – må bekreftes |
-| 042 | `042_freeze_display_location_on_update.sql` | Låser grovkorningen ved første stempling | Ingen — forebyggende | ukjent – må bekreftes |
+| 042 | `042_freeze_display_location_on_update.sql` | Låser grovkorningen ved første stempling | Avløst av 075: lim inn 075 i stedet, og **aldri** denne etter 075 | ukjent – må bekreftes |
 | 043 | `043_geo_index_and_definer_hardening.sql` | Geo-indeks + låser `search_path` på fire SECURITY DEFINER-funksjoner | Ingen — indeks + herding | ukjent – må bekreftes |
 | 044 | `044_drop_unused_profile_settings.sql` | Slipper to ubrukte kolonner på `profiles` | **Destruktiv** — se under | ukjent – må bekreftes |
 
-## 045–074
+## 045–075
 
 | # | Fil | Hva den gjør | Status |
 |---|---|---|---|
@@ -99,11 +130,12 @@ forbehold: 041 og 043 oppfører seg annerledes når en senere migrasjon (056 og
 | 072 | `072_prove_paaminnelser.sql` | Tabellene `prove_paaminnelser` og `prove_svar` | trolig kjørt – bekreft |
 | 073 | `073_ai_identifiseringsfeil.sql` | Tabellen `ai_identifiseringsfeil` | trolig kjørt – bekreft |
 | 074 | `074_verified_foragers_skjul_merknad.sql` | Kolonnerettigheter på `verified_foragers`: anon og innloggede roller får bare kolonnene forum-merket trenger | **ikke kjørt** — gjøres samme dag som utgivelsen, se øverst |
+| 075 | `075_sonerute_uten_breddegradslekkasje.sql` | Sone-ruta røper ikke lenger funnets eksakte breddegrad; eksisterende sone-funn stemples på nytt | **ikke kjørt** — haster, se øverst |
 
 ## Én spørring som svarer for alle
 
 Lim inn i SQL Editor. Den leser bare — ingenting i databasen endres — og gir
-én rad for hver migrasjon fra 039 til 074. `true` betyr at sporet etter
+én rad for hver migrasjon fra 039 til 075. `true` betyr at sporet etter
 migrasjonen finnes.
 
 Slik brukes den:
@@ -121,8 +153,9 @@ Lim aldri inn en fil når raden dens allerede står som `true`. Flere av filene
 tåler ikke å kjøres to ganger, og noen gjør skade når de kjøres etter en
 nyere — se «Når en tidlig migrasjon kjøres sent».
 
-To rader følger ikke steg 3: **074** har sin egen rekkefølge (se øverst), og
-**044** er frivillig — den kan stå som `false` (se «Om 044»).
+Tre rader følger ikke steg 3: **075** haster og kan limes inn før alle de
+andre, **074** har sin egen rekkefølge (se øverst for begge), og **044** er
+frivillig — den kan stå som `false` (se «Om 044»).
 
 ```sql
 SELECT * FROM (VALUES
@@ -161,7 +194,8 @@ SELECT * FROM (VALUES
   ('071', to_regclass('public.soppregistreringer') IS NOT NULL),
   ('072', to_regclass('public.prove_paaminnelser') IS NOT NULL AND to_regclass('public.prove_svar') IS NOT NULL),
   ('073', to_regclass('public.ai_identifiseringsfeil') IS NOT NULL),
-  ('074', NOT EXISTS (SELECT 1 FROM pg_attribute a WHERE a.attrelid = to_regclass('public.verified_foragers') AND a.attname = 'note' AND NOT a.attisdropped AND (has_column_privilege('anon', a.attrelid, a.attnum, 'SELECT') OR has_column_privilege('authenticated', a.attrelid, a.attnum, 'SELECT'))))
+  ('074', NOT EXISTS (SELECT 1 FROM pg_attribute a WHERE a.attrelid = to_regclass('public.verified_foragers') AND a.attname = 'note' AND NOT a.attisdropped AND (has_column_privilege('anon', a.attrelid, a.attnum, 'SELECT') OR has_column_privilege('authenticated', a.attrelid, a.attnum, 'SELECT')))),
+  ('075', EXISTS (SELECT 1 FROM pg_proc WHERE oid = to_regproc('public.set_display_location') AND prosrc LIKE '%zone_grid_location%') AND NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgrelid = to_regclass('public.findings') AND tgname IN ('findings_set_display_location', 'findings_updated_at') AND tgenabled <> 'O'))
 ) AS t(migrasjon, kjort)
 ORDER BY migrasjon;
 ```
@@ -187,16 +221,21 @@ raden, men det er verdt å vite hva det betyr:
   stikkprøven; fila retter fire arter i samme kjøring.
 - **066 og 067** blir `true` også når en senere av de tre (067, 068) er kjørt:
   den nyeste regelen inneholder de eldre flatene.
+- **042** blir `true` også når 075 er kjørt: 075 inneholder vakten 042 legger
+  inn. Da er det ingenting igjen for 042 å gjøre, og den skal ikke limes inn.
+- **075** sjekker to ting: at triggeren bruker den nye utregningen av
+  sone-ruta, og at de to triggerne på `findings` står på. Blir den `false`
+  igjen senere, er 042 limt inn etterpå — lim da inn 075 på nytt.
 
 `/api/health` (uten `?fast=1`) sier også fra under `checks.tabeller` når en av
 tabellene fra 007, 020, 064 og 070–073 mangler.
 
 ### Vil du se mer enn ja/nei
 
-Elleve av filene har en egen kontrollspørring som viser detaljene. De andre
+Tolv av filene har en egen kontrollspørring som viser detaljene. De andre
 25 har ingen — for dem er raden i spørringen over hele kontrollen.
 
-- **Nederst i fila:** 039, 041, 043, 045, 050, 056, 058, 074
+- **Nederst i fila:** 039, 041, 043, 045, 050, 056, 058, 074, 075
 - **I filhodet (før SQL-en):** 040, 042, 044
 
 Tre av dem bør du vite dette om:
@@ -212,7 +251,7 @@ Tre av dem bør du vite dette om:
 ## Når en tidlig migrasjon kjøres sent
 
 Nummerrekkefølgen forutsetter at alt kjøres i tur. Kjøres en tidlig migrasjon
-etter en senere, er det fire steder som biter:
+etter en senere, er det fem steder som biter:
 
 - **041 etter 056.** Begge skriver funksjonen `get_user_stats`, og den som
   kjøres sist, vinner. Limes 041 inn når 056 allerede er kjørt, teller profilen
@@ -220,6 +259,13 @@ etter en senere, er det fire steder som biter:
   inn 056 på nytt (den er idempotent). Etter 056 teller profilen til gjengjeld
   skjulte innlegg igjen, uansett rekkefølge. Det er en mangel i 056 som bare en
   ny migrasjon kan rette, ikke en ny kjøring.
+- **042 etter 075.** Begge skriver funksjonen `set_display_location`, og den
+  som kjøres sist, vinner. 075 inneholder alt 042 gjør, pluss rettingen av
+  sone-ruta. Limes 042 inn etterpå, regnes ruta ut på den gamle måten igjen, og
+  breddegraden til hvert sone-funn som lagres, kan regnes ut av det kartet
+  viser. Når 075 er kjørt, står derfor også raden 042 som `true` — den skal
+  ikke limes inn da. Skjer det likevel, blir raden 075 `false`: lim inn 075 på
+  nytt. Den er idempotent, og stempler sone-funnene som kom til i mellomtiden.
 - **043 etter 054.** 054 erstatter `get_occurrences_in_bounds` med en versjon
   som har ett argument til. 043 prøver å låse `search_path` på den gamle, og
   stopper da med `function public.get_occurrences_in_bounds(…) does not

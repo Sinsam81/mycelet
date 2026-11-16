@@ -1,5 +1,13 @@
 -- 042: Lås grovkorningen til raden ved første stempling.
 --
+-- ⚠️ LES FØR DU LIMER INN (lagt til 16. november 2026). Denne fila er avløst av
+-- 075_sonerute_uten_breddegradslekkasje.sql, som inneholder vakten under OG
+-- retter sone-ruta. Sone-grenen her regner lengdesteget av funnets eksakte
+-- breddegrad, og da kan breddegraden regnes ut av det kartet viser.
+--   · Er 075 kjørt: lim IKKE inn denne. Den ville tatt hullet tilbake. (Raden
+--     042 i hovedboka står da allerede som `true`.)
+--   · Er 075 ikke kjørt: lim inn 075 i stedet for denne.
+--
 -- Lanseringsrevisjon, infra/data-funn 6. Ikke en feil i dag — det finnes ingen
 -- oppdateringsvei for funn i appen (ingen .update() mot findings noe sted i
 -- src/), og målt mot produksjon er display_* helt stabilt mellom lesninger

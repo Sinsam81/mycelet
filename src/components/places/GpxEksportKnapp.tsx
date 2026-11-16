@@ -12,9 +12,11 @@ import { LUKKEKNAPP_KLASSER, useDialogFokus } from '@/components/ui/useDialogFok
  * klare for Garmin, UT.no og Organic Maps.
  *
  * Fila bygges av /api/me/gpx (owner-RLS, paginerer forbi sidevisningens
- * 1000-raders tak, artsnavn på leserens språk) — ikke av props: notatene til
- * opptil tusenvis av funn skal ikke fraktes i RSC-payloaden på hver eneste
- * sidevisning for en fil de færreste laster ned.
+ * 1000-raders tak, artsnavn på leserens språk) — ikke av props: eksporten skal
+ * ha ALLE funnene med eksakte koordinater, og de skal ikke fraktes i
+ * RSC-payloaden på hver eneste sidevisning for en fil de færreste laster ned.
+ * (Lista under hvert sted får notatene til funnene siden alt har hentet, men
+ * ingen koordinater — se src/lib/findings/mine-funn.ts.)
  *
  * Nedlastingsveien er GDPR-eksportens (AccountDataActions):
  *  · nett: fetch → blob + a[download].

@@ -13,6 +13,7 @@ import { checkRateLimit } from '@/lib/rate-limit';
 import { getClientKey, rateLimitResponse } from '@/lib/rate-limit/route';
 import { createRequestLogger } from '@/lib/log/request';
 import { ensureProfile } from '@/lib/auth/ensure-profile';
+import { funnFeilSvar } from './svar';
 
 export const runtime = 'nodejs';
 export const maxDuration = 15;
@@ -32,14 +33,15 @@ export async function POST(request: NextRequest) {
     const {
       data: { user }
     } = await supabase.auth.getUser();
-    if (!user) return NextResponse.json({ error: 'Ikke autentisert' }, { status: 401 });
+    if (!user) return funnFeilSvar('unauthenticated', 401);
 
     const rateLimit = checkRateLimit(`findings:${getClientKey(request, user.id)}`, 20, 60);
     if (!rateLimit.allowed) return rateLimitResponse(rateLimit);
 
     const parsed = parseFindingRequest(await request.json().catch(() => null));
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: 400 });
+      // Koden er stabil, teksten følger leserens språk — se src/lib/findings/feil.ts.
+      return funnFeilSvar(parsed.code, 400);
     }
 
     const finding = parsed.data;
@@ -104,7 +106,7 @@ export async function POST(request: NextRequest) {
 
     if (error || !data) {
       log.error('findings.insert_failed', { code: error?.code, message: error?.message });
-      return NextResponse.json({ error: 'Kunne ikke lagre funnet' }, { status: 500 });
+      return funnFeilSvar('save_failed', 500);
     }
 
     log.info('findings.saved', {
@@ -122,6 +124,6 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     log.error('findings.failed', error);
-    return NextResponse.json({ error: 'Kunne ikke lagre funnet' }, { status: 500 });
+    return funnFeilSvar('save_failed', 500);
   }
 }
