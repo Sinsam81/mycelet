@@ -3,6 +3,12 @@ import { redirect } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
 import { PageWrapper } from '@/components/layout/PageWrapper';
 import { createClient } from '@/lib/supabase/server';
+import { privatSide } from '@/lib/seo/side-titler';
+
+export async function generateMetadata() {
+  const t = await getTranslations('AdminPrediction');
+  return privatSide(t('title'));
+}
 
 interface PredictionTileRow {
   id: string;

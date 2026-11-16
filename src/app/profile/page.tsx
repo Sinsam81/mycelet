@@ -17,6 +17,12 @@ import { formatMemberSince } from '@/lib/utils/member-since';
 import { statusLabel, tierLabel } from '@/lib/billing/labels';
 import { abonnementKanal, periodelinje, periodelinjeVerdier } from '@/lib/billing/kanal';
 import { logger } from '@/lib/log';
+import { privatSide } from '@/lib/seo/side-titler';
+
+export async function generateMetadata() {
+  const t = await getTranslations('Profile');
+  return privatSide(t('myProfile'));
+}
 
 interface UserStats {
   total_findings: number;
@@ -224,6 +230,17 @@ export default async function ProfilePage() {
               ))}
             </ul>
           )}
+          {/* Lista over er bare til å se på. Funnene styres under Mine steder:
+              deling, notat, sletting og angring. */}
+          {findings.length > 0 ? (
+            <Link
+              href="/mine-steder"
+              className="mt-3 flex min-h-11 items-center justify-between gap-2 rounded-lg border border-forest-200 bg-forest-50 px-3 py-2 text-sm font-medium text-forest-800 hover:border-forest-400"
+            >
+              <span>{t('manageFindings')}</span>
+              <span aria-hidden>→</span>
+            </Link>
+          ) : null}
         </article>
 
         <article className="rounded-2xl bg-white p-4 shadow-card">

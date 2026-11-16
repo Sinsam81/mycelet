@@ -17,12 +17,11 @@ import { timeZoneForLocale } from '@/i18n/config';
 // under regner dagene som står igjen av samme tall, så de to ikke kan drive.
 import { PURGE_AFTER_DAYS } from '@/app/api/cron/purge-deleted-findings/route';
 import { isUuid } from '@/app/api/findings/[id]/soft-delete';
+import { privatSide } from '@/lib/seo/side-titler';
 
 export async function generateMetadata() {
   const t = await getTranslations('MineSteder');
-  return {
-    title: t('metaTitle')
-  };
+  return privatSide(t('metaTitle'));
 }
 
 /**

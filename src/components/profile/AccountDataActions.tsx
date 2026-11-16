@@ -218,6 +218,7 @@ export function AccountDataActions({
                 <li>{t('deletedFindings')}</li>
                 <li>{t('deletedForum')}</li>
                 <li>{t('deletedInteractions')}</li>
+                <li>{t('deletedEmailAlerts')}</li>
                 <li>{abonnementKanal === 'stripe' ? t('deletedSubscription') : t('deletedSubscriptionNative')}</li>
               </ul>
               <p className="pt-1 text-xs">

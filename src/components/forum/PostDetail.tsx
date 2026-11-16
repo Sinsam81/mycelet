@@ -13,6 +13,7 @@ import { checkContent } from '@/lib/moderation/content-filter';
 import { useForumErrorMessage } from '@/components/forum/useForumErrorMessage';
 import { forumBadgeClass } from '@/lib/utils/forumBadge';
 import { useForumBadge } from '@/lib/hooks/useForumBadge';
+import { forumDato } from '@/components/forum/forumDato';
 
 interface PostDetailProps {
   post: ForumPostDetail;
@@ -96,6 +97,11 @@ export function PostDetail({ post, onToggleLike, onReport, onEdit, onDelete, lik
         <div className="flex items-center gap-2">
           <p className="text-sm font-medium text-gray-900">{author}</p>
           {badge ? <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${forumBadgeClass(badge.tone)}`}>{badge.label}</span> : null}
+          {post.created_at ? (
+            <time dateTime={post.created_at} className="text-xs text-gray-500">
+              {forumDato(post.created_at, locale)}
+            </time>
+          ) : null}
         </div>
         <span className="rounded-full bg-gray-100 px-2 py-1 text-xs font-medium text-gray-800">{categoryLabel[post.category]}</span>
       </div>
@@ -139,7 +145,16 @@ export function PostDetail({ post, onToggleLike, onReport, onEdit, onDelete, lik
       {post.images.length > 0 ? (
         <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
           {post.images.map((image, idx) => (
-            <img key={`${image.url}-${idx}`} src={image.url} alt={image.caption ?? post.title} className="h-40 w-full rounded-lg object-cover" />
+            // Første bilde lastes med en gang (det står øverst i tråden), resten når
+            // de nærmer seg skjermen. Fast høyde i klassen holder plassen.
+            <img
+              key={`${image.url}-${idx}`}
+              src={image.url}
+              alt={image.caption ?? post.title}
+              loading={idx === 0 ? 'eager' : 'lazy'}
+              decoding="async"
+              className="h-40 w-full rounded-lg object-cover"
+            />
           ))}
         </div>
       ) : null}

@@ -2,6 +2,12 @@ import Link from 'next/link';
 import { getTranslations } from 'next-intl/server';
 import { CheckCircle2, Smartphone } from 'lucide-react';
 import { PageWrapper } from '@/components/layout/PageWrapper';
+import { privatSide } from '@/lib/seo/side-titler';
+
+export async function generateMetadata() {
+  const t = await getTranslations('AuthBekreftetApp');
+  return privatSide(t('title'));
+}
 
 /**
  * Landingssiden etter e-postbekreftelse for kontoer som ble opprettet I APPEN.

@@ -8,7 +8,7 @@ import { ReportButton } from '@/components/forum/ReportButton';
 import { BlockUserButton } from '@/components/forum/BlockUserButton';
 import { forumBadgeClass } from '@/lib/utils/forumBadge';
 import { useForumBadge } from '@/lib/hooks/useForumBadge';
-import { intlLocale } from '@/lib/utils/intl-locale';
+import { forumTidspunkt } from '@/components/forum/forumDato';
 import { grupperKommentarer } from '@/lib/forum/kommentartre';
 import { checkContent } from '@/lib/moderation/content-filter';
 import { useForumErrorMessage } from '@/components/forum/useForumErrorMessage';
@@ -139,7 +139,9 @@ function CommentCard({
         <p className="mt-1 text-sm text-gray-800">{comment.content}</p>
       )}
 
-      <p className="mt-1 text-xs text-gray-500">{new Date(comment.created_at).toLocaleString(intlLocale(locale))}</p>
+      <p className="mt-1 text-xs text-gray-500">
+        <time dateTime={comment.created_at}>{forumTidspunkt(comment.created_at, locale)}</time>
+      </p>
 
       <div className="mt-2 flex flex-wrap items-center gap-2">
         {onReply ? (

@@ -7,6 +7,12 @@ import { MushroomMap } from '@/components/map/MushroomMapLazy';
 import { RegistrerBruksdag } from '@/components/bruk/RegistrerBruksdag';
 import { logger } from '@/lib/log';
 import { parseMapViewParams, parseSpeciesParam } from '@/lib/utils/map-view-params';
+import { privatSide } from '@/lib/seo/side-titler';
+
+export async function generateMetadata() {
+  const t = await getTranslations('MapPage');
+  return privatSide(t('title'));
+}
 
 export default async function MapPage({
   searchParams

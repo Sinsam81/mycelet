@@ -10,10 +10,11 @@ import { intlLocale } from '@/lib/utils/intl-locale';
 import { getJoinedSpeciesName } from '@/lib/utils/species-name';
 import { IDENTIFY_HISTORY_BUCKET } from '@/lib/identifications/config';
 import type { Edibility } from '@/types/species';
+import { privatSide } from '@/lib/seo/side-titler';
 
 export async function generateMetadata() {
   const t = await getTranslations('Identifiseringer');
-  return { title: t('metaTitle') };
+  return privatSide(t('metaTitle'));
 }
 
 /**

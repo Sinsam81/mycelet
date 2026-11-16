@@ -7,6 +7,7 @@ import { Plus } from 'lucide-react';
 import { PageWrapper } from '@/components/layout/PageWrapper';
 import { CategoryFilter } from '@/components/forum/CategoryFilter';
 import { PostCard } from '@/components/forum/PostCard';
+import { useErModerator } from '@/components/forum/useErModerator';
 import { createClient } from '@/lib/supabase/client';
 import { useForumPostsInfinite } from '@/lib/hooks/useForum';
 import { ForumCategory, ForumSort } from '@/types/forum';
@@ -23,6 +24,8 @@ export default function ForumPage() {
   const [category, setCategory] = useState<ForumCategory>(null);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
   const supabase = useMemo(() => createClient(), []);
+  // Lenken til moderasjonen er bare for dem som kan bruke den.
+  const erModerator = useErModerator();
 
   const { data, isLoading, error, fetchNextPage, hasNextPage, isFetchingNextPage, refetch } = useForumPostsInfinite(
     sort,
@@ -120,6 +123,7 @@ export default function ForumPage() {
         {!isLoading && posts.length === 0 ? (
           <div className="rounded-2xl bg-white p-6 text-center shadow-card">
             <p className="text-sm text-gray-700">{t('emptyState')}</p>
+            <p className="mt-1 text-sm text-gray-600">{t('emptyStateHint')}</p>
             <Link href="/forum/new" className="mt-2 inline-flex items-center gap-1 text-sm font-semibold text-forest-800 hover:underline">
               <Plus className="h-4 w-4" /> {t('beFirst')}
             </Link>
@@ -130,9 +134,11 @@ export default function ForumPage() {
           <Link href="/forum/reports" className="hover:text-forest-800 hover:underline">
             {t('myReports')}
           </Link>
-          <Link href="/forum/moderation" className="hover:text-forest-800 hover:underline">
-            {t('moderation')}
-          </Link>
+          {erModerator ? (
+            <Link href="/forum/moderation" className="hover:text-forest-800 hover:underline">
+              {t('moderation')}
+            </Link>
+          ) : null}
         </div>
       </section>
     </PageWrapper>
