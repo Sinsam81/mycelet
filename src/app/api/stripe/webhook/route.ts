@@ -24,6 +24,47 @@ import {
 
 export const runtime = 'nodejs';
 
+/**
+ * Taket for hele kjøringen. Uten det arvet ruta plattformens standardgrense,
+ * og et kall som hang holdt funksjonen i live lenge etter at Stripe hadde
+ * gitt opp å vente og lagt hendelsen i kø for et nytt forsøk — da kunne to
+ * kjøringer av samme hendelse stå samtidig. Fristene under gjør at et tregt
+ * kall feiler INNE i ruta (logget, og merket «failed» i
+ * billing_webhook_events); dette taket er nettet under dem, for alt som ikke
+ * har egen frist (databasekallene). Blir funksjonen drept her, står hendelsen
+ * som «received», og Stripes neste forsøk behandler den på nytt.
+ */
+export const maxDuration = 60;
+
+/**
+ * Fristen for ETT kall til Stripes API herfra. SDK-ens standard er 80 s per
+ * forsøk og ett nytt forsøk — nesten tre minutter for et kall som normalt tar
+ * et halvt sekund. Ett nytt forsøk beholdes (et brutt oppkall er vanligere
+ * enn et tregt svar), så verste fall er rundt 20 s. Går fristen ut, kaster
+ * SDK-en, hendelsen svarer ikke-2xx, og Stripe leverer den på nytt.
+ */
+const STRIPE_KALL = { timeout: 10_000, maxNetworkRetries: 1 } as const satisfies Stripe.RequestOptions;
+
+/** Supabase Auth (getUserById) og Resend har ingen egen frist; de får denne. */
+const OPPSLAG_FRIST_MS = 8_000;
+
+/** Løftet, eller en avvisning når fristen er ute. Tidtakeren ryddes uansett utfall. */
+function medFrist<T>(lofte: PromiseLike<T>, ms: number, hva: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const tidtaker = setTimeout(() => reject(new Error(`${hva}: ingen svar på ${ms} ms`)), ms);
+    Promise.resolve(lofte).then(
+      (verdi) => {
+        clearTimeout(tidtaker);
+        resolve(verdi);
+      },
+      (feil) => {
+        clearTimeout(tidtaker);
+        reject(feil);
+      }
+    );
+  });
+}
+
 function mapStripeStatus(status: Stripe.Subscription.Status) {
   if (status === 'active') return 'active';
   if (status === 'trialing') return 'trialing';
@@ -82,15 +123,48 @@ async function upsertBillingByUserId(payload: {
   }
 }
 
-/** Finnes auth-brukeren fortsatt? Slettede kontoer har ingen rad å skrive til. */
-async function brukerFinnes(userId: string): Promise<boolean> {
+/** Stripe svarer at abonnementet ikke finnes (lenger): `resource_missing` / 404. */
+function erAlleredeBorteHosStripe(err: unknown): boolean {
+  const feil = (err ?? {}) as { code?: unknown; statusCode?: unknown };
+  return feil.code === 'resource_missing' || feil.statusCode === 404;
+}
+
+/** Supabase Auth svarte uttrykkelig at brukeren ikke finnes (404 «user_not_found»). */
+function erBrukerIkkeFunnet(error: { status?: number; code?: string } | null | undefined): boolean {
+  return error?.status === 404 || error?.code === 'user_not_found';
+}
+
+/**
+ * Finnes auth-brukeren fortsatt? Slettede kontoer har ingen rad å skrive til.
+ *
+ * Svaret «nei» SIER OPP et løpende abonnement hos Stripe (se kallstedet), så
+ * det gis bare når Supabase Auth uttrykkelig svarer at brukeren ikke finnes.
+ * Alt annet — tidsavbrudd, nettverksbrudd, 429, 5xx, en avvist nøkkel — er
+ * «vet ikke», og da går hendelsen den vanlige veien: finnes brukeren, skrives
+ * raden; er hen slettet, feiler skrivingen høyt (FK-brudd), Stripe prøver
+ * igjen, og neste forsøk får et ordentlig svar.
+ *
+ * Før sto det `if (error) return false`. auth-js legger også nettverksfeil,
+ * 429 og 5xx i `error` (samme felle som /auth/reset gikk i — se
+ * erForbigaaendeAuthFeil i src/lib/auth/auth-feil.ts), så et kort utfall hos
+ * Supabase Auth midt i en fornyelse ville sagt opp abonnementet til en
+ * betalende kunde. Her er regelen strengere enn der: også 401/403 er «vet
+ * ikke», for de sier at VI ikke fikk spørre, ikke at brukeren er borte.
+ */
+async function brukerFinnes(userId: string, log: ReturnType<typeof createRequestLogger>): Promise<boolean> {
   try {
     const admin = createAdminClient();
-    const { data, error } = await admin.auth.admin.getUserById(userId);
-    if (error) return false;
+    const { data, error } = await medFrist(admin.auth.admin.getUserById(userId), OPPSLAG_FRIST_MS, 'auth.getUserById');
+    if (error) {
+      if (erBrukerIkkeFunnet(error)) return false;
+      log.warn('stripe.webhook.user_lookup_uncertain', { userId, status: error.status ?? null, code: error.code ?? null });
+      return true;
+    }
     return Boolean(data?.user);
-  } catch {
-    // Uten admin-klient kan vi ikke vite — la den vanlige stien prøve (og feile høyt).
+  } catch (err) {
+    // Uten admin-klient, eller uten svar innen fristen, kan vi ikke vite — la
+    // den vanlige stien prøve (og feile høyt).
+    log.warn('stripe.webhook.user_lookup_uncertain', { userId, detalj: err instanceof Error ? err.message : 'ukjent' });
     return true;
   }
 }
@@ -265,7 +339,7 @@ async function sendProvePaaminnelse(
   let rabatt = lesRabatt(subscription);
   if (rabatt && rabattStorrelseUkjent(rabatt)) {
     try {
-      rabatt = lesRabatt(await stripe.subscriptions.retrieve(subscription.id, { expand: ['discounts'] }));
+      rabatt = lesRabatt(await stripe.subscriptions.retrieve(subscription.id, { expand: ['discounts'] }, STRIPE_KALL));
     } catch (err) {
       log.warn('stripe.prove_paaminnelse.rabatt_ukjent', {
         subscriptionId: subscription.id,
@@ -288,14 +362,20 @@ async function sendProvePaaminnelse(
   }
 
   const admin = createAdminClient();
-  const { data, error } = await admin.auth.admin.getUserById(userId);
-  const email = data?.user?.email;
-  if (error || !email) {
+  // Samme utfall som en feil fra oppslaget når det ikke svarer innen fristen:
+  // advarsel, ingen e-post, hendelsen behandlet. Fristen endrer ikke regelen,
+  // bare hvor lenge vi venter på å få bruke den.
+  const { data, error } = await medFrist(admin.auth.admin.getUserById(userId), OPPSLAG_FRIST_MS, 'auth.getUserById').catch(
+    (err: unknown) => ({ data: null, error: { message: err instanceof Error ? err.message : 'ukjent' } })
+  );
+  const bruker = data?.user ?? null;
+  const email = bruker?.email;
+  if (error || !bruker || !email) {
     log.warn('stripe.prove_paaminnelse.ingen_epostadresse', { userId, subscriptionId: subscription.id, message: error?.message });
     return;
   }
 
-  const locale = sprakFraMetadata(data.user.user_metadata);
+  const locale = sprakFraMetadata(bruker.user_metadata);
   const tier = resolveTierByPriceId(price?.id);
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://www.mycelet.com';
   const epost = byggProvePaaminnelseEpost({
@@ -310,7 +390,13 @@ async function sendProvePaaminnelse(
   });
 
   try {
-    const res = await sendEpost({ til: email, ...epost, idempotensNokkel: `stripe/prove-slutt/${subscription.id}` });
+    // sendEpost har ingen egen frist. Går denne ut, havner det i catch-en
+    // under som en mislykket sending — logget, og hendelsen behandlet.
+    const res = await medFrist(
+      sendEpost({ til: email, ...epost, idempotensNokkel: `stripe/prove-slutt/${subscription.id}` }),
+      OPPSLAG_FRIST_MS,
+      'resend'
+    );
     if (res.ok) {
       log.info('stripe.prove_paaminnelse.sendt', {
         userId,
@@ -414,7 +500,7 @@ export async function POST(request: NextRequest) {
       const metadataPrice = session.metadata?.price_id ?? null;
 
       if (session.mode === 'subscription' && typeof session.subscription === 'string') {
-        const subscription = await stripe.subscriptions.retrieve(session.subscription);
+        const subscription = await stripe.subscriptions.retrieve(session.subscription, STRIPE_KALL);
         const firstItem = subscription.items.data[0];
         const priceId = firstItem?.price?.id ?? metadataPrice;
         const tier = metadataTier ?? resolveTierByPriceId(priceId);
@@ -498,7 +584,7 @@ export async function POST(request: NextRequest) {
       // Stripe fakturerer videre. Før sa opsertet FK-brudd → 400 → Stripe
       // prøvde på nytt i tre døgn, ved hver fornyelse, uten at noen så det.
       // Sikkerhetsnett: et løpende abonnement uten eier sies opp her.
-      if (userId && !(await brukerFinnes(userId))) {
+      if (userId && !(await brukerFinnes(userId, log))) {
         const lopende = ['active', 'trialing', 'past_due', 'unpaid'].includes(subscription.status);
         log.warn('stripe.webhook.subscription_for_deleted_user', {
           eventType: event.type,
@@ -507,7 +593,17 @@ export async function POST(request: NextRequest) {
           avsluttes: lopende && event.type !== 'customer.subscription.deleted'
         });
         if (lopende && event.type !== 'customer.subscription.deleted') {
-          await stripe.subscriptions.cancel(subscription.id);
+          try {
+            await stripe.subscriptions.cancel(subscription.id, STRIPE_KALL);
+          } catch (err) {
+            // Med en frist kan et forsøk ha gått gjennom hos Stripe uten at
+            // svaret kom fram. Neste levering av samme hendelse sier fortsatt
+            // «løpende», og oppsigelsen svarer da at abonnementet ikke finnes.
+            // Målet er nådd — samme regel som avsluttStripeVedSletting. Alt
+            // annet kastes videre, så Stripe prøver igjen.
+            if (!erAlleredeBorteHosStripe(err)) throw err;
+            log.info('stripe.webhook.subscription_already_gone', { subscriptionId: subscription.id });
+          }
         }
       } else if (userId) {
         // Her kommer objektet rått fra Stripe, rendret i kontoens
@@ -578,11 +674,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Feilteksten følger bare med når signaturen ER verifisert (da er
+    // avsenderen Stripe, og svaret er det som står på leveringsforsøket i
+    // Stripe-dashbordet). Før det kan hvem som helst ha sendt forespørselen,
+    // og da skal verken konfigurasjonsfeil eller unntakstekst ut — den står i
+    // loggen over.
     return NextResponse.json(
-      {
-        error: 'Webhook-feil',
-        details: error instanceof Error ? error.message : 'unknown'
-      },
+      webhookEventId
+        ? { error: 'Webhook-feil', details: error instanceof Error ? error.message : 'unknown' }
+        : { error: 'Webhook-feil' },
       { status: 400 }
     );
   }

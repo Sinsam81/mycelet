@@ -107,7 +107,10 @@ export default async function HomePage() {
   // «Tidligere» avgjøres av samme funksjon som checkout og /api/billing/status
   // (tidligere-abonnent.ts) — ikke av om raden finnes: en slettet konto med
   // samme e-post har ingen rad, men Stripe nekter uka. Oppslaget går parallelt
-  // med artslista, så det ikke koster forsiden ventetid.
+  // med artslista, så det ikke koster forsiden ventetid — og det har fristen
+  // sin innebygd (5 s samlet, se tidligere-abonnent.ts): før ventet forsiden,
+  // den første skjermen i appen, på Stripe så lenge SDK-en ville, mens
+  // statuskallet fra headeren på samme side hadde gitt opp etter 5 s.
   const abonnement = await getUserBillingSubscription(supabase, user.id);
   const betaler = getBillingCapabilities(abonnement).paid;
 
@@ -123,7 +126,14 @@ export default async function HomePage() {
       // Noen flere enn de fire som vises, så lista er full også etter at funn
       // fra blokkerte brukere er tatt ut under.
       .limit(SISTE_FUNN_ANTALL * BLOKKERINGSMARGIN),
-    betaler ? Promise.resolve(true) : harHattTilgangFor({ subscription: abonnement, email: user.email, stripe: getStripeServerClient }),
+    betaler
+      ? Promise.resolve(true)
+      : harHattTilgangFor({
+          subscription: abonnement,
+          email: user.email,
+          stripe: getStripeServerClient,
+          vedFrist: (fristMs) => logger.warn('home.stripe_lookup_timeout', { userId: user.id, fristMs })
+        }),
     // Egne rader via RLS. Feiler oppslaget, vises funnene ufiltrert som før.
     supabase.from('blocked_users').select('blocked_id')
   ]);

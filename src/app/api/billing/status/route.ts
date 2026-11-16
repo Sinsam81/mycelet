@@ -14,6 +14,31 @@ import { DEFAULT_LOCALE, type Locale } from '@/i18n/config';
 // Called frequently from the client to render subscription state — logging
 // every successful call would just be noise. We log only failures.
 
+/**
+ * Taket for hele kallet. Ruta leses av headeren, forsidekortet, arket og
+ * prissiden; et normalt svar tar noen hundre millisekunder. Samme tak som de
+ * andre korte lese- og skriverutene (places, findings, spot-feedback).
+ */
+export const maxDuration = 15;
+
+/**
+ * Teksten prissiden viser når statusen ikke lot seg hente. Generert på
+ * serveren, så next-intl dekker den ikke — den sto på norsk også for svenske
+ * brukere. Samme ordlyd som katalogens `Pricing.errorLoadStatus`.
+ */
+const STATUS_FEILET: Record<Locale, string> = {
+  nb: 'Kunne ikke hente abonnementsstatus',
+  sv: 'Kunde inte hämta prenumerationsstatus'
+};
+
+async function hentSprak(): Promise<Locale> {
+  try {
+    return await getUserLocale();
+  } catch {
+    return DEFAULT_LOCALE;
+  }
+}
+
 export async function GET(request: NextRequest) {
   try {
     const supabase = createClient();
@@ -23,13 +48,7 @@ export async function GET(request: NextRequest) {
 
     if (!user) {
       // Samme tekst og språk som checkout og portalen (src/lib/billing/copy.ts).
-      let locale: Locale = DEFAULT_LOCALE;
-      try {
-        locale = await getUserLocale();
-      } catch {
-        locale = DEFAULT_LOCALE;
-      }
-      return NextResponse.json({ error: billingCopy('unauthenticated', locale) }, { status: 401 });
+      return NextResponse.json({ error: billingCopy('unauthenticated', await hentSprak()) }, { status: 401 });
     }
 
     // Read endpoint, called from layouts/headers — generous limit so normal
@@ -47,8 +66,21 @@ export async function GET(request: NextRequest) {
     // og headeren leste før «finnes det en rad?» og lovet uka til en som hadde
     // slettet kontoen etter en betalt sesong. Betalende spør vi ikke om —
     // de kan ikke løse inn noe, og Stripe slipper et oppslag per sidevisning.
+    //
+    // Fristen for Stripe-oppslaget (4 s per kall, 5 s samlet) ligger i
+    // tidligere-abonnent.ts, ikke her: forsiden og checkout gjør det samme
+    // oppslaget, og de tre skal vente like lenge og svare det samme. Går
+    // taket ut, er svaret det samme som når Stripe feiler — prøven som
+    // standard — i stedet for at headeren, arket og prissiden henger for
+    // alle som ikke betaler. Herfra kommer bare logglinja.
     const kanFaaProve =
-      !capabilities.paid && !(await harHattTilgangFor({ subscription, email: user.email, stripe: getStripeServerClient }));
+      !capabilities.paid &&
+      !(await harHattTilgangFor({
+        subscription,
+        email: user.email,
+        stripe: getStripeServerClient,
+        vedFrist: (fristMs) => logger.warn('billing.status.stripe_lookup_timeout', { route: '/api/billing/status', userId: user.id, fristMs })
+      }));
 
     return NextResponse.json({
       subscription,
@@ -58,13 +90,9 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     logger.error('billing.status.failed', error, { route: '/api/billing/status' });
-    return NextResponse.json(
-      {
-        error: 'Kunne ikke hente betalingsstatus',
-        details: error instanceof Error ? error.message : 'unknown'
-      },
-      { status: 500 }
-    );
+    // Ingen `details`: unntaksteksten gikk før rett til nettleseren, og
+    // prissiden viser `error` til kunden. Den hører hjemme i loggen over.
+    const locale = await hentSprak();
+    return NextResponse.json({ error: STATUS_FEILET[locale] ?? STATUS_FEILET[DEFAULT_LOCALE] }, { status: 500 });
   }
 }
-

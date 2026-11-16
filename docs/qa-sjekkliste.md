@@ -48,7 +48,7 @@ Dette er bug-klassen som rammet oss i prod (svensk kart blankt, fast i Oslo, dø
 - [ ] En allerede lagret rad viser «Lagret som funn» + «Se i kartet», og resultatsiden tilbyr da ikke lagring på nytt.
 - [ ] 🖐️ Sletting (skriver til prod): «Slett» spør om bekreftelse, raden forsvinner etter `router.refresh()`, og bildet er borte fra `identify-history`-bøtta.
 - [ ] Bildene ligger i en PRIVAT bøtte: en signert URL fra lista skal virke, men samme sti uten signatur skal gi 400/403.
-- [ ] `GET /api/me/export` har med `identifications` og `_manifest.imageLinksComplete`, og `schemaVersion` er 4.
+- [ ] `GET /api/me/export` har med `identifications` og `_manifest.imageLinksComplete`, og `schemaVersion` er 7 (tallet testen i `src/app/api/me/export/__tests__/route.test.ts` låser — øker hver gang eksporten får et nytt datasett).
 
 ## 3. Prediksjon / «Lovende områder»
 
@@ -70,6 +70,17 @@ Dette er bug-klassen som rammet oss i prod (svensk kart blankt, fast i Oslo, dø
 - [ ] `/forum/new` laster skjema (innlogget).
 - [ ] 🖐️ Manuell (skriver til prod): poste innlegg + laste opp bilde fungerer ende-til-ende.
 
+### 5b. Moderasjon (`/forum/moderation`)
+
+Ingen av disse kjøres av `npm run qa`: de skriver til prod eller krever moderator-rolle. Reglene står i `docs/forum-trust.md`.
+
+- [ ] 🖐️ Utlogget: `/forum/moderation` sender til `/auth/login` (gating på sidenivå — virker også lokalt). Innlogget uten rolle: «Du har ikke tilgang», ingen konsoll.
+- [ ] 🖐️ Meld et testinnlegg fra en annen konto → rapporten står under «Åpne» med utdrag, forfatter og årsak på riktig språk — og uten noe om hvem som meldte.
+- [ ] 🖐️ «Skjul innhold»: innlegget er borte fra `/forum` for alle, rapporten er løst, og `/admin/audit-log` har en rad `moderation.hide`. «Vis igjen» under «Alle» får det tilbake, og rapporten er åpen igjen.
+- [ ] 🖐️ `/admin`: kortet «Rapporter — venter» viser samme tall som banneret i konsollen (ny *og* gjennomgått teller) og er en lenke dit; linja om skjulte innlegg har også lenke.
+- [ ] 🖐️ Med en åpen rapport: dagsrapporten (morgen) og kveldsvarselet (18:00 UTC) har «⚠️ N åpne rapporter — frist i dag/i morgen kl. …» i emnelinja og øverst, med lenke til konsollen. Klokkeslettet er norsk tid og stemmer med meldingstidspunktet + 24 t. «Behandle den nå» når neste e-post ville kommet for sent, ellers «før det»; rødt og «over døgnfristen» når den eldste er over 24 t.
+- [ ] 🖐️ Uten åpne rapporter: bare raden «Åpne rapporter i forumet 0» i dagsrapporten, og **ingen** e-post om kvelden.
+
 ## 6. Innlogging + glemt passord
 
 - [ ] `/auth/login` har e-post- + passordfelt og «Logg inn»-knapp.
@@ -77,7 +88,8 @@ Dette er bug-klassen som rammet oss i prod (svensk kart blankt, fast i Oslo, dø
 - [ ] `/auth/forgot` har e-postfelt + «Send lenke»-knapp.
 - [ ] `/auth/register` laster med skjemafelt.
 - [ ] **Innlogging fungerer**: testbruker logger inn via skjemaet og lander innlogget (ikke feilmelding).
-- [ ] Beskyttede sider redirecter uinnlogget til `/auth/login`: `/profile`, `/map`, `/mine-steder`, `/forum/new`, `/admin`.
+- [ ] Beskyttede sider redirecter uinnlogget til `/auth/login`: `/profile`, `/map`, `/mine-steder`, `/forum/new`, `/admin`. Sjekk **adressen nettleseren ender på**, ikke HTTP-statusen: `/map`, `/mine-steder`, `/profile` og `/identifiseringer` har `loading.tsx`, så lokalt (der middleware ikke kjører) svarer siden 200 med skjelettet og sender deg videre fra klienten. `curl -I` viser da 200 selv om gatingen virker.
+- [ ] 🖐️ Glemt passord fra **appen** (skriver til prod, sender e-post): be om lenke i iOS-appen, åpne e-posten — lenka går til `/auth/reset?token_hash=…` og virker i Safari selv om den ble bestilt i appen. Nytt passord lagres, og en konto laget i appen får beskjed om å åpne appen igjen. (Supabases egen lenke var en PKCE-kode som bare virker i nettleseren som ba om den.)
 
 ## 7. Betaling-gating (web vs native)
 

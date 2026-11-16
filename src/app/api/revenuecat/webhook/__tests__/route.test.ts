@@ -1,6 +1,9 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
-import type { RevenueCatEvent } from '@/lib/billing/revenuecat';
+import { BILLING_ERROR_CANCELLATION_ACK, type RevenueCatEvent } from '@/lib/billing/revenuecat';
+import { abonnementKanal, periodelinje } from '@/lib/billing/kanal';
+import { hasPaidAccess, type BillingStatus, type BillingTier } from '@/lib/billing/plans';
+import { klassifiserAbonnement } from '@/lib/rapport/abonnement';
 
 /**
  * Kjernepåstanden: et manuelt tildelt pass overlever reviewerens sandkassekjøp.
@@ -77,7 +80,7 @@ vi.mock('@/lib/log/request', () => {
   return { createRequestLogger: () => logger };
 });
 
-const { POST } = await import('../route');
+const { POST, maxDuration } = await import('../route');
 
 function postEvent(event: RevenueCatEvent) {
   return POST(
@@ -329,5 +332,315 @@ describe('TRANSFER: kjøp flyttet til en ny konto', () => {
     const res = await postEvent(transfer());
     expect((await res.json()).ignored).toBe('transfer_no_source_row');
     expect(billingUpsertOrNull()).toBeNull();
+  });
+});
+
+describe('rammene rundt ruta', () => {
+  it('hele kjøringen har et tak, godt innenfor de 60 s RevenueCat venter', () => {
+    expect(maxDuration).toBe(30);
+    expect(maxDuration).toBeLessThan(60);
+  });
+
+  it('uautorisert: 401 før noe leses eller skrives, og uten feildetaljer', async () => {
+    const res = await POST(
+      new NextRequest('https://www.mycelet.com/api/revenuecat/webhook', {
+        method: 'POST',
+        headers: { authorization: 'feil-streng' },
+        body: JSON.stringify({ api_version: '1.0', event: sandboxPurchase() })
+      })
+    );
+    expect(res.status).toBe(401);
+    expect(await res.json()).toEqual({ error: 'Ugyldig autorisasjon' });
+    expect(upserts).toEqual([]);
+    expect(updates).toEqual([]);
+  });
+});
+
+/**
+ * Et betalingsproblem kommer som TO hendelser, laget samtidig: BILLING_ISSUE
+ * (med fristen Apple gir) og CANCELLATION med cancel_reason BILLING_ERROR (uten
+ * frist — bare utløpet som nettopp var). Den siste ble skrevet som en frivillig
+ * oppsigelse, og da gikk fristen tapt i begge rekkefølger:
+ *
+ *   BILLING_ISSUE → CANCELLATION  fristen overskrevet med en passert dato
+ *   CANCELLATION → BILLING_ISSUE  BILLING_ISSUE forkastet som «utdatert»
+ *
+ * Testene spiller av hendelsene mot ÉN rad: det ruta skriver, er det neste
+ * hendelse leser. Sluttilstanden skal være den samme uansett rekkefølge.
+ */
+describe('betalingsproblem: BILLING_ISSUE og CANCELLATION (BILLING_ERROR) i begge rekkefølger', () => {
+  const KUNDE = '7c1d2e3f-4a5b-4c6d-8e7f-9a0b1c2d3e4f';
+  const NAA = new Date('2026-10-01T12:00:00Z');
+  const DAG = 24 * 3600 * 1000;
+  /** Perioden gikk ut for fem timer siden — RevenueCat melder problemet etter utløpet. */
+  const UTLOP = NAA.getTime() - 5 * 3600 * 1000;
+  const KJOPT = UTLOP - 30 * DAG;
+  /** Apples frist: 16 dager etter utløpet. */
+  const FRIST = UTLOP + 16 * DAG;
+  /** De to hendelsene lages samtidig, BILLING_ISSUE et øyeblikk først. */
+  const TS_ISSUE = NAA.getTime() - 1000;
+  const TS_CANCEL = TS_ISSUE + 5;
+
+  const hendelse = (type: string, over: Partial<RevenueCatEvent> = {}): RevenueCatEvent => ({
+    type,
+    id: `evt-${type}-${Math.random().toString(36).slice(2)}`,
+    app_user_id: KUNDE,
+    product_id: 'no.mycelet.premium.monthly',
+    period_type: 'NORMAL',
+    purchased_at_ms: KJOPT,
+    expiration_at_ms: UTLOP,
+    store: 'APP_STORE',
+    environment: 'PRODUCTION',
+    ...over
+  });
+  const billingIssue = (over: Partial<RevenueCatEvent> = {}) =>
+    hendelse('BILLING_ISSUE', { grace_period_expiration_at_ms: FRIST, event_timestamp_ms: TS_ISSUE, ...over });
+  const billingErrorCancellation = (over: Partial<RevenueCatEvent> = {}) =>
+    hendelse('CANCELLATION', { cancel_reason: 'BILLING_ERROR', event_timestamp_ms: TS_CANCEL, ...over });
+
+  /** En betalende App Store-kunde, slik siste RENEWAL etterlot raden. */
+  const kunderad = (over: Record<string, unknown> = {}) => ({
+    user_id: KUNDE,
+    tier: 'premium',
+    status: 'active',
+    current_period_start: new Date(KJOPT).toISOString(),
+    current_period_end: new Date(UTLOP).toISOString(),
+    cancel_at_period_end: false,
+    created_at: new Date(KJOPT - 60 * DAG).toISOString(),
+    metadata: { provider: 'revenuecat', rc_event_type: 'RENEWAL', rc_event_timestamp_ms: KJOPT, rc_environment: 'PRODUCTION' },
+    ...over
+  });
+
+  interface Rad {
+    user_id: string;
+    tier: string;
+    status: string;
+    current_period_start: string | null;
+    current_period_end: string | null;
+    cancel_at_period_end: boolean;
+    created_at: string;
+    metadata: Record<string, unknown>;
+  }
+
+  /** Spiller av hendelsene i rekkefølge. Raden ruta skriver, er den neste hendelse leser. */
+  async function spillAv(start: Record<string, unknown>, hendelser: RevenueCatEvent[]) {
+    existingBillingRow = start;
+    const svar: Array<{ type: string; status: number; body: Record<string, unknown>; skrev: boolean }> = [];
+    for (const h of hendelser) {
+      upserts = [];
+      const res = await postEvent(h);
+      const skrevet = billingUpsertOrNull();
+      if (skrevet) existingBillingRow = { ...existingBillingRow, ...skrevet };
+      svar.push({ type: h.type ?? '', status: res.status, body: (await res.json()) as Record<string, unknown>, skrev: skrevet !== null });
+    }
+    return { rad: existingBillingRow as unknown as Rad, svar };
+  }
+
+  const harTilgang = (rad: Rad) => hasPaidAccess(rad.status as BillingStatus, rad.tier as BillingTier, rad.current_period_end);
+  const kortlinje = (rad: Rad) =>
+    periodelinje({
+      status: rad.status,
+      cancelAtPeriodEnd: rad.cancel_at_period_end,
+      periodeSlutt: rad.current_period_end,
+      kanal: abonnementKanal(rad),
+      metadata: rad.metadata,
+      naa: NAA
+    });
+
+  const REKKEFOLGER: Array<[string, () => RevenueCatEvent[]]> = [
+    ['BILLING_ISSUE først (slik RevenueCat sender dem)', () => [billingIssue(), billingErrorCancellation()]],
+    ['CANCELLATION først (byttet om på veien)', () => [billingErrorCancellation(), billingIssue()]]
+  ];
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NAA);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  describe.each(REKKEFOLGER)('%s', (_navn, par) => {
+    it('fristen står: kunden beholder tilgangen til Apples frist', async () => {
+      const { rad, svar } = await spillAv(kunderad(), par());
+      expect(svar.map((s) => s.status)).toEqual([200, 200]);
+
+      expect(rad.status).toBe('active');
+      expect(rad.tier).toBe('premium');
+      expect(rad.current_period_end).toBe(new Date(FRIST).toISOString());
+      expect(rad.cancel_at_period_end).toBe(true);
+      expect(harTilgang(rad)).toBe(true);
+    });
+
+    it('CANCELLATION-hendelsen skriver ingenting — heller ikke rekkefølgemerket', async () => {
+      const { rad, svar } = await spillAv(kunderad(), par());
+      const cancel = svar.find((s) => s.type === 'CANCELLATION');
+      expect(cancel?.skrev).toBe(false);
+      expect(cancel?.body).toEqual({ received: true, ignored: BILLING_ERROR_CANCELLATION_ACK });
+      expect(svar.find((s) => s.type === 'BILLING_ISSUE')?.skrev).toBe(true);
+      // Raden bærer BILLING_ISSUE som siste hendelse, med DENS tidsstempel.
+      expect(rad.metadata.rc_event_type).toBe('BILLING_ISSUE');
+      expect(rad.metadata.rc_event_timestamp_ms).toBe(TS_ISSUE);
+      expect(rad.metadata.provider).toBe('revenuecat');
+    });
+
+    it('plankortet lover ikke «du belastes ikke igjen» — Apple forsøker fortsatt trekket', async () => {
+      const { rad } = await spillAv(kunderad(), par());
+      expect(kortlinje(rad)).toBe('periodAccessUntil');
+    });
+
+    it('betalingen går i orden: RENEWAL gir en vanlig, løpende rad igjen', async () => {
+      const nyttUtlop = UTLOP + 30 * DAG;
+      const { rad } = await spillAv(kunderad(), [
+        ...par(),
+        hendelse('RENEWAL', { purchased_at_ms: UTLOP, expiration_at_ms: nyttUtlop, event_timestamp_ms: NAA.getTime() + 2 * DAG })
+      ]);
+      expect(rad.status).toBe('active');
+      expect(rad.cancel_at_period_end).toBe(false);
+      expect(rad.current_period_end).toBe(new Date(nyttUtlop).toISOString());
+      expect(kortlinje(rad)).toBe('periodRenews');
+    });
+
+    it('fristen går ut uten betaling: EXPIRATION tar tilgangen', async () => {
+      const { rad } = await spillAv(kunderad(), [
+        ...par(),
+        hendelse('EXPIRATION', { expiration_reason: 'BILLING_ERROR', expiration_at_ms: FRIST, event_timestamp_ms: FRIST + 1000 })
+      ]);
+      expect(rad.status).toBe('canceled');
+      expect(harTilgang(rad)).toBe(false);
+    });
+
+    it('uten frist hos Apple: past_due, ikke «active» — og EXPIRATION avslutter', async () => {
+      const utenFrist = par().map((h) => (h.type === 'BILLING_ISSUE' ? { ...h, grace_period_expiration_at_ms: null } : h));
+      const mellom = await spillAv(kunderad(), utenFrist);
+      expect(mellom.rad.status).toBe('past_due');
+      expect(harTilgang(mellom.rad)).toBe(false);
+
+      const { rad } = await spillAv(mellom.rad as unknown as Record<string, unknown>, [
+        hendelse('EXPIRATION', { expiration_reason: 'BILLING_ERROR', event_timestamp_ms: TS_CANCEL + 1000 })
+      ]);
+      expect(rad.status).toBe('canceled');
+    });
+
+    it('første trekk etter en prøve feiler: raden er fortsatt en prøve, ikke en betalende kunde', async () => {
+      const proveStart = new Date(UTLOP - 7 * DAG).toISOString();
+      const proverad = kunderad({
+        status: 'trialing',
+        current_period_start: proveStart,
+        metadata: {
+          provider: 'revenuecat',
+          rc_event_type: 'INITIAL_PURCHASE',
+          rc_event_timestamp_ms: UTLOP - 7 * DAG,
+          rc_environment: 'PRODUCTION',
+          prove_start: proveStart
+        }
+      });
+      const iProve = par().map((h) => ({ ...h, period_type: 'TRIAL', purchased_at_ms: UTLOP - 7 * DAG }));
+
+      const { rad } = await spillAv(proverad, iProve);
+      expect(rad.status).toBe('trialing');
+      expect(rad.current_period_end).toBe(new Date(FRIST).toISOString());
+      expect(harTilgang(rad)).toBe(true);
+      // Dagsrapportens regel: en prøve, aldri «betalende», og ingen belastning er merket.
+      expect(klassifiserAbonnement(rad, NAA)).toBe('prove');
+      expect(rad.metadata.prove_start).toBe(proveStart);
+      expect(rad.metadata.forste_belastning).toBeUndefined();
+
+      // Går trekket gjennom senere, er DET første belastning.
+      const belastet = UTLOP + 3 * DAG;
+      const etter = await spillAv(rad as unknown as Record<string, unknown>, [
+        hendelse('RENEWAL', { purchased_at_ms: belastet, expiration_at_ms: belastet + 30 * DAG, event_timestamp_ms: belastet + 1000 })
+      ]);
+      expect(etter.rad.status).toBe('active');
+      expect(etter.rad.metadata.forste_belastning).toBe(new Date(belastet).toISOString());
+      expect(klassifiserAbonnement(etter.rad, new Date(belastet + DAG))).toBe('betalende');
+    });
+
+    it('et manuelt tildelt pass er urørt: ingen av hendelsene skriver', async () => {
+      const pass = manualGrantRow({ user_id: KUNDE, current_period_end: new Date(NAA.getTime() + 1.5 * YEAR).toISOString() });
+      const { rad, svar } = await spillAv(pass, par());
+      expect(svar.map((s) => s.skrev)).toEqual([false, false]);
+      expect(rad.tier).toBe('season_pass');
+      expect(rad.status).toBe('active');
+      expect(rad.current_period_end).toBe(pass.current_period_end);
+      expect(rad.metadata.source).toBe('manual_grant');
+    });
+
+    it('et kjøp som eide raden over et pass: passet er gulvet når betalingen svikter', async () => {
+      const passSlutt = new Date(NAA.getTime() + 1.5 * YEAR).toISOString();
+      const kjopOverPass = kunderad({
+        metadata: {
+          provider: 'revenuecat',
+          rc_event_type: 'RENEWAL',
+          rc_event_timestamp_ms: KJOPT,
+          manual_grant: {
+            tier: 'season_pass',
+            status: 'active',
+            current_period_start: null,
+            current_period_end: passSlutt,
+            cancel_at_period_end: false,
+            note: 'kundeservice'
+          }
+        }
+      });
+      const { rad } = await spillAv(kjopOverPass, par());
+      expect(rad.tier).toBe('season_pass');
+      expect(rad.status).toBe('active');
+      expect(rad.current_period_end).toBe(passSlutt);
+      expect(rad.cancel_at_period_end).toBe(false);
+      expect(rad.metadata.source).toBe('manual_grant');
+      expect(harTilgang(rad)).toBe(true);
+    });
+  });
+
+  it('en FRIVILLIG oppsigelse er uendret: tilgang ut perioden, og kortet kan love «belastes ikke igjen»', async () => {
+    const lopende = kunderad({ current_period_end: new Date(NAA.getTime() + 10 * DAG).toISOString() });
+    const { rad, svar } = await spillAv(lopende, [
+      hendelse('CANCELLATION', { cancel_reason: 'UNSUBSCRIBE', expiration_at_ms: NAA.getTime() + 10 * DAG, event_timestamp_ms: TS_CANCEL })
+    ]);
+    expect(svar[0].skrev).toBe(true);
+    expect(rad.status).toBe('active');
+    expect(rad.cancel_at_period_end).toBe(true);
+    expect(rad.metadata.rc_event_type).toBe('CANCELLATION');
+    expect(kortlinje(rad)).toBe('periodEndsNoCharge');
+  });
+
+  it('en oppsigelse i PRØVEN beholder trialing — en avbrutt gratisuke er ikke en kunde', async () => {
+    const proveSlutt = NAA.getTime() + 4 * DAG;
+    const proverad = kunderad({
+      status: 'trialing',
+      current_period_start: new Date(proveSlutt - 7 * DAG).toISOString(),
+      current_period_end: new Date(proveSlutt).toISOString(),
+      metadata: { provider: 'revenuecat', rc_event_type: 'INITIAL_PURCHASE', rc_event_timestamp_ms: proveSlutt - 7 * DAG }
+    });
+    const { rad } = await spillAv(proverad, [
+      hendelse('CANCELLATION', {
+        cancel_reason: 'UNSUBSCRIBE',
+        period_type: 'TRIAL',
+        purchased_at_ms: proveSlutt - 7 * DAG,
+        expiration_at_ms: proveSlutt,
+        event_timestamp_ms: TS_CANCEL
+      })
+    ]);
+    expect(rad.status).toBe('trialing');
+    expect(rad.cancel_at_period_end).toBe(true);
+    expect(klassifiserAbonnement(rad, NAA)).toBe('prove');
+    expect(kortlinje(rad)).toBe('periodTrialEndsNoCharge');
+  });
+
+  it('en BILLING_ISSUE som kommer ETTER at betalingen gikk i orden, forkastes som utdatert', async () => {
+    // RENEWAL er laget etter BILLING_ISSUE, men kom fram først.
+    const nyttUtlop = UTLOP + 30 * DAG;
+    const { rad, svar } = await spillAv(kunderad(), [
+      hendelse('RENEWAL', { purchased_at_ms: UTLOP, expiration_at_ms: nyttUtlop, event_timestamp_ms: TS_ISSUE + 60_000 }),
+      billingIssue(),
+      billingErrorCancellation()
+    ]);
+    expect(svar[1].body).toEqual({ received: true, ignored: 'stale_event' });
+    expect(svar[2].skrev).toBe(false);
+    expect(rad.status).toBe('active');
+    expect(rad.cancel_at_period_end).toBe(false);
+    expect(rad.current_period_end).toBe(new Date(nyttUtlop).toISOString());
   });
 });
