@@ -29,6 +29,9 @@ Dette er bug-klassen som rammet oss i prod (svensk kart blankt, fast i Oslo, dø
 - [ ] Funn-lagets filterchips vises (spiselighet, sesong og årsfilteret «Alle år / Siste 5 år / Siste 10 år»); å velge «Siste 5 år» gir ikke JS-feil (virker både med og uten migrasjon 054 via klient-fallback).
 - [ ] Ingen ukjente JS-feil i konsollen ved kartlasting.
 - [ ] 🖐️ Native: «Finn meg» fungerer i iOS-appen (Capacitor Geolocation, ikke `navigator.geolocation`).
+- [ ] «Legg til funn» måler posisjonen på nytt når skjemaet åpnes og tilbyr både «der du står» og «der kartet står» når de er forskjellige — appen velger aldri i stillhet (`map-geo.e2e.ts`; skjemaet åpnes og avbrytes, ingenting lagres).
+- [ ] Kartet åpner med «Kun mine funn» på, og kontrollene oppå kartet tar imot trykk i hele 44 px-flaten (`map-geo.e2e.ts`).
+- [ ] 🖐️ Manuell (skriver til prod): «Meld funnet» og «Blokker brukeren» fra popupen til en annens funn. Popupen blir stående mens skjemaet er åpent (også når kartet flytter seg for å vise den), teksten er på riktig språk, og etter blokkering forsvinner den brukerens funn fra kartet uten ny innlasting. Opphev blokkeringen fra profilen etterpå.
 
 ## 2. AI-soppkjenner (`/identify`)
 
@@ -62,6 +65,8 @@ Dette er bug-klassen som rammet oss i prod (svensk kart blankt, fast i Oslo, dø
 - [ ] `/calendar` laster og viser sesong-innhold («i sesong»-seksjon).
 - [ ] 12-måneders-rutenettet rendrer.
 - [ ] Åpner **ikke** en uoppfordret posisjons-prompt (skal være stille opt-in).
+- [ ] Giftige og dødelige arter står i sin egen røde blokk (april–november), aldri under den nøytrale overskriften og aldri med topp-merke (`smoke.e2e.ts`).
+- [ ] Utenfor september–oktober sier siden hva som kommer neste (`smoke.e2e.ts`).
 
 ## 5. Forum
 
@@ -107,6 +112,28 @@ App Store-regel 3.1.1: native-appen får **ikke** vise ekstern betaling/Google-l
 - [ ] `/species` laster og viser artskort med lenker.
 - [ ] En art `/species/[id]` åpner og viser detaljer (navn + fare-/spiselighet-info).
 - [ ] Artsbilder lastes (ikke ødelagte `<img>`).
+- [ ] Søket finner en art på det svenske navnet og i flertall («kantareller», «morkler») (`smoke.e2e.ts`).
+- [ ] `/species` og `/calendar` har egen tittel og kanonisk adresse; en artsside beholder sin egen tittel med «— Mycelet» (`smoke.e2e.ts`).
+- [ ] **Forvekslingstreneren** `/species/forvekslinger` laster utlogget og viser sikkerhetslinja, Giftinformasjonen og enten «Start en runde» eller tom-tilstanden. Én runde: to kort med «Foto: …» under hvert bilde før svaret, og «Slik skiller du dem» pluss lenker til begge artssidene etter (`smoke.e2e.ts`, bare lesing — fremdriften ligger i nettleseren).
+- [ ] 🖐️ Treneren på svensk: navn og merker på svensk, ingen norsk skilletekst — bare en merknad om at teksten står på artssiden. Lange navn («Snøballsjampinjong») brytes, kuttes ikke, på 360 px.
+- [ ] 🖐️ En art som bare finnes som en annens forveksling (f.eks. grønn fluesopp): forvekslingskortene vises fra den andre siden, uten faregrad på kortet. En matsopp uten egne rader (piggsopp) har forbeholdet over kortene.
+
+### 8b. Områdesidene og soppvarselet (`/soppforhold/[omrade]`)
+
+- [ ] Norsk område: `<article lang="nb">`, `og:locale` `nb_NO`, og varselboksen er selve påmeldingsskjemaet med riktig område og `retur` (`smoke.e2e.ts`). Svensk område sier selv at innholdet er svensk (`sv_SE`).
+- [ ] **Skjemaet sendes aldri inn av en test.** Påmeldingen skriver til prod og sender e-post; testene leser bare feltene.
+- [ ] `/api/soppvarsel/av` og `/api/soppvarsel/bekreft`: GET uten navigering gir en side med én knapp og ingen omdirigering, HEAD svarer 200 uten å gjøre noe (`public-api.e2e.ts`).
+- [ ] 🖐️ Manuell (skriver til prod, sender e-post): meld deg på fra en områdeside med en egen testadresse, bekreft fra e-posten i en vanlig nettleser, og meld av fra lenka i neste varsel. Kvitteringen lander på samme områdeside (`?status=…#varsel`) på sidens språk.
+
+### 8c. Egne funn på `/mine-steder`
+
+Alt her skriver til prod — kjøres for hånd med testbrukeren, aldri i `authed`-prosjektet. Automatisert er bare at siden laster innlogget (`authed-flows.e2e.ts`).
+
+- [ ] 🖐️ Et stedskort åpnes og viser funnene sine. «Endre deling» tilbyr omtrentlig, sone og privat — aldri det eksakte punktet. Etter en endring er omtrentlig grået ut med tidspunktet det kan velges igjen (24 t), mens privat alltid går.
+- [ ] 🖐️ «Sone-funn» tilbys ikke for et funn som ikke alt er sone, så lenge migrasjon 075 ikke er bekreftet kjørt; for et sone-funn står rutestørrelsen som tekst, ikke som glidebryter.
+- [ ] 🖐️ Rette notatet lagres og vises etterpå; et notat som ikke er endret, gir ingen lagring.
+- [ ] 🖐️ Slette fra kortet (to trinn) → funnet havner under «Nylig slettet» med antall dager igjen; «Gjenopprett» får det tilbake på samme sted på kartet.
+- [ ] 🖐️ Alt over på både norsk og svensk; feilmeldingene er på leserens språk.
 
 ## 9. Datakilder + helse
 

@@ -5,7 +5,7 @@ slug: soppkart-over-norge
 lang: nb
 alternate: svampkarta-over-sverige
 kicker: Kart og funn · 5 min
-summary: 428 829 registrerte sopfunn på ett kart — hva prikkene faktisk betyr, hvorfor 72 prosent av dem er historie, og hvordan du bruker et soppkart uten å bli lurt av det.
+summary: 428 829 registrerte soppfunn på ett kart — hva prikkene faktisk betyr, hvorfor 72 prosent av dem er historie, og hvordan du bruker et soppkart uten å bli lurt av det.
 ---
 
 # Soppkart over Norge: 428 829 funn — og hva de egentlig forteller

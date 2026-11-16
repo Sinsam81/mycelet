@@ -76,11 +76,20 @@ const TIME_MS = 3600_000;
  * CANCELLATION; alt annet (BILLING_ISSUE, TRANSFER, ukjent) får den nøytrale
  * «Tilgang til {dato}», som er sann uansett.
  *
- * Kjent grense: ved et betalingsproblem sender RevenueCat også en
- * CANCELLATION med cancel_reason=BILLING_ERROR, og webhooken lagrer ikke
- * årsaken. Står den hendelsen sist på raden med en utløpsdato fram i tid, ser
- * den ut som en frivillig oppsigelse her. Skal løftet være vanntett, må
- * webhooken lagre cancel_reason og denne funksjonen lese den.
+ * Kjent grense, lukket i webhooken (november 2026): ved et betalingsproblem
+ * sender RevenueCat også en CANCELLATION med cancel_reason=BILLING_ERROR. Så
+ * lenge den ble skrevet, kunne den stå sist på raden og se ut som en frivillig
+ * oppsigelse her. Nå skriver webhooken den aldri — mapRevenueCatEvent
+ * kvitterer den uten å røre raden (BILLING_ERROR_CANCELLATION_ACK i
+ * revenuecat.ts) — så i begge rekkefølger er det BILLING_ISSUE som står igjen.
+ * `rc_event_type === 'CANCELLATION'` er derfor alltid en oppsigelse der
+ * fornyelsen er slått av, aldri et trekk Apple fortsatt forsøker, og det
+ * trengs ingen lagret cancel_reason i tillegg.
+ *
+ * Løftet på kortet hviler altså på den regelen i webhooken: skrives
+ * BILLING_ERROR-hendelsen igjen, er hullet tilbake her. Rutetesten spiller av
+ * paret i begge rekkefølger og leser kortlinja etterpå
+ * (src/app/api/revenuecat/webhook/__tests__/route.test.ts).
  */
 function erFrivilligOppsagt(kanal: AbonnementKanal | null, metadata: Record<string, unknown> | null | undefined): boolean {
   if (kanal !== 'apple') return true;
