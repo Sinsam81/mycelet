@@ -1,11 +1,13 @@
 'use client';
 
 import { FolgOmrade } from '@/components/home/FolgOmrade';
+import { Hentefeil, skalProveIgjen } from '@/components/home/hentefeil';
 import { erUtenomSesongFlush } from '@/components/home/utenom-sesong-flush';
 import { RegistrerBruksdag } from '@/components/bruk/RegistrerBruksdag';
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { MapPin } from 'lucide-react';
+import { skipToken, useQuery } from '@tanstack/react-query';
 import { useLocale, useTranslations } from 'next-intl';
 import { forecastBarHeights } from '@/lib/utils/forecast-bars';
 import { forecastBand } from '@/lib/utils/forecast-scale';
@@ -50,6 +52,69 @@ interface Posisjon {
   lat: number;
   lng: number;
   kilde: Kilde;
+}
+
+/** Det kortet viser: prognosen OG posisjonen den gjelder for. De to hører sammen — aldri nytt navn på gammelt tall. */
+interface Vist {
+  prognose: Forecast;
+  posisjon: Posisjon;
+}
+
+/**
+ * ── HENTINGEN ───────────────────────────────────────────────────────────────
+ *
+ * Prognosen hentes gjennom appens QueryClient (Providers). Kortet holdt før
+ * svaret i sin egen tilstand og hentet i en løs useEffect, så hver retur til
+ * forsiden (Hjem → Kart → Hjem) startet på «Sjekker soppforholdene …» og
+ * spurte på nytt om noe ruta selv holder i 30 minutter. Nå tegnes kortet med
+ * en gang når svaret alt ligger i minnet, og friskes opp i bakgrunnen når det
+ * er eldre enn et kvarter.
+ *
+ * Bare HENTINGEN er flyttet. Hvor kortet regner (posisjonsvalget), hva det
+ * viser mens en ny henting går eller feiler, bruksdagen og «kortet har data»
+ * er som før: oppførselstestene i __tests__/MushroomDayCard.test.tsx (alt før
+ * «prognosen huskes mellom åpninger») ble skrevet mot den gamle hentingen og
+ * besto mot begge.
+ *
+ * To ting er nye, med vilje: et kall som feiler får ETT forsøk til (før: ingen),
+ * og svaret huskes mellom åpninger.
+ */
+
+/** Så lenge regnes en hentet prognose som fersk. Ruta selv holder svaret i 30 minutter. */
+export const PROGNOSE_FERSK_MS = 15 * 60_000;
+/** Så lenge huskes prognosen etter at kortet er borte fra skjermen. */
+export const PROGNOSE_HUSKES_MS = 60 * 60_000;
+/** Nye forsøk etter det første når hentingen feiler. Før: ingen. */
+export const PROGNOSE_NYE_FORSOK = 1;
+
+/**
+ * Nøkkelen i minnet. Alt svaret avhenger av, står her:
+ *  · ruta — to desimaler, samme avrunding som adressen og rutas eget lager;
+ *  · språket — dommen, banneret og ukedagene er tekst på leserens språk, og et
+ *    lager uten språk i nøkkelen serverer første lesers språk til alle;
+ *  · dagen — «i dag» i svaret er rutas UTC-dato. Et svar fra i går skal aldri
+ *    kunne tegnes som dagens.
+ * `kilde` («egen» / «standard») står IKKE her: den sier hvor posisjonen kom
+ * fra, ikke hva prognosen er, og følger posisjonen i kortets egen tilstand.
+ */
+export const prognoseNokkel = (p: { lat: number; lng: number }, locale: string, dag: string) =>
+  ['mushroom-forecast', p.lat.toFixed(2), p.lng.toFixed(2), locale, dag] as const;
+
+/** Rutas «i dag»: UTC-datoen (todayKey i /api/mushroom-forecast). */
+const utcDag = (naar: Date) => naar.toISOString().slice(0, 10);
+
+async function hentPrognose(p: { lat: number; lng: number }): Promise<Forecast> {
+  // Grovkorn til ~1 km FØR posisjonen legges i en URL. Hjemskjermen lastes
+  // hver gang appen åpnes, og en URL med meterpresis GPS havner i
+  // infrastrukturens forespørselslogg — over en sesong blir det et
+  // bevegelsesspor vi ikke har bruk for. Ruta runder uansett selv til to
+  // desimaler for cache-nøkkelen sin, og værdataene er regionale, så svaret
+  // er identisk.
+  const res = await fetch(`/api/mushroom-forecast?lat=${p.lat.toFixed(2)}&lon=${p.lng.toFixed(2)}`, {
+    cache: 'no-store'
+  });
+  if (!res.ok) throw new Hentefeil('Prognosen', res.status);
+  return (await res.json()) as Forecast;
 }
 
 /** Sendes på window én gang, når kortet først har data — andre flater (tilbudsarket) kan vente på den. */
@@ -109,16 +174,21 @@ export function MushroomDayCard({
 }) {
   const t = useTranslations('MushroomDayCard');
   const locale = useLocale();
-  const [data, setData] = useState<Forecast | null>(null);
-  const [loading, setLoading] = useState(true);
+  /** Posisjonen kortet ØNSKER å regne på. Det som vises, kan henge etter (se `viser`). */
   const [posisjon, setPosisjon] = useState<Posisjon | null>(null);
-  /** Posisjonen dataene på skjermen faktisk gjelder for (etiketten følger den, ikke ønsket). */
-  const [vist, setVist] = useState<Posisjon | null>(null);
+  /**
+   * Det kortet sist viste. Står når prognosen for en NY posisjon er underveis,
+   * og når den hentingen feiler — med sin egen posisjon, så etiketten følger
+   * tallet og ikke ønsket.
+   */
+  const [sistVist, setSistVist] = useState<Vist | null>(null);
   /** Fersk måling fra denne monteringen (stille eller ved eget trykk) — bekrefter det som vises, eller ikke. */
   const [ferskFix, setFerskFix] = useState<{ lat: number; lng: number } | null>(null);
   /** Frosset ved første data: én hjem-rad per montering, med kilden kortet viste. */
   const [registrert, setRegistrert] = useState<Kilde | null>(null);
   const klarSendt = useRef(false);
+  /** Dagen kortet ble åpnet. En ny åpning etter midnatt får ny nøkkel, og dermed nytt svar. */
+  const [dag] = useState(() => utcDag(new Date()));
 
   // 1. Hvor? Se dokkommentaren over. Kjøres på nytt ved språkbytte, fordi
   // standardområdet følger språket — bruksdagen og hendelsen er alt frosset.
@@ -146,49 +216,74 @@ export function MushroomDayCard({
     };
   }, [locale]);
 
-  // 2. Hent prognosen for den valgte posisjonen. Bytter posisjonen mens en
-  // henting pågår, forkastes det gamle svaret (cancelled) — det huskede og det
-  // ferske kappløpet skal ikke ende med feil etikett på riktig tall.
+  // 2. Hent prognosen for den valgte posisjonen — se «HENTINGEN» over.
+  // networkMode 'always': standarden setter spørringen på VENT når nettleseren
+  // har meldt «offline». Da ville «Sjekker soppforholdene …» stått så lenge
+  // dekningen var borte. Slik feiler kallet som før, og kortet viser det det
+  // har — eller ingenting.
+  const sporring = useQuery({
+    queryKey: posisjon ? prognoseNokkel(posisjon, locale, dag) : (['mushroom-forecast', 'uten-posisjon'] as const),
+    queryFn: posisjon ? () => hentPrognose(posisjon) : skipToken,
+    staleTime: PROGNOSE_FERSK_MS,
+    gcTime: PROGNOSE_HUSKES_MS,
+    // Nettverksfeil og 5xx: ett forsøk til. 4xx: aldri (hentefeil.ts).
+    retry: (antallFeil, feil) => skalProveIgjen(antallFeil, feil, PROGNOSE_NYE_FORSOK),
+    networkMode: 'always'
+  });
+
+  // En NY posisjon i SAMME rute: spørringen ser bare nøkkelen, og den er den
+  // samme, så av seg selv gjør den ingenting. Før hentet kortet på nytt hver
+  // gang posisjonen ble satt. To tilfeller der det fortsatt må skje:
+  //  · forrige henting for ruta FEILET — ellers var et nytt trykk på «Min
+  //    posisjon» etter en feil et dødt trykk;
+  //  · svaret er eldre enn et kvarter (kortet har stått åpent lenge).
+  // Er svaret ferskt, er det ingenting å hente: det er hele poenget med minnet.
+  // Referansen sørger for at dette skjer ved posisjonsbyttet og aldri ellers —
+  // en feil skal ikke selv sette i gang en ny henting. cancelRefetch: false:
+  // går det alt en henting for ruta, er det den vi venter på.
+  const hentingFeilet = sporring.isError;
+  // «Gammelt» krever at det FINNES et svar: en rute uten svar henter
+  // spørringen selv i det nøkkelen byttes.
+  const svaretErGammelt = sporring.data !== undefined && sporring.isStale;
+  const hentIgjen = sporring.refetch;
+  const vurdertFor = useRef<Posisjon | null>(null);
   useEffect(() => {
-    if (!posisjon) return;
-    let cancelled = false;
-    const hent = async () => {
-      setLoading(true);
-      try {
-        // Grovkorn til ~1 km FØR posisjonen legges i en URL. Hjemskjermen lastes
-        // hver gang appen åpnes, og en URL med meterpresis GPS havner i
-        // infrastrukturens forespørselslogg — over en sesong blir det et
-        // bevegelsesspor vi ikke har bruk for. Ruta runder uansett selv til to
-        // desimaler for cache-nøkkelen sin, og værdataene er regionale, så svaret
-        // er identisk.
-        const res = await fetch(
-          `/api/mushroom-forecast?lat=${posisjon.lat.toFixed(2)}&lon=${posisjon.lng.toFixed(2)}`,
-          { cache: 'no-store' }
-        );
-        const neste = res.ok ? ((await res.json()) as Forecast) : null;
-        if (cancelled) return;
-        // Feiler en OPPFRISKING, blir det som alt vises stående; feiler den
-        // første hentingen, er det ingenting å vise (som før).
-        setData((forrige) => neste ?? forrige);
-        if (neste) {
-          setVist(posisjon);
-          setRegistrert((forrige) => forrige ?? posisjon.kilde);
-          if (!klarSendt.current) {
-            klarSendt.current = true;
-            window.dispatchEvent(new Event(FORSIDEKORT_KLAR_EVENT));
-          }
-        }
-      } catch {
-        // Nett nede: samme regel som over — behold det som vises, ellers ingenting.
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    };
-    void hent();
-    return () => {
-      cancelled = true;
-    };
-  }, [posisjon]);
+    if (vurdertFor.current === posisjon) return;
+    vurdertFor.current = posisjon;
+    if (posisjon && (hentingFeilet || svaretErGammelt)) void hentIgjen({ cancelRefetch: false });
+  }, [posisjon, hentingFeilet, svaretErGammelt, hentIgjen]);
+
+  // Svaret for posisjonen kortet ønsker — finnes det, vises det, under sitt
+  // eget sted. Spørringen svarer alltid for nøkkelen i DENNE tegningen, så et
+  // tregt svar for det forrige stedet kan aldri havne under det nye navnet.
+  const svarNaa: Vist | null = posisjon && sporring.data ? { prognose: sporring.data, posisjon } : null;
+  // Husk det, så det står når neste henting er underveis eller feiler: feiler
+  // en OPPFRISKING, blir det som alt vises stående; feiler den første
+  // hentingen, er det ingenting å vise (som før). Satt under tegning — Reacts
+  // eget mønster for tilstand som følger av andre verdier — så kortet aldri
+  // tegnes tomt én gang mellom svaret og minnet om det.
+  if (
+    svarNaa &&
+    (sistVist === null || sistVist.prognose !== svarNaa.prognose || sistVist.posisjon !== svarNaa.posisjon)
+  ) {
+    setSistVist(svarNaa);
+  }
+  // Frosset ved første data: kilden kortet viste FØRST, aldri «standard» og så «egen».
+  if (svarNaa && registrert === null) {
+    setRegistrert(svarNaa.posisjon.kilde);
+  }
+  const viser = svarNaa ?? sistVist;
+
+  // «Kortet har data» — én gang per åpning. Tilbudsarket (ProvGratisVedStart)
+  // står FØR kortet i treet og setter lytteren sin i sin egen mount-effekt, så
+  // den er på plass også når svaret kommer rett fra minnet: denne effekten kan
+  // tidligst kjøre etter at posisjonen er valgt, altså etter første tegning.
+  const harData = viser !== null;
+  useEffect(() => {
+    if (!harData || klarSendt.current) return;
+    klarSendt.current = true;
+    window.dispatchEvent(new Event(FORSIDEKORT_KLAR_EVENT));
+  }, [harData]);
 
   // Brukerens eget trykk — den ene gangen kortet får be om tillatelse, og da
   // gjennom Capacitor-laget så det virker i skallet også.
@@ -212,18 +307,27 @@ export function MushroomDayCard({
     return p.kilde === 'standard' ? t('defaultRegion') : t('yourPosition');
   };
 
-  if (loading && !data) {
-    // Reserve the loaded card's height so content below doesn't jump when the
-    // forecast arrives (was the main layout-shift / CLS source on the home page).
-    return (
-      <div className="flex min-h-[15rem] items-center justify-center rounded-xl bg-white p-4 text-sm text-gray-500 shadow-sm">
-        {t('checkingConditions')}
-      </div>
-    );
+  if (!viser) {
+    // Ingenting å vise ennå. Venter kortet fortsatt på et svar — posisjonen er
+    // ikke valgt, eller en henting går (det ene nye forsøket medregnet)?
+    // isPending dekker også en ny åpning etter en feilet henting: spørringen
+    // går tilbake til «venter» i det den prøver igjen, så plassen holdes av.
+    if (posisjon === null || sporring.isPending) {
+      // Reserve the loaded card's height so content below doesn't jump when the
+      // forecast arrives (was the main layout-shift / CLS source on the home page).
+      return (
+        <div className="flex min-h-[15rem] items-center justify-center rounded-xl bg-white p-4 text-sm text-gray-500 shadow-sm">
+          {t('checkingConditions')}
+        </div>
+      );
+    }
+    // Weather unavailable → render nothing rather than a broken card.
+    return null;
   }
-  // Weather unavailable → render nothing rather than a broken card.
-  if (!data) return null;
 
+  const data = viser.prognose;
+  /** Posisjonen dataene på skjermen faktisk gjelder for (etiketten følger den, ikke ønsket). */
+  const vist: Posisjon | null = viser.posisjon;
   const { today, days } = data;
   // Standard → «omtrentlig» + det store delingstilbudet. Alt en fersk måling fra
   // denne åpningen IKKE bekrefter (husket fra forrige uke, Safari uten Permissions

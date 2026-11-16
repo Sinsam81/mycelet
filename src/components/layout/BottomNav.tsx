@@ -6,9 +6,12 @@ import { useTranslations } from 'next-intl';
 import { Calendar, Home, Library, Map, MessageSquare, type LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 import { FLAGS } from '@/lib/flags';
+import { useAuth } from '@/lib/hooks/useAuth';
+import { useIsNative } from '@/lib/hooks/useIsNative';
+import { HJEM, erAktiv, hjemHref } from '@/lib/nav/hjem';
 
 const items = [
-  { href: '/', labelKey: 'home', icon: Home },
+  { href: HJEM, labelKey: 'home', icon: Home },
   { href: '/species', labelKey: 'library', icon: Library },
   { href: '/map', labelKey: 'map', icon: Map },
   { href: '/calendar', labelKey: 'calendar', icon: Calendar },
@@ -45,6 +48,14 @@ function FaneInnhold({ active, icon: Icon, label }: { active: boolean; icon: Luc
 export function BottomNav() {
   const pathname = usePathname();
   const t = useTranslations('BottomNav');
+  const { user, loading } = useAuth();
+  const native = useIsNative();
+  // I appen er /soppforhold hjem for en som ikke er logget inn — «/» var en
+  // full sidelasting via landingssiden og tilbake dit brukeren alt sto, uten at
+  // noen fane lyste (src/lib/nav/hjem.ts). Mens innloggingen er ukjent står
+  // «/», så en innlogget bruker aldri får /soppforhold i et øyeblikk. Begge
+  // krokene svarer «ukjent»/«nett» på første tegning, som serverens HTML.
+  const hjem = loading ? HJEM : hjemHref({ native, innlogget: Boolean(user) });
 
   return (
     <nav
@@ -53,12 +64,15 @@ export function BottomNav() {
     >
       <ul className="mx-auto flex max-w-screen-md items-center justify-between px-3 py-2">
         {items.map((item) => {
-          const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+          const href = item.labelKey === 'home' ? hjem : item.href;
+          const active = erAktiv(pathname, href);
 
           return (
-            <li key={item.href}>
+            // Nøkkelen er fanen, ikke adressen: Hjem bytter adresse når
+            // innloggingen blir kjent, og skal ikke monteres på nytt av det.
+            <li key={item.labelKey}>
               <Link
-                href={item.href}
+                href={href}
                 // Aktiv fane ble bare vist med farge. Skjermlesere får den nå også.
                 aria-current={active ? 'page' : undefined}
                 className={cn(

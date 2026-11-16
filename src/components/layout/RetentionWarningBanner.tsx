@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { AlertTriangle, Loader2, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useLocale, useTranslations } from 'next-intl';
+import { useAuth } from '@/lib/hooks/useAuth';
 import { intlLocale } from '@/lib/utils/intl-locale';
 
 interface DeletionWarning {
@@ -16,23 +17,39 @@ interface DeletionWarning {
  * deletion warning. Lets them cancel the scheduled deletion in one click
  * by hitting /api/me/extend-retention.
  *
- * Polls /api/me/deletion-warning once on mount. If no warning, renders
- * nothing — no flash, no layout shift on the common path. The endpoint
- * returns 401 for anonymous traffic; we silently treat that as "no
- * warning" so unauthenticated pages don't error.
+ * Asks /api/me/deletion-warning once per logged-in user. If no warning,
+ * renders nothing — no flash, no layout shift on the common path.
  *
- * Mounted once in the root layout via Providers. Stacks above the cookie
- * notice (different vertical anchor) so a brand-new user could in theory
- * see both at once.
+ * ⚠️ ONLY WHEN SOMEONE IS LOGGED IN. This component is mounted on every page
+ * (root layout, via Providers), and it used to ask on mount no matter who was
+ * looking. For a logged-out visitor — /soppforhold, the species library, the
+ * calendar, the login page — that was one serverless call per page load that
+ * could only answer 401, plus a red «Failed to load resource: 401» in the
+ * console of every anonymous visit. The endpoint still answers 401 for
+ * anonymous traffic and that is still treated as «no warning»: the browser's
+ * idea of the session can be staler than the server's.
+ *
+ * The answer is kept together with the user it belongs to, so it disappears
+ * when that user logs out and is asked for again when someone logs in —
+ * Providers is never remounted by client-side navigation.
+ *
+ * Stacks above the cookie notice (different vertical anchor) so a brand-new
+ * user could in theory see both at once.
  */
 export function RetentionWarningBanner() {
   const t = useTranslations('RetentionWarningBanner');
   const locale = useLocale();
-  const [warning, setWarning] = useState<DeletionWarning | null>(null);
+  const { user } = useAuth();
+  // The id, not the user object: Supabase hands out a new object on every
+  // token refresh, and that must not ask again.
+  const userId = user?.id ?? null;
+  const [fetched, setFetched] = useState<{ userId: string; warning: DeletionWarning } | null>(null);
   const [loading, setLoading] = useState(false);
-  const [dismissed, setDismissed] = useState(false);
+  const [dismissedFor, setDismissedFor] = useState<string | null>(null);
 
   useEffect(() => {
+    // Logged out, or the session is not known yet: nothing to ask about.
+    if (!userId) return;
     let cancelled = false;
     const load = async () => {
       try {
@@ -40,7 +57,7 @@ export function RetentionWarningBanner() {
         if (!response.ok) return; // 401 or 5xx — fail silent
         const data = await response.json();
         if (cancelled) return;
-        if (data?.warning) setWarning(data.warning);
+        if (data?.warning) setFetched({ userId, warning: data.warning });
       } catch {
         // Network blip during nav — banner stays hidden, nothing to do.
       }
@@ -49,7 +66,11 @@ export function RetentionWarningBanner() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [userId]);
+
+  // Only the warning that belongs to whoever is logged in right now.
+  const warning = fetched && fetched.userId === userId ? fetched.warning : null;
+  const dismissed = dismissedFor !== null && dismissedFor === userId;
 
   const cancelDeletion = async () => {
     setLoading(true);
@@ -66,7 +87,7 @@ export function RetentionWarningBanner() {
       // Også bekreftelsen kommer oversatt fra ruta, som vet om det faktisk
       // fantes en planlagt sletting å avbryte.
       toast.success(data?.message ?? t('cancelSuccess'));
-      setWarning(null);
+      setFetched(null);
     } catch (err) {
       // Nettverksfeil. Aldri err.message: det er nettleserens egen engelske
       // tekst («Load failed»), ikke noe vi har skrevet.
@@ -116,7 +137,7 @@ export function RetentionWarningBanner() {
 
         <button
           type="button"
-          onClick={() => setDismissed(true)}
+          onClick={() => setDismissedFor(userId)}
           aria-label={t('dismissAriaLabel')}
           className="rounded-md p-1 text-amber-600 hover:bg-amber-100 hover:text-amber-800"
         >

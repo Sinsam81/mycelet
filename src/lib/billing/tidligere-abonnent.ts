@@ -13,7 +13,7 @@ import type { BillingSubscription } from './subscription';
  * betalt sesong og registrerte seg på nytt med samme e-post fikk «Prøv
  * Sesongpass gratis i 7 dager» på tre flater og et Stripe-skjema som trakk
  * 249 kr samme dag. Nå svarer /api/billing/status (kanFaaProve) og forsiden
- * fra samme funksjon som checkout, så ingen flate lover en uke butikken nekter.
+ * etter samme regel som checkout, så ingen flate lover en uke butikken nekter.
  *
  * Stripe-oppslaget er best effort, som i checkout: feiler det, får kunden
  * prøven (som før) heller enn at flaten eller kjøpet stopper.
@@ -21,20 +21,24 @@ import type { BillingSubscription } from './subscription';
  * ── FRISTEN ER EN DEL AV REGELEN ───────────────────────────────────────────
  *
  * Oppslaget kjøres for HVER gratisbruker: av /api/billing/status på hver
- * sidevisning som trenger planstatusen, av forsiden mens den rendres på
- * serveren, og av checkout mens kunden venter på betalingssiden. Stripe-SDK-en
- * venter som standard 80 s per kall, med ett nytt forsøk, så én treg dag hos
- * Stripe holdt alt dette hengende — for et svar som bare avgjør om teksten
- * skal nevne gratisuka.
+ * sidevisning som trenger planstatusen, og av checkout mens kunden venter på
+ * betalingssiden. Stripe-SDK-en ventet som standard 80 s per kall, med ett
+ * nytt forsøk, så én treg dag hos Stripe holdt alt dette hengende — for et
+ * svar som bare avgjør om teksten skal nevne gratisuka.
  *
  * Fristen sto først bare i statusruta. Da svarte den etter 5 s («får prøven»),
  * mens checkout ventet på det ekte svaret, fant det gamle abonnementet og
  * lot Stripe trekke samme dag — nøyaktig den uenigheten denne fila ble til
- * for å fjerne. Derfor ligger fristen HER, i den ene funksjonen alle tre
+ * for å fjerne. Derfor ligger fristen HER, i den ene funksjonen begge
  * kaller: hvert kall får `STRIPE_OPPSLAG_KALL`, hele oppslaget (inntil seks
  * kall etter hverandre) får `STRIPE_OPPSLAG_FRIST_MS`, og går taket ut, er
  * svaret det samme som når Stripe feiler: «ikke hatt tilgang før», altså
- * prøven. En treg dag gir da samme svar på flatene og i kjøpet.
+ * prøven. En treg dag gir da samme svar i headeren, arket, prissiden og kjøpet.
+ *
+ * Forsiden for innloggede bruker samme REGEL (`harHattStripeAbonnementFor`),
+ * men gjennom tidligere-abonnent-visning.ts: den avgjør ingenting, så den
+ * venter kortere og sier «vet ikke» — og lover da ingenting — i stedet for å
+ * gjette på prøven.
  *
  * Det som står igjen: flatene og kjøpet gjør hvert sitt oppslag, til hver sin
  * tid. Svarer Stripe for sent på det ene og i tide på det andre, kan de

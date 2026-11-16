@@ -84,7 +84,11 @@ hengende:
 - **Oppslaget «har e-posten hatt et abonnement før?»: 4 s per kall, 5 s
   samlet.** Fristen er en del av regelen selv (`harHattTilgangFor` i
   `src/lib/billing/tidligere-abonnent.ts`), som `/api/billing/status`
-  (`kanFaaProve`), forsiden for innloggede og checkout alle kaller.
+  (`kanFaaProve`) og checkout begge kaller.
+- **Samme oppslag fra forsiden for innloggede: 2,5 s samlet.** Forsiden
+  avgjør ingenting, så den bruker visningsutgaven (`provesvarForVisning` i
+  `src/lib/billing/tidligere-abonnent-visning.ts`): samme regel, kortere
+  frist, og «vet ikke» som eget svar.
 - **Supabase Auth og prøvepåminnelsen i Stripe-webhooken: 8 s.**
 
 Går en frist ut, skjer nøyaktig det samme som når kallet feiler: webhooken
@@ -96,8 +100,10 @@ oppslaget svarer som om Stripe ikke svarte — gratisuka som standard.
 Oppslaget har **én** frist med vilje. Den sto først bare i statusruta: da
 lovet headeren, arket og prissiden gratisuka etter 5 s, mens checkout ventet
 på det ekte svaret, fant det gamle abonnementet og lot Stripe trekke samme dag.
-Nå gir en treg dag hos Stripe samme svar på flatene og i kjøpet, og forsiden
-venter ikke lenger på Stripe enn statusruta gjør.
+Nå gir en treg dag hos Stripe samme svar i headeren, arket, prissiden og
+kjøpet. Forsiden er strengere: svarer ikke Stripe innen 2,5 s, eller feiler
+oppslaget, lover premiumkortet der ingenting om gratisuka denne gangen
+(nøytral knapp) i stedet for å gjette.
 
 Én feil ble rettet i samme omgang, fordi den avgjorde hva «ikke noe svar»
 betyr: spørsmålet «finnes brukeren fortsatt?» i Stripe-webhooken svarte «nei»

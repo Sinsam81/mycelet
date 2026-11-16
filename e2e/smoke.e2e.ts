@@ -53,3 +53,53 @@ test.describe('Offentlige sider', () => {
     await expect(page).toHaveTitle(/Personvern/i);
   });
 });
+
+// Landingssiden besøkende faktisk ser er den STATISKE fila i public/landing/,
+// som mellomvaren skriver «/» om til. React-komponenten LandingPage er bare
+// reserven der mellomvaren ikke kjører — altså lokalt, og dermed i `npm run qa`.
+// QA-løkka prøvde derfor en landingsside ingen besøkende får. Denne ene sjekken
+// kjører mot prod og ser at «/» virkelig er den statiske fila.
+test.describe('Den ekte landingssiden', () => {
+  const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? '';
+  const isLocalDev = baseURL.includes('localhost') || baseURL.includes('127.0.0.1');
+
+  test('«/» serverer den statiske landingssiden til utloggede', async ({ request }) => {
+    test.skip(
+      isLocalDev,
+      'Mellomvaren kjører ikke i lokal Turbopack-dev — verifiseres mot prod (npm run qa:prod).'
+    );
+    const svar = await request.get('/');
+    expect(svar.status()).toBe(200);
+    // Selvhostet skrift som bare den statiske fila laster (norsk og svensk utgave).
+    expect(await svar.text()).toContain('/landing/f1.woff2');
+  });
+});
+
+// Toppen og bunnmenyen for en som IKKE er logget inn. Reglene er enhetstestet
+// (src/lib/nav/__tests__/hjem.test.ts); her sjekkes at de to komponentene
+// faktisk får innlogging og plattform fra nettleseren. Kun lesing.
+test.describe('Utlogget — toppen og bunnmenyen', () => {
+  test('toppen har «Logg inn», med veien tilbake til siden', async ({ page }) => {
+    await page.goto('/species');
+    const lenke = page.locator('header').first().getByRole('link', { name: /^(Logg inn|Logga in)$/ });
+    await expect(lenke).toBeVisible();
+    await expect(lenke).toHaveAttribute('href', '/auth/login?next=%2Fspecies');
+  });
+
+  test('i appen (simulert) er Hjem /soppforhold, og fanen lyser der', async ({ page }) => {
+    // Samme markør som billing-gating.e2e.ts: Capacitor.isNativePlatform() blir sann.
+    await page.addInitScript(() => {
+      (window as Window & { CapacitorCustomPlatform?: unknown }).CapacitorCustomPlatform = {
+        name: 'ios',
+        plugins: {}
+      };
+    });
+    await page.goto('/soppforhold');
+    const hjem = page
+      .getByRole('navigation', { name: /Hovedmeny|Huvudmeny/ })
+      .getByRole('link', { name: /^(Hjem|Hem)$/ });
+    // «/» var en full sidelasting via landingssiden og tilbake hit, og ingen fane lyste.
+    await expect(hjem).toHaveAttribute('href', '/soppforhold');
+    await expect(hjem).toHaveAttribute('aria-current', 'page');
+  });
+});

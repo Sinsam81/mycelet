@@ -1,9 +1,13 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import Link from 'next/link';
+import { useQuery } from '@tanstack/react-query';
 import { useLocale, useTranslations } from 'next-intl';
 import { regionBandHex, regionScoreToCondition } from '@/lib/prediction/region-score';
+import { previousDate, withinCronGraceWindow } from '@/lib/prediction/tile-freshness';
+import { useFolgerOmrade } from '@/components/home/folger-omrade-hendelse';
+import { Hentefeil, skalProveIgjen } from '@/components/home/hentefeil';
 
 /**
  * «Hvor i landet er det best i dag?»
@@ -44,30 +48,113 @@ interface RegionRad {
 
 const FLAGG: Record<string, string> = { NO: '🇳🇴', SE: '🇸🇪' };
 
-export function BestRegionsCard() {
+/**
+ * ── HENTINGEN ───────────────────────────────────────────────────────────────
+ *
+ * Lista hentes gjennom appens QueryClient (Providers), ikke med en løs
+ * useEffect. Kortet holdt før svaret i sin egen tilstand, så hver retur til
+ * forsiden (Hjem → Kart → Hjem) monterte det tomt og hentet på nytt — tre grå
+ * streker og et nytt kall for tall serveren selv regner ut én gang i døgnet.
+ * Og feilet det ene kallet, var kortet borte til neste gang forsiden ble åpnet,
+ * uten et forsøk til.
+ *
+ * Nå: en retur innen et kvarter tegner lista med en gang, uten kall. Etter det
+ * tegnes den fortsatt med en gang, og friskes opp i bakgrunnen. Et kall som
+ * feiler prøves to ganger til før kortet gir opp. Minnet gjelder innenfor én
+ * rasterdag: første åpning etter nattens raster starter tomt (regionerNokkel).
+ *
+ * ⚠️ networkMode 'always'. Standarden ('online') setter spørringen på VENT når
+ * nettleseren har meldt «offline», i stedet for å la kallet feile. Da ville de
+ * tre grå strekene blitt stående så lenge dekningen var borte — i skogen, der
+ * appen brukes. Med 'always' oppfører hentingen seg som et vanlig kall: den
+ * prøver, feiler, og kortet tar seg selv bort.
+ */
+
+/** Så lenge regnes lista som fersk. Rasteret bak den lages én gang i døgnet. */
+export const REGIONER_FERSK_MS = 15 * 60_000;
+/** Så lenge huskes lista etter at kortet er borte fra skjermen. */
+export const REGIONER_HUSKES_MS = 60 * 60_000;
+/** Nye forsøk etter det første, før kortet gir opp. */
+export const REGIONER_NYE_FORSOK = 2;
+
+/**
+ * Rasterdagen: datoen nattens raster senest kan ha akkurat nå. Dagens UTC-dato
+ * fra klokka 02 UTC, gårsdagens før det — flisjobbene går 01:15 (Norge) og
+ * 01:45 (Sverige) UTC og skriver UTC-datoen (tile-freshness.ts).
+ *
+ * Ikke kalenderdagen. Mellom midnatt UTC og jobbene svarer ruta selv med
+ * gårsdagens raster, så en grense ved midnatt ville lagt en liste hentet i
+ * det vinduet under DAGENS dato, der den kunne bli stående til neste midnatt.
+ */
+export function rasterdag(naar: Date): string {
+  const idag = naar.toISOString().slice(0, 10);
+  return withinCronGraceWindow(naar) ? previousDate(idag) : idag;
+}
+
+/**
+ * SPRÅKET ER EN DEL AV NØKKELEN. Ruta svarer med dommer og artsnavn på ett
+ * språk; et mellomlager uten språk i nøkkelen serverer den første leserens
+ * språk til alle (i18n-regelen i CLAUDE.md).
+ *
+ * DAGEN OGSÅ — rasterdagen kortet ble åpnet. Overskriften sier «i dag», og en
+ * feilet oppfriskning lar lista i minnet stå (se `feilet` under). Uten dagen i
+ * nøkkelen var det ingen grense for hvor gammel den lista kunne være: appen sto
+ * på Hjem om kvelden, ble tatt fram igjen i skogen neste morgen uten dekning,
+ * og en tur innom kartet og tilbake tegnet gårsdagens tall og dommer under
+ * «Best i landet i dag» — og der ble de stående. Nå er en ny rasterdag en ny
+ * nøkkel: en åpning etter nattens raster henter på nytt, og feiler det, tar
+ * kortet seg selv bort. Samme grep som dagen i prognoseNokkel (MushroomDayCard).
+ */
+export const regionerNokkel = (locale: string, dag: string) => ['prediction-regions', locale, dag] as const;
+
+export async function hentBesteRegioner(locale: string): Promise<RegionRad[]> {
+  // Språket står også i adressen, så svaret og nøkkelen ikke kan være uenige:
+  // uten det leser ruta informasjonskapselen, og den kan ha byttet siden
+  // forrige henting.
+  const svar = await fetch(`/api/prediction/regions?locale=${encodeURIComponent(locale)}`);
+  if (!svar.ok) throw new Hentefeil('Områdelista', svar.status);
+  const data = (await svar.json()) as { regions?: unknown } | null;
+  return Array.isArray(data?.regions) ? (data.regions as RegionRad[]) : [];
+}
+
+/** Nettverksfeil og 5xx: inntil to nye forsøk. 4xx: aldri (hentefeil.ts). */
+export function skalProveRegionerIgjen(antallFeil: number, feil: unknown): boolean {
+  return skalProveIgjen(antallFeil, feil, REGIONER_NYE_FORSOK);
+}
+
+export function BestRegionsCard({
+  /**
+   * Serveren så en aktiv varselrad. Da er «Få varsel på e-post» en oppfordring
+   * til noe brukeren alt har — og den skal bort også i det øyeblikket hen
+   * begynner å følge et område fra stripa i forsidekortet (useFolgerOmrade).
+   */
+  folger: folgerFraServer = false
+}: {
+  folger?: boolean;
+} = {}) {
   const t = useTranslations('Home');
   const locale = useLocale();
-  const [regions, setRegions] = useState<RegionRad[] | null>(null);
+  const folger = useFolgerOmrade(folgerFraServer);
   const [land, setLand] = useState<'NO' | 'SE'>(locale === 'sv' ? 'SE' : 'NO');
   const [utvidet, setUtvidet] = useState(false);
-  const [feilet, setFeilet] = useState(false);
+  /** Rasterdagen kortet ble åpnet. En åpning etter nattens raster får ny nøkkel, og dermed ny liste. */
+  const [dag] = useState(() => rasterdag(new Date()));
 
-  useEffect(() => {
-    let avbrutt = false;
-    fetch('/api/prediction/regions')
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
-      .then((d) => {
-        if (!avbrutt) setRegions(Array.isArray(d.regions) ? d.regions : []);
-      })
-      .catch(() => {
-        // Kortet forsvinner helt hvis kallet feiler. En tom ramme med en
-        // feilmelding på forsiden er verre enn ingen ramme.
-        if (!avbrutt) setFeilet(true);
-      });
-    return () => {
-      avbrutt = true;
-    };
-  }, []);
+  const sporring = useQuery({
+    queryKey: regionerNokkel(locale, dag),
+    queryFn: () => hentBesteRegioner(locale),
+    staleTime: REGIONER_FERSK_MS,
+    gcTime: REGIONER_HUSKES_MS,
+    retry: skalProveRegionerIgjen,
+    networkMode: 'always'
+  });
+  const regions = sporring.data ?? null;
+  // Kortet forsvinner helt hvis kallet feiler. En tom ramme med en
+  // feilmelding på forsiden er verre enn ingen ramme. Men bare når det ikke
+  // er noe å vise: feiler en oppfriskning i bakgrunnen, står lista som alt er
+  // på skjermen (TanStack beholder forrige svar ved siden av feilen). Den
+  // lista er aldri hentet før rasterdagen kortet ble åpnet — se regionerNokkel.
+  const feilet = sporring.isError && !regions;
 
   // Land som faktisk har regioner i rasteret. Uten dette ville bryteren tilbudt
   // et land der lista er tom — verre enn å ikke tilby valget.
@@ -176,14 +263,19 @@ export function BestRegionsCard() {
           appen — ingen lenke fra forsiden, ingen fra navigasjonen — og
           soppvarselets eneste påmeldingsknapp ligger nettopp der. Trakten
           «se at det er bra et sted → få beskjed neste gang» var brutt for
-          alle som ikke kom inn utenfra. */}
+          alle som ikke kom inn utenfra.
+
+          Varsel-lenka vises ikke til en som alt følger et område. Lenka til
+          /soppforhold står alltid. */}
       <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1">
         <Link href="/soppforhold" className="text-xs font-medium text-forest-800 hover:underline">
           {t('bestRegionsAllAreas')} →
         </Link>
-        <Link href="/profile?vis=soppvarsel" className="text-xs font-medium text-forest-800 hover:underline">
-          {t('bestRegionsAlert')} →
-        </Link>
+        {folger ? null : (
+          <Link href="/profile?vis=soppvarsel" className="text-xs font-medium text-forest-800 hover:underline">
+            {t('bestRegionsAlert')} →
+          </Link>
+        )}
       </div>
 
       {/* Forbeholdet hører i detaljen, ikke i overskriften — men det skal stå. */}
