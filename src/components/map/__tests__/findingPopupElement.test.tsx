@@ -63,8 +63,8 @@ describe('findingPopupElement', () => {
   /**
    * Slette-knappen bor i FindingPopup, men eierskapet avgjøres av kartet og
    * sendes gjennom denne fabrikken. Går et av de to leddene tapt i en
-   * refaktorering, forsvinner den eneste slette-veien i appen uten at noe
-   * annet blir rødt.
+   * refaktorering, forsvinner slette-veien fra kartet uten at noe annet blir
+   * rødt.
    */
   it('sender slette-muligheten videre til popupen', () => {
     const html = renderToString(

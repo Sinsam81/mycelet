@@ -6,7 +6,7 @@ import { lagreHusketUtsnitt, lesHusketUtsnitt, type HusketUtsnitt } from '@/lib/
 import { lagreHusketPosisjon } from '@/lib/map/husket-posisjon';
 import { useLocale, useMessages, useTranslations } from 'next-intl';
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
-import { Download, Filter, MoreHorizontal, Navigation, Trash2, X } from 'lucide-react';
+import { Download, Filter, MoreHorizontal, Navigation, X } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { fetchRpcPaged } from '@/lib/supabase/paged-rpc';
 import { useGeolocation } from '@/lib/hooks/useGeolocation';
@@ -41,11 +41,15 @@ import { useBillingStatus } from '@/lib/hooks/useBilling';
 import { PredictionHotspot, PredictionResponse, PredictionTile } from '@/types/prediction';
 import { AddFindingSheet } from './AddFindingSheet';
 import { findingPopupElement } from './findingPopupElement';
+import { inneholderMonster } from '@/lib/api/postgrest-filter';
+import { serverFeiltekst } from '@/lib/map/funn-svar';
+import { VisbarFeil } from '@/lib/map/visbar-feil';
 import { Funnlag } from './funnlag';
 import type { FindingReportPayload } from './FindingPopup';
 import { HotspotPanel } from './HotspotPanel';
 import { MapFilters, MapFilterState } from './MapFilters';
 import { MapIntro } from './MapIntro';
+import { ToTrinnsSletting } from './ToTrinnsSletting';
 import { MapFinding } from '@/types/finding';
 import { OwnFindingRow, ownFindingToMapFinding } from '@/lib/utils/map-findings';
 import {
@@ -1132,12 +1136,15 @@ export function MushroomMap({
       }
       const reqId = ++searchReqRef.current;
       speciesSearchTimer.current = setTimeout(async () => {
+        // Søketeksten står i et or-filter, der komma og parenteser er
+        // syntaks — se postgrest-filter.ts.
+        const monster = inneholderMonster(value);
         const [speciesRes, places] = await Promise.all([
           supabase
             .from('mushroom_species')
             .select('id,norwegian_name,swedish_name')
             .or(
-              `norwegian_name.ilike.%${value}%,swedish_name.ilike.%${value}%,latin_name.ilike.%${value}%,synonyms_text.ilike.%${value}%`
+              `norwegian_name.ilike.${monster},swedish_name.ilike.${monster},latin_name.ilike.${monster},synonyms_text.ilike.${monster}`
             )
             .order('norwegian_name', { ascending: true })
             .limit(6),
@@ -2020,10 +2027,11 @@ export function MushroomMap({
    * dager senere. Derfor kan varselet under tilby en ekte angreknapp — den
    * skriver deleted_at tilbake til NULL, den gjenoppretter ikke noe.
    *
-   * Angreknappen er ikke pynt. Dette er den eneste slette-flaten i appen, den
-   * betjenes med tommelen på en telefon i skogen, og et feilklikk her fjernet
-   * tidligere et funn for godt. To-trinns bekreftelse i popupen fanger de
-   * fleste feilklikkene; angreknappen fanger resten.
+   * Angreknappen er ikke pynt. Popupen betjenes med tommelen på en telefon i
+   * skogen, og et feilklikk her fjernet tidligere et funn for godt. To-trinns
+   * bekreftelse i popupen fanger de fleste feilklikkene; angreknappen fanger
+   * resten. (Funn kan også slettes og gjenopprettes på Mine steder, der
+   * «Nylig slettet» står hele angrefristen — se src/components/places/.)
    *
    * Kartet — ikke popupen — eier dette, fordi det er kartet som må lukke
    * popupen og tegne laget på nytt. Popupen lever i en løsrevet React-rot som
@@ -2045,11 +2053,20 @@ export function MushroomMap({
 
   const handleDeleteFinding = useCallback(
     async (findingId: string) => {
-      const res = await fetch(`/api/findings/${findingId}`, { method: 'DELETE' });
-      const body = await res.json().catch(() => ({}));
+      // Kastes videre til popupen, som viser den der brukeren ser på. Bare
+      // rutas egen, oversatte tekst (med `details` når en migrasjon mangler:
+      // «Funnet ditt er trygt og IKKE slettet …») eller katalogens. Et fetch
+      // uten dekning kaster nettleserens engelske «Load failed», og en
+      // feilside fra en proxy er ikke rutas svar — se funn-svar.ts.
+      let res: Response;
+      try {
+        res = await fetch(`/api/findings/${findingId}`, { method: 'DELETE' });
+      } catch {
+        throw new VisbarFeil(t('findingDeleteFailed'));
+      }
+      const body: unknown = await res.json().catch(() => null);
       if (!res.ok) {
-        // Kastes videre til popupen, som viser den der brukeren ser på.
-        throw new Error(body?.details || body?.error || t('findingDeleteFailed'));
+        throw new VisbarFeil(serverFeiltekst(body, { medDetaljer: true, status: res.status }) ?? t('findingDeleteFailed'));
       }
 
       mapRef.current?.closePopup();
@@ -2124,7 +2141,7 @@ export function MushroomMap({
       try {
         await sendReport({ findingId, reason: payload.reason, description: payload.description });
       } catch (error) {
-        throw new Error(forumError(error, tReport('submitError')));
+        throw new VisbarFeil(forumError(error, tReport('submitError')));
       }
     },
     [forumError, sendReport, tReport]
@@ -2151,7 +2168,7 @@ export function MushroomMap({
     async (finding: MapFinding) => {
       const blokkertId = finding.user_id;
       if (!currentUserId || !blokkertId || blokkertId === currentUserId) {
-        throw new Error(tBlock('failed'));
+        throw new VisbarFeil(tBlock('failed'));
       }
       // Alt som går galt her — også et kall som kaster — blir til den
       // oversatte teksten. Popupen viser det som kastes ordrett.
@@ -2167,7 +2184,7 @@ export function MushroomMap({
       } catch {
         skrevet = false;
       }
-      if (!skrevet) throw new Error(tBlock('failed'));
+      if (!skrevet) throw new VisbarFeil(tBlock('failed'));
 
       blokkerte.leggTil(blokkertId);
       mapRef.current?.closePopup();
@@ -3368,8 +3385,9 @@ export function MushroomMap({
                 {t('tilesZoom', { tiles: area.cachedTiles, zoom: area.zoom })}
               </p>
               {/* «Slett» sto 4 px fra «Gå til», begge 26 px høye — og sletting
-                  kan ikke gjøres om uten dekning. Større flater, mer luft. */}
-              <div className="mt-1 flex gap-2">
+                  kan ikke gjøres om uten dekning. Større flater, mer luft, og
+                  et spørsmål før kartet faktisk slettes. */}
+              <div className="mt-1 flex flex-wrap gap-2">
                 <button
                   type="button"
                   onClick={() => focusSavedArea(area)}
@@ -3378,14 +3396,14 @@ export function MushroomMap({
                   <Navigation className="h-3 w-3" />
                   {t('goTo')}
                 </button>
-                <button
-                  type="button"
-                  onClick={() => void deleteSavedArea(area.id)}
-                  className={`${PANELKNAPP} border-red-200 text-red-700 hover:bg-red-50`}
-                >
-                  <Trash2 className="h-3 w-3" />
-                  {t('delete')}
-                </button>
+                <ToTrinnsSletting
+                  etikett={t('delete')}
+                  sporsmal={t('deleteAreaConfirm', { name: area.name })}
+                  bekreft={t('deleteAreaConfirmYes')}
+                  avbryt={t('confirmCancel')}
+                  onBekreft={() => deleteSavedArea(area.id)}
+                  knappKlasser={`${PANELKNAPP} border-red-200 text-red-700 hover:bg-red-50`}
+                />
               </div>
             </div>
           ))}
@@ -3399,14 +3417,16 @@ export function MushroomMap({
           <p className="text-[11px] text-gray-600">
             {storageMb != null ? t('storageUsage', { mb: storageMb }) : t('storageUsageUnknown')}
           </p>
-          <button
-            type="button"
-            onClick={() => void clearTileCache()}
-            className={`mt-1 ${PANELKNAPP} border-gray-300 font-medium text-gray-800 hover:bg-gray-50`}
-          >
-            <Trash2 className="h-3 w-3" />
-            {t('clearTileCache')}
-          </button>
+          <div className="mt-1">
+            <ToTrinnsSletting
+              etikett={t('clearTileCache')}
+              sporsmal={t('clearTileCacheConfirm')}
+              bekreft={t('clearTileCacheConfirmYes')}
+              avbryt={t('confirmCancel')}
+              onBekreft={clearTileCache}
+              knappKlasser={`${PANELKNAPP} border-gray-300 font-medium text-gray-800 hover:bg-gray-50`}
+            />
+          </div>
         </div>
 
         {/* /offline er den ene siden som kan åpnes uten dekning (precachet av

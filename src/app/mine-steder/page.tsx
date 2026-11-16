@@ -16,6 +16,7 @@ import { timeZoneForLocale } from '@/i18n/config';
 // Angrefristen har ÉN kilde: ryddejobben som faktisk fjerner funnene. Lista
 // under regner dagene som står igjen av samme tall, så de to ikke kan drive.
 import { PURGE_AFTER_DAYS } from '@/app/api/cron/purge-deleted-findings/route';
+import { isUuid } from '@/app/api/findings/[id]/soft-delete';
 
 export async function generateMetadata() {
   const t = await getTranslations('MineSteder');
@@ -52,8 +53,19 @@ interface DeletedRow {
  */
 const DELETED_LIMIT = 100;
 
-export default async function MineStederPage() {
+export default async function MineStederPage({
+  searchParams
+}: {
+  /**
+   * `?funn=<id>`: kartets popup sender eieren hit for å endre deling eller
+   * notat. Stedet med funnet åpnes, og funnet markeres. Bare en id — aldri en
+   * posisjon — og den brukes bare til å velge blant radene RLS alt har gitt.
+   */
+  searchParams: Promise<{ funn?: string | string[] }>;
+}) {
   const t = await getTranslations('MineSteder');
+  const { funn: funnParam } = await searchParams;
+  const apneFunnId = typeof funnParam === 'string' && isUuid(funnParam) ? funnParam.toLowerCase() : null;
   const locale = await getLocale();
   const supabase = createClient();
   const {
@@ -249,7 +261,12 @@ export default async function MineStederPage() {
                   </div>
                   {/* Funnene bak kortet: endre deling, endre notat, slett.
                       Rendres først når kortet åpnes. */}
-                  <StedetsFunn funn={spot.finds} angrefristDager={PURGE_AFTER_DAYS} stedId={headingId} />
+                  <StedetsFunn
+                    funn={spot.finds}
+                    angrefristDager={PURGE_AFTER_DAYS}
+                    stedId={headingId}
+                    apneFunnId={apneFunnId}
+                  />
                 </li>
               );
             })}

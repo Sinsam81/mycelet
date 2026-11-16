@@ -115,7 +115,7 @@ describe('melding', () => {
   });
 
   it('kaster videre en oversatt tekst, aldri den rå feilen', () => {
-    expect(melding).toContain("throw new Error(forumError(error, tReport('submitError')));");
+    expect(melding).toContain("throw new VisbarFeil(forumError(error, tReport('submitError')));");
     expect(melding).not.toContain('error.message');
   });
 });
@@ -139,7 +139,7 @@ describe('blokkering', () => {
 
   it('tar brukerens funn ut av laget med en gang, og henter laget på nytt', () => {
     const skriving = blokkering.indexOf(".from('blocked_users')");
-    const feil = blokkering.indexOf("if (!skrevet) throw new Error(tBlock('failed'));");
+    const feil = blokkering.indexOf("if (!skrevet) throw new VisbarFeil(tBlock('failed'));");
     const huskes = blokkering.indexOf('blokkerte.leggTil(blokkertId);');
     const lukkes = blokkering.indexOf('mapRef.current?.closePopup();');
     const fjernes = blokkering.indexOf('funnlagRef.current?.fjernFraBruker(blokkertId);');
@@ -159,7 +159,7 @@ describe('blokkering', () => {
   it('kaster oversatt tekst, og kvitterer med brukernavnet', () => {
     expect(blokkering).not.toContain('error.message');
     // Også et kall som KASTER (ikke bare et svar med feil) blir til teksten.
-    expect(blokkering).toMatch(/\} catch \{\s*skrevet = false;\s*\}\s*if \(!skrevet\) throw new Error\(tBlock\('failed'\)\);/);
+    expect(blokkering).toMatch(/\} catch \{\s*skrevet = false;\s*\}\s*if \(!skrevet\) throw new VisbarFeil\(tBlock\('failed'\)\);/);
     expect(blokkering).toContain("toast.success(tBlock('blocked', { name: finding.username?.trim() || tBlockedUsers('unknown') }));");
   });
 

@@ -2,6 +2,7 @@
 
 import { FormEvent, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
+import toast from 'react-hot-toast';
 import { Camera } from 'lucide-react';
 import { buildUserUploadPath } from '@/lib/storage/upload-path';
 import { lagreDelingsnivaStandard, lesDelingsnivaStandard } from '@/lib/findings/delingsniva';
@@ -9,10 +10,13 @@ import { createClient } from '@/lib/supabase/client';
 import { getSpeciesDisplayName } from '@/lib/utils/species-name';
 import { Button } from '@/components/ui/Button';
 import { TREFF_44 } from './trykkflate';
-import { reencodeImageForUpload } from '@/lib/utils/image';
+import { bildeFeilKode, reencodeImageForUpload } from '@/lib/utils/image';
 import { applyPositionOffset } from '@/lib/utils/position-offset';
 import { isNativePlatform } from '@/lib/native/platform';
-import { captureNativePhoto } from '@/lib/native/camera';
+import { captureNativePhoto, kameraFeil, type KameraFeil } from '@/lib/native/camera';
+import { inneholderMonster } from '@/lib/api/postgrest-filter';
+import { lagringsBeskjed, serverFeiltekst } from '@/lib/map/funn-svar';
+import { VisbarFeil, visbarTekst } from '@/lib/map/visbar-feil';
 import { finnFerskPosisjon } from '@/lib/map/fersk-posisjon';
 import {
   SAMME_STED_M,
@@ -32,6 +36,20 @@ const POSISJON_MAAL_M = 30;
  * dialogen står oppe av disse sekundene (se vakthunden i fersk-posisjon.ts).
  */
 const POSISJON_FRIST_MS = 8_000;
+
+/**
+ * Kamerapluginens kjente avvisninger, med identifiseringssidens tekster: samme
+ * plugin, samme råd («slå det på i Innstillinger»). Ukjente avvisninger er
+ * pluginens engelske streng og vises aldri — se kameraFeil.
+ */
+const KAMERA_FEIL_TEKST: Record<KameraFeil, 'cameraDenied' | 'photosDenied' | 'photoUnavailable'> = {
+  'kamera-avslatt': 'cameraDenied',
+  'bilder-avslatt': 'photosDenied',
+  'bilde-utilgjengelig': 'photoUnavailable'
+};
+
+/** Så lenge står beskjeden fra serveren — den er lengre enn et vanlig varsel. */
+const LAGRINGSBESKJED_MS = 10_000;
 
 type Visibility = 'public' | 'approximate' | 'private';
 type SharingMode = 'public' | 'approximate' | 'zone' | 'private';
@@ -101,6 +119,7 @@ export function AddFindingSheet({
   initialSpeciesName = null
 }: AddFindingSheetProps) {
   const t = useTranslations('AddFindingSheet');
+  const tBilde = useTranslations('Identify');
   const locale = useLocale();
   const supabase = useMemo(() => createClient(), []);
 
@@ -263,7 +282,9 @@ export function AddFindingSheet({
       const file = await captureNativePhoto(locale);
       if (file) setImageFromFile(file);
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('errorFetchImage'));
+      // Aldri err.message: pluginen avviser med engelske setninger.
+      const kjent = kameraFeil(err);
+      setError(kjent ? tBilde(KAMERA_FEIL_TEKST[kjent]) : t('errorFetchImage'));
     }
   };
 
@@ -271,11 +292,17 @@ export function AddFindingSheet({
     const {
       data: { user }
     } = await supabase.auth.getUser();
-    if (!user) throw new Error(t('errorNotLoggedIn'));
+    if (!user) throw new VisbarFeil(t('errorNotLoggedIn'));
 
     // Re-encode via canvas before upload: strips EXIF (incl. GPS), so the
     // photo can't leak the exact spot of an approximate/private find.
-    const blob = await reencodeImageForUpload(file);
+    let blob: Blob;
+    try {
+      blob = await reencodeImageForUpload(file);
+    } catch (err) {
+      // image.ts kaster norske setninger; koden velger katalogens tekst.
+      throw new VisbarFeil(bildeFeilKode(err) === 'ulesbart' ? tBilde('imageUnreadable') : t('errorFetchImage'));
+    }
     const fileName = buildUserUploadPath(user.id);
 
     const { error: uploadError } = await supabase.storage.from('finding-images').upload(fileName, blob, {
@@ -283,7 +310,8 @@ export function AddFindingSheet({
       contentType: 'image/jpeg'
     });
 
-    if (uploadError) throw new Error(t('errorImageUpload', { message: uploadError.message }));
+    // Lagringens egen melding er engelsk og intern; den vises ikke.
+    if (uploadError) throw new VisbarFeil(t('errorImageUpload'));
 
     const {
       data: { publicUrl }
@@ -302,6 +330,10 @@ export function AddFindingSheet({
       return;
     }
 
+    // Teksten står i et or-filter, der komma og parenteser er syntaks. Rå
+    // tekst ga en ødelagt spørring (eller et ekstra vilkår) — se
+    // postgrest-filter.ts.
+    const monster = inneholderMonster(value);
     const { data } = await supabase
       .from('mushroom_species')
       // Uten swedish_name her får en svensk bruker som skriver «flugsvamp»
@@ -310,7 +342,7 @@ export function AddFindingSheet({
       // hele artslisten; dette var den siste artssøkingen som ikke brukte dem.
       .select('id,norwegian_name,swedish_name,latin_name')
       .or(
-        `norwegian_name.ilike.%${value}%,swedish_name.ilike.%${value}%,latin_name.ilike.%${value}%,synonyms_text.ilike.%${value}%`
+        `norwegian_name.ilike.${monster},swedish_name.ilike.${monster},latin_name.ilike.${monster},synonyms_text.ilike.${monster}`
       )
       .order('norwegian_name', { ascending: true })
       .limit(8);
@@ -337,7 +369,7 @@ export function AddFindingSheet({
       } = await supabase.auth.getUser();
 
       if (!user) {
-        throw new Error(t('errorNotLoggedIn'));
+        throw new VisbarFeil(t('errorNotLoggedIn'));
       }
 
       const adjusted = applyPositionOffset(lagretLat, lagretLng, positionOffsetMeters, offsetBearing);
@@ -349,7 +381,7 @@ export function AddFindingSheet({
       // etterlate et foreldreløst bilde i finding-images-bøtta — og med husket
       // sone-standard åpner arket oftere i sonemodus, så feilen ble vanligere.
       if (isZoneFinding && !zoneLabel.trim()) {
-        throw new Error(t('errorZoneLabelRequired'));
+        throw new VisbarFeil(t('errorZoneLabelRequired'));
       }
 
       // No image for negative observations — there's nothing to photograph.
@@ -373,13 +405,26 @@ export function AddFindingSheet({
         })
       });
 
+      const body = await saveResponse.json().catch(() => null);
       if (!saveResponse.ok) {
-        const body = await saveResponse.json().catch(() => null);
-        throw new Error(body?.error || t('errorSaveFinding'));
+        // Rutas egen, oversatte tekst — eller katalogens, aldri noe annet.
+        throw new VisbarFeil(serverFeiltekst(body, { status: saveResponse.status }) ?? t('errorSaveFinding'));
       }
-      onSaved(speciesQuery || undefined, sharingMode);
+      // Lagret, men ikke helt slik brukeren ba om: et sonefunn serveren måtte
+      // lagre som privat. Da er serverens setning beskjeden (lenge nok til å
+      // lese den), og funnet er privat for kartet også — ellers leter
+      // brukeren etter det i fellesskapets lag, der det aldri vil stå.
+      const beskjed = lagringsBeskjed(body);
+      if (beskjed) {
+        toast(beskjed.message, { duration: LAGRINGSBESKJED_MS, icon: '🔒' });
+        onSaved(speciesQuery || undefined, 'private');
+      } else {
+        onSaved(speciesQuery || undefined, sharingMode);
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('errorSaveFinding'));
+      // Bare tekst vi selv har satt — et fetch uten dekning kaster
+      // nettleserens engelske «Load failed».
+      setError(visbarTekst(err, t('errorSaveFinding')));
     } finally {
       setLoading(false);
     }

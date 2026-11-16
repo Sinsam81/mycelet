@@ -198,7 +198,7 @@ describe('panelene på kartet', () => {
     expect(har44(konstant('PANELKNAPP'))).toBe(true);
     const panel = mellom('{offlineOpen ? (', "{t('offlineShellHint')}");
     expect(panel.match(/\$\{PANELKNAPP\}/g)?.length).toBe(4);
-    expect(panel).toContain('<div className="mt-1 flex gap-2">');
+    expect(panel).toContain('<div className="mt-1 flex flex-wrap gap-2">');
     const lagre = mellom('onClick={() => void saveCurrentAreaOffline()}', '<Download');
     expect(har44(lagre)).toBe(true);
   });

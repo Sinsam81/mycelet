@@ -3,11 +3,12 @@
 import { type FormEvent, useEffect, useId, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useLocale, useTranslations } from 'next-intl';
-import { Flag, Trash2, UserX } from 'lucide-react';
+import { Flag, Settings2, Trash2, UserX } from 'lucide-react';
 import { MapFinding } from '@/types/finding';
 import type { ReportReason } from '@/types/forum';
 import { REPORT_REASONS } from '@/lib/moderation/report-reasons';
 import { intlLocale } from '@/lib/utils/intl-locale';
+import { visbarTekst } from '@/lib/map/visbar-feil';
 import { TREFF_44 } from './trykkflate';
 
 /** Det popupen sender til kartet når et funn meldes. */
@@ -35,7 +36,9 @@ interface FindingPopupProps {
   /**
    * Utfører slettingen. Kartet eier den: det er kartet som må fjerne markøren,
    * vise angre-varselet og laste laget på nytt. Kaster den, viser popupen
-   * feilmeldingen og lar brukeren prøve igjen.
+   * feilmeldingen og lar brukeren prøve igjen — meldingen bare når den er en
+   * VisbarFeil (src/lib/map/visbar-feil.ts), ellers popupens egen tekst. Det
+   * samme gjelder onReport og onBlock.
    */
   onDelete?: (findingId: string) => Promise<void>;
   /**
@@ -109,7 +112,7 @@ export function FindingPopup({ finding, displayName, canDelete, onDelete, onRepo
       setPanel(null);
       setDescription('');
     } catch (error) {
-      setActionError(error instanceof Error && error.message ? error.message : tReport('submitError'));
+      setActionError(visbarTekst(error, tReport('submitError')));
     } finally {
       setWorking(false);
     }
@@ -126,7 +129,7 @@ export function FindingPopup({ finding, displayName, canDelete, onDelete, onRepo
       setBlocked(true);
       setPanel(null);
     } catch (error) {
-      setActionError(error instanceof Error && error.message ? error.message : tBlock('failed'));
+      setActionError(visbarTekst(error, tBlock('failed')));
     } finally {
       setWorking(false);
     }
@@ -141,7 +144,9 @@ export function FindingPopup({ finding, displayName, canDelete, onDelete, onRepo
       // Ingen opprydding etterpå: kartet fjerner markøren, og hele denne
       // roten med den.
     } catch (error) {
-      setDeleteError(error instanceof Error ? error.message : t('deleteFailed'));
+      // Bare tekst kartet har merket som trygg (VisbarFeil); alt annet kan
+      // være nettleserens engelske «Load failed».
+      setDeleteError(visbarTekst(error, t('deleteFailed')));
       setDeleting(false);
       setConfirming(false);
     }
@@ -195,6 +200,21 @@ export function FindingPopup({ finding, displayName, canDelete, onDelete, onRepo
           001; det var grensesnittet som manglet. */}
       {canDelete && onDelete ? (
         <div className="border-t border-gray-200 pt-2">
+          {/* Deling og notat endres på Mine steder, ikke her. Popupen lever i
+              en løsrevet React-rot, og «Endre deling» der (EndreDelingArk) er
+              bygget på radene siden henter selv — karantenetidspunktet blant
+              dem, som kartets lag ikke har. Lenka åpner stedet med dette
+              funnet, så det er ett trykk unna. Bare id-en går i adressen,
+              aldri en posisjon. Samme regler gjelder der: privat går alltid,
+              åpnere deling har karantene, posisjonen kan ikke endres. */}
+          {!confirming ? (
+            <Link
+              href={`/mine-steder?funn=${encodeURIComponent(finding.id)}`}
+              className="mb-2 flex min-h-[44px] w-fit items-center gap-1.5 text-sm font-medium text-forest-800 hover:underline"
+            >
+              <Settings2 className="h-3.5 w-3.5" aria-hidden /> {t('manageFinding')}
+            </Link>
+          ) : null}
           {deleteError ? <p className="mb-2 text-xs text-red-600">{deleteError}</p> : null}
 
           {confirming ? (

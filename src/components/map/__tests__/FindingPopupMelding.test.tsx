@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { NextIntlClientProvider } from 'next-intl';
 import { FindingPopup } from '../FindingPopup';
 import { REPORT_REASONS } from '@/lib/moderation/report-reasons';
+import { VisbarFeil } from '@/lib/map/visbar-feil';
 import { TREFF_44 } from '../trykkflate';
 import nb from '../../../../messages/nb.json';
 import sv from '../../../../messages/sv.json';
@@ -217,7 +218,7 @@ describe('melding', () => {
   });
 
   it('viser feilen kartet kaster, og lar skjemaet stå med det brukeren skrev', async () => {
-    const onReport = vi.fn().mockRejectedValue(new Error('Du må logge inn først.'));
+    const onReport = vi.fn().mockRejectedValue(new VisbarFeil('Du må logge inn først.'));
     rendrer({ onReport });
     fireEvent.click(screen.getByRole('button', { name: MELD }));
     fireEvent.change(screen.getByLabelText(nb.ReportButton.descriptionPlaceholder), { target: { value: 'Feil art' } });
@@ -232,7 +233,7 @@ describe('melding', () => {
   });
 
   it('en feil uten tekst gir forumets egen feiltekst, aldri en tom linje', async () => {
-    const onReport = vi.fn().mockRejectedValue(new Error(''));
+    const onReport = vi.fn().mockRejectedValue(new VisbarFeil(''));
     rendrer({ onReport });
     fireEvent.click(screen.getByRole('button', { name: MELD }));
     fireEvent.click(screen.getByRole('button', { name: nb.ReportButton.submit }));
@@ -290,7 +291,7 @@ describe('blokkering', () => {
   });
 
   it('viser feilen og lar brukeren prøve igjen', async () => {
-    const onBlock = vi.fn().mockRejectedValue(new Error(nb.BlockUser.failed));
+    const onBlock = vi.fn().mockRejectedValue(new VisbarFeil(nb.BlockUser.failed));
     rendrer({ onBlock });
     fireEvent.click(screen.getByRole('button', { name: BLOKKER }));
     fireEvent.click(screen.getByRole('button', { name: nb.BlockUser.confirmYes }));

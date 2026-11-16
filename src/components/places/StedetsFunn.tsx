@@ -1,6 +1,6 @@
 'use client';
 
-import { useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import toast from 'react-hot-toast';
@@ -32,7 +32,8 @@ import { endreFunn, gjenopprettFunn, slettFunn, utdatertGrunn } from '@/lib/find
 export function StedetsFunn({
   funn,
   angrefristDager,
-  stedId
+  stedId,
+  apneFunnId = null
 }: {
   funn: FunnIKort[];
   angrefristDager: number;
@@ -41,9 +42,15 @@ export function StedetsFunn({
    * heter «Vis funnene»; med denne leser en skjermleser hvilket sted den hører til.
    */
   stedId?: string;
+  /**
+   * Funnet kartets popup lenket til (`?funn=<id>`). Står det under dette
+   * stedet, er lista åpen fra start og funnet markert — ellers måtte eieren
+   * lete det opp blant stedene igjen.
+   */
+  apneFunnId?: string | null;
 }) {
   const t = useTranslations('MineSteder');
-  const [aapen, setAapen] = useState(false);
+  const [aapen, setAapen] = useState(() => apneFunnId != null && funn.some((f) => f.id === apneFunnId));
   const listeId = useId();
 
   if (funn.length === 0) return null;
@@ -64,7 +71,7 @@ export function StedetsFunn({
       {aapen ? (
         <ul id={listeId} className="divide-y divide-gray-100 border-t border-gray-100">
           {funn.map((f) => (
-            <FunnRad key={f.id} funn={f} angrefristDager={angrefristDager} />
+            <FunnRad key={f.id} funn={f} angrefristDager={angrefristDager} fremhevet={f.id === apneFunnId} />
           ))}
         </ul>
       ) : null}
@@ -75,7 +82,15 @@ export function StedetsFunn({
 const HANDLING_KLASSER =
   'inline-flex min-h-11 items-center gap-1.5 rounded-full px-3 text-xs font-semibold hover:bg-gray-100 disabled:opacity-50';
 
-function FunnRad({ funn, angrefristDager }: { funn: FunnIKort; angrefristDager: number }) {
+function FunnRad({
+  funn,
+  angrefristDager,
+  fremhevet = false
+}: {
+  funn: FunnIKort;
+  angrefristDager: number;
+  fremhevet?: boolean;
+}) {
   const t = useTranslations('MineSteder');
   const tLagring = useTranslations('AddFindingSheet');
   // Samme ord som kartets popup og slettevarsel: «Slett funn» skal ikke hete
@@ -98,6 +113,17 @@ function FunnRad({ funn, angrefristDager }: { funn: FunnIKort; angrefristDager: 
   // tar den av igjen: rekker den fram før oppfriskingen, er dette fortsatt
   // samme rad, og den skal ikke bli stående skjult eller i «Sletter …».
   const [slettet, setSlettet] = useState(false);
+
+  // Kom eieren hit fra kartet, rulles funnet fram og får fokus, så tastatur
+  // og skjermleser står på det og ikke øverst på siden. Bare ved første
+  // visning: senere oppfriskinger skal ikke rykke siden tilbake hit.
+  const radRef = useRef<HTMLLIElement>(null);
+  useEffect(() => {
+    if (!fremhevet) return;
+    radRef.current?.scrollIntoView?.({ block: 'center' });
+    radRef.current?.focus({ preventScroll: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- bare ved montering
+  }, []);
 
   const delingEtikett = {
     public: tLagring('sharingPublic'),
@@ -197,7 +223,12 @@ function FunnRad({ funn, angrefristDager }: { funn: FunnIKort; angrefristDager: 
   if (slettet) return null;
 
   return (
-    <li className="px-4 py-3">
+    <li
+      ref={radRef}
+      tabIndex={fremhevet ? -1 : undefined}
+      aria-current={fremhevet ? 'true' : undefined}
+      className={`px-4 py-3 outline-none ${fremhevet ? 'bg-forest-50 ring-2 ring-inset ring-forest-600' : ''}`}
+    >
       <div className="flex items-start gap-3">
         {funn.bilde ? (
           // eslint-disable-next-line @next/next/no-img-element
