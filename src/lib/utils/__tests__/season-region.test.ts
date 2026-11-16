@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
   baseSeasonMask,
+  comparePeakFirst,
   isMonthInMask,
   latitudeBand,
   monthMask,
   monthsInMask,
+  monthsUntilSeasonStart,
+  nextArrivalMonth,
   nextMonth,
   peakMask,
   seasonMask,
@@ -161,6 +164,173 @@ describe('månedsmasker', () => {
   it('toppsesong er tom når arten ikke har noen', () => {
     expect(peakMask({ peak_season_start: null, peak_season_end: null })).toBe(0);
     expect(monthsInMask(peakMask({ peak_season_start: 8, peak_season_end: 9 }))).toEqual([8, 9]);
+  });
+});
+
+/**
+ * «Kommer snart» i kalenderen så bare én måned fram. Fra september til februar
+ * kommer det ingen nye arter måneden etter, så blokken var borte et halvt år.
+ * Disse to ser så langt fram som det trengs — over nyttår.
+ */
+describe('monthsUntilSeasonStart — hvor lenge til arten kommer i sesong', () => {
+  const morkel = monthMask(4, 6); // apr–jun
+  const vintersopp = monthMask(10, 3); // okt–mar, over nyttår
+  const helaar = monthMask(1, 12);
+
+  it('teller over nyttår — fra desember er det fire måneder til april', () => {
+    expect(monthsUntilSeasonStart(morkel, 12)).toBe(4);
+    expect(monthsUntilSeasonStart(morkel, 1)).toBe(3);
+    expect(monthsUntilSeasonStart(morkel, 3)).toBe(1);
+  });
+
+  it('teller til STARTEN av vinduet, også når vinduet selv går over nyttår', () => {
+    expect(monthsUntilSeasonStart(vintersopp, 4)).toBe(6);
+    expect(monthsUntilSeasonStart(vintersopp, 9)).toBe(1);
+  });
+
+  it('er null når arten allerede er i sesong', () => {
+    expect(monthsUntilSeasonStart(morkel, 4)).toBeNull();
+    expect(monthsUntilSeasonStart(morkel, 6)).toBeNull();
+    expect(monthsUntilSeasonStart(vintersopp, 12)).toBeNull();
+    expect(monthsUntilSeasonStart(vintersopp, 1)).toBeNull();
+  });
+
+  it('en helårsart er aldri en ankomst', () => {
+    for (let month = 1; month <= 12; month++) {
+      expect(monthsUntilSeasonStart(helaar, month)).toBeNull();
+    }
+  });
+
+  it('en tom maske har ingen neste gang', () => {
+    for (let month = 1; month <= 12; month++) {
+      expect(monthsUntilSeasonStart(0, month)).toBeNull();
+    }
+  });
+
+  it('en art med sesong i én måned er høyst elleve måneder unna', () => {
+    const bareMai = monthMask(5, 5);
+    expect(monthsUntilSeasonStart(bareMai, 6)).toBe(11);
+    expect(monthsUntilSeasonStart(bareMai, 4)).toBe(1);
+  });
+
+  it('to adskilte vinduer: det nærmeste teller', () => {
+    const vaarOgHost = monthMask(4, 5) | monthMask(9, 10);
+    expect(monthsUntilSeasonStart(vaarOgHost, 7)).toBe(2);
+    expect(monthsUntilSeasonStart(vaarOgHost, 12)).toBe(4);
+  });
+
+  it('en måned som ikke er et tall gir null, ikke et svar om januar', () => {
+    expect(monthsUntilSeasonStart(morkel, Number.NaN)).toBeNull();
+  });
+
+  it('stemmer med masken for alle ekte vinduer og alle måneder', () => {
+    for (const id of Object.keys(SEASON_WINDOWS)) {
+      const mask = SEASON_WINDOWS[id].all;
+      for (let month = 1; month <= 12; month++) {
+        const ahead = monthsUntilSeasonStart(mask, month);
+        if (isMonthInMask(mask, month)) {
+          expect(ahead).toBeNull();
+          continue;
+        }
+        expect(ahead).not.toBeNull();
+        // Måneden den peker på er i sesong, og ingen måned før den er det.
+        let candidate = month;
+        for (let i = 1; i <= ahead!; i++) {
+          candidate = nextMonth(candidate);
+          expect(isMonthInMask(mask, candidate)).toBe(i === ahead);
+        }
+      }
+    }
+  });
+});
+
+describe('nextArrivalMonth — første måned noe nytt kommer i sesong', () => {
+  const morkel = monthMask(4, 6);
+  const kantarell = monthMask(6, 10);
+  const vintersopp = monthMask(10, 3);
+  const helaar = monthMask(1, 12);
+
+  it('fra desember er det april — over nyttår, forbi arter som allerede er ute', () => {
+    expect(nextArrivalMonth([morkel, kantarell, vintersopp, helaar], 12)).toBe(4);
+  });
+
+  it('den nærmeste ankomsten vinner', () => {
+    expect(nextArrivalMonth([morkel, kantarell], 5)).toBe(6);
+    expect(nextArrivalMonth([morkel, kantarell], 2)).toBe(4);
+  });
+
+  it('en helårsart er aldri en ankomst', () => {
+    expect(nextArrivalMonth([helaar], 12)).toBeNull();
+    expect(nextArrivalMonth([helaar, vintersopp], 12)).toBeNull();
+  });
+
+  it('en tom liste har ingen ankomst', () => {
+    expect(nextArrivalMonth([], 12)).toBeNull();
+    expect(nextArrivalMonth([0, 0], 12)).toBeNull();
+  });
+
+  it('tar imot en iterator, ikke bare en liste (Map.values())', () => {
+    const masks = new Map([
+      [1, kantarell],
+      [2, morkel]
+    ]);
+    expect(nextArrivalMonth(masks.values(), 12)).toBe(4);
+  });
+});
+
+describe('comparePeakFirst — toppsesong først, ellers urørt rekkefølge', () => {
+  const art = (navn: string, start: number | null, slutt: number | null) => ({
+    navn,
+    peak_season_start: start,
+    peak_season_end: slutt
+  });
+  // Rekkefølgen inn er den alfabetiske fra siden — den skal stå innenfor hver gruppe.
+  const liste = [
+    art('Ametystsopp', 9, 10),
+    art('Blå ridderhatt', 10, 11),
+    art('Judasøre', 9, 11),
+    art('Klubbetraktsopp', null, null),
+    art('Vintersopp', 11, 12),
+    art('Østerssopp', 11, 2)
+  ];
+  const sortert = (month: number) => [...liste].sort(comparePeakFirst(month)).map((a) => a.navn);
+
+  it('løfter artene i toppsesong denne måneden øverst', () => {
+    expect(sortert(11)).toEqual([
+      'Blå ridderhatt',
+      'Judasøre',
+      'Vintersopp',
+      'Østerssopp',
+      'Ametystsopp',
+      'Klubbetraktsopp'
+    ]);
+  });
+
+  it('toppsesong over nyttår teller i januar', () => {
+    expect(sortert(1)).toEqual([
+      'Østerssopp',
+      'Ametystsopp',
+      'Blå ridderhatt',
+      'Judasøre',
+      'Klubbetraktsopp',
+      'Vintersopp'
+    ]);
+  });
+
+  it('en måned uten noen i toppsesong lar lista stå', () => {
+    expect(sortert(5)).toEqual(liste.map((a) => a.navn));
+  });
+
+  it('en art uten toppsesong står aldri foran en art som er i toppsesong', () => {
+    for (let month = 1; month <= 12; month++) {
+      const rekkefolge = sortert(month);
+      const utenTopp = rekkefolge.indexOf('Klubbetraktsopp');
+      for (const a of liste) {
+        if (isMonthInMask(peakMask(a), month)) {
+          expect(rekkefolge.indexOf(a.navn), `${a.navn} i måned ${month}`).toBeLessThan(utenTopp);
+        }
+      }
+    }
   });
 });
 

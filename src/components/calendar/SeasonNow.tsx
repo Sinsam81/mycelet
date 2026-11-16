@@ -3,16 +3,10 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useLocale, useTranslations } from 'next-intl';
-import { MapPin } from 'lucide-react';
+import { AlertTriangle, MapPin } from 'lucide-react';
 import { EdibilityBadge } from '@/components/ui/EdibilityBadge';
-import {
-  isMonthInMask,
-  latitudeBand,
-  nextMonth,
-  peakMask,
-  seasonMask,
-  type LatitudeBand
-} from '@/lib/utils/season-region';
+import { isDangerousEdibility } from '@/lib/utils/edibility';
+import { isMonthInMask, latitudeBand, peakMask, type LatitudeBand } from '@/lib/utils/season-region';
 import type { Edibility } from '@/types/species';
 import { getSpeciesDisplayName } from '@/lib/utils/species-name';
 import {
@@ -21,6 +15,7 @@ import {
   isGeolocationAvailable
 } from '@/lib/hooks/useGeolocation';
 import { lagreHusketPosisjon, lesHusketPosisjon } from '@/lib/map/husket-posisjon';
+import { sesongNa } from './sesong-na';
 
 export interface CalendarSpecies {
   id: number;
@@ -40,26 +35,45 @@ const MONTH_KEYS = [
   'monthJuly', 'monthAugust', 'monthSeptember', 'monthOctober', 'monthNovember', 'monthDecember'
 ] as const;
 
-function SpeciesRowLink({ s, peak }: { s: CalendarSpecies; peak?: boolean }) {
+/**
+ * Ett artskort. Farlige arter får rødtonet kort og ALDRI «Topp-sesong»-merket,
+ * uansett hva kallstedet sender: «topp» leses som en anbefaling, og samme regel
+ * holder årstabellen under på med fargene sine.
+ */
+function SpeciesRowLink({ s, peak, dangerous }: { s: CalendarSpecies; peak?: boolean; dangerous?: boolean }) {
   const t = useTranslations('SeasonNow');
   const locale = useLocale();
   const displayName = getSpeciesDisplayName(s, locale);
   return (
     <Link
       href={`/species/${s.id}`}
-      className="flex items-center gap-3 rounded-xl border border-gray-200 bg-white p-2 shadow-card transition hover:-translate-y-0.5 hover:border-forest-300 hover:shadow-lg"
+      className={`flex items-center gap-3 rounded-xl border p-2 shadow-card transition hover:-translate-y-0.5 hover:shadow-lg ${
+        dangerous
+          ? 'border-red-200 bg-red-50 hover:border-red-400'
+          : 'border-gray-200 bg-white hover:border-forest-300'
+      }`}
     >
       <div className="h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-gray-100">
         {s.primary_image_url ? (
-          <img src={s.primary_image_url} alt={displayName} className="h-full w-full object-cover" />
+          // I september er det over 70 kort på siden. Uten `loading="lazy"`
+          // hentet nettleseren alle bildene med én gang, også de langt nede.
+          <img
+            src={s.primary_image_url}
+            alt={displayName}
+            loading="lazy"
+            decoding="async"
+            className="h-full w-full object-cover"
+          />
         ) : null}
       </div>
       <div className="min-w-0 flex-1">
-        <p className="truncate font-serif text-base font-bold text-forest-900">{displayName}</p>
+        <p className={`truncate font-serif text-base font-bold ${dangerous ? 'text-red-950' : 'text-forest-900'}`}>
+          {displayName}
+        </p>
         <p className="truncate text-xs italic text-gray-600">{s.latin_name}</p>
         <div className="mt-1 flex items-center gap-1.5">
           <EdibilityBadge edibility={s.edibility} />
-          {peak ? (
+          {peak && !dangerous ? (
             <span className="rounded-full bg-forest-100 px-2 py-0.5 text-xs font-semibold text-forest-900">{t('peakSeason')}</span>
           ) : null}
         </div>
@@ -74,7 +88,19 @@ const BAND_KEYS: Record<LatitudeBand, 'regionSouth' | 'regionCentral' | 'regionN
   north: 'regionNorth'
 };
 
-export function SeasonNow({ species }: { species: CalendarSpecies[] }) {
+interface SeasonNowProps {
+  species: CalendarSpecies[];
+  /**
+   * Måneden (1–12) i Oslo-tid, regnet ut på serveren (sesongtilstand i
+   * src/app/calendar/page.tsx) — den samme årstabellen under får. Komponenten
+   * leser aldri klokka selv: serveren står i UTC og enheten i brukerens sone,
+   * så de to panelene kunne vise hver sin måned rundt et månedsskifte, og
+   * serverens og nettleserens første rendring kunne bli ulike.
+   */
+  month: number;
+}
+
+export function SeasonNow({ species, month }: SeasonNowProps) {
   const t = useTranslations('SeasonNow');
   const [band, setBand] = useState<LatitudeBand | null>(null);
   const [personalized, setPersonalized] = useState(false);
@@ -127,23 +153,19 @@ export function SeasonNow({ species }: { species: CalendarSpecies[] }) {
     }
   };
 
-  const now = new Date();
-  const month = now.getMonth() + 1;
-  const soon = nextMonth(month);
   const label = band ? t(BAND_KEYS[band]) : '';
+  const monthName = (m: number) => t(MONTH_KEYS[Math.max(1, Math.min(12, Math.round(m))) - 1]);
 
   // Vinduene er månedsgrove fordi datagrunnlaget er månedsgrovt — vi later ikke
-  // som vi vet at sesongen starter en bestemt dag.
-  const masks = new Map(species.map((s) => [s.id, seasonMask(s, band)]));
-  const maskOf = (s: CalendarSpecies) => masks.get(s.id) ?? 0;
-  const inSeason = species.filter((s) => isMonthInMask(maskOf(s), month));
-  const comingSoon = species.filter((s) => !isMonthInMask(maskOf(s), month) && isMonthInMask(maskOf(s), soon));
+  // som vi vet at sesongen starter en bestemt dag. Hva som havner i hvilken
+  // blokk, og hvorfor, står i sesong-na.ts.
+  const { iSesong, farligeISesong, nesteUt } = sesongNa(species, month, band);
 
   return (
     <>
       <article className="space-y-3 rounded-2xl bg-white p-4 shadow-card">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="font-serif text-xl font-bold text-forest-900">{t('inSeasonNowHeading', { month: t(MONTH_KEYS[now.getMonth()]) })}</h2>
+          <h2 className="font-serif text-xl font-bold text-forest-900">{t('inSeasonNowHeading', { month: monthName(month) })}</h2>
           {(personalized && label) || (canRequest && !bekreftet) ? (
             <div className="flex flex-wrap items-center gap-2">
               {personalized && label ? (
@@ -164,31 +186,65 @@ export function SeasonNow({ species }: { species: CalendarSpecies[] }) {
             </div>
           ) : null}
         </div>
-        {inSeason.length === 0 ? (
-          <p className="text-sm text-gray-700">
-            {personalized ? t('noneInSeasonForArea') : t('noneInSeason')}
-          </p>
-        ) : (
+        {iSesong.length > 0 ? (
           <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            {inSeason.map((s) => (
+            {iSesong.map((s) => (
               <li key={s.id}>
                 <SpeciesRowLink s={s} peak={isMonthInMask(peakMask(s), month)} />
               </li>
             ))}
           </ul>
-        )}
+        ) : farligeISesong.length === 0 ? (
+          <p className="text-sm text-gray-700">
+            {personalized ? t('noneInSeasonForArea') : t('noneInSeason')}
+          </p>
+        ) : null}
       </article>
 
-      {comingSoon.length > 0 ? (
+      {/* Egen blokk, eget utseende: giftige og dødelige arter skal aldri stå
+          mellom matsoppene i en liste som heter «i sesong nå». */}
+      {farligeISesong.length > 0 ? (
         <article className="space-y-3 rounded-2xl bg-white p-4 shadow-card">
-          <h2 className="font-serif text-xl font-bold text-forest-900">{t('comingSoon')}</h2>
+          <div className="space-y-1">
+            <h2 className="flex items-center gap-2 font-serif text-xl font-bold text-red-900">
+              <AlertTriangle className="h-5 w-5 shrink-0 text-red-700" aria-hidden="true" />
+              {t('dangerousNowHeading')}
+            </h2>
+            <p className="text-sm text-gray-700">{t('dangerousNowNote')}</p>
+          </div>
           <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            {comingSoon.map((s) => (
+            {farligeISesong.map((s) => (
               <li key={s.id}>
-                <SpeciesRowLink s={s} />
+                <SpeciesRowLink s={s} dangerous />
               </li>
             ))}
           </ul>
+        </article>
+      ) : null}
+
+      {nesteUt ? (
+        <article className="space-y-3 rounded-2xl bg-white p-4 shadow-card">
+          <h2 className="font-serif text-xl font-bold text-forest-900">
+            {nesteUt.manederFram === 1 ? t('comingSoon') : t('nextUpHeading', { month: monthName(nesteUt.maaned) })}
+          </h2>
+          <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            {nesteUt.arter.map((s) => (
+              <li key={s.id}>
+                <SpeciesRowLink s={s} dangerous={isDangerousEdibility(s.edibility)} />
+              </li>
+            ))}
+          </ul>
+          {/* Bare når det er lenge til: da er dette stedet siden sier noe om
+              månedene som kommer, og forbeholdet hører hjemme her. Ingen løfter
+              om funn — og en vei til noe å gjøre i mellomtiden. */}
+          {nesteUt.manederFram > 1 ? (
+            <p className="text-sm text-gray-700">
+              {t('nextUpNote')}{' '}
+              <Link href="/species" className="font-semibold text-forest-800 underline underline-offset-2">
+                {t('nextUpLibraryLink')}
+              </Link>
+            </p>
+          ) : null}
         </article>
       ) : null}
     </>

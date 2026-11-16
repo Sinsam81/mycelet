@@ -27,7 +27,10 @@ export default function SpeciesPage() {
     { label: t('edibilityDeadly'), value: 'deadly' }
   ];
   const [query, setQuery] = useState('');
-  const debouncedQuery = useDebouncedValue(query, 300);
+  // Søket går ikke lenger til databasen (useSpecies filtrerer lista i minnet),
+  // så forsinkelsen er bare der for å slippe å tegne rutenettet om for hver
+  // bokstav i et raskt skrevet ord.
+  const debouncedQuery = useDebouncedValue(query, 150);
   const [edibility, setEdibility] = useState<'all' | Edibility>('all');
   const [inSeasonNow, setInSeasonNow] = useState(false);
   const [habitat, setHabitat] = useState('');
@@ -116,7 +119,9 @@ export default function SpeciesPage() {
           ))}
         </div>
 
-        {!isLoading && count === 0 ? (
+        {/* Ikke ved feil: da er lista tom fordi den aldri kom, ikke fordi
+            filtrene er for strenge — og feilmeldingen står allerede over. */}
+        {!isLoading && !error && count === 0 ? (
           <p className="text-sm text-gray-700">{t('noMatches')}</p>
         ) : null}
       </section>

@@ -15,6 +15,40 @@ test.describe('Offentlige sider', () => {
     await expect(page.locator('a[href^="/species/"]').first()).toBeVisible();
   });
 
+  // Søket går i nettleseren og leser også svenske navn og eldre latinske navn.
+  // «karl johan» ga null treff i det norske biblioteket før. Kortene finnes på
+  // det latinske navnet, som er likt på begge språk.
+  test('artssøket finner steinsopp på det svenske navnet, og kantarell i flertall', async ({ page }) => {
+    await page.goto('/species');
+    const kort = page.locator('a[href^="/species/"]');
+    const sok = page.getByRole('searchbox');
+    await expect(kort.filter({ hasText: 'Cantharellus cibarius' })).toBeVisible();
+    await sok.fill('karl johan');
+    await expect(kort.filter({ hasText: 'Boletus edulis' })).toBeVisible();
+    await expect(kort.filter({ hasText: 'Cantharellus cibarius' })).toHaveCount(0);
+    // Bøyde former: «kantareller» står ikke i noe navn, men stammen gjør det.
+    await sok.fill('kantareller');
+    await expect(kort.filter({ hasText: 'Cantharellus cibarius' })).toBeVisible();
+    await expect(kort.filter({ hasText: 'Boletus edulis' })).toHaveCount(0);
+  });
+
+  // Biblioteket og kalenderen arvet forsidens tittel og hadde ingen canonical.
+  // Bibliotekets metadata kommer fra en layout som også ligger rundt
+  // artssidene — de skal fortsatt ha sin EGEN tittel, med merkenavnet bak.
+  test('biblioteket og kalenderen har egen tittel og kanonisk adresse', async ({ page }) => {
+    await page.goto('/calendar');
+    await expect(page).toHaveTitle(/^(Soppkalender|Svampkalender).* — Mycelet$/);
+    await expect(page.locator('link[rel="canonical"]')).toHaveAttribute('href', 'https://www.mycelet.com/calendar');
+
+    await page.goto('/species');
+    await expect(page).toHaveTitle(/^(Sopparter|Svamparter).* — Mycelet$/);
+    await expect(page.locator('link[rel="canonical"]')).toHaveAttribute('href', 'https://www.mycelet.com/species');
+
+    await page.locator('a[href^="/species/"]').filter({ hasText: 'Cantharellus cibarius' }).click();
+    await expect(page).toHaveURL(/\/species\/\d+$/);
+    await expect(page).toHaveTitle(/Cantharellus cibarius.* — Mycelet$/);
+  });
+
   test('en art kan åpnes og viser detaljer', async ({ page }) => {
     await page.goto('/species');
     await page.locator('a[href^="/species/"]').first().click();
@@ -26,6 +60,26 @@ test.describe('Offentlige sider', () => {
     await page.goto('/calendar');
     await expect(page).toHaveTitle(/Mycelet/i);
     await expect(page.getByText(/sesong/i).first()).toBeVisible();
+  });
+
+  // Hva kalenderen skal vise følger måneden (Oslo-tid, som siden selv bruker):
+  //  · april–november er det giftige arter ute — de står i sin egen blokk,
+  //  · utenom september–oktober sier siden hva som kommer («Kommer snart» når
+  //    det er neste måned, ellers «Neste ut: <måned>»).
+  test('kalenderen skiller ut de giftige artene og ser framover', async ({ page }) => {
+    const maaned = Number(
+      new Intl.DateTimeFormat('en-US', { timeZone: 'Europe/Oslo', month: 'numeric' }).format(new Date())
+    );
+    await page.goto('/calendar');
+    await expect(page.getByRole('heading', { name: /I sesong nå|I säsong nu/ })).toBeVisible();
+    if (maaned >= 4 && maaned <= 11) {
+      await expect(
+        page.getByRole('heading', { name: /Giftige arter som også er ute nå|Giftiga arter som också finns ute nu/ })
+      ).toBeVisible();
+    }
+    if (maaned !== 9 && maaned !== 10) {
+      await expect(page.getByRole('heading', { name: /Neste ut|Näst på tur|Kommer snart/ })).toBeVisible();
+    }
   });
 
   test('prissiden viser begge planene med riktige priser (bygges i nettleseren)', async ({ page }) => {

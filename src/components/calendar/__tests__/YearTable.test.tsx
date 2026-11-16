@@ -126,10 +126,31 @@ describe('farlige arter får aldri den grønne «kan plukkes»-fargen', () => {
     }
   });
 
+  it('ukjent spiselighet får heller ikke grønt — den regnes som farlig, som i «i sesong nå» over tabellen', () => {
+    // Tabellen hadde sin egen regel (bare giftig og dødelig). Kortene over
+    // bruker isDangerousEdibility, der ukjent er farlig — samme art ville fått
+    // rødt kort og grønne ruter på samme side.
+    const ukjent: CalendarSpecies = { ...kantarell, id: 4, edibility: 'unknown' };
+    const html = rows(render([ukjent]));
+    for (const green of GREEN_MARKERS) {
+      expect(html).not.toContain(green);
+    }
+    expect(html).toContain('bg-red-800');
+    expect(html).toContain(nb.EdibilityBadge.unknown);
+  });
+
   it('spiselig art beholder grønt', () => {
     const html = rows(render([kantarell]));
     expect(html).toContain('bg-forest-700');
     expect(html).toContain('bg-forest-300');
+  });
+
+  it('uspiselig og betinget spiselig beholder også grønt — de er ikke giftige', () => {
+    for (const edibility of ['inedible', 'conditionally_edible'] as const) {
+      const html = rows(render([{ ...kantarell, id: 5, edibility }]));
+      expect(html, edibility).toContain('bg-forest-700');
+      expect(html, edibility).not.toContain('bg-red-800');
+    }
   });
 
   it('en grønn og en dødelig art i samme tabell blandes ikke sammen', () => {

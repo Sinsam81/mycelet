@@ -105,6 +105,46 @@ export function previousMonth(month: number): number {
 }
 
 /**
+ * Hvor mange måneder det er til masken neste gang har en måned — 1 for neste
+ * måned, opptil 11, med wrap over nyttår (desember → april = 4).
+ *
+ * `null` når det ikke finnes noen «neste gang»: arten er allerede i sesong i
+ * `month` (en helårsmaske er aldri en ankomst), masken er tom, eller måneden
+ * er ikke et tall.
+ *
+ * Bakgrunn: «Kommer snart» i kalenderen så bare én måned fram. Fra september
+ * til februar kommer det ingen nye arter måneden etter, så blokken forsvant et
+ * halvt år — akkurat de månedene siden ellers er tynnest.
+ */
+export function monthsUntilSeasonStart(mask: number, month: number): number | null {
+  if (!Number.isFinite(month) || !Number.isFinite(mask)) return null;
+  if (isMonthInMask(mask, month)) return null;
+  let candidate = clampMonth(month);
+  for (let ahead = 1; ahead <= 11; ahead++) {
+    candidate = nextMonth(candidate);
+    if (isMonthInMask(mask, candidate)) return ahead;
+  }
+  return null;
+}
+
+/**
+ * Første måned (1–12) etter `month` der minst én av maskene kommer i sesong
+ * uten å være det nå. `null` når ingen gjør det — tom liste, eller alt som har
+ * sesong er allerede ute.
+ */
+export function nextArrivalMonth(masks: Iterable<number>, month: number): number | null {
+  let nearest: number | null = null;
+  for (const mask of masks) {
+    const ahead = monthsUntilSeasonStart(mask, month);
+    if (ahead != null && (nearest == null || ahead < nearest)) nearest = ahead;
+  }
+  if (nearest == null) return null;
+  let arrival = clampMonth(month);
+  for (let i = 0; i < nearest; i++) arrival = nextMonth(arrival);
+  return arrival;
+}
+
+/**
  * Maskens sammenhengende månedsintervaller, som `[fra, til]`-par.
  *
  * Brukes til å skrive masken ut som «jul – nov» i stedet for en liste med tolv
@@ -173,4 +213,16 @@ export function seasonMask(species: SeasonSpecies, band: LatitudeBand | null): n
 export function peakMask(species: { peak_season_start: number | null; peak_season_end: number | null }): number {
   if (species.peak_season_start == null || species.peak_season_end == null) return 0;
   return monthMask(species.peak_season_start, species.peak_season_end);
+}
+
+/**
+ * Sammenligner som løfter artene i toppsesong i `month` øverst og ellers lar
+ * rekkefølgen stå (Array.prototype.sort er stabil). Lista som kommer inn er
+ * allerede sortert på navnet leseren ser, med riktig språk — den sorteringen
+ * skal ikke gjøres om igjen her.
+ */
+export function comparePeakFirst(month: number) {
+  type Peak = Parameters<typeof peakMask>[0];
+  const rank = (species: Peak) => (isMonthInMask(peakMask(species), month) ? 0 : 1);
+  return (a: Peak, b: Peak): number => rank(a) - rank(b);
 }

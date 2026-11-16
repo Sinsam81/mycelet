@@ -270,6 +270,8 @@
     "eyebrow": "Kalender",
     "title": "Säsongskalender",
     "subtitle": "Vilka svampar som är i säsong nu — och vad som kommer.",
+    "metaTitle": "Svampkalender: när varje art är i säsong",
+    "metaDescription": "Se vilka svampar som är i säsong nu, vad som kommer och när varje art finns ute under året i Sverige och Norge. De giftiga arterna är med — tydligt märkta.",
     "loadError": "Kunde inte hämta arter.",
     "wholeYear": "Hela året",
     "wholeYearSubtitle": "När varje art finns ute i naturen under året — även de giftiga. Kontrollera ätlighetsmärket på varje rad innan du plockar något.",
@@ -1085,6 +1087,8 @@
     "edibilityDeadly": "Dödlig",
     "eyebrow": "Bibliotek",
     "title": "Norska och svenska svampar",
+    "metaTitle": "Svamparter i Sverige och Norge: kännetecken och säsong",
+    "metaDescription": "Slå upp svenska och norska svampar: kännetecken, säsong, ätlighetsmärke och förväxlingsarter. Sök på svenskt, norskt eller latinskt namn.",
     "countSummary": "{count} arter — sök, filtrera, lär.",
     "edibilityLabel": "Ätlighet",
     "habitatLabel": "Habitat",
@@ -1107,6 +1111,11 @@
     "noneInSeason": "Inga av de registrerade arterna är i säsong just nu.",
     "noneInSeasonForArea": "Inga av de registrerade arterna är i säsong just nu för ditt område.",
     "comingSoon": "Kommer snart",
+    "nextUpHeading": "Näst på tur: {month}",
+    "nextUpNote": "Månaderna visar när arterna normalt går att hitta i Norden — inte vad som står där du är.",
+    "nextUpLibraryLink": "Lär känna arterna i biblioteket",
+    "dangerousNowHeading": "Giftiga arter som också finns ute nu",
+    "dangerousNowNote": "Ingen matsvamp. De står här för att de finns ute nu, och är värda att känna igen.",
     "monthJanuary": "januari",
     "monthFebruary": "februari",
     "monthMarch": "mars",
@@ -1611,7 +1620,9 @@
     "confirmDelete": "Ja, radera mitt konto för alltid"
   },
   "SpeciesSearch": {
-    "placeholder": "Sök på svenskt eller latinskt namn"
+    "placeholder": "Sök på svenskt, norskt eller latinskt namn",
+    "label": "Sök i artbiblioteket",
+    "clear": "Rensa sökningen"
   },
   "EdibilityBadge": {
     "edible": "Ätlig",

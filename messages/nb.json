@@ -270,6 +270,8 @@
     "eyebrow": "Kalender",
     "title": "Sesongkalender",
     "subtitle": "Hvilke sopper som er i sesong nå — og hva som kommer.",
+    "metaTitle": "Soppkalender: når hver art er i sesong",
+    "metaDescription": "Se hvilke sopper som er i sesong nå, hva som kommer, og når hver art er ute gjennom året i Norge og Sverige. De giftige artene er med — tydelig merket.",
     "loadError": "Kunne ikke hente arter.",
     "wholeYear": "Hele året",
     "wholeYearSubtitle": "Når hver art er ute i naturen gjennom året — også de giftige. Sjekk spiselighetsmerket på hver rad før du plukker noe.",
@@ -1085,6 +1087,8 @@
     "edibilityDeadly": "Dødelig",
     "eyebrow": "Bibliotek",
     "title": "Norske og svenske sopper",
+    "metaTitle": "Sopparter i Norge og Sverige: kjennetegn og sesong",
+    "metaDescription": "Slå opp norske og svenske sopper: kjennetegn, sesong, spiselighetsmerke og forvekslingsarter. Søk på norsk, svensk eller latinsk navn.",
     "countSummary": "{count} arter — søk, filtrer, lær.",
     "edibilityLabel": "Spiselighet",
     "habitatLabel": "Habitat",
@@ -1107,6 +1111,11 @@
     "noneInSeason": "Ingen av de registrerte artene er i sesong akkurat nå.",
     "noneInSeasonForArea": "Ingen av de registrerte artene er i sesong akkurat nå for ditt område.",
     "comingSoon": "Kommer snart",
+    "nextUpHeading": "Neste ut: {month}",
+    "nextUpNote": "Månedene viser når artene normalt er å finne i Norden — ikke hva som står der du er.",
+    "nextUpLibraryLink": "Bli kjent med artene i biblioteket",
+    "dangerousNowHeading": "Giftige arter som også er ute nå",
+    "dangerousNowNote": "Ikke matsopp. De står her fordi de er ute nå, og er verdt å kjenne igjen.",
     "monthJanuary": "januar",
     "monthFebruary": "februar",
     "monthMarch": "mars",
@@ -1611,7 +1620,9 @@
     "confirmDelete": "Ja, slett kontoen min for alltid"
   },
   "SpeciesSearch": {
-    "placeholder": "Søk på norsk eller latinsk navn"
+    "placeholder": "Søk på norsk, svensk eller latinsk navn",
+    "label": "Søk i artsbiblioteket",
+    "clear": "Tøm søket"
   },
   "EdibilityBadge": {
     "edible": "Spiselig",

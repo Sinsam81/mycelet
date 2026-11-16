@@ -1,9 +1,9 @@
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { EdibilityBadge } from '@/components/ui/EdibilityBadge';
+import { isDangerousEdibility } from '@/lib/utils/edibility';
 import { getSpeciesDisplayName } from '@/lib/utils/species-name';
 import { baseSeasonMask, isMonthInMask, peakMask } from '@/lib/utils/season-region';
-import type { Edibility } from '@/types/species';
 import type { CalendarSpecies } from './SeasonNow';
 
 const MONTH_KEYS = [
@@ -12,7 +12,8 @@ const MONTH_KEYS = [
 ] as const;
 
 /**
- * Arter man kan bli alvorlig syk eller dø av.
+ * Arter man kan bli alvorlig syk eller dø av (`isDangerousEdibility`: giftig,
+ * dødelig — og ukjent spiselighet, som behandles som farlig).
  *
  * De blir stående i tabellen — kalenderen har en reell funksjon i å vise NÅR
  * de farlige artene er ute — men de får aldri den grønne fargen. Grønt leses
@@ -20,13 +21,11 @@ const MONTH_KEYS = [
  * i praksis en trygghetserklæring vi ikke kan stå for. Hver rad bærer i tillegg
  * et spiselighetsmerke i tekst, slik at fargen aldri er eneste bærer av
  * informasjonen.
+ *
+ * Tabellen hadde sin egen regel (bare giftig og dødelig), så en art med ukjent
+ * spiselighet ville fått grønne ruter her og rødt kort i «i sesong nå» rett
+ * over. Nå spør begge den samme funksjonen.
  */
-const DANGEROUS_EDIBILITY: readonly Edibility[] = ['toxic', 'deadly'];
-
-export function isDangerousToEat(edibility: Edibility): boolean {
-  return DANGEROUS_EDIBILITY.includes(edibility);
-}
-
 function markerClass(inSeason: boolean, peak: boolean, dangerous: boolean) {
   if (!inSeason && !peak) return 'bg-gray-200';
   if (dangerous) return peak ? 'bg-red-800' : 'bg-red-300';
@@ -75,7 +74,7 @@ export function YearTable({ species, locale, currentMonth }: YearTableProps) {
           </thead>
           <tbody>
             {species.map((s) => {
-              const dangerous = isDangerousToEat(s.edibility);
+              const dangerous = isDangerousEdibility(s.edibility);
               // Samme kalibrerte vindu som «i sesong nå» over tabellen — ellers
               // ville de to panelene på samme side motsi hverandre. Tabellen
               // rendres på server uten posisjon, så den bruker det

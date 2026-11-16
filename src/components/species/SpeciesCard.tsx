@@ -22,9 +22,15 @@ export function SpeciesCard({ species, imageUrl }: SpeciesCardProps) {
     >
       <div className="relative aspect-square w-full overflow-hidden bg-gray-100">
         {imageUrl ? (
+          // Biblioteket er ~80 kort, og uten `loading="lazy"` startet alle
+          // bildene samtidig — også de som ligger mange skjermhøyder nede på en
+          // telefon. Rammen rundt har fast kvadratisk form, så ingenting hopper
+          // når bildet kommer.
           <img
             src={imageUrl}
             alt={displayName}
+            loading="lazy"
+            decoding="async"
             className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
           />
         ) : (
