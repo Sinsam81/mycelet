@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { REGION_CONDITION_THRESHOLDS } from '@/lib/prediction/region-score';
 import {
+  bestePerLand,
   datoTekst,
   erStille,
   innledningsRegion,
@@ -8,6 +9,7 @@ import {
   lokalDato,
   omradeTilstand,
   regionerPerLand,
+  tallDato,
   visArtslinje,
   type SoppforholdRegion
 } from '../hent-regioner';
@@ -185,5 +187,55 @@ describe('innledningsRegion', () => {
   it('gir ingen region, og ingen «mangler»-linje, når det ikke finnes tall overhodet', () => {
     expect(innledningsRegion([], 'sv')).toEqual({ region: null, egetLandMangler: false });
     expect(innledningsRegion([], 'nb')).toEqual({ region: null, egetLandMangler: false });
+  });
+});
+
+describe('bestePerLand — radene på samlesidens delingsbilde', () => {
+  it('gir det beste området i hvert land, Norge først — uansett leserens språk', () => {
+    const regioner = [
+      region('Göteborg', 'SE', 88),
+      region('Trondheim', 'NO', 84),
+      region('Stockholm', 'SE', 70),
+      region('Oslo', 'NO', 61)
+    ];
+    expect(bestePerLand(regioner).map((r) => r.name)).toEqual(['Trondheim', 'Göteborg']);
+  });
+
+  it('stoler ikke på at svaret er sortert: høyeste tall vinner', () => {
+    const usortert = [region('Oslo', 'NO', 40), region('Uppsala', 'SE', 12), region('Bergen', 'NO', 75), region('Malmö', 'SE', 66)];
+    expect(bestePerLand(usortert).map((r) => r.name)).toEqual(['Bergen', 'Malmö']);
+  });
+
+  it('ved likt tall vinner det som står først i svaret', () => {
+    const like = [region('Oslo', 'NO', 70), region('Bergen', 'NO', 70)];
+    expect(bestePerLand(like).map((r) => r.name)).toEqual(['Oslo']);
+  });
+
+  it('et land uten tall i dagens raster får ingen rad (NO skrives før SE)', () => {
+    expect(bestePerLand([region('Oslo', 'NO', 70)]).map((r) => r.name)).toEqual(['Oslo']);
+    expect(bestePerLand([region('Umeå', 'SE', 55)]).map((r) => r.name)).toEqual(['Umeå']);
+    expect(bestePerLand([])).toEqual([]);
+  });
+});
+
+describe('tallDato — datoen for flater som ikke kan velge språk', () => {
+  it('skriver rasterdatoen som rene tall', () => {
+    expect(tallDato('2026-09-15')).toBe('15.09.2026');
+    expect(tallDato('2026-01-01')).toBe('01.01.2026');
+    expect(tallDato('2026-12-31')).toBe('31.12.2026');
+  });
+
+  it('er ren strengregning: ingen tidssone kan flytte dagen', () => {
+    // new Date('2026-09-15') er UTC-midnatt, og ville vært 14. september vest
+    // for Greenwich. Her finnes ingen Date å snuble i.
+    expect(tallDato('2026-09-15')).toMatch(/^15\./);
+  });
+
+  it('gir tom streng for manglende eller rar dato — da utelates den', () => {
+    expect(tallDato(null)).toBe('');
+    expect(tallDato('')).toBe('');
+    expect(tallDato('2026-9-15')).toBe('');
+    expect(tallDato('15.09.2026')).toBe('');
+    expect(tallDato('2026-09-15T00:00:00Z')).toBe('');
   });
 });

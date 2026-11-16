@@ -89,7 +89,11 @@ export const VARSEL_MIN_OKNING = 8;
 export interface VarselTilstand {
   /** Regionens score i dag (90-persentilen — «der det er best i regionen»). */
   scoreIDag: number;
-  /** Samme tall i går. null når gårsdagens fliser mangler. */
+  /**
+   * Samme tall forrige MÅLTE dag — normalt i går. Mangler gårsdagens rad,
+   * sender cronen inn nyeste målte dag inntil MAKS_HULL_DAGER + 1 dager
+   * tilbake (se historikk.ts). null når heller ikke den finnes.
+   */
   scoreIGar: number | null;
   /**
    * Laveste score for regionen de siste sju dagene (i dag medregnet).
@@ -104,7 +108,8 @@ export interface VarselTilstand {
    * Datoen (ÅÅÅÅ-MM-DD) for regionens siste omslag under→over terskelen i
    * historikkvinduet, eller null/utelatt når ingen finnes. Gjør at et varsel
    * som feilet på selve omslagsdagen (Resend nede, nettverksglipp) kan hentes
-   * inn igjen dagen etter — se regel 3.
+   * inn igjen dagen etter — se regel 3. Regnes også over et hull på inntil
+   * MAKS_HULL_DAGER umålte dager (sisteOmslag i historikk.ts).
    */
   sisteOmslagIso?: string | null;
 }
@@ -124,9 +129,13 @@ export function skalVarsle(t: VarselTilstand): VarselBeslutning {
   // 1. Er dagen verdt en tur i det hele tatt?
   if (t.scoreIDag < VARSEL_MIN_SCORE) return { send: false, grunn: 'under-terskel' };
 
-  // 2. Uten gårsdagen finnes ingen flanke. Da tier vi heller enn å gjette —
-  //    fliser kan mangle fordi cron-jobben feilet, og et varsel basert på
-  //    «vi vet ikke hva det var i går» er et varsel vi ikke kan stå inne for.
+  // 2. Uten en målt dag å sammenligne med finnes ingen flanke. Da tier vi
+  //    heller enn å gjette — fliser kan mangle fordi cron-jobben feilet, og et
+  //    varsel basert på «vi vet ikke hva det var» er et varsel vi ikke kan stå
+  //    inne for. null betyr at det ikke finnes NOEN målt dag innenfor
+  //    hulltoleransen: én eller to manglende dager brobygges av kalleren
+  //    (historikk.ts), for én natt uten fliser svelget ellers hele omslaget —
+  //    «ingen gårsdag» den dagen, «var allerede bra» alle dagene etter.
   if (t.scoreIGar === null) return { send: false, grunn: 'ingen-gaardag' };
 
   // 3. Var det bra allerede i går, er ingenting nytt — med ETT unntak: fikk

@@ -1,4 +1,5 @@
 import type { Locale } from '@/i18n/config';
+import type { Toppdag } from './ekstra';
 
 /**
  * Selve soppvarselet.
@@ -28,6 +29,19 @@ import type { Locale } from '@/i18n/config';
  * se MYCELET_LOCALE-cookien. For varsler slipper vi det: språket ble lagret da
  * abonnementet ble satt opp (alert_subscriptions.locale). En svensk mottaker
  * skal ikke måtte rulle forbi norsk tekst for å finne sin egen.
+ *
+ * ── ÉN SKALA PER E-POST ─────────────────────────────────────────────────────
+ *
+ * Emnet og hovedboksen viser REGIONENS tall (p90 over rasterrutene — samme
+ * tall som /soppforhold). Linja «Utsikten fremover» kommer fra en annen
+ * modell: punkt-dagscoren i regionens sentrum. Den sto med sitt eget «av 100»
+ * rett under, så samme dag kunne stå med 82 i overskriften og 74 to avsnitt
+ * lenger ned — i den ene e-posten som skal bygge tillit. Samme feilklasse som
+ * «three distributions, one label» i CLAUDE.md.
+ *
+ * Derfor navngir linja bare DAGEN, aldri et tall — samme regel som stripen på
+ * områdesiden knappen leder til (se region-week.ts og velgToppdag). «av 100»
+ * skal stå ved regionens tall og ingen andre steder; testene låser det.
  */
 
 interface VarselEpostArgs {
@@ -38,7 +52,7 @@ interface VarselEpostArgs {
   appUrl: string;
   avmeldingsUrl: string;
   /** Beste dag i 7-dagersutsikten — valgfri: mangler prognosen, mangler linja. */
-  toppdag?: { dag: string; score: number; erIDag: boolean; delteDager?: string[]; jevn?: boolean } | null;
+  toppdag?: Toppdag | null;
   /** Ferdig lokaliserte artsnavn i sesong nå — valgfri, samme regel. */
   arter?: string[];
   /** Fasit for FORRIGE varsel i regionen — kun når tallene er modne (fasit.ts). */
@@ -62,14 +76,13 @@ const COPY = {
     forbehold:
       'Det sier ingenting om skogen der du står. Gammel granskog med mose slår et høyt tall i feil terreng hver gang. Vi lover ikke at du finner sopp — vi sier at forholdene ligger til rette.',
     fasit: (dato: string, etter: number, foer: number) =>
-      `Fasit for forrige varsel (${dato}): uken etter ble det registrert ${etter} sopfunn i området, mot ${foer} uken før. Kilder: Artsobservasjoner/GBIF og Mycelet-brukere. Vi publiserer fasiten uansett utfall — se hele loggen på mycelet.com/apenhet.`,
-    toppdagIDag: (score: number) =>
-      `Utsikten fremover: i dag ser ut til å bli ukas beste dag (${score} av 100).`,
-    toppdag: (dag: string, score: number) =>
-      `Utsikten fremover: best ${dag} (${score} av 100) — samme tall som 7-dagersstripa i appen.`,
-    toppdagDelt: (dager: string, score: number) =>
-      `Utsikten fremover: ${dager} ser like gode ut (${score} av 100) — samme tall som 7-dagersstripa i appen.`,
-    toppdagJevn: (score: number) => `Utsikten fremover: jevnt hele uka (${score} av 100) — ingen dag skiller seg ut.`,
+      `Fasit for forrige varsel (${dato}): uken etter ble det registrert ${etter} soppfunn i området, mot ${foer} uken før. Kilder: Artsobservasjoner/GBIF og Mycelet-brukere. Vi publiserer fasiten uansett utfall — se hele loggen på mycelet.com/apenhet.`,
+    toppdagIDag: 'Utsikten fremover: i dag ser ut til å bli ukas beste dag.',
+    toppdag: (dag: string) => `Utsikten fremover: ser best ut på ${dag}.`,
+    toppdagDelt: (dager: string) => `Utsikten fremover: ${dager} ser like gode ut.`,
+    toppdagMange: 'Utsikten fremover: flere dager ser like gode ut — ingen enkeltdag skiller seg ut.',
+    toppdagJevn: 'Utsikten fremover: jevnt hele uka — ingen dag skiller seg ut.',
+    iDag: 'i dag',
     og: 'og',
     arter: (liste: string) => `I sesong nå: ${liste}.`,
     knapp: 'Se forholdene for området ditt',
@@ -90,13 +103,12 @@ const COPY = {
       'Det säger ingenting om skogen där du står. Gammal granskog med mossa slår ett högt tal i fel terräng varje gång. Vi lovar inte att du hittar svamp — vi säger att förhållandena ligger rätt.',
     fasit: (dato: string, etter: number, foer: number) =>
       `Facit för förra varningen (${dato}): veckan efter registrerades ${etter} svampfynd i området, mot ${foer} veckan innan. Källor: Artsobservasjoner/GBIF och Mycelet-användare. Vi publicerar facit oavsett utfall — se hela loggen på mycelet.com/apenhet.`,
-    toppdagIDag: (score: number) =>
-      `Utsikten framöver: i dag ser ut att bli veckans bästa dag (${score} av 100).`,
-    toppdag: (dag: string, score: number) =>
-      `Utsikten framöver: bäst ${dag} (${score} av 100) — samma siffra som 7-dagarsremsan i appen.`,
-    toppdagDelt: (dager: string, score: number) =>
-      `Utsikten framöver: ${dager} ser lika bra ut (${score} av 100) — samma siffra som 7-dagarsremsan i appen.`,
-    toppdagJevn: (score: number) => `Utsikten framöver: jämnt hela veckan (${score} av 100) — ingen dag sticker ut.`,
+    toppdagIDag: 'Utsikten framöver: i dag ser ut att bli veckans bästa dag.',
+    toppdag: (dag: string) => `Utsikten framöver: ser bäst ut på ${dag}.`,
+    toppdagDelt: (dager: string) => `Utsikten framöver: ${dager} ser lika bra ut.`,
+    toppdagMange: 'Utsikten framöver: flera dagar ser lika bra ut — ingen enskild dag sticker ut.',
+    toppdagJevn: 'Utsikten framöver: jämnt hela veckan — ingen dag sticker ut.',
+    iDag: 'i dag',
     og: 'och',
     arter: (liste: string) => `I säsong nu: ${liste}.`,
     knapp: 'Se läget för ditt område',
@@ -120,14 +132,36 @@ export function fasitDato(iso: string, locale: Locale): string {
   return locale === 'sv' ? `${d} ${navn}` : `${d}. ${navn}`;
 }
 
-function toppdagLinjeFor(t: (typeof COPY)[Locale], toppdag: NonNullable<VarselEpostArgs['toppdag']>): string {
-  if (toppdag.jevn) return t.toppdagJevn(toppdag.score);
-  const delte = toppdag.delteDager ?? [];
+/**
+ * Ukedagene fullt ut, søndag først (som Date.getUTCDay). Stripens korte
+ * etiketter («tor», «tors») ga «best tor» i løpende tekst. Samme ord som
+ * områdesiden bruker (UKEDAG_LANG i region-week.ts) — testen i
+ * __tests__/ekstra.test.ts holder de to i takt.
+ */
+const UKEDAG: Record<Locale, string[]> = {
+  nb: ['søndag', 'mandag', 'tirsdag', 'onsdag', 'torsdag', 'fredag', 'lørdag'],
+  sv: ['söndag', 'måndag', 'tisdag', 'onsdag', 'torsdag', 'fredag', 'lördag']
+};
+
+/** Flere delte toppdager enn dette ramses ikke opp — samme grense som stripen på områdesiden. */
+const MAKS_NAVNGITTE_DAGER = 4;
+
+/** «2026-09-03» → «torsdag». Midt på dagen i UTC, så dagen ikke kan gli over en tidssone. */
+function ukedag(iso: string, locale: Locale): string {
+  return (UKEDAG[locale] ?? UKEDAG.nb)[new Date(`${iso}T12:00:00Z`).getUTCDay()];
+}
+
+/** Linja navngir dager og ALDRI et tall — se «ÉN SKALA PER E-POST» i filhodet. */
+function toppdagLinjeFor(t: (typeof COPY)[Locale], toppdag: Toppdag, locale: Locale): string {
+  if (toppdag.jevn) return t.toppdagJevn;
+  const delte = toppdag.delteDatoer;
+  if (delte.length > MAKS_NAVNGITTE_DAGER) return t.toppdagMange;
   if (delte.length > 1) {
-    const dager = `${delte.slice(0, -1).join(', ')} ${t.og} ${delte[delte.length - 1]}`;
-    return t.toppdagDelt(dager, toppdag.score);
+    // Bare den tidligste kan være i dag, og da skrives den «i dag», ikke ukedagen.
+    const dager = delte.map((dato) => (toppdag.erIDag && dato === toppdag.dato ? t.iDag : ukedag(dato, locale)));
+    return t.toppdagDelt(`${dager.slice(0, -1).join(', ')} ${t.og} ${dager[dager.length - 1]}`);
   }
-  return toppdag.erIDag ? t.toppdagIDag(toppdag.score) : t.toppdag(toppdag.dag, toppdag.score);
+  return toppdag.erIDag ? t.toppdagIDag : t.toppdag(ukedag(toppdag.dato, locale));
 }
 
 export function byggVarselEpost(args: VarselEpostArgs) {
@@ -152,7 +186,7 @@ ${
     <p style="font-size: 14px; line-height: 1.55; color: #4b5563;">${t.forbehold}</p>
 ${
   args.toppdag
-    ? `\n    <p style="font-size: 14px; line-height: 1.55; font-weight: 600; color: #1A3409;">${toppdagLinjeFor(t, args.toppdag)}</p>`
+    ? `\n    <p style="font-size: 14px; line-height: 1.55; font-weight: 600; color: #1A3409;">${toppdagLinjeFor(t, args.toppdag, args.locale)}</p>`
     : ''
 }${
   args.arter && args.arter.length
@@ -187,7 +221,7 @@ ${
   const fasitLinje = args.fasit
     ? `\n${t.fasit(fasitDato(args.fasit.dato, args.locale), args.fasit.ukenEtter, args.fasit.ukenFor)}\n`
     : '';
-  const toppdagLinje = args.toppdag ? `\n${toppdagLinjeFor(t, args.toppdag)}\n` : '';
+  const toppdagLinje = args.toppdag ? `\n${toppdagLinjeFor(t, args.toppdag, args.locale)}\n` : '';
   const arterLinje = args.arter && args.arter.length ? `\n${t.arter(args.arter.join(', '))}\n` : '';
 
   const tekst = `${t.tittel(args.region)}

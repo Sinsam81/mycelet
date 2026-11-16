@@ -1,5 +1,6 @@
 import { VARSEL_MIN_OKNING, VARSEL_MIN_SCORE } from '@/lib/alerts/decision';
 import { fasitDato } from '@/lib/alerts/email';
+import { lesRegionHistorikk } from '@/lib/alerts/historikk';
 import { REGION_CONDITION_THRESHOLDS } from '@/lib/prediction/region-score';
 
 /**
@@ -34,6 +35,54 @@ export interface Omslag {
   /** Ukas bunn — samme «fra» som e-posten viser og fasitloggen lagrer. */
   fra: number;
   til: number;
+  /**
+   * Satt (true) når «i går» ble hentet over et hull i historikken — se
+   * src/lib/alerts/historikk.ts. Da vet vi AT det snudde, et sted i et vindu
+   * på to–tre døgn, men ikke hvilken natt. Tekster som bygges av omslaget skal
+   * ikke si «i natt» om et slikt. Utelatt når gårsdagen var målt.
+   */
+  brobygd?: boolean;
+}
+
+/** Det finnOmslag trenger, lest fra regionenes lagrede dagsscorer. */
+export interface Omslagsgrunnlag {
+  iDag: Map<string, number>;
+  iGar: Map<string, number>;
+  lavesteUke: Map<string, number>;
+  /** Regioner der «i går» ble hentet over et hull — se Omslag.brobygd. */
+  brobygde: Set<string>;
+}
+
+/**
+ * Fra lagrede dagsscorer (region → dato → score) til «i dag», «i går» og ukas
+ * bunn for dagen `tileDate`.
+ *
+ * «I går» og bunnen leses med lesRegionHistorikk — SAMME funksjon som
+ * e-postvarselet bruker. Det er hele poenget: X-posteren leste før bare raden
+ * for nøyaktig datoen før, så én natt uten lagrede scorer (flisgenereringen
+ * eller 05:00-jobben feilet) ga ingen «i går» på omslagsdagen, og dagen etter
+ * var det «allerede bra». E-posten gikk ut — den brobygger hullet — mens X
+ * tidde, og bunnteksten i e-posten sier at omslagene også publiseres åpent
+ * der. De to kanalene skal fyre på samme omslag eller tie sammen.
+ *
+ * Bare regioner med score for `tileDate` tas med: uten dagens tall finnes
+ * ingenting å vurdere.
+ */
+export function lesOmslagsgrunnlag(
+  scorePerRegion: ReadonlyMap<string, ReadonlyMap<string, number>>,
+  tileDate: string
+): Omslagsgrunnlag {
+  const grunnlag: Omslagsgrunnlag = { iDag: new Map(), iGar: new Map(), lavesteUke: new Map(), brobygde: new Set() };
+  for (const [region, datoer] of scorePerRegion) {
+    const iDag = datoer.get(tileDate);
+    if (iDag === undefined) continue;
+    grunnlag.iDag.set(region, iDag);
+    const lest = lesRegionHistorikk(datoer, tileDate);
+    if (lest.scoreIGar !== null) grunnlag.iGar.set(region, lest.scoreIGar);
+    if (lest.lavesteSisteUke !== null) grunnlag.lavesteUke.set(region, lest.lavesteSisteUke);
+    if (lest.hullDager > 0) grunnlag.brobygde.add(region);
+  }
+  return grunnlag;
 }
 
 /**
@@ -41,11 +90,15 @@ export interface Omslag {
  * i går under, i dag over, og bedringen målt mot ukas bunn må være reell.
  * (Karantenen i decision.ts er per abonnent og gjelder ikke her — en flanke
  * kan per definisjon ikke fyre to dager på rad.)
+ *
+ * «I går» er forrige MÅLTE dag — se lesOmslagsgrunnlag. Regioner i `brobygde`
+ * fikk den hentet over et hull, og omslaget merkes da `brobygd`.
  */
 export function finnOmslag(args: {
   iDag: Map<string, number>;
   iGar: Map<string, number>;
   lavesteUke: Map<string, number>;
+  brobygde?: ReadonlySet<string>;
 }): Omslag[] {
   const omslag: Omslag[] = [];
   for (const [region, til] of args.iDag) {
@@ -54,7 +107,7 @@ export function finnOmslag(args: {
     if (til < VARSEL_MIN_SCORE || iGar >= VARSEL_MIN_SCORE) continue;
     const bunn = args.lavesteUke.get(region) ?? til;
     if (til - bunn < VARSEL_MIN_OKNING) continue;
-    omslag.push({ region, fra: bunn, til });
+    omslag.push({ region, fra: bunn, til, ...(args.brobygde?.has(region) ? { brobygd: true } : {}) });
   }
   return omslag.sort((a, b) => b.til - a.til);
 }
@@ -65,16 +118,23 @@ const FASIT_LOVNAD = 'Fasit publiseres når funnene er inne. 🍄';
 /**
  * Omslagsposten: «det snudde i natt» — dagens nyhet, når den finnes.
  *
+ * «i natt» står der bare når HVERT omslag i posten er målt mot gårsdagen. Er
+ * ett av dem brobygd over et hull (Omslag.brobygd), vet vi at det snudde, men
+ * ikke hvilken natt — da sier posten bare at varselet slo ut. Regelen gjelder
+ * hele posten, også regionene som bare telles («og N til»).
+ *
  * Tar bevisst ingen tekstlinje utenfra: et år-mot-år-tall fra
  * registreringsdata skal aldri ut til kunder (se «Rapportpuls» i CLAUDE.md).
  */
 export function byggOmslagsPost(omslag: Omslag[]): string | null {
   if (omslag.length === 0) return null;
 
+  const naar = omslag.some((o) => o.brobygd) ? '' : ' i natt';
+
   let hode: string;
   if (omslag.length === 1) {
     const o = omslag[0];
-    hode = `Soppvarselet slo ut i natt: forholdene i ${o.region} snudde — fra ${o.fra} til ${o.til} av 100 siste uka.`;
+    hode = `Soppvarselet slo ut${naar}: forholdene i ${o.region} snudde — fra ${o.fra} til ${o.til} av 100 siste uka.`;
   } else {
     const navngitte = omslag.slice(0, MAKS_REGIONER).map((o, i) => `${o.region} (${o.fra}→${o.til}${i === 0 ? ' av 100' : ''})`);
     const rest = omslag.length - MAKS_REGIONER;
@@ -82,7 +142,7 @@ export function byggOmslagsPost(omslag: Omslag[]): string | null {
       navngitte.length > 1
         ? `${navngitte.slice(0, -1).join(', ')} og ${navngitte[navngitte.length - 1]}`
         : navngitte[0];
-    hode = `Soppvarselet slo ut i natt: ${liste}${rest > 0 ? `, og ${rest} til` : ''}.`;
+    hode = `Soppvarselet slo ut${naar}: ${liste}${rest > 0 ? `, og ${rest} til` : ''}.`;
   }
 
   return kuttTilMaks([hode, FORBEHOLD, FASIT_LOVNAD]);

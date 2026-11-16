@@ -206,3 +206,32 @@ test.describe('Utlogget — toppen og bunnmenyen', () => {
     await expect(hjem).toHaveAttribute('aria-current', 'page');
   });
 });
+
+// Soppvarselet og områdesidene — fortsatt KUN lesing. Skjemaene finnes på
+// siden, men sendes aldri inn herfra: det er én database, og en innsending
+// ville laget en ekte påmelding og sendt en ekte e-post.
+test.describe('Soppvarsel og områdesider', () => {
+  test('soppvarsel-siden har sin egen tittel, ikke appens generelle', async ({ page }) => {
+    await page.goto('/soppvarsel');
+    await expect(page).toHaveTitle(/^(Soppvarsel på e-post|Svampvarning via mejl) — Mycelet$/);
+    await expect(page.locator('link[rel="canonical"]')).toHaveAttribute('href', 'https://www.mycelet.com/soppvarsel');
+    await expect(page.locator('form[action="/api/soppvarsel/pamelding"] input[name="email"]')).toBeVisible();
+  });
+
+  test('svensk områdeside sier selv at innholdet er svensk', async ({ page }) => {
+    // <html lang> følger den besøkende; artikkelen og delingskortet følger landet.
+    await page.goto('/soppforhold/goteborg');
+    await expect(page.locator('article[lang="sv"]')).toBeVisible();
+    await expect(page.locator('meta[property="og:locale"]')).toHaveAttribute('content', 'sv_SE');
+  });
+
+  test('norsk områdeside: norsk artikkel, og varselboksen er selve påmeldingsskjemaet', async ({ page }) => {
+    await page.goto('/soppforhold/oslo');
+    await expect(page.locator('article[lang="nb"]')).toBeVisible();
+    await expect(page.locator('meta[property="og:locale"]')).toHaveAttribute('content', 'nb_NO');
+    const skjema = page.locator('#varsel form[action="/api/soppvarsel/pamelding"]');
+    await expect(skjema.locator('input[name="email"]')).toBeVisible();
+    await expect(skjema.locator('input[name="region"]')).toHaveValue('Oslo');
+    await expect(skjema.locator('input[name="retur"]')).toHaveValue('oslo');
+  });
+});

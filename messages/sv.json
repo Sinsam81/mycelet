@@ -2056,11 +2056,11 @@
   "SoppvarselAv": {
     "title": "Svampvarning avstängd",
     "successHeading": "Du får inga fler svampvarningar",
-    "successBody": "Vi har stängt av varningen. Området du hade valt finns kvar, så du kan slå på den igen när som helst från din profil, utan att välja på nytt.",
+    "successBody": "Vi har stängt av varningen. Ångrar du dig kan du anmäla dig igen på <varsel>mycelet.com/soppvarsel</varsel> — eller slå på den från din profil om du har ett konto.",
     "mapBefore": "Svampförhållandena ligger fortfarande öppet för alla på",
     "mapAfter": ", utan inloggning.",
     "errorHeading": "Länken fungerade inte",
-    "errorBody": "Den kan vara ofullständig. Vissa e-postklienter delar långa länkar över två rader. Prova att kopiera hela adressen från mejlet, eller stäng av varningen från din profil.",
+    "errorBody": "Den kan vara ofullständig. Vissa e-postklienter delar långa länkar över två rader. Prova att kopiera hela adressen från mejlet. Har du ett konto kan du också stänga av varningen från din profil.",
     "contactBefore": "Får du det ändå inte att fungera, skicka ett mejl till",
     "contactAfter": ", så gör vi det åt dig.",
     "toFrontpage": "Till startsidan"
@@ -2070,6 +2070,7 @@
     "metaDescription": "Är det svamp i skogen nu? Daglig översikt över svampläget i 22 svenska och norska områden, beräknad från nederbörd, markfuktighet, temperatur och säsong.",
     "ogTitle": "Svampläget i Sverige idag",
     "ogDescription": "Daglig översikt över var förhållandena är bäst just nu.",
+    "ogImageAlt": "Dagens svampläge i Sverige och Norge, uppdateras varje morgon",
     "jsonLdDescription": "Daglig översikt över svampläget i 22 svenska och norska områden, beräknad från nederbörd, markfuktighet, temperatur och säsong.",
     "updated": "Uppdaterad {date}",
     "updatedDaily": "Uppdateras varje dag",

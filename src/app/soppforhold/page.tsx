@@ -94,7 +94,9 @@ export async function generateMetadata(): Promise<Metadata> {
       url: `${BASE}/soppforhold`,
       type: 'website',
       locale: locale === 'sv' ? 'sv_SE' : 'nb_NO',
-      images: [{ url: ogBilde, width: 1200, height: 630 }]
+      // alt MÅ stå her: bildefilas egen `alt`-eksport sendes ikke ut når
+      // bildene settes eksplisitt (som de må, for versjoneringen over).
+      images: [{ url: ogBilde, width: 1200, height: 630, alt: t('ogImageAlt') }]
     }
   };
 }

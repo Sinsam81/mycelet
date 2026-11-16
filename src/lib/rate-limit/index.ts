@@ -89,6 +89,30 @@ export function checkRateLimit(key: string, limit: number, windowSeconds: number
 }
 
 /**
+ * Give back the slot an earlier allowed `checkRateLimit(key, …)` call took.
+ *
+ * For callers that have to reserve the slot up front (so two concurrent
+ * requests cannot both take the last one) but should only be charged when the
+ * guarded action really happened — an e-mail that actually went out, say:
+ *
+ *   const taken = checkRateLimit(key, 3, 3600);
+ *   if (!taken.allowed) return …;
+ *   if (!(await send()).ok) refundRateLimit(key, taken);
+ *
+ * Pass the result `checkRateLimit` returned, and call this at most once per
+ * taken slot. It is a no-op when that call was not allowed, when the bucket is
+ * gone, or when the window has rolled over since: the slot expired together
+ * with its own window, and a refund must never free a slot in a later one.
+ * The count never goes below zero. Same per-instance caveats as above.
+ */
+export function refundRateLimit(key: string, taken: Pick<RateLimitResult, 'allowed' | 'resetAt'>): void {
+  if (!taken.allowed) return;
+  const bucket = buckets.get(key);
+  if (!bucket || bucket.resetAt !== taken.resetAt) return;
+  if (bucket.count > 0) bucket.count -= 1;
+}
+
+/**
  * Test/inspection only. Don't call from production code paths — checkRateLimit
  * already increments atomically.
  */

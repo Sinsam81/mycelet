@@ -4,7 +4,8 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { createRequestLogger } from '@/lib/log/request';
 import { bearerSecretMatches } from '@/lib/security/secret-compare';
 import { beregnFasit, FASIT_MODEN_ETTER_VARSEL_DAGER } from '@/lib/alerts/fasit';
-import { byggOmslagsPost, byggUkesPost, finnOmslag, type UkensFasit } from '@/lib/x/innlegg';
+import { HISTORIKK_DAGER } from '@/lib/alerts/historikk';
+import { byggOmslagsPost, byggUkesPost, finnOmslag, lesOmslagsgrunnlag, type UkensFasit } from '@/lib/x/innlegg';
 import { manglendeXKonfig, postTilX } from '@/lib/x/klient';
 import { byggPresseVarsel } from '@/lib/alerts/presse';
 import { sendEpost } from '@/lib/email/send';
@@ -20,6 +21,10 @@ import { sendEpost } from '@/lib/email/send';
  *   · omslag       — dagene forholdene krysser under→over terskelen et sted.
  *                    Samme flankeregler som decision.ts, minus per-abonnent-
  *                    karantenen (en flanke kan ikke fyre to dager på rad).
+ *                    Og samme hullregel som e-posten: mangler gårsdagens rad,
+ *                    er «i går» nyeste målte dag inntil tre dager tilbake
+ *                    (src/lib/alerts/historikk.ts). Posten sier da ikke
+ *                    «i natt» — se byggOmslagsPost.
  *   · ukesoppsummering — søndager: ukas beste områder + fasit for et modent
  *                    varsel når vi har en. Fasiten er hele differensieringen:
  *                    ingen andre publiserer etterprøvbare soppvarsler.
@@ -34,8 +39,6 @@ import { sendEpost } from '@/lib/email/send';
  */
 
 export const maxDuration = 120;
-
-const HISTORIKK_DAGER = 7;
 
 type Score = { region: string; tile_date: string; score: number };
 
@@ -85,9 +88,6 @@ export async function GET(request: NextRequest) {
 
   const fraDato = new Date(`${tileDate}T00:00:00Z`);
   fraDato.setUTCDate(fraDato.getUTCDate() - (HISTORIKK_DAGER - 1));
-  const igaar = new Date(`${tileDate}T00:00:00Z`);
-  igaar.setUTCDate(igaar.getUTCDate() - 1);
-  const igaarIso = igaar.toISOString().slice(0, 10);
 
   const { data: historikk, error: histErr } = await db
     .from('region_daily_scores')
@@ -99,20 +99,26 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Kunne ikke hente historikk' }, { status: 500 });
   }
 
-  const iDag = new Map<string, number>();
-  const iGar = new Map<string, number>();
-  const lavesteUke = new Map<string, number>();
+  // «I går» og ukas bunn leses med de SAMME reglene som e-postvarselet. Før
+  // ble bare raden for nøyaktig datoen før lest: én natt uten lagrede scorer
+  // ga da ingen «i går» på omslagsdagen og «allerede bra» dagen etter, så
+  // omslaget e-posten varslet om kom aldri på X. Se lesOmslagsgrunnlag.
+  const scorePerRegion = new Map<string, Map<string, number>>();
   for (const rad of (historikk ?? []) as Score[]) {
-    if (rad.tile_date === tileDate) iDag.set(rad.region, rad.score);
-    if (rad.tile_date === igaarIso) iGar.set(rad.region, rad.score);
-    const bunn = lavesteUke.get(rad.region);
-    if (bunn === undefined || rad.score < bunn) lavesteUke.set(rad.region, rad.score);
+    const datoer = scorePerRegion.get(rad.region) ?? new Map<string, number>();
+    datoer.set(rad.tile_date, rad.score);
+    scorePerRegion.set(rad.region, datoer);
+  }
+  const grunnlag = lesOmslagsgrunnlag(scorePerRegion, tileDate);
+  const { iDag } = grunnlag;
+  if (grunnlag.brobygde.size > 0) {
+    log.warn('xpost.hull_i_historikk', { tileDate, regioner: grunnlag.brobygde.size });
   }
 
   // ── 2. Sett sammen dagens poster ──────────────────────────────────────────
   const planlagte: Array<{ type: 'omslag' | 'ukesoppsummering'; tekst: string }> = [];
 
-  const omslag = finnOmslag({ iDag, iGar, lavesteUke });
+  const omslag = finnOmslag(grunnlag);
   const omslagsTekst = byggOmslagsPost(omslag);
   if (omslagsTekst) planlagte.push({ type: 'omslag', tekst: omslagsTekst });
 

@@ -68,6 +68,23 @@ export interface EpostResultat {
 const RESEND_URL = 'https://api.resend.com/emails';
 
 /**
+ * Fristen for kallet mot Resend.
+ *
+ * Kallet hadde ingen. Et kall som hang, holdt hele forespørselen — en
+ * cron-kjøring til plattformen drepte den midt i lista, eller en besøkende som
+ * ventet på svar etter påmeldingsskjemaet. Nå avbrytes det, og funksjonen
+ * svarer { ok: false } som ved enhver annen feil: kalleren har allerede en
+ * regel for hva som skjer da.
+ *
+ * Romslig med vilje. Et sunt svar kommer på under ett sekund; fristen skal
+ * bare fange kall som henger. Den skal IKKE være så knapp at en treg, men
+ * vellykket utsending regnes som feilet — da ville kalleren trodd at e-posten
+ * ikke gikk, og soppvarselet hentet den inn igjen dagen etter (to e-poster om
+ * samme omslag). Sett den heller opp enn ned.
+ */
+export const RESEND_FRIST_MS = 15_000;
+
+/**
  * Hvilke e-postvariabler mangler? Tom liste betyr at utsending er konfigurert.
  *
  * Egen eksport fordi den stille feilen må kunne oppdages ANDRE steder enn inne
@@ -112,7 +129,9 @@ export async function sendEpost(args: EpostArgs): Promise<EpostResultat> {
               }
             }
           : {})
-      })
+      }),
+      // Gjelder hele kallet, også lesingen av svaret under.
+      signal: AbortSignal.timeout(RESEND_FRIST_MS)
     });
 
     if (!res.ok) {
@@ -134,7 +153,13 @@ export async function sendEpost(args: EpostArgs): Promise<EpostResultat> {
     const data = (await res.json()) as { id?: string };
     return { ok: true, detalj: data?.id ?? 'sendt' };
   } catch (err) {
-    logger.error('epost.feilet', { feil: err instanceof Error ? err.message : 'ukjent' });
+    // AbortSignal.timeout gir «TimeoutError»; eldre kjøremiljøer «AbortError».
+    const tidsavbrudd = err instanceof Error && (err.name === 'TimeoutError' || err.name === 'AbortError');
+    // Feilen er ANDRE argument, konteksten tredje. Konteksten sto som andre —
+    // da tolkes objektet som selve feilen, og linja i loggen sa bare
+    // «[object Object]». Se src/lib/alerts/__tests__/feillogg.test.ts.
+    logger.error('epost.feilet', err, { tidsavbrudd });
+    if (tidsavbrudd) return { ok: false, detalj: `Resend svarte ikke innen ${RESEND_FRIST_MS / 1000} s` };
     return { ok: false, detalj: err instanceof Error ? err.message : 'ukjent feil' };
   }
 }

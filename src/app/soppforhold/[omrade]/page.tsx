@@ -15,6 +15,7 @@ import { computeRegionWeek, type RegionWeek } from '@/lib/prediction/region-week
 import { fetchWeatherSummary } from '@/lib/weather';
 import { fetchDailyForecast } from '@/lib/weather/forecast';
 import { sesongtilstand } from '@/lib/sesong/sesongtilstand';
+import { omradeSvar } from '@/app/soppvarsel/tekst';
 import {
   SOPPFORHOLD_BASE,
   datoTekst,
@@ -52,6 +53,7 @@ const COPY = {
     metaBeskrivelse: (navn: string) =>
       `Er det sopp i skogen rundt ${navn} nå? Daglig oppdatert vurdering regnet ut fra nedbør, jordfuktighet, temperatur og sesong.`,
     ogTittel: (navn: string) => `Soppforhold i ${navn} i dag`,
+    ogBildeAlt: (navn: string) => `Soppforhold i ${navn} i dag, som tall fra 0 til 100`,
     oppdatert: (dato: string) => `Oppdatert ${dato}`,
     oppdateresDaglig: 'Oppdateres daglig',
     h1: (navn: string) => `Soppforhold i ${navn} i dag`,
@@ -88,6 +90,7 @@ const COPY = {
     metaBeskrivelse: (navn: string) =>
       `Är det svamp i skogen kring ${navn} nu? Daglig bedömning beräknad från nederbörd, markfuktighet, temperatur och säsong.`,
     ogTittel: (navn: string) => `Svampläget i ${navn} idag`,
+    ogBildeAlt: (navn: string) => `Svampläget i ${navn} idag, som tal från 0 till 100`,
     oppdatert: (dato: string) => `Uppdaterad ${dato}`,
     oppdateresDaglig: 'Uppdateras varje dag',
     h1: (navn: string) => `Svampläget i ${navn} idag`,
@@ -126,7 +129,11 @@ export function generateStaticParams() {
 
 interface SideProps {
   params: Promise<{ omrade: string }>;
-  /** ?status=bekreftet fra /api/soppvarsel/bekreft — kvitteringen vises her. */
+  /**
+   * ?status=bekreftet fra /api/soppvarsel/bekreft — kvitteringen vises her —
+   * og svaret på påmeldingsskjemaet i VarselCta (sendt, ugyldig, for-mange,
+   * feil) fra /api/soppvarsel/pamelding.
+   */
   searchParams: Promise<{ status?: string }>;
 }
 
@@ -150,12 +157,19 @@ export async function generateMetadata({ params }: SideProps): Promise<Metadata>
     title: t.metaTittel(region.name),
     description: t.metaBeskrivelse(region.name),
     alternates: { canonical: url },
+    // Next erstatter rot-layoutens openGraph-objekt i sin helhet, så siteName
+    // og locale må stå her også. Språket følger LANDET, som resten av siden:
+    // rot-layouten ville gitt en crawler uten cookie nb_NO for Göteborg.
     openGraph: {
       title: t.ogTittel(region.name),
       description: t.metaBeskrivelse(region.name),
       url,
       type: 'website',
-      images: [{ url: ogBilde, width: 1200, height: 630 }]
+      siteName: 'Mycelet',
+      locale: region.country === 'SE' ? 'sv_SE' : 'nb_NO',
+      // alt MÅ stå her: bildefilas egen `alt`-eksport sendes ikke ut når
+      // bildene settes eksplisitt (som de må, for versjoneringen over).
+      images: [{ url: ogBilde, width: 1200, height: 630, alt: t.ogBildeAlt(region.name) }]
     }
   };
 }
@@ -250,6 +264,9 @@ export default async function OmradePage({ params, searchParams }: SideProps) {
 
   const land = regionDef.country;
   const t = COPY[land];
+  // Svaret på skjemaet i VarselCta, på sidens eget språk (landets). Samme
+  // tekster som /soppvarsel viser — se omradeSvar i soppvarsel/tekst.ts.
+  const varselSvar = omradeSvar(status, land === 'SE' ? 'sv' : 'nb');
 
   // Bare regiontallene ventes på her. Ukestripen strømmes (UkeStripeSeksjon).
   const { tileDate, regions } = await hentRegioner(land === 'SE' ? 'sv' : 'nb');
@@ -276,7 +293,13 @@ export default async function OmradePage({ params, searchParams }: SideProps) {
   return (
     <PageWrapper>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
-      <article className="space-y-8 py-6">
+      {/* lang på artikkelen, i BEGGE retninger: <html lang> følger den
+          besøkende (cookie → Accept-Language → nb), mens innholdet her følger
+          landet. Uten dette fikk en crawler eller skjermleser lang="nb" rundt
+          svensk tekst på /soppforhold/goteborg — og en svensk leser lang="sv"
+          rundt norsk tekst på /soppforhold/oslo. <html lang> står urørt:
+          toppmeny og bunnmeny er på leserens språk. */}
+      <article lang={land === 'SE' ? 'sv' : 'nb'} className="space-y-8 py-6">
         {/* Innloggede: «så området i dag» (migrasjon 064). Klientkomponent: siden henter prognosen anonymt. */}
         <RegistrerBruksdag flate="omrade" omrade={omrade} />
         <header className="space-y-3">
@@ -362,8 +385,31 @@ export default async function OmradePage({ params, searchParams }: SideProps) {
         )}
 
         {/* Ikke «meld deg på» rett under «du er påmeldt» — og en ny innsending
-            av samme adresse ville svart «sjekk innboksen» uten å sende noe. */}
-        {pameldt ? null : <VarselCta regionNavn={regionDef.name} land={land} />}
+            av samme adresse ville svart «sjekk innboksen» uten å sende noe.
+
+            id="varsel" + #varsel-fragmentet i redirecten fra påmeldingsruta:
+            svaret må lande der øyet er, uten JS — samme grep som #status på
+            /soppvarsel. Etter «sendt» skjules skjemaet: neste steg er
+            innboksen, ikke en innsending til. */}
+        {pameldt ? null : (
+          <div id="varsel" className="scroll-mt-24 space-y-3">
+            {varselSvar.linje ? (
+              <p role="status" className={`rounded-xl border px-4 py-3 text-sm font-medium ${varselSvar.linje.farge}`}>
+                {varselSvar.linje.tekst}
+              </p>
+            ) : null}
+            {varselSvar.visSkjema ? (
+              <VarselCta regionNavn={regionDef.name} land={land} />
+            ) : (
+              // Samme side uten ?status= — da står skjemaet der igjen.
+              <p className="text-sm text-gray-600">
+                <Link href={`/soppforhold/${omrade}#varsel`} className="underline">
+                  {varselSvar.nyttForsok}
+                </Link>
+              </p>
+            )}
+          </div>
+        )}
 
         <SoppforholdForbehold land={land} />
 

@@ -223,3 +223,40 @@ export function omradeTilstand(
   const landStille = iLandet.length > 0 && iLandet.every(erStille);
   return { landStille, utenomSesong: landStille && !iHovedsesong };
 }
+
+/**
+ * Det beste området i hvert land, Norge først — radene på samlesidens
+ * delingsbilde.
+ *
+ * Bildet viste bare «Soppforhold i Norge i dag» og det beste NORSKE området,
+ * selv om siden handler om begge land og setter Sverige først for svenske
+ * lesere. Delingsskrapere sender ingen språkcookie, så bildet kan ikke følge
+ * leseren slik siden gjør: det må være riktig for begge. Derfor ett område per
+ * land, i fast rekkefølge.
+ *
+ * Høyeste tall vinner, og ved likhet det som står først i API-svaret (som er
+ * sortert på score). Regnes ut her i stedet for å stole på sorteringen, så et
+ * usortert eller delvis svar aldri gir feil «best». Et land uten tall i dagens
+ * raster (NO skrives en halvtime før SE) får ingen rad.
+ */
+export function bestePerLand(regions: SoppforholdRegion[]): SoppforholdRegion[] {
+  return (['NO', 'SE'] as const)
+    .map((land) =>
+      regions
+        .filter((r) => r.country === land)
+        .reduce<SoppforholdRegion | null>((beste, r) => (beste === null || r.score > beste.score ? r : beste), null)
+    )
+    .filter((r): r is SoppforholdRegion => r !== null);
+}
+
+/**
+ * Rasterdatoen som rene tall: «2026-09-15» → «15.09.2026».
+ *
+ * For flater som ikke kan velge språk (samlesidens delingsbilde): «15. september»
+ * er norsk og «15 september» svensk, tallformen leses likt av begge. Ren
+ * strengregning — ingen Date, så ingen tidssone kan flytte dagen.
+ */
+export function tallDato(iso: string | null): string {
+  const treff = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso ?? '');
+  return treff ? `${treff[3]}.${treff[2]}.${treff[1]}` : '';
+}
