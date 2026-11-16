@@ -1,92 +1,61 @@
 'use client';
 
-import { useMemo, useRef, useState } from 'react';
-import { useLocale, useTranslations } from 'next-intl';
+import { useId, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { SlidersHorizontal, X } from 'lucide-react';
-import { createClient } from '@/lib/supabase/client';
-import { getSpeciesDisplayName } from '@/lib/utils/species-name';
-import { PlaceResult, searchPlaces } from '@/lib/utils/place-search';
+import { activeFilterCount, type MapFilterState } from '@/lib/map/initial-filters';
+import { LUKKEKNAPP_KLASSER } from '@/components/ui/useDialogFokus';
+import { TREFF_44 } from './trykkflate';
 
-export interface MapFilterState {
-  speciesId: number | null;
-  period: 'month' | '3months' | 'year' | 'all';
-  onlyMine: boolean;
-}
-
-interface SpeciesOption {
-  id: number;
-  norwegian_name: string;
-  swedish_name: string | null;
-  latin_name: string;
-}
+// Typen og reglene for filtrene bor i src/lib/map/initial-filters.ts, der de
+// har tester. Eksporteres videre herfra for dem som alt importerer den her.
+export type { MapFilterState };
 
 interface MapFiltersProps {
   filters: MapFilterState;
   onChange: (next: MapFilterState) => void;
-  onSelectPlace: (lat: number, lng: number) => void;
+  /**
+   * Navnet på arten kartet er filtrert på, når det er kjent. Arket VISER
+   * artsfilteret; det velges i søkefeltet øverst på kartet.
+   *
+   * Arket hadde før sitt eget artssøk og sitt eget stedssøk ved siden av det
+   * felles søkefeltet. De skrev bare halve tilstanden: en art valgt her satte
+   * id-en, men ikke navnet, så funn, fliser og registrerte funn ble filtrert
+   * uten at noe på skjermen sa på hva — og det navnløse filteret ble husket
+   * til neste besøk. «Nullstill art» her lot den grønne brikken og de lovende
+   * områdene stå igjen for en art som ikke lenger filtrerte. Et sted valgt her
+   * flyttet bare kartet: ingen værstripe, og en sen GPS-fiks dro kartet hjem
+   * igjen. Nå finnes det ett søk, og arket har én vei ut av artsfilteret — den
+   * samme som brikken bruker.
+   */
+  speciesName: string | null;
+  /** Fjerner artsfilteret overalt: brikken, søketeksten, filteret og de lovende områdene. */
+  onClearSpecies: () => void;
 }
 
-export function MapFilters({ filters, onChange, onSelectPlace }: MapFiltersProps) {
+export function MapFilters({ filters, onChange, speciesName, onClearSpecies }: MapFiltersProps) {
   const t = useTranslations('MapFilters');
-  const locale = useLocale();
-  const supabase = useMemo(() => createClient(), []);
-  const [query, setQuery] = useState('');
-  const [options, setOptions] = useState<SpeciesOption[]>([]);
   const [open, setOpen] = useState(false);
-  const [placeQuery, setPlaceQuery] = useState('');
-  const [placeResults, setPlaceResults] = useState<PlaceResult[]>([]);
-  // Skiller «har ikke søkt ennå» fra «søkte, fant ingenting». Uten den ble et
-  // tomt svar helt stille, og et stille søkefelt leses som at appen henger.
-  const [placeSearched, setPlaceSearched] = useState(false);
-  const placeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Etikett og felt kobles uttrykkelig (htmlFor + id), ikke bare ved at
+  // etiketten ligger rundt feltet: den uttalte koblingen er den hjelpemidler
+  // leser sikrest. Krokene står før den tidlige returen under.
+  const periodId = useId();
+  const onlyMineId = useId();
 
-  const activeCount = Number(Boolean(filters.speciesId)) + Number(filters.period !== 'all') + Number(filters.onlyMine);
-
-  const searchSpecies = async (value: string) => {
-    setQuery(value);
-
-    if (value.trim().length < 2) {
-      setOptions([]);
-      return;
-    }
-
-    const { data } = await supabase
-      .from('mushroom_species')
-      .select('id,norwegian_name,swedish_name,latin_name')
-      .or(
-        `norwegian_name.ilike.%${value}%,swedish_name.ilike.%${value}%,latin_name.ilike.%${value}%,synonyms_text.ilike.%${value}%`
-      )
-      .order('norwegian_name', { ascending: true })
-      .limit(10);
-
-    setOptions(data ?? []);
-  };
-
-  // Uses the shared Nordic place search (via our /api/places proxy) — this
-  // field used to call Kartverket directly, which answered Swedish queries
-  // with wrong Norwegian places. Debounced so we don't fire per keystroke.
-  const searchPlace = (value: string) => {
-    setPlaceQuery(value);
-    if (placeTimer.current) clearTimeout(placeTimer.current);
-    setPlaceSearched(false);
-    if (value.trim().length < 2) {
-      setPlaceResults([]);
-      return;
-    }
-    placeTimer.current = setTimeout(async () => {
-      setPlaceResults(await searchPlaces(value));
-      setPlaceSearched(true);
-    }, 300);
-  };
+  const activeCount = activeFilterCount(filters);
 
   // Collapsed: a small chip so the map stays the hero. Tap to reveal filters.
+  //
+  // Knappen ser fortsatt 36 px ut, men treffflaten er 44 × 44 px (se
+  // trykkflate.ts). Større kan den ikke tegnes: søkefeltet begynner 8 px til
+  // høyre for den, og en 44 px bred knapp ville stått kant i kant med det.
   if (!open) {
     return (
       <button
         type="button"
         onClick={() => setOpen(true)}
         aria-label={t('title')}
-        className="absolute left-3 top-3 z-[1000] inline-flex h-9 w-9 items-center justify-center gap-1.5 rounded-full bg-white/95 p-0 text-sm font-medium text-gray-800 shadow-lg backdrop-blur hover:bg-white sm:w-auto sm:justify-start sm:px-3"
+        className={`absolute left-3 top-3 z-[1000] inline-flex h-9 w-9 items-center justify-center gap-1.5 rounded-full bg-white/95 p-0 text-sm font-medium text-gray-800 shadow-lg backdrop-blur hover:bg-white sm:w-auto sm:justify-start sm:px-3 ${TREFF_44}`}
       >
         <SlidersHorizontal className="h-4 w-4" />
         <span className="hidden sm:inline">{t('title')}</span>
@@ -103,91 +72,36 @@ export function MapFilters({ filters, onChange, onSelectPlace }: MapFiltersProps
         <p className="text-sm font-semibold text-gray-900">{t('title')}</p>
         <div className="flex items-center gap-2">
           <span className="rounded-full bg-forest-100 px-2 py-1 text-xs font-medium text-forest-900">{t('activeCount', { count: activeCount })}</span>
-          <button
-            type="button"
-            onClick={() => setOpen(false)}
-            aria-label={t('closeFilters')}
-            className="rounded-full p-1 text-gray-500 hover:bg-gray-100"
-          >
-            <X className="h-4 w-4" />
+          <button type="button" onClick={() => setOpen(false)} aria-label={t('closeFilters')} className={LUKKEKNAPP_KLASSER}>
+            <X className="h-4 w-4" aria-hidden />
           </button>
         </div>
       </div>
 
-      <div className="space-y-2">
-        <label className="block text-xs font-medium text-gray-700">{t('searchPlace')}</label>
-        <input
-          value={placeQuery}
-          onChange={(event) => searchPlace(event.target.value)}
-          className="w-full rounded-lg border border-gray-300 px-2 py-1.5 text-sm"
-          placeholder={t('searchPlacePlaceholder')}
-        />
-        {placeResults.length > 0 ? (
-          <div className="max-h-36 overflow-auto rounded-lg border border-gray-200">
-            {placeResults.map((p, i) => (
-              <button
-                key={i}
-                type="button"
-                onClick={() => {
-                  onSelectPlace(p.lat, p.lng);
-                  setPlaceResults([]);
-                  setPlaceQuery(p.name);
-                  setOpen(false);
-                }}
-                className="flex w-full flex-col items-start px-2 py-1.5 text-left text-sm hover:bg-gray-50"
-              >
-                <span>{p.name}</span>
-                {p.context ? <span className="text-xs text-gray-500">{p.context}</span> : null}
-              </button>
-            ))}
-          </div>
-        ) : placeSearched && placeQuery.trim().length >= 2 ? (
-          <p className="text-xs text-gray-600">{t('noPlaceResults')}</p>
-        ) : null}
-      </div>
-
-      <div className="space-y-2">
-        <label className="block text-xs font-medium text-gray-700">{t('speciesSearch')}</label>
-        <input
-          value={query}
-          onChange={(event) => searchSpecies(event.target.value)}
-          className="w-full rounded-lg border border-gray-300 px-2 py-1.5 text-sm"
-          placeholder={t('speciesSearchPlaceholder')}
-        />
-
-        {options.length > 0 ? (
-          <div className="max-h-36 overflow-auto rounded-lg border border-gray-200">
-            {options.map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => onChange({ ...filters, speciesId: item.id })}
-                className="flex w-full items-center justify-between px-2 py-1.5 text-left text-sm hover:bg-gray-50"
-              >
-                <span>{getSpeciesDisplayName(item, locale)}</span>
-                <span className="text-xs text-gray-500 italic">{item.latin_name}</span>
-              </button>
-            ))}
-          </div>
-        ) : null}
-
-        {filters.speciesId ? (
+      {/* Raden er 44 px høy, så treffflaten til «Nullstill art» blir inne i
+          den og ikke når opp i krysset rett over. */}
+      {filters.speciesId ? (
+        <div className="flex min-h-[44px] items-center justify-between gap-2 rounded-lg bg-forest-50 px-2 py-1.5">
+          <p className="min-w-0 truncate text-sm text-gray-900">
+            {speciesName ? t('speciesFilter', { species: speciesName }) : t('speciesFilterUnnamed')}
+          </p>
           <button
             type="button"
-            onClick={() => onChange({ ...filters, speciesId: null })}
-            className="text-xs font-medium text-forest-800"
+            onClick={onClearSpecies}
+            className={`relative shrink-0 text-xs font-medium text-forest-800 underline ${TREFF_44}`}
           >
             {t('resetSpecies')}
           </button>
-        ) : null}
-      </div>
+        </div>
+      ) : null}
 
-      <label className="block text-xs font-medium text-gray-700">
+      <label htmlFor={periodId} className="block text-xs font-medium text-gray-700">
         {t('period')}
         <select
+          id={periodId}
           value={filters.period}
           onChange={(event) => onChange({ ...filters, period: event.target.value as MapFilterState['period'] })}
-          className="mt-1 w-full rounded-lg border border-gray-300 px-2 py-1.5 text-sm"
+          className="mt-1 h-11 w-full rounded-lg border border-gray-300 px-2 text-sm"
         >
           <option value="month">{t('periodMonth')}</option>
           <option value="3months">{t('periodThreeMonths')}</option>
@@ -196,14 +110,17 @@ export function MapFilters({ filters, onChange, onSelectPlace }: MapFiltersProps
         </select>
       </label>
 
-      <label className="inline-flex items-center gap-2 text-sm text-gray-800">
+      <label htmlFor={onlyMineId} className="flex min-h-[44px] items-center gap-2 text-sm text-gray-800">
         <input
+          id={onlyMineId}
           type="checkbox"
           checked={filters.onlyMine}
           onChange={(event) => onChange({ ...filters, onlyMine: event.target.checked })}
         />
         {t('onlyMine')}
       </label>
+
+      <p className="text-xs text-gray-600">{t('searchHint')}</p>
     </div>
   );
 }

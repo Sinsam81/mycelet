@@ -5,20 +5,47 @@ import type { MapSpeciesParam, MapViewParams } from '@/lib/utils/map-view-params
 import { lagreHusketUtsnitt, lesHusketUtsnitt, type HusketUtsnitt } from '@/lib/map/husket-utsnitt';
 import { lagreHusketPosisjon } from '@/lib/map/husket-posisjon';
 import { useLocale, useMessages, useTranslations } from 'next-intl';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Download, Filter, MoreHorizontal, Navigation, Trash2, X } from 'lucide-react';
-import { createRoot, Root } from 'react-dom/client';
 import { createClient } from '@/lib/supabase/client';
 import { fetchRpcPaged } from '@/lib/supabase/paged-rpc';
-import { useGeolocation, watchPositionUntilAccurate } from '@/lib/hooks/useGeolocation';
+import { useGeolocation } from '@/lib/hooks/useGeolocation';
+import { finnFerskPosisjon } from '@/lib/map/fersk-posisjon';
+import { flyttetoleranseMeter, kartErFlyttet, senterForBoks } from '@/lib/map/funnposisjon';
+import { initialMapFilters, nextMapFilters } from '@/lib/map/initial-filters';
+import { rettArtsfilter } from '@/lib/map/artsfilter-navn';
+import {
+  LOVENDE_RADIER_KM,
+  harSkogdekning,
+  nesteRadiusIndex,
+  nesteSteg,
+  type LovendeSteg
+} from '@/lib/map/lovende-sok';
+import { festBoksTilOppslagspresisjon } from '@/lib/map/oppslagsboks';
+import {
+  SPISELIGHET_MARKORFARGE,
+  SPISELIGHET_TEKSTFARGE,
+  UKJENT_MARKORFARGE,
+  UKJENT_TEKSTFARGE
+} from '@/lib/map/spiselighetsfarger';
+import {
+  kanGjenbrukeHenting,
+  ligger,
+  velgHenteutsnitt,
+  type ForrigeHenting,
+  type Utsnitt
+} from '@/lib/map/utsnitt-gjenbruk';
 import { getRegion } from '@/lib/utils/region';
 import { usePrediction } from '@/lib/hooks/usePrediction';
 import { useBillingStatus } from '@/lib/hooks/useBilling';
 import { PredictionHotspot, PredictionResponse, PredictionTile } from '@/types/prediction';
 import { AddFindingSheet } from './AddFindingSheet';
 import { findingPopupElement } from './findingPopupElement';
+import { Funnlag } from './funnlag';
+import type { FindingReportPayload } from './FindingPopup';
 import { HotspotPanel } from './HotspotPanel';
 import { MapFilters, MapFilterState } from './MapFilters';
+import { MapIntro } from './MapIntro';
 import { MapFinding } from '@/types/finding';
 import { OwnFindingRow, ownFindingToMapFinding } from '@/lib/utils/map-findings';
 import {
@@ -28,13 +55,17 @@ import {
   type OccurrenceYearFilter
 } from '@/lib/utils/occurrence-filters';
 import {
+  MAX_NATIVE_ZOOM,
+  NoTilesCachedError,
   OfflineArea,
+  OfflineAreaTooLargeError,
   OSM_TILE_TEMPLATE,
   SATELLITE_TILE_TEMPLATE,
   TERRAIN_TILE_TEMPLATE,
   cacheMapTilesForArea,
   clearMapTileCache,
   estimateStorageMb,
+  offlineZoomLevels,
   readOfflineAreas,
   removeOfflineAreaById,
   removeOfflineAreaTiles,
@@ -49,6 +80,7 @@ import { scoreToCondition } from '@/lib/utils/prediction';
 import { bestTilePerCell } from '@/lib/prediction/collapse-tiles';
 import { getSpeciesDisplayName } from '@/lib/utils/species-name';
 import { PlaceResult, searchPlaces } from '@/lib/utils/place-search';
+import { roundForProviderLookup } from '@/lib/privacy/provider-precision';
 import { filterWithinRadiusKm, haversineKm } from '@/lib/utils/geo-distance';
 import { SEARCH_AREA_RADIUS_M } from '@/lib/utils/spot-area';
 import { createTopSpotArea } from './topSpotArea';
@@ -58,6 +90,12 @@ import { readLocal, readLocalJson, removeLocal, writeLocal } from '@/lib/utils/s
 import { PlaceForecastStrip } from './PlaceForecastStrip';
 import { FLAGS } from '@/lib/flags';
 import toast from 'react-hot-toast';
+import { useQueryClient } from '@tanstack/react-query';
+import { useReportContent } from '@/lib/hooks/useForum';
+import { invalidateAfterBlockChange } from '@/lib/hooks/useBlocks';
+import { useForumErrorMessage } from '@/components/forum/useForumErrorMessage';
+import { utenBlokkerte } from '@/lib/moderation/blokkering';
+import { lagBlokkerteHusk } from '@/lib/map/blokkerte-brukere';
 import { useIsNative } from '@/lib/hooks/useIsNative';
 import { byggLovendeOmraderGpx } from '@/lib/gpx/lovende-omrader';
 import { osloDag } from '@/lib/bruk/bruksdag';
@@ -78,6 +116,8 @@ import {
 } from '@/lib/billing/provetilbud';
 import { foreslaaVurdering } from '@/lib/vurdering/foreslaa';
 import { vernLeafletEtterFjerning } from './leafletEtterFjerning';
+import { TREFF_44 } from './trykkflate';
+import { LUKKEKNAPP_KLASSER } from '@/components/ui/useDialogFokus';
 
 type LeafletType = typeof import('leaflet');
 
@@ -95,7 +135,8 @@ type LeafletType = typeof import('leaflet');
  *
  * Målt før hevingen: 1000 rader på 1,9 s for Oslo ved mobil zoom 11, hentet over
  * flere sider. Budsjettet er tegnetid, ikke databasen — klyngelaget takler
- * størrelsen, og laget tømmes og hentes på nytt ved panorering uansett.
+ * størrelsen. Laget hentes og tegnes på nytt bare når utsnittet går ut over det
+ * som alt er hentet, eller et filter endres (se loadOccurrences).
  */
 const OCCURRENCE_FETCH_LIMIT = 6000;
 
@@ -124,6 +165,46 @@ const FOREST_LABEL: Record<string, string> = {
 const TRAIL_WMS_URL = 'https://wms.geonorge.no/skwms1/wms.friluftsruter2';
 const TRAIL_LAYER_KEY = 'mycelet:kart-turruter-v1';
 
+/** En rad fra get_occurrences_in_bounds, slik kartet bruker den. */
+type OccRow = {
+  latitude: number;
+  longitude: number;
+  species_id: number | null;
+  observed_at?: string | null;
+  coordinate_uncertainty_m?: number | null;
+};
+
+/**
+ * Siste henting av registrerte funn: radene, utsnittet de ble hentet for, og
+ * det serveren ble spurt om. Brukes til å la være å hente på nytt når det som
+ * vises alt er dekket — se src/lib/map/utsnitt-gjenbruk.ts.
+ */
+type OccFetch = ForrigeHenting & {
+  speciesId: number | null;
+  yearCutoff: number | null;
+  /** false = årsfilteret må gjøres her (RPC-en mangler p_min_year, eller kallet feilet). */
+  serverYearFiltered: boolean;
+  rows: OccRow[];
+};
+
+/**
+ * Det markørene i funnlaget er bygget av. Er alt dette uendret, står
+ * markørene riktig og laget trenger ikke tømmes og bygges opp igjen.
+ */
+type OccDraw = {
+  henting: OccFetch;
+  filter: 'all' | 'edible' | 'toxic';
+  seasonOnly: boolean;
+  /** Sesongfilteret regnes mot inneværende måned. */
+  maaned: number;
+  /** Artsnavn-oppslaget markørene ble bygget med (byttes ut når artene er lastet). */
+  navn: Map<number, string>;
+  /** Oversetteren popupene bruker. */
+  t: unknown;
+  /** Punktene som faktisk ble tegnet, til tellingen av det som er i utsnittet. */
+  punkter: { lat: number; lng: number }[];
+};
+
 type TopSpot = {
   lat: number;
   lng: number;
@@ -150,11 +231,62 @@ function bearingLabel(aLat: number, aLng: number, bLat: number, bLng: number): s
   return dirs[Math.round(deg / 45) % 8];
 }
 
-const initialFilters: MapFilterState = {
-  speciesId: null,
-  period: 'month',
-  onlyMine: false
-};
+/**
+ * Der kartet står før noe annet er kjent (ingen dyplenke, intet husket utsnitt,
+ * ingen posisjon ennå). Ett sted å lese det fra: kartinit, vernet mot å huske
+ * plassholderen som utsnitt, og «har brukeren flyttet kartet?» må være enige.
+ */
+const PLASSHOLDER_SENTER = { lat: 59.91, lng: 10.75 } as const;
+const PLASSHOLDER_ZOOM = 11;
+
+/**
+ * Knappene i verktøyraden øverst på kartet: 36 px høye, med en usynlig
+ * treffflate på 44 px rundt (se trykkflate.ts). Radene i kolonnen står 8 px
+ * fra hverandre, så flatene møtes uten å overlappe. De var 28 px høye — og
+ * betjenes med tommelen ute i skogen.
+ */
+const VERKTOYKNAPP = `relative whitespace-nowrap rounded-full px-3 py-2.5 text-xs font-medium shadow-lg backdrop-blur ${TREFF_44}`;
+
+/** En rad i «Mer»-menyen: 44 px høy i seg selv. */
+const MENYRAD = 'min-h-[44px] rounded-lg px-2 py-2 text-left text-xs font-medium text-gray-800 hover:bg-gray-100';
+
+/** Valgene i funnfilteret: 36 px høye med treffflate på 44 px, 8 px mellom radene. */
+const FILTERVALG = `relative rounded-full px-2.5 py-2.5 text-[11px] font-medium ${TREFF_44}`;
+
+/** De små knappene i offline-panelet (Gå til, Slett, Tøm kartcachen, Åpne offline-kartet). */
+const PANELKNAPP = 'inline-flex min-h-[44px] items-center gap-1 rounded border px-3 text-[11px]';
+
+/**
+ * Krysset i en Leaflet-popup er 24 × 24 px og eies av Leaflet. Klassene
+ * legges på elementet når popupen åpnes, og gir det 10 px usynlig flate på
+ * hver side — 44 × 44 px. Krysset er alt `position: absolute`.
+ */
+const POPUPKRYSS_TREFF = ['after:absolute', 'after:-inset-2.5', "after:content-['']"];
+
+/**
+ * Zoomknappene er også Leaflets egne: 30 × 30 px, kant i kant. De er veien
+ * inn og ut for den som har én hånd ledig — knip trenger to.
+ *
+ * Her er usynlig flate alene ikke nok: knappene står oppå hverandre, så
+ * flatene kan ikke vokse mot hverandre, og over og under er det bare 10 px
+ * til kartkanten og lagvelgeren. Knappene tegnes derfor 36 px, og får 4 px
+ * flate til hver side; «inn» får 8 px oppover og «ut» 8 px nedover. Det gir
+ * 44 × 44 px hver. `!` fordi Leaflets egne regler for størrelsen er mer
+ * spesifikke enn en vanlig klasse. Målt i nettleseren med Leaflets egne
+ * elementer og stilark, på en 375 px bred telefon: kontrollen står 6 px fra
+ * søkefeltet og flaten 4 px fra, og lagvelgeren under flytter seg 12 px ned.
+ */
+const ZOOMKNAPP = ['relative', '!h-9', '!w-9', '!leading-9', 'after:absolute', 'after:-inset-x-1', "after:content-['']"];
+const ZOOMKNAPP_INN = ['after:-top-2', 'after:bottom-0'];
+const ZOOMKNAPP_UT = ['after:top-0', 'after:-bottom-2'];
+
+/**
+ * Så lenge må kartet stå i ro før lasterne henter for det nye utsnittet.
+ * En finger som drar kartet i flere korte tak, eller et knip som slippes og
+ * tas opp igjen, ga ett «moveend» per tak — og hvert av dem startet fire
+ * hentinger som det neste straks gjorde ugyldige.
+ */
+const FLYTT_RO_MS = 300;
 
 export function MushroomMap({
   /**
@@ -180,6 +312,13 @@ export function MushroomMap({
   initialSpecies?: MapSpeciesParam | null;
 } = {}) {
   const t = useTranslations('MushroomMap');
+  // Forumets tekster for melding og blokkering — kartet viser dem i varsler og
+  // sender dem til funnpopupen som ferdig tekst (se handleReportFinding).
+  const tReport = useTranslations('ReportButton');
+  const tBlock = useTranslations('BlockUser');
+  const tBlockedUsers = useTranslations('BlockedUsers');
+  const forumError = useForumErrorMessage();
+  const queryClient = useQueryClient();
   const locale = useLocale();
   const native = useIsNative();
   // «Lovende områder» som GPX i appskallet vises som tekst (se GpxKopierModal).
@@ -193,7 +332,9 @@ export function MushroomMap({
   const heatLayerRef = useRef<import('leaflet').LayerGroup | null>(null);
   const topLayerRef = useRef<import('leaflet').LayerGroup | null>(null);
   const speciesLayerRef = useRef<import('leaflet').LayerGroup | null>(null);
-  const popupRootsRef = useRef<Root[]>([]);
+  // Funnlaget: markørene for brukernes funn og popup-roten til hver av dem.
+  // Stemmes av mot hvert nytt svar i stedet for å tømmes — se funnlag.ts.
+  const funnlagRef = useRef<Funnlag<MapFinding> | null>(null);
   const loadFindingsRef = useRef<() => Promise<void>>(async () => {});
   const generateTopSpotsRef = useRef<(speciesIdOverride?: number | null, originOverride?: { lat: number; lng: number } | null) => Promise<void>>(
     async () => {}
@@ -208,6 +349,14 @@ export function MushroomMap({
   const loadPredictionTilesRef = useRef<() => Promise<void>>(async () => {});
   // Monotonic request id so only the latest prediction-tile RPC may write state.
   const tileReqRef = useRef(0);
+  // Samme vern for funnlaget. Flisene og de registrerte funnene hadde det;
+  // funnlaget manglet det, og der er følgen verst: en treg henting av ALLES
+  // funn, startet før «Kun mine funn» ble krysset av, kunne bli ferdig etter
+  // den raske hentingen av egne funn og tegne andres funn under avkrysningen.
+  const findingsGenRef = useRef(0);
+  // Hva funnlaget viser akkurat nå. Feiler hentingen av egne funn, skal det
+  // som ligger der fra fellesskapslaget ikke bli stående under «Kun mine funn».
+  const findingsLayerShowsRef = useRef<'own' | 'shared' | null>(null);
   const occClusterRef = useRef<any>(null);
   const loadOccurrencesRef = useRef<() => Promise<void>>(async () => {});
   // PÅ FRA START. Laget var ferdig bygget — klynger, artsnavn, spiselighets-
@@ -223,7 +372,8 @@ export function MushroomMap({
   // mangler dag.
   //
   // Målt før den ble skrudd på: 277 ms–2 s per utsnitt (Oslo mobil zoom 11 ga
-  // 1000 rader på 1,9 s). Laget tømmes og hentes på nytt ved panorering.
+  // 1000 rader på 1,9 s). Laget hentes på nytt når utsnittet går ut over det
+  // som alt er hentet — ikke ved hver panorering (se loadOccurrences).
   const showOccurrencesRef = useRef(true);
   const speciesNamesRef = useRef<Map<number, string>>(new Map());
   // Artsnavnene lastes asynkront, og varmelaget rekker som regel å tegne før de
@@ -247,12 +397,18 @@ export function MushroomMap({
   // den tregeste vinner — og chip og kart kan vise hver sin sannhet. Bare den
   // nyeste generasjonen får tegne.
   const occLoadGenRef = useRef(0);
+  // Siste henting og siste tegning av registrerte funn. Null = ingenting å
+  // gjenbruke (laget er av, eller forrige henting feilet).
+  const lastOccFetchRef = useRef<OccFetch | null>(null);
+  const lastOccDrawRef = useRef<OccDraw | null>(null);
   const tripActiveRef = useRef(false);
   const tripFindsRef = useRef<string[]>([]);
   const speciesSearchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const meMarkerRef = useRef<any>(null);
   const meCircleRef = useRef<any>(null); // GPS accuracy circle around the "me" dot
   const geoAbortRef = useRef<AbortController | null>(null); // cancels an in-flight locate watch
+  // Ventende henting etter at kartet er flyttet — se FLYTT_RO_MS.
+  const moveLoadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // True once the user manually picks a base layer — stops the region auto-switch.
   const userPickedBaseLayerRef = useRef(false);
   // The three switchable base layers, so the offline-save can cache whichever one
@@ -266,8 +422,35 @@ export function MushroomMap({
   // Last known position, so the map can recenter even if geolocation resolves
   // before the (async) map init finishes.
   const posRef = useRef<{ lat: number; lng: number } | null>(null);
+  // Siste EKTE GPS-måling: fra åpningen av kartet, fra «Finn meg» og fra den
+  // ferske målingen i funnskjemaet. Aldri et søkt sted — posRef over settes
+  // også av stedssøket, så den kan ikke brukes som «der brukeren er».
+  //
+  // Finnes fordi `latitude`/`longitude` fra useGeolocation() er målt ÉN gang,
+  // da kartet ble åpnet, og aldri oppdateres. Alt som leste dem etterpå —
+  // «Lovende» sitt utgangspunkt, reserven i «Finn meg» — regnet fra der
+  // brukeren var da turen startet.
+  const sisteGpsRef = useRef<{ lat: number; lng: number } | null>(null);
 
   const supabase = useRef(createClient()).current;
+  // Hvem leseren har blokkert, for funnlaget. Et løfte som hentes én gang og
+  // ventes på sammen med funnene — se src/lib/map/blokkerte-brukere.ts for
+  // hvorfor det ikke er en tilstand. RLS gir bare leserens egne rader.
+  // createClient() i selve oppslaget (nettleserklienten er én og samme), så
+  // tilstanden ikke bygges av en ref-verdi under gjengivelsen.
+  const [blokkerte] = useState(() =>
+    lagBlokkerteHusk(() => createClient().from('blocked_users').select('blocked_id'))
+  );
+  // Ventingen på lista har en frist: blir oppslaget hengende, tegnes funnene
+  // uten den. Dette rydder opp når lista så kommer — nålene til de blokkerte
+  // tas ut av det som alt står på kartet, uten ny henting. Samme grep som rett
+  // etter en blokkering (handleBlockFindingAuthor). Kom lista i tide, er det
+  // ingenting å ta ut.
+  useEffect(() => {
+    void blokkerte.naarHentet().then((ider) => {
+      for (const id of ider) funnlagRef.current?.fjernFraBruker(id);
+    });
+  }, [blokkerte]);
   const { latitude, longitude, error: geoError } = useGeolocation();
 
   // Forrige utsnitt (senter, zoom, art, søkt sted) — se husket-utsnitt.ts.
@@ -280,28 +463,52 @@ export function MushroomMap({
   const husketUtsnittRef = useRef<{ lat: number; lng: number; zoom: number } | null>(
     husket ? { lat: husket.lat, lng: husket.lng, zoom: husket.zoom } : null
   );
+  // Det siste senteret APPEN la kartet på uten at noen ba om et sted:
+  // plassholderen, sentreringen på GPS ved åpning, «Finn meg», utsnittet
+  // «⭐ Lovende» zoomer til. Null når kartet åpnet på et sted noen valgte
+  // (dyplenke, søkt sted, utsnittet fra forrige besøk). Funnskjemaet bruker
+  // det til å avgjøre om kartsenteret er et sted brukeren har pekt ut, eller
+  // bare der appen la kartet — se kartErFlyttet.
+  const autoSenterRef = useRef<{ lat: number; lng: number } | null>(
+    initialView || husket ? null : { lat: PLASSHOLDER_SENTER.lat, lng: PLASSHOLDER_SENTER.lng }
+  );
   const initialSpeciesRef = useRef<MapSpeciesParam | null>(initialSpecies);
 
-  const [filters, setFilters] = useState<MapFilterState>(() => ({
-    ...initialFilters,
-    speciesId: initialSpecies?.id ?? husket?.speciesId ?? null,
-    onlyMine: startWithOnlyMine
-  }));
+  // Startverdien og reglene står i src/lib/map/initial-filters.ts. Kort: åpner
+  // kartet på «Kun mine funn» (?mine=1), starter perioden på «alle» — ellers
+  // skjulte standardperioden «denne måneden» nettopp de funnene lenken lovet.
+  const [filters, setFiltersRaw] = useState<MapFilterState>(() =>
+    initialMapFilters({ startWithOnlyMine, speciesId: initialSpecies?.id ?? husket?.speciesId ?? null })
+  );
+  // ALLE endringer av filtrene går gjennom nextMapFilters, så perioden følger
+  // med når «Kun mine funn» slås på — uansett om det skjer i filterarket eller
+  // fordi et privat funn nettopp ble lagret.
+  const setFilters = useCallback((next: MapFilterState | ((previous: MapFilterState) => MapFilterState)) => {
+    setFiltersRaw((previous) => nextMapFilters(previous, typeof next === 'function' ? next(previous) : next));
+  }, []);
   const [showAddSheet, setShowAddSheet] = useState(false);
   /**
-   * Posisjonen «Legg til funn» skal bruke når GPS ikke er å få tak i.
+   * Kartsenteret i det brukeren trykket pluss, og om det er brukeren selv som
+   * har lagt kartet der.
    *
-   * Skjemaet krevde `useGeolocation()` og avviste lagring uten. Det låste ute
-   * fire helt vanlige tilfeller: desktop uten GPS, avslått posisjonstillatelse,
-   * dårlig signal under tregrenser — og det vanligste av alt, å registrere et
-   * funn i etterkant hjemmefra. «Jeg fant kantarell ved den lysningen i går»
-   * lot seg rett og slett ikke lagre.
+   * Skjemaet krevde først `useGeolocation()` og avviste lagring uten. Det låste
+   * ute fire helt vanlige tilfeller: desktop uten GPS, avslått
+   * posisjonstillatelse, dårlig signal under tregrenser — og det vanligste av
+   * alt, å registrere et funn i etterkant hjemmefra. «Jeg fant kantarell ved
+   * den lysningen i går» lot seg rett og slett ikke lagre. Kartsenteret er
+   * svaret som allerede ligger på skjermen: brukeren panorerer dit hen var, og
+   * trykker pluss.
    *
-   * Kartsenteret er svaret som allerede ligger på skjermen: brukeren panorerer
-   * dit hen var, og trykker pluss. Skjemaet sier tydelig hvilken av de to
-   * posisjonene det bruker, så ingen tror de lagrer en GPS-måling de ikke har.
+   * Så ble kartsenteret reserve for GPS — og bare det. Hadde kartet fått en
+   * posisjon da det ble åpnet, vant den alltid: «i etterkant hjemmefra» ble
+   * lagret hjemme, og den som gikk førti minutter fra parkeringsplassen fikk
+   * funnet lagret der. Nå følger kartsenteret ALLTID med, skjemaet måler
+   * posisjonen på nytt selv, og velger bare mellom dem når de er enige
+   * (src/lib/map/funnposisjon.ts). Kartets egen, gamle posisjon sendes ikke inn.
    */
-  const [addSheetFallback, setAddSheetFallback] = useState<{ lat: number; lng: number } | null>(null);
+  const [addSheetKart, setAddSheetKart] = useState<{ senter: { lat: number; lng: number }; flyttet: boolean } | null>(
+    null
+  );
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   // Brukernavnet vises i popupen. For «Kun mine funn» leser vi funnene rett fra
   // tabellen, som ikke har den join-en public_findings-viewet gjør.
@@ -362,9 +569,18 @@ export function MushroomMap({
   // Bodø mens prognosepanelet ved siden av beskrev brukerens egen posisjon —
   // to steder på samme skjerm, som er nøyaktig feilen kommentaren ved
   // GPS-effekten lenger nede allerede advarer mot.
-  const [predictionCoords, setPredictionCoords] = useState<{ lat: number | null; lon: number | null }>({
-    lat: initialView?.lat ?? husket?.lat ?? null,
-    lon: initialView?.lng ?? husket?.lng ?? null
+  //
+  // Punktet har ÉN presisjon uansett hvor det settes fra (her, stedssøket,
+  // GPS-en, flytting av kartet): tre desimaler, ~100 m. usePrediction bruker
+  // punktet som nøkkel, og kartet flyttes rett etter hvert av de andre
+  // kallene — med ulik presisjon ble det to nøkler og to kall til
+  // /api/prediction for samme sted. Serveren runder uansett til det samme
+  // før vær og skog slås opp, og enhetens eksakte posisjon trenger ikke stå
+  // i en URL.
+  const [predictionCoords, setPredictionCoords] = useState<{ lat: number | null; lon: number | null }>(() => {
+    const lat = initialView?.lat ?? husket?.lat ?? null;
+    const lng = initialView?.lng ?? husket?.lng ?? null;
+    return lat != null && lng != null ? roundForProviderLookup(lat, lng) : { lat: null, lon: null };
   });
   const [tileHotspots, setTileHotspots] = useState<PredictionHotspot[]>([]);
   // Snitt over ALLE kollapsede ruter i utsnittet, ikke bare de 80 vi tegner.
@@ -372,6 +588,7 @@ export function MushroomMap({
   const [tileCellAverage, setTileCellAverage] = useState<number | null>(null);
   const [offlineAreas, setOfflineAreas] = useState<OfflineArea[]>([]);
   const [offlineName, setOfflineName] = useState('');
+  const offlineNameId = useId();
   const [offlineStatus, setOfflineStatus] = useState<string | null>(null);
   const [offlineBusy, setOfflineBusy] = useState(false);
   const [offlineOpen, setOfflineOpen] = useState(false);
@@ -444,11 +661,6 @@ export function MushroomMap({
     lon: predictionCoords.lon,
     speciesId: filters.speciesId
   });
-
-  const cleanupPopupRoots = () => {
-    popupRootsRef.current.forEach((root) => root.unmount());
-    popupRootsRef.current = [];
-  };
 
 
   const updateHeatLayer = useCallback(
@@ -735,29 +947,47 @@ export function MushroomMap({
       // Origin priority: an explicit origin (husket utsnitt ved dyplenke) beats a
       // searched place, which beats the GPS fix — otherwise «steinsopp ved Hamar»
       // computed spots around the user's home instead.
+      // GPS-fiksen er den SISTE vi har (sisteGpsRef), ikke den fra da kartet
+      // ble åpnet: etter en tur og et trykk på «Finn meg» regnet «Lovende»
+      // ellers fortsatt rundt parkeringsplassen.
       const center = map.getCenter();
       const place = searchedPlaceRef.current;
-      const originLat = originOverride?.lat ?? place?.lat ?? latitude ?? center.lat;
-      const originLng = originOverride?.lng ?? place?.lng ?? longitude ?? center.lng;
+      const gpsNaa = sisteGpsRef.current;
+      // Avrundet til ~100 m FØR boksen regnes ut. Utgangspunktet er som regel
+      // enhetens GPS-posisjon, og midt i boksen ligger nettopp det punktet:
+      // rutenett-ruta slår opp vær, skog og høyde hos eksterne tjenester for
+      // det, og boksen står i URL-en. Vær og skog er egenskaper ved området
+      // (provider-precision.ts): rutenettet flyttes høyst ~60 m, og rutene er
+      // minst 1,4 km brede. Ett og samme punkt brukes videre til radiusen og
+      // avstandene i popupene, så tallene på skjermen stemmer med hverandre.
+      const { lat: originLat, lon: originLng } = roundForProviderLookup(
+        originOverride?.lat ?? place?.lat ?? gpsNaa?.lat ?? center.lat,
+        originOverride?.lng ?? place?.lng ?? gpsNaa?.lng ?? center.lng
+      );
 
       type Spot = TopSpot;
 
-      // Start local (5 km) and widen only when the near area has no promising
-      // forest, so users in fields/towns still get pointed at the nearest good
-      // ground instead of a dead-end message. 35 km stays inside the grid
-      // route's bounds cap (2·35/111≈0.63° lat, ≤1.76° lng even at 69°N).
-      const RADII_KM = [5, 10, 20, 35];
+      // Start local (5 km) and widen only when the near area has no forest to
+      // judge, so users in fields/towns still get pointed at the nearest good
+      // ground instead of a dead-end message. Når det ER skog her og
+      // forholdene er for svake, hjelper ingen radius — da stopper søket etter
+      // første kall og sier nettopp det. Reglene (og radiene) står i
+      // src/lib/map/lovende-sok.ts.
+      const RADII_KM = LOVENDE_RADIER_KM;
       // Rutenettet vi ber om. Serveren kan sette den ned (gratisbrukere får 5),
       // og sier i så fall fra i svaret — derfor leses cellestørrelsen derfra.
       const GRID_N = 7;
       let spots: Spot[] = [];
-      let usedRadius = RADII_KM[0];
+      let usedRadius: number = RADII_KM[0];
       let limited = false;
       // Radiusen sirklene tegnes med: halve cellebredden i rutenettet som
       // faktisk ble brukt. Se src/lib/utils/spot-area.ts.
       let areaRadiusM = SEARCH_AREA_RADIUS_M;
+      // Hvorfor søket ga seg uten treff, og om noe svar underveis viste skog.
+      let sluttSteg: LovendeSteg = 'stopp_ingen_skog';
+      let skogSett = false;
 
-      for (let i = 0; i < RADII_KM.length; i++) {
+      for (let i: number | null = 0; i !== null; ) {
         const radiusKm = RADII_KM[i];
         const latDelta = radiusKm / 111;
         const lngDelta = radiusKm / (111 * Math.cos((originLat * Math.PI) / 180));
@@ -798,11 +1028,8 @@ export function MushroomMap({
         // √2 × radius unna. Uten dette sa banneret «6 lovende steder innen 5 km»
         // over en nål som selv skrev «~6,1 km» — to tall som motsier hverandre i
         // samme kartvisning. Vi kutter det som ligger utenfor radiusen vi lover.
-        const found = filterWithinRadiusKm(
-          { lat: originLat, lng: originLng },
-          (data.cells ?? []) as Spot[],
-          radiusKm
-        );
+        const serverCells = (data.cells ?? []) as Spot[];
+        const found = filterWithinRadiusKm({ lat: originLat, lng: originLng }, serverCells, radiusKm);
         if (found.length > 0) {
           spots = found;
           usedRadius = radiusKm;
@@ -814,15 +1041,37 @@ export function MushroomMap({
           break;
         }
 
+        // Ingen treff innenfor radiusen. Avgjørelsen tas på serverens RÅ liste
+        // (hjørnerutene utenfor sirkelen er fortsatt treff neste radius tar
+        // med), sammen med dekningen og den beste scoren i svaret.
+        sluttSteg = nesteSteg({
+          serverCellsEmpty: serverCells.length === 0,
+          coverage: data.coverage,
+          bestScore: data.bestScore,
+          radiusIndex: i,
+          skogSettFor: skogSett
+        });
+        skogSett = skogSett || harSkogdekning(data.coverage);
+        i = nesteRadiusIndex(sluttSteg, i);
+
         // Nothing here — tell the user we're widening before the next attempt.
-        if (i < RADII_KM.length - 1) {
+        if (i !== null) {
           setTopMsg(t('expandingSearch', { km: radiusKm }));
         }
       }
 
       if (spots.length === 0) {
         clearTopSpots();
-        setTopMsg(t('littleForestData', { km: RADII_KM[RADII_KM.length - 1] }));
+        if (sluttSteg === 'stopp_forhold') {
+          // Skogen er her; det er forholdene som ikke holder. Å be en bruker
+          // midt i Nordmarka om å «flytte kartet nærmere skog» var både usant
+          // og kom etter fire kall. Ingen tall og ingen påstand om at det ikke
+          // finnes sopp — bare at vi ikke har noe å love.
+          const art = sid != null ? speciesNamesRef.current.get(sid) ?? null : null;
+          setTopMsg(art ? t('weakConditionsSpecies', { species: art }) : t('weakConditions'));
+        } else {
+          setTopMsg(t('littleForestData', { km: RADII_KM[RADII_KM.length - 1] }));
+        }
         return;
       }
 
@@ -845,7 +1094,15 @@ export function MushroomMap({
         bounds.extend([s.lat + padLat, s.lng + padLng]);
         bounds.extend([s.lat - padLat, s.lng - padLng]);
       });
-      map.fitBounds(bounds.pad(0.2));
+      const utsnitt = bounds.pad(0.2);
+      map.fitBounds(utsnitt);
+      // Kartet står nå der APPEN la det: midt mellom de lovende områdene, ikke
+      // på et sted brukeren har pekt ut. Uten dette leste funnskjemaet
+      // flyttingen som brukerens egen — med fersk GPS måtte hvert pluss etter
+      // «Lovende» velge mellom to posisjoner, og uten GPS ble funnet lagret
+      // midt i boksen uten spørsmål. Målet regnes ut i stedet for å leses av
+      // kartet når flyttingen er ferdig; se senterForBoks for hvorfor.
+      autoSenterRef.current = senterForBoks(utsnitt.getSouthWest(), utsnitt.getNorthEast());
       const sName = sid != null ? speciesNamesRef.current.get(sid) ?? null : null;
       setTopMsg(
         limited
@@ -859,7 +1116,7 @@ export function MushroomMap({
     } finally {
       setTopLoading(false);
     }
-  }, [latitude, longitude, filters.speciesId, renderTopSpots, clearTopSpots, t]);
+  }, [filters.speciesId, renderTopSpots, clearTopSpots, t]);
 
   // One search box, two answers: «hvilken sopp» AND «hvor». Both lookups run
   // on the same keystrokes so «steinsopp» and «Hamar» each resolve without the
@@ -911,7 +1168,7 @@ export function MushroomMap({
       posRef.current = { lat: place.lat, lng: place.lng };
       mapRef.current?.setView([place.lat, place.lng], 12);
       // The prediction panel follows the map, not the GPS, once you search.
-      setPredictionCoords({ lat: place.lat, lon: place.lng });
+      setPredictionCoords(roundForProviderLookup(place.lat, place.lng));
       searchedPlaceRef.current = place;
       setSearchedPlace(place);
       searchReqRef.current++;
@@ -929,7 +1186,12 @@ export function MushroomMap({
     if (!viewport) return;
     // Oslo-plassholderen før GPS-en har svart er ikke et utsnitt noen har valgt.
     // Lagres den, blokkerer den GPS-sentreringen ved hvert senere besøk.
-    if (Math.abs(viewport.lat - 59.91) < 1e-4 && Math.abs(viewport.lng - 10.75) < 1e-4 && viewport.zoom === 11) return;
+    if (
+      Math.abs(viewport.lat - PLASSHOLDER_SENTER.lat) < 1e-4 &&
+      Math.abs(viewport.lng - PLASSHOLDER_SENTER.lng) < 1e-4 &&
+      viewport.zoom === PLASSHOLDER_ZOOM
+    )
+      return;
     lagreHusketUtsnitt({
       lat: viewport.lat,
       lng: viewport.lng,
@@ -950,7 +1212,7 @@ export function MushroomMap({
       searchReqRef.current++; // discard any in-flight lookup for the old text
       void generateTopSpots(id);
     },
-    [generateTopSpots]
+    [generateTopSpots, setFilters]
   );
 
   const clearSpeciesSearch = useCallback(() => {
@@ -960,7 +1222,28 @@ export function MushroomMap({
     setSpeciesSuggestions([]);
     setPlaceSuggestions([]);
     clearTopSpots();
-  }, [clearTopSpots]);
+  }, [clearTopSpots, setFilters]);
+
+  // Et artsfilter skal alltid ha et navn brukeren kan se. Et filter uten navn
+  // (husket fra det gamle artssøket i filterarket, eller fra en dyplenke uten
+  // artnavn) får navnet sitt når artslista er inne, og en art som ikke finnes,
+  // fjernes helt. Reglene står i src/lib/map/artsfilter-navn.ts.
+  useEffect(() => {
+    const retting = rettArtsfilter({
+      speciesId: filters.speciesId,
+      speciesName: selectedSpeciesName,
+      navn: speciesNamesRef.current
+    });
+    if (retting.type === 'sett_navn') {
+      setSelectedSpeciesName(retting.navn);
+      // Søkefeltet viser den valgte arten, som når den velges der — men
+      // skriver ikke over noe brukeren alt har skrevet.
+      setSpeciesSearch((tekst) => tekst || retting.navn);
+    } else if (retting.type === 'fjern_art') {
+      clearSpeciesSearch();
+    }
+    // speciesNamesVersion: artslista ligger i en ref og lastes asynkront.
+  }, [filters.speciesId, selectedSpeciesName, speciesNamesVersion, clearSpeciesSearch]);
 
   // "Soppbilder på kartet": round species photos on each species' best ground.
   const renderSpeciesSpots = useCallback(
@@ -986,7 +1269,7 @@ export function MushroomMap({
           <div style="color:#555;font-size:12px;margin-top:3px">${spot.verdict ?? t('promisingConditionsInArea')} · ${spot.score}/100</div>
           <div style="font-size:12px;margin-top:6px;color:#1f2937">${reasonsHtml}</div>
           <a href="https://www.google.com/maps/search/?api=1&query=${spot.lat},${spot.lng}" target="_blank" rel="noreferrer" style="display:block;margin-top:7px;color:#15803d;font-weight:600;font-size:12px;text-decoration:underline">${t('openInMapNavigate')}</a>
-          <div style="color:#9ca3af;font-size:10px;margin-top:6px">${t('sourcesCredit')}</div>
+          <div style="color:#4b5563;font-size:10px;margin-top:6px">${t('sourcesCredit')}</div>
         </div>`;
         leaflet.marker([spot.lat, spot.lng], { icon }).bindPopup(popup).addTo(layer);
       }
@@ -1007,11 +1290,20 @@ export function MushroomMap({
     setSpeciesLoading(true);
     try {
       const b = map.getBounds();
+      // Står kartet der appen la det, er midten av utsnittet enhetens
+      // posisjon, og ruta slår opp vær for nettopp det punktet. Samme festing
+      // som «Lovende» (se oppslagsboks.ts): utsnittet flyttes høyst ~60 m.
+      const boks = festBoksTilOppslagspresisjon({
+        minLat: b.getSouth(),
+        minLng: b.getWest(),
+        maxLat: b.getNorth(),
+        maxLng: b.getEast()
+      });
       const params = new URLSearchParams({
-        minLat: String(b.getSouth()),
-        maxLat: String(b.getNorth()),
-        minLng: String(b.getWest()),
-        maxLng: String(b.getEast()),
+        minLat: String(boks.minLat),
+        maxLat: String(boks.maxLat),
+        minLng: String(boks.minLng),
+        maxLng: String(boks.maxLng),
         n: '6'
       });
       const res = await fetch(`/api/prediction/species-spots?${params.toString()}`, { cache: 'no-store' });
@@ -1046,72 +1338,125 @@ export function MushroomMap({
     const map = mapRef.current;
     const cluster = occClusterRef.current;
     if (!map || !cluster) return;
+    // Tas FØR grenen under som bare tømmer laget, så også den gjør pågående
+    // hentinger ugyldige — samme grep som i loadFindings.
+    const gen = ++occLoadGenRef.current;
     if (!showOccurrencesRef.current) {
       cluster.clearLayers();
+      lastOccFetchRef.current = null;
+      lastOccDrawRef.current = null;
       return;
     }
+    // Et svar skal bare inn i laget det ble hentet for: er en nyere lasting i
+    // gang, eller kartet (og dermed laget) byttet ut i mellomtiden, forkastes
+    // det — og huskes heller ikke, for da ville neste lasting tro at markørene
+    // alt sto i det nye laget.
+    const utdatert = () => gen !== occLoadGenRef.current || occClusterRef.current !== cluster;
     const b = map.getBounds();
-    const gen = ++occLoadGenRef.current;
-    type OccRow = {
-      latitude: number;
-      longitude: number;
-      species_id: number | null;
-      observed_at?: string | null;
-      coordinate_uncertainty_m?: number | null;
-    };
-    const baseArgs = {
-      min_lat: b.getSouth(),
-      min_lng: b.getWest(),
-      max_lat: b.getNorth(),
-      max_lng: b.getEast(),
-      p_species_id: filters.speciesId,
-      p_limit: OCCURRENCE_FETCH_LIMIT
-    };
+    const visning: Utsnitt = { south: b.getSouth(), west: b.getWest(), north: b.getNorth(), east: b.getEast() };
     // Årsfilteret hører hjemme i RPC-en (migrasjon 054): filtrerer vi klient-
     // side inne i det avkuttede utvalget, kan «siste 5 år» vise tomt kart i
     // tette utsnitt selv om ferske funn finnes — trunkeringsskjevheten under.
     const yearCutoff = occurrenceYearCutoff(occYearRef.current, new Date());
-    let serverYearFiltered = yearCutoff != null && !occYearParamUnsupportedRef.current;
-    // PostgREST kutter hvert svar ved 1000 rader uansett hva p_limit sier, så
-    // dette må pagineres — ellers viser kartet 1000 punkter som (fordi RPC-en
-    // ikke sorterer) i praksis er én til to arter, og ser komplett ut.
-    let result = await fetchRpcPaged<OccRow>(
-      supabase,
-      'get_occurrences_in_bounds',
-      serverYearFiltered ? { ...baseArgs, p_min_year: yearCutoff } : baseArgs,
-      { limit: OCCURRENCE_FETCH_LIMIT }
-    );
-    if (result.error && serverYearFiltered) {
-      // fetchRpcPaged KASTER ikke — feil kommer som result.error. Kun den
-      // KONKRETE «ukjent signatur»-feilen (PGRST202: «Could not find the
-      // function … in the schema cache») betyr at migrasjon 054 ikke er
-      // kjørt — da husker vi det for økta og filtrerer klient-side. Alle
-      // andre feil (nettverksglipp midt i pagineringen, timeout på fjelltur)
-      // skal IKKE degradere økta permanent: neste panorering prøver
-      // server-side igjen, og denne lastingen faller bare tilbake én gang.
-      const missingParam =
-        result.error.code === 'PGRST202' || /schema cache|p_min_year/i.test(result.error.message);
-      if (missingParam) occYearParamUnsupportedRef.current = true;
-      serverYearFiltered = false;
-      result = await fetchRpcPaged<OccRow>(supabase, 'get_occurrences_in_bounds', baseArgs, {
-        limit: OCCURRENCE_FETCH_LIMIT
+
+    // ── Hentingen: gjenbruk når det forrige hentede utsnittet dekker det som
+    // vises (samme art og årsfilter), ellers hent. Se utsnitt-gjenbruk.ts.
+    // Zoomet brukeren inn, lå radene der allerede — og likevel ble opptil 6000
+    // av dem hentet på nytt og hver markør bygget om.
+    const forrige = lastOccFetchRef.current;
+    const forrigeSammeNokkel =
+      forrige !== null && forrige.speciesId === filters.speciesId && forrige.yearCutoff === yearCutoff ? forrige : null;
+    let henting: OccFetch;
+    if (forrigeSammeNokkel && kanGjenbrukeHenting(forrigeSammeNokkel, visning)) {
+      henting = forrigeSammeNokkel;
+    } else {
+      const argsFor = (u: Utsnitt) => ({
+        min_lat: u.south,
+        min_lng: u.west,
+        max_lat: u.north,
+        max_lng: u.east,
+        p_species_id: filters.speciesId,
+        p_limit: OCCURRENCE_FETCH_LIMIT
       });
+      let serverYearFiltered = yearCutoff != null && !occYearParamUnsupportedRef.current;
+      // PostgREST kutter hvert svar ved 1000 rader uansett hva p_limit sier, så
+      // dette må pagineres — ellers viser kartet 1000 punkter som (fordi RPC-en
+      // ikke sorterer) i praksis er én til to arter, og ser komplett ut.
+      const hent = (u: Utsnitt, medServerAar: boolean) =>
+        fetchRpcPaged<OccRow>(
+          supabase,
+          'get_occurrences_in_bounds',
+          medServerAar ? { ...argsFor(u), p_min_year: yearCutoff } : argsFor(u),
+          { limit: OCCURRENCE_FETCH_LIMIT }
+        );
+      // Litt mer enn det som vises, så små panoreringer treffer det hentede —
+      // men bare når forrige henting sier at det er god plass under taket.
+      let utsnitt = velgHenteutsnitt({ visning, forrige: forrigeSammeNokkel, tak: OCCURRENCE_FETCH_LIMIT });
+      let result = await hent(utsnitt, serverYearFiltered);
+      if (result.error && serverYearFiltered) {
+        // fetchRpcPaged KASTER ikke — feil kommer som result.error. Kun den
+        // KONKRETE «ukjent signatur»-feilen (PGRST202: «Could not find the
+        // function … in the schema cache») betyr at migrasjon 054 ikke er
+        // kjørt — da husker vi det for økta og filtrerer klient-side. Alle
+        // andre feil (nettverksglipp midt i pagineringen, timeout på fjelltur)
+        // skal IKKE degradere økta permanent: neste panorering prøver
+        // server-side igjen, og denne lastingen faller bare tilbake én gang.
+        const missingParam =
+          result.error.code === 'PGRST202' || /schema cache|p_min_year/i.test(result.error.message);
+        if (missingParam) occYearParamUnsupportedRef.current = true;
+        serverYearFiltered = false;
+        result = await hent(utsnitt, false);
+      }
+      // Polstringen skal aldri koste et helt utsnitt: ble den polstrede
+      // hentingen avkuttet, hentes akkurat det som vises. Taket ble hevet til
+      // 6000 nettopp for at et vanlig utsnitt skulle komme hel fram.
+      if (!result.error && result.truncated && utsnitt !== visning) {
+        utsnitt = visning;
+        result = await hent(utsnitt, serverYearFiltered);
+      }
+      // En nyere lasting er i gang — verken husk eller tegn denne.
+      if (utdatert()) return;
+      henting = {
+        utsnitt,
+        antallRader: result.rows.length,
+        avkortet: result.truncated,
+        speciesId: filters.speciesId,
+        yearCutoff,
+        serverYearFiltered,
+        rows: result.rows
+      };
+      // Et feilet svar huskes ikke — neste flytt skal prøve igjen.
+      lastOccFetchRef.current = result.error ? null : henting;
     }
-    const { rows: data, truncated } = result;
+
+    // ── Tegningen: bare når noe av det markørene er bygget av, er endret.
+    // Dekker det hentede fortsatt det som vises, og filtrene og artsdataene er
+    // de samme, står markørene der de skal. Da telles det bare på nytt.
+    const filter = occEdibilityRef.current;
+    const seasonOnly = occSeasonRef.current;
+    const nowMonth = new Date().getMonth() + 1;
+    const tegnet = lastOccDrawRef.current;
+    if (
+      tegnet !== null &&
+      tegnet.henting === henting &&
+      tegnet.filter === filter &&
+      tegnet.seasonOnly === seasonOnly &&
+      tegnet.maaned === nowMonth &&
+      tegnet.navn === speciesNamesRef.current &&
+      tegnet.t === t
+    ) {
+      setOccCount(tegnet.punkter.filter((punkt) => ligger(punkt, visning)).length);
+      setOccTruncated(henting.avkortet);
+      return;
+    }
+
     const leaflet = (await import('leaflet')).default;
     // En nyere lasting er i gang — ikke rydd clusteret dens resultat skal inn i.
-    if (gen !== occLoadGenRef.current) return;
+    if (utdatert()) return;
     cluster.clearLayers();
     const names = speciesNamesRef.current;
     const edibilities = speciesEdibilityRef.current;
     const shapes = speciesShapeRef.current;
-    const EDIBILITY_HEX: Record<string, string> = {
-      edible: '#059669',
-      conditionally_edible: '#f59e0b',
-      inedible: '#f97316',
-      toxic: '#dc2626',
-      deadly: '#7f1d1d'
-    };
     const EDIBILITY_LABEL: Record<string, string> = {
       edible: t('edEdible'),
       conditionally_edible: t('edConditionallyEdible'),
@@ -1144,9 +1489,6 @@ export function MushroomMap({
       if (month === 1 && day === 1) return m[1];
       return `${MONTHS_NO[month - 1]} ${m[1]}`;
     };
-    const filter = occEdibilityRef.current;
-    const seasonOnly = occSeasonRef.current;
-    const nowMonth = new Date().getMonth() + 1;
     const inSeasonMonth = (d?: string | null) => {
       if (!d) return true; // no date → keep (graceful before dates are loaded)
       const m = /^\d{4}-(\d{2})/.exec(d);
@@ -1155,33 +1497,26 @@ export function MushroomMap({
       const diff = Math.min((month - nowMonth + 12) % 12, (nowMonth - month + 12) % 12);
       return diff <= 1; // within ±1 month of now (wraps the year boundary)
     };
-    const all = data;
-    const points = all.filter((o) => {
+    const points = henting.rows.filter((o) => {
       // Klient-fallbacken for årsfilteret — kun aktiv når RPC-en mangler
       // p_min_year (før migrasjon 054); ellers har serveren alt filtrert.
-      if (!serverYearFiltered && !passesYearCutoff(o.observed_at, yearCutoff)) return false;
+      if (!henting.serverYearFiltered && !passesYearCutoff(o.observed_at, yearCutoff)) return false;
       if (seasonOnly && !inSeasonMonth(o.observed_at)) return false;
       if (filter === 'all') return true;
       const e = o.species_id != null ? edibilities.get(o.species_id) : undefined;
       if (filter === 'edible') return e === 'edible' || e === 'conditionally_edible';
       return e === 'toxic' || e === 'deadly';
     });
-    for (const o of points) {
+    // Popupen bygges når den ÅPNES, ikke for hvert av opptil 6000 punkter på
+    // forhånd. Teksten er ordrett den samme som før — forbeholdene i den er
+    // bevisst ærlighet og skal ikke kortes ned.
+    const byggPopup = (o: OccRow): string => {
       const name = o.species_id != null ? names.get(o.species_id) ?? t('mushroomFallback') : t('mushroomFallback');
       const edi = o.species_id != null ? edibilities.get(o.species_id) : undefined;
-      const color = (edi && EDIBILITY_HEX[edi]) || '#8b5e34';
       const ediLabel = edi ? EDIBILITY_LABEL[edi] : null;
-      // Formen sier HVA som ble funnet, fargen sier om det kan spises. Alle
-      // funn var identiske prikker før — se speciesMarkerIcon.ts for hvorfor det
-      // ble silhuetter og ikke emoji (Unicode har bare to soppemoji, og hver
-      // plattform tegner dem ulikt).
-      const shape = o.species_id != null ? shapes.get(o.species_id) ?? 'generisk' : 'generisk';
-      const icon = leaflet.divIcon({
-        className: 'occ-marker',
-        html: markerHtml(shape, color, 16),
-        iconSize: [16, 16],
-        iconAnchor: [8, 8]
-      });
+      // Tekstfargen, ikke markørfargen: den er for lys til å leses på hvitt
+      // (gult ga 2,15:1). Se src/lib/map/spiselighetsfarger.ts.
+      const color = (edi && SPISELIGHET_TEKSTFARGE[edi]) || UKJENT_TEKSTFARGE;
       // SPISELIGHET UTEN KONTEKST ER EN TRYGGHETSERKLÆRING.
       //
       // Her sto ordet «Spiselig» alene i grønt, rett under artsnavnet, i en boks
@@ -1207,16 +1542,44 @@ export function MushroomMap({
       const uncertaintyHtml = uncertaintyLabel
         ? `<br/><span style="color:#6b7280;font-size:11px">${t('coordUncertainty', { value: uncertaintyLabel })}</span>`
         : '';
-      const popup = `<div><b>${name}</b>${ediHtml}<br/><span style="color:#555;font-size:12px">${t('registeredFinding')}${foundHtml}</span>${uncertaintyHtml}<br/><span style="color:#6b7280;font-size:11px">${t('historicalFindingNote')}</span><br/><a href="https://www.google.com/maps/search/?api=1&query=${o.latitude},${o.longitude}" target="_blank" rel="noreferrer" style="color:#15803d;font-weight:600;font-size:12px;text-decoration:underline">${t('openInMap')}</a><br/><span style="color:#9ca3af;font-size:10px">Artsdatabanken/GBIF</span></div>`;
-      leaflet.marker([o.latitude, o.longitude], { icon }).bindPopup(popup).addTo(cluster);
+      return `<div><b>${name}</b>${ediHtml}<br/><span style="color:#555;font-size:12px">${t('registeredFinding')}${foundHtml}</span>${uncertaintyHtml}<br/><span style="color:#6b7280;font-size:11px">${t('historicalFindingNote')}</span><br/><a href="https://www.google.com/maps/search/?api=1&query=${o.latitude},${o.longitude}" target="_blank" rel="noreferrer" style="color:#15803d;font-weight:600;font-size:12px;text-decoration:underline">${t('openInMap')}</a><br/><span style="color:#4b5563;font-size:10px">Artsdatabanken/GBIF</span></div>`;
+    };
+    for (const o of points) {
+      const edi = o.species_id != null ? edibilities.get(o.species_id) : undefined;
+      const color = (edi && SPISELIGHET_MARKORFARGE[edi]) || UKJENT_MARKORFARGE;
+      // Formen sier HVA som ble funnet, fargen sier om det kan spises. Alle
+      // funn var identiske prikker før — se speciesMarkerIcon.ts for hvorfor det
+      // ble silhuetter og ikke emoji (Unicode har bare to soppemoji, og hver
+      // plattform tegner dem ulikt).
+      const shape = o.species_id != null ? shapes.get(o.species_id) ?? 'generisk' : 'generisk';
+      const icon = leaflet.divIcon({
+        className: 'occ-marker',
+        html: markerHtml(shape, color, 16),
+        iconSize: [16, 16],
+        iconAnchor: [8, 8]
+      });
+      leaflet
+        .marker([o.latitude, o.longitude], { icon })
+        .bindPopup(() => byggPopup(o))
+        .addTo(cluster);
     }
-    if (gen !== occLoadGenRef.current) return;
-    setOccCount(points.length);
+    lastOccDrawRef.current = {
+      henting,
+      filter,
+      seasonOnly,
+      maaned: nowMonth,
+      navn: names,
+      t,
+      punkter: points.map((o) => ({ lat: o.latitude, lng: o.longitude }))
+    };
+    // Bare det som faktisk er i det som vises, telles — hentingen kan være
+    // polstret, og etiketten sier «i utsnittet».
+    setOccCount(points.filter((o) => ligger({ lat: o.latitude, lng: o.longitude }, visning)).length);
     // Avkuttingen skal ikke være stille: når vi traff taket viser kartet et
     // utvalg, og spiselighets-/sesongfiltrene over har filtrert INNI det
     // utvalget. Et tomt «giftige»-kart kan da skyldes avkuttingen, ikke at det
     // mangler giftige funn — og må aldri leses som en trygghetserklæring.
-    setOccTruncated(truncated);
+    setOccTruncated(henting.avkortet);
   }, [filters.speciesId, supabase, t]);
 
   useEffect(() => {
@@ -1230,7 +1593,14 @@ export function MushroomMap({
     if (next) {
       void loadOccurrences();
     } else {
+      // En henting som er underveis, skal ikke fylle laget igjen etter at det
+      // er slått av — den sjekker generasjonen når svaret kommer.
+      occLoadGenRef.current++;
       occClusterRef.current?.clearLayers();
+      // Laget er tomt: det finnes verken en henting eller en tegning å
+      // gjenbruke når det slås på igjen.
+      lastOccFetchRef.current = null;
+      lastOccDrawRef.current = null;
       setOccCount(0);
       setOccTruncated(false);
     }
@@ -1352,13 +1722,20 @@ export function MushroomMap({
     const zoomForAccuracy = (m: number) => (m <= 20 ? 17 : m <= 50 ? 16 : m <= 150 ? 15 : 14);
     let firstFix = true;
 
-    const render = async (lat: number, lng: number, accuracy: number, isFinal: boolean) => {
+    // `accuracy === null` = ingen måling nå, bare den sist kjente posisjonen.
+    const render = async (lat: number, lng: number, accuracy: number | null, isFinal: boolean) => {
       if (controller.signal.aborted) return;
       const leaflet = (await import('leaflet')).default;
       if (controller.signal.aborted || mapRef.current !== map) return;
 
       // Accuracy circle (radius in meters) — shrinks as the GPS sharpens.
-      if (meCircleRef.current) {
+      // Uten en måling tegnes ingen sirkel. Reserven tegnet før en sirkel på
+      // 100 m rundt en posisjon som kunne være førti minutter gammel — en
+      // nøyaktighet ingen hadde målt.
+      if (accuracy === null) {
+        meCircleRef.current?.remove();
+        meCircleRef.current = null;
+      } else if (meCircleRef.current) {
         meCircleRef.current.setLatLng([lat, lng]).setRadius(accuracy);
       } else {
         meCircleRef.current = leaflet
@@ -1387,18 +1764,24 @@ export function MushroomMap({
       }
 
       posRef.current = { lat, lng };
+      if (accuracy !== null) sisteGpsRef.current = { lat, lng };
 
       // Recenter on the first fix and do one gentle zoom-refinement on the final
       // fix; intermediate fixes only move the dot/circle so we never fight the
       // user panning or pinching while the GPS is still sharpening.
       if (firstFix || isFinal) {
         firstFix = false;
-        map.setView([lat, lng], zoomForAccuracy(accuracy));
+        map.setView([lat, lng], accuracy === null ? 14 : zoomForAccuracy(accuracy));
+        // Kartet står nå der appen la det, ikke der brukeren pekte.
+        autoSenterRef.current = { lat, lng };
       }
     };
 
     setLocating(true);
-    watchPositionUntilAccurate({
+    // finnFerskPosisjon, ikke watchPositionUntilAccurate direkte: i iOS-skallet
+    // er den første «målingen» ofte den sist kjente posisjonen, og med god
+    // nøyaktighet stoppet letingen der — prikken havnet der brukeren VAR.
+    finnFerskPosisjon({
       targetAccuracyM: 25,
       timeoutMs: 12_000,
       signal: controller.signal,
@@ -1410,16 +1793,23 @@ export function MushroomMap({
         void render(lat, lng, accuracy, true);
       })
       .catch(() => {
-        // Aborted/denied/no-fix → fall back to the hook's last known position.
-        if (!controller.signal.aborted && latitude != null && longitude != null) {
-          void render(latitude, longitude, 100, true);
+        if (controller.signal.aborted) return;
+        // Avslått eller ingen måling. Et trykk som bare viste «…» i tolv
+        // sekunder og så ingenting, leses som at knappen er død — si fra.
+        // Samme id som varselet ved åpning, så de to aldri står oppå hverandre.
+        const sist = sisteGpsRef.current;
+        if (sist) {
+          void render(sist.lat, sist.lng, null, true);
+          toast(t('gpsLastKnown'), { id: 'map-geolocation-error' });
+        } else {
+          toast.error(t('gpsUnavailable'), { id: 'map-geolocation-error' });
         }
       })
       .finally(() => {
         if (geoAbortRef.current === controller) geoAbortRef.current = null;
         setLocating(false);
       });
-  }, [latitude, longitude]);
+  }, [t]);
 
   const focusSavedArea = useCallback((area: OfflineArea) => {
     const map = mapRef.current;
@@ -1440,7 +1830,10 @@ export function MushroomMap({
       // CacheStorage for alltid, og lagringen brukeren trodde han frigjorde var
       // fortsatt opptatt.
       const area = offlineAreas.find((item) => item.id === areaId);
-      if (area) await removeOfflineAreaTiles(area);
+      // De andre områdene sendes med: fliser de deler med dette (to lagrede
+      // områder som overlapper), skal bli liggende. Ellers tok «Slett» på det
+      // ene med seg kartet til det andre.
+      if (area) await removeOfflineAreaTiles(area, offlineAreas);
       setOfflineAreas(removeOfflineAreaById(areaId));
       void refreshStorageUsage();
     },
@@ -1514,10 +1907,30 @@ export function MushroomMap({
     setOfflineBusy(true);
 
     try {
-      const zoomLevels = Array.from(new Set([Math.max(8, zoom - 1), zoom, Math.min(18, zoom + 1)]));
+      // Nivået brukeren ser på først, så ett ut og ett inn — og aldri dypere
+      // enn bakgrunnskartet faktisk har fliser for. Reglene står i
+      // offlineZoomLevels (src/lib/utils/offlineMap.ts).
+      const { zoom: lagretZoom, zoomLevels } = offlineZoomLevels(zoom, tileTemplate);
       const cacheResult = await cacheMapTilesForArea(area.bounds, zoomLevels, tileTemplate);
+      // ET OMRÅDE UTEN FLISER ER IKKE ET OFFLINE-KART.
+      //
+      // Lista under legger det nye området øverst og kaster det eldste ut når
+      // den er full — med flisene. På én strek dekning byttet et forsøk som
+      // ikke fikk ned én eneste flis, ut et ekte, nedlastet område mot et tomt,
+      // akkurat der det gamle ikke kan lastes ned igjen, og kvitteringen sa
+      // «Området ble lagret». cacheMapTilesForArea avviser nå et slikt forsøk
+      // (NoTilesCachedError, fanget under); denne sjekken står her i tillegg,
+      // så lista aldri avhenger av at hjelperen kaster.
+      if (cacheResult.cached === 0) {
+        setOfflineStatus(t('offlineCacheFailed'));
+        return;
+      }
       const areaWithTiles: OfflineArea = {
         ...area,
+        // Nivået som faktisk ble lagret. Står kartet på zoom 19–20, er det
+        // forstørrede fliser fra nivå 18 brukeren ser; offline-siden tegner
+        // området på det nivået som står her, og fant før ingen fliser.
+        zoom: lagretZoom,
         cachedTiles: cacheResult.cached,
         failedTiles: cacheResult.failed,
         // Nødvendig for å kunne slette akkurat disse flisene senere.
@@ -1528,20 +1941,42 @@ export function MushroomMap({
       const kept = [areaWithTiles, ...offlineAreas.filter((item) => item.id !== areaWithTiles.id)];
       const next = kept.slice(0, 8);
       // Område nr. 9 forsvant stille fra lista mens flisene ble igjen i cachen.
-      // Faller det ut av visningen, skal lagringen følge med ut.
-      for (const evicted of kept.slice(8)) void removeOfflineAreaTiles(evicted);
+      // Faller det ut av visningen, skal lagringen følge med ut — men bare
+      // flisene ingen av de gjenværende områdene deler. Uten `next` her mistet
+      // området som nettopp ble lagret flisene sine i samme øyeblikk, når det
+      // eldste området dekket samme sted (samme skog lagret før hver tur).
+      for (const evicted of kept.slice(8)) void removeOfflineAreaTiles(evicted, next);
       saveOfflineAreas(next);
       setOfflineAreas(next);
       setOfflineName('');
       void refreshStorageUsage();
-
-      if (cacheResult.cached === 0 && cacheResult.failed > 0) {
-        setOfflineStatus(t('offlineCacheFailed'));
-      } else {
-        setOfflineStatus(t('offlineSaved', { count: cacheResult.cached }));
-      }
-    } catch {
-      setOfflineStatus(t('offlineSaveError'));
+      // «Klare offline» loves bare når ALLE flisene kom ned. Mangler noen —
+      // det vanlige når nettet faller ut midt i lagringen — har kartet hull, og
+      // kvitteringen sa før «Område lagret. 30 kartfliser klare offline» uten
+      // å nevne de 50 som manglet.
+      setOfflineStatus(
+        cacheResult.failed > 0
+          ? t('offlineSavedPartial', {
+              failed: cacheResult.failed,
+              total: cacheResult.cached + cacheResult.failed
+            })
+          : t('offlineSaved', { count: cacheResult.cached })
+      );
+    } catch (error) {
+      // Lista og de lagrede områdene er urørt, og teksten sier nettopp det.
+      // Navnet brukeren skrev får stå, så neste forsøk er ett trykk.
+      //  - For stort område: ingenting ble hentet. Brukeren må zoome inn.
+      //  - Ingen fliser lot seg lagre: prøv igjen med bedre dekning.
+      //  - Alt annet er en uventet feil.
+      setOfflineStatus(
+        t(
+          error instanceof OfflineAreaTooLargeError
+            ? 'offlineAreaTooLarge'
+            : error instanceof NoTilesCachedError
+              ? 'offlineCacheFailed'
+              : 'offlineSaveError'
+        )
+      );
     } finally {
       setOfflineBusy(false);
     }
@@ -1618,6 +2053,9 @@ export function MushroomMap({
       }
 
       mapRef.current?.closePopup();
+      // Nåla tas ut med en gang, så den ikke står igjen hvis hentingen under
+      // feiler. Laget stemmes av mot svaret, og et feilet svar endrer ingenting.
+      funnlagRef.current?.fjern(findingId);
       await loadFindingsRef.current?.();
 
       // Strengene hentes HER, i et tre som har next-intl-provideren. Varselet
@@ -1665,11 +2103,105 @@ export function MushroomMap({
   }, [handleDeleteFinding]);
   const deleteFinding = useCallback((findingId: string) => deleteFindingRef.current(findingId), []);
 
+  /**
+   * Melding av en annens funn, fra popupen.
+   *
+   * Lagringen er forumets egen (useReportContent): samme tabell, samme
+   * moderatorkø, og `finding_id` har ligget klar i den siden migrasjon 001 —
+   * det var bare kartet som manglet knappen. Popupen kan ikke kalle kroken
+   * selv; den lever i en løsrevet React-rot uten QueryClient.
+   *
+   * Feilteksten hentes HER, i et tre som har next-intl-provideren, og kastes
+   * videre til popupen som viser den. Aldri den rå feilmeldingen: det er enten
+   * en intern kode eller engelsk PostgREST-tekst.
+   *
+   * Meldingen sier ikke hvem som meldte til noen andre enn moderatorene, og
+   * popupen viser ingenting om andres meldinger.
+   */
+  const { mutateAsync: sendReport } = useReportContent();
+  const handleReportFinding = useCallback(
+    async (findingId: string, payload: FindingReportPayload) => {
+      try {
+        await sendReport({ findingId, reason: payload.reason, description: payload.description });
+      } catch (error) {
+        throw new Error(forumError(error, tReport('submitError')));
+      }
+    },
+    [forumError, sendReport, tReport]
+  );
+
+  /**
+   * Blokkering av den som la inn et funn, fra popupen.
+   *
+   * Tre ting skjer, i denne rekkefølgen:
+   *  1. Raden skrives. `ignoreDuplicates` (ON CONFLICT DO NOTHING), ikke en
+   *     vanlig upsert: blocked_users har ingen UPDATE-policy, så en upsert på
+   *     en rad som alt finnes avvises av RLS. Det skjer når forrige forsøk
+   *     gikk gjennom, men laget ikke ble lastet på nytt — og da skal ikke et
+   *     nytt trykk svare «kunne ikke blokkere» om en bruker som ER blokkert.
+   *  2. Brukerens nåler tas ut av laget med en gang, av markørene vi alt har.
+   *     Kartet skal ikke stå med funnene til en du nettopp blokkerte fordi en
+   *     henting feilet.
+   *  3. Laget hentes på nytt, og forumets spørringer gjøres ugyldige — de
+   *     leser samme blokkeringsliste (se BLOCK_INVALIDATION_KEYS).
+   *
+   * Kaster med ferdig oversatt tekst, som popupen viser.
+   */
+  const handleBlockFindingAuthor = useCallback(
+    async (finding: MapFinding) => {
+      const blokkertId = finding.user_id;
+      if (!currentUserId || !blokkertId || blokkertId === currentUserId) {
+        throw new Error(tBlock('failed'));
+      }
+      // Alt som går galt her — også et kall som kaster — blir til den
+      // oversatte teksten. Popupen viser det som kastes ordrett.
+      let skrevet = false;
+      try {
+        const { error } = await supabase
+          .from('blocked_users')
+          .upsert(
+            { blocker_id: currentUserId, blocked_id: blokkertId },
+            { onConflict: 'blocker_id,blocked_id', ignoreDuplicates: true }
+          );
+        skrevet = !error;
+      } catch {
+        skrevet = false;
+      }
+      if (!skrevet) throw new Error(tBlock('failed'));
+
+      blokkerte.leggTil(blokkertId);
+      mapRef.current?.closePopup();
+      funnlagRef.current?.fjernFraBruker(blokkertId);
+      invalidateAfterBlockChange(queryClient);
+      // Navnet kommer fra funnet; uten brukernavn sier varselet «Ukjent bruker».
+      toast.success(tBlock('blocked', { name: finding.username?.trim() || tBlockedUsers('unknown') }));
+      void loadFindingsRef.current?.();
+    },
+    [blokkerte, currentUserId, queryClient, supabase, tBlock, tBlockedUsers]
+  );
+
+  // Stabile innganger, av samme grunn som deleteFinding over: de står i
+  // deps-lista til loadFindings, som en effekt henter funn på.
+  const reportFindingRef = useRef(handleReportFinding);
+  const blockFindingAuthorRef = useRef(handleBlockFindingAuthor);
+  useEffect(() => {
+    reportFindingRef.current = handleReportFinding;
+    blockFindingAuthorRef.current = handleBlockFindingAuthor;
+  }, [handleReportFinding, handleBlockFindingAuthor]);
+  const reportFinding = useCallback(
+    (findingId: string, payload: FindingReportPayload) => reportFindingRef.current(findingId, payload),
+    []
+  );
+  const blockFindingAuthor = useCallback((finding: MapFinding) => blockFindingAuthorRef.current(finding), []);
+
   const loadFindings = useCallback(async () => {
     const map = mapRef.current;
     const clusters = clusterRef.current;
     if (!map || !clusters) return;
 
+    // Tas FØR alt annet — også før grenen under som bare tømmer laget — så
+    // hvert nytt kall gjør alle eldre, pågående hentinger ugyldige.
+    const gen = ++findingsGenRef.current;
     const bounds = map.getBounds();
     const monthFilter = filters.period === 'month' ? new Date().getMonth() + 1 : null;
 
@@ -1689,10 +2221,15 @@ export function MushroomMap({
     // «Kun mine funn» vise INGENTING. Å falle tilbake til det offentlige laget
     // ville vist alle andres funn under en avkrysningsboks som sier «mine».
     if (filters.onlyMine && !currentUserId) {
-      cleanupPopupRoots();
-      clusters.clearLayers();
+      funnlagRef.current?.tom();
+      findingsLayerShowsRef.current = null;
       return;
     }
+
+    // Hvem leseren har blokkert. Startes FØR hentingen under og ventes på
+    // etter den, så de to går samtidig og laget tegnes én gang — filtrert.
+    // «Kun mine funn» viser bare egne funn og trenger ikke lista.
+    const blokkerteLofte = filters.onlyMine ? null : blokkerte.ider();
 
     const { data, error } = filters.onlyMine && currentUserId
       ? await (async () => {
@@ -1731,59 +2268,98 @@ export function MushroomMap({
           month_filter: monthFilter
         });
 
+    // Avvises aldri, og venter høyst BLOKKERTE_FRIST_MS: feiler oppslaget
+    // eller blir det hengende, vises funnene som før. Settet er huskens eget:
+    // en liste som kom etter fristen, men før funnene, er med i filteret under.
+    const blokkerteIder = blokkerteLofte ? await blokkerteLofte : null;
+
+    // Et nyere kall har overtatt (panorering, filterendring, innlogging som
+    // løste seg). Dets svar skal inn i laget, ikke dette.
+    if (gen !== findingsGenRef.current) return;
+
     if (error) {
+      // Det som lå der fra før får stå — med ett unntak: fellesskapets funn
+      // under en avkrysning som sier «mine». Da er et tomt lag det ærlige.
+      if (filters.onlyMine && findingsLayerShowsRef.current === 'shared') {
+        funnlagRef.current?.tom();
+        findingsLayerShowsRef.current = null;
+      }
       return;
     }
 
     const findings = (data ?? []) as MapFinding[];
-    const filtered = findings.filter((finding) => passPeriodFilter(finding.found_at, filters.period));
+    // Fellesskapets lag uten funnene til dem leseren har blokkert. Viewet bak
+    // (public_findings) kjenner ikke blokkeringslista, så dette er stedet —
+    // se src/lib/moderation/blokkering.ts.
+    const synlige = blokkerteIder ? utenBlokkerte(findings, blokkerteIder) : findings;
+    const filtered = synlige.filter((finding) => passPeriodFilter(finding.found_at, filters.period));
 
-    cleanupPopupRoots();
-    clusters.clearLayers();
+    // Laget hører til kartet det ble laget for. Er kartet byttet ut mens vi
+    // ventet på svaret, finnes ikke laget dette svaret skulle inn i.
+    const funnlag = funnlagRef.current;
+    if (!funnlag || funnlag.klynger !== clusters || clusterRef.current !== clusters) return;
 
-    const leaflet = (await import('leaflet')).default;
+    // Herfra og ut er det ingen venting: generasjonen er sjekket over, og
+    // resten skjer i én usplittet bolk. To overlappende kjøringer kan da ikke
+    // flette seg og etterlate begge settene i laget.
+    //
+    // Bytter laget kilde — egne funn ↔ fellesskapets — bygges alt på nytt:
+    // samme funn står på hvert sitt punkt i de to (eksakt for eieren,
+    // forskjøvet for andre), og ingenting fra det ene skal bli stående i det
+    // andre.
+    const viser = filters.onlyMine ? 'own' : 'shared';
+    if (findingsLayerShowsRef.current !== viser) funnlag.tom();
+    findingsLayerShowsRef.current = viser;
 
-    for (const finding of filtered) {
-      if (!finding.display_lat || !finding.display_lng) continue;
-
-      const marker = leaflet.marker([finding.display_lat, finding.display_lng], {
-        icon: createMarkerIcon(leaflet, finding.edibility)
-      });
-
-      const popupContainer = document.createElement('div');
-      const popupRoot = createRoot(popupContainer);
-
-      // Provideren MÅ være med her — den bor i findingPopupElement, som HAR en
-      // test ved siden av seg. Dette er en løsrevet React-rot (Leaflet eier
-      // elementet), og React-kontekst krysser ikke rot-grenser: uten provider
-      // kaster FindingPopup på første linje og roten står tom. Fra 26. juni til
-      // 1. august ga hvert klikk på en soppmarkør en tom hvit boks for ALLE
-      // brukere. Ingen test laster denne fila, så wrappingen skal ikke ligge her.
-      popupRoot.render(
-        findingPopupElement({
-          finding,
-          displayName:
-            finding.species_id != null ? speciesNamesRef.current.get(finding.species_id) : undefined,
-          locale,
-          messages: messages as Record<string, unknown>,
-          // Kun eierens egne funn. Det offentlige laget viser andres nåler
-          // også, og public_findings har user_id, så sammenligningen holder
-          // begge lagene i sjakk.
-          canDelete: currentUserId != null && finding.user_id === currentUserId,
-          onDelete: deleteFinding
-        })
-      );
-      popupRootsRef.current.push(popupRoot);
-
-      marker.bindPopup(popupContainer, {
-        closeButton: true,
-        maxWidth: 320,
-        minWidth: 240
-      });
-
-      clusters.addLayer(marker);
-    }
-  }, [currentUserId, currentUsername, filters, supabase, locale, messages, deleteFinding]);
+    // AVSTEMMING, IKKE TØMMING. Laget ble tømt og bygget opp ved hver henting,
+    // og Leaflet lukker popupen til en markør som fjernes: åpnet du et funn,
+    // og kartet flyttet seg for å gi popupen plass, forsvant den når den nye
+    // hentingen var ferdig. Nå blir markører for funn som fortsatt er med,
+    // stående — med popupen og alt brukeren har skrevet i den. Se funnlag.ts.
+    funnlag.synk(filtered, (finding) => {
+      // Kun eierens egne funn kan slettes. Det offentlige laget viser andres
+      // nåler også, og public_findings har user_id, så sammenligningen holder
+      // begge lagene i sjakk.
+      const eget = currentUserId != null && finding.user_id === currentUserId;
+      // Melding og blokkering: bare for en innlogget leser, og bare på ANDRES
+      // funn. Før innloggingen er slått opp vises ingen av dem.
+      const kanMelde = currentUserId != null && !eget;
+      const displayName = finding.species_id != null ? speciesNamesRef.current.get(finding.species_id) : undefined;
+      return {
+        // Alt popupen viser. Er dette uendret, gjengis den ikke på nytt.
+        signatur: JSON.stringify([finding, displayName ?? null, eget, kanMelde]),
+        // Provideren MÅ være med — den bor i findingPopupElement, som HAR en
+        // test ved siden av seg. Popupen er en løsrevet React-rot (Leaflet eier
+        // elementet), og React-kontekst krysser ikke rot-grenser: uten
+        // provider kaster FindingPopup på første linje og roten står tom. Fra
+        // 26. juni til 1. august ga hvert klikk på en soppmarkør en tom hvit
+        // boks for ALLE brukere. Ingen test laster denne fila, så wrappingen
+        // skal ikke ligge her.
+        lag: () =>
+          findingPopupElement({
+            finding,
+            displayName,
+            locale,
+            messages: messages as Record<string, unknown>,
+            canDelete: eget,
+            onDelete: deleteFinding,
+            onReport: kanMelde ? reportFinding : undefined,
+            onBlock: kanMelde && finding.user_id ? blockFindingAuthor : undefined
+          })
+      };
+    });
+  }, [
+    currentUserId,
+    currentUsername,
+    filters,
+    supabase,
+    locale,
+    messages,
+    deleteFinding,
+    reportFinding,
+    blockFindingAuthor,
+    blokkerte
+  ]);
 
   useEffect(() => {
     loadFindingsRef.current = loadFindings;
@@ -1834,8 +2410,8 @@ export function MushroomMap({
           ? [searchedPlaceRef.current.lat, searchedPlaceRef.current.lng]
           : husketUtsnittRef.current
             ? [husketUtsnittRef.current.lat, husketUtsnittRef.current.lng]
-            : [59.91, 10.75],
-        zoom: initialView?.zoom ?? husketUtsnittRef.current?.zoom ?? (searchedPlaceRef.current ? 12 : 11),
+            : [PLASSHOLDER_SENTER.lat, PLASSHOLDER_SENTER.lng],
+        zoom: initialView?.zoom ?? husketUtsnittRef.current?.zoom ?? (searchedPlaceRef.current ? 12 : PLASSHOLDER_ZOOM),
         // Shared display ceiling. Without this the map inherits the ACTIVE layer's
         // max (Terreng = 18), capping zoom there. 20 lets the user zoom much
         // deeper; layers over-zoom (upscale) past their maxNativeZoom.
@@ -1851,32 +2427,42 @@ export function MushroomMap({
       // maxNativeZoom = deepest REAL tile each provider serves over our coverage
       // (verified: Kartverket topo tops out at z18); maxZoom = shared over-zoom
       // ceiling so all layers reach the same depth by upscaling the last tiles.
+      // Tallene bor i offlineMap.ts (MAX_NATIVE_ZOOM): offline-lagringen må
+      // holde seg innenfor de samme nivåene som lagene faktisk har fliser for.
       const baseTerreng = L.tileLayer(TERRAIN_TILE_TEMPLATE, {
         attribution: '&copy; Kartverket',
-        maxNativeZoom: 18,
+        maxNativeZoom: MAX_NATIVE_ZOOM[TERRAIN_TILE_TEMPLATE],
         maxZoom: 20
       });
       const baseKart = L.tileLayer(OSM_TILE_TEMPLATE, {
         attribution: '&copy; OpenStreetMap',
-        maxNativeZoom: 19,
+        maxNativeZoom: MAX_NATIVE_ZOOM[OSM_TILE_TEMPLATE],
         maxZoom: 20
       });
       const baseSatellitt = L.tileLayer(SATELLITE_TILE_TEMPLATE, {
-        attribution: 'Flyfoto &copy; Esri, Maxar, Earthstar Geographics',
-        maxNativeZoom: 19,
+        attribution: `${t('attributionAerial')} &copy; Esri, Maxar, Earthstar Geographics`,
+        maxNativeZoom: MAX_NATIVE_ZOOM[SATELLITE_TILE_TEMPLATE],
         maxZoom: 20
       });
       baseTerreng.addTo(map);
       baseLayersRef.current = { terreng: baseTerreng, kart: baseKart, satellitt: baseSatellitt };
 
-      L.control.zoom({ position: 'topright' }).addTo(map);
+      // Leaflets egne kontroller har engelske navn («Zoom in», «Layers», «Close
+      // popup»). De er det eneste en skjermleser får lest opp for knappene.
+      const zoomkontroll = L.control
+        .zoom({ position: 'topright', zoomInTitle: t('zoomIn'), zoomOutTitle: t('zoomOut') })
+        .addTo(map);
+      // 44 × 44 px treffflate på hver av de to knappene — se ZOOMKNAPP.
+      const zoomflate = zoomkontroll.getContainer();
+      zoomflate?.querySelector('.leaflet-control-zoom-in')?.classList.add(...ZOOMKNAPP, ...ZOOMKNAPP_INN);
+      zoomflate?.querySelector('.leaflet-control-zoom-out')?.classList.add(...ZOOMKNAPP, ...ZOOMKNAPP_UT);
       // Turruter oppå grunnkartet, under prognosen og markørene (tile-panet).
       const turruter = L.tileLayer.wms(TRAIL_WMS_URL, {
         layers: 'Fotrute',
         format: 'image/png',
         transparent: true,
         version: '1.3.0',
-        attribution: 'Turruter &copy; Kartverket',
+        attribution: `${t('attributionTrails')} &copy; Kartverket`,
         // Tjenesten tegner ingenting over 1:1 000 000 (MaxScaleDenominator i
         // GetCapabilities) — z8–9 ga tomme fliser og en avkrysning uten effekt.
         // Kartet går til z20; uten maxZoom arver laget Leaflets 18 og forsvinner
@@ -1894,13 +2480,35 @@ export function MushroomMap({
         if (e.layer === turruter) writeLocal(TRAIL_LAYER_KEY, '0');
       });
 
-      L.control
+      // Navnene i lagvelgeren på leserens språk. De sto som faste norske ord,
+      // mens den svenske introen ba brukeren bytte til «Satellit». `t` er den
+      // fra første gjengivelse (effekten kjøres én gang) — språkbytte laster
+      // siden på nytt, så den blir aldri gammel. Lagene huskes og byttes på
+      // identitet, ikke på navn, så navnene kan endres fritt.
+      const lagvelger = L.control
         .layers(
-          { Terreng: baseTerreng, Kart: baseKart, Satellitt: baseSatellitt },
-          { 'Turruter (Kartverket, Norge)': turruter },
+          {
+            [t('layerTerrain')]: baseTerreng,
+            [t('layerMap')]: baseKart,
+            [t('layerSatellite')]: baseSatellitt
+          },
+          { [t('layerTrails')]: turruter },
           { position: 'topright', collapsed: true }
         )
         .addTo(map);
+      // Knappen som åpner lagvelgeren heter «Layers» og har ingen innstilling
+      // for det; navnet settes på elementet.
+      const lagknapp = lagvelger.getContainer()?.querySelector('.leaflet-control-layers-toggle');
+      lagknapp?.setAttribute('title', t('layersControl'));
+      lagknapp?.setAttribute('aria-label', t('layersControl'));
+      // Krysset i en popup heter «Close popup». Gjelder alle popupene på
+      // kartet: funn, registrerte funn, lovende områder og soppbilder.
+      map.on('popupopen', (e: import('leaflet').PopupEvent) => {
+        const kryss = e.popup.getElement()?.querySelector('.leaflet-popup-close-button');
+        if (!kryss) return;
+        kryss.setAttribute('aria-label', t('closePopup'));
+        kryss.classList.add(...POPUPKRYSS_TREFF);
+      });
 
       // Once the user manually switches base layer, stop auto-switching by region.
       map.on('baselayerchange', () => {
@@ -1934,6 +2542,7 @@ export function MushroomMap({
       map.addLayer(speciesLayer);
       mapRef.current = map;
       clusterRef.current = clusters;
+      funnlagRef.current = new Funnlag<MapFinding>(L, clusters, (funn) => createMarkerIcon(L, funn.edibility));
       occClusterRef.current = occCluster;
       heatLayerRef.current = heatLayer;
       topLayerRef.current = topLayer;
@@ -1947,6 +2556,7 @@ export function MushroomMap({
       // tillatelse fra før).
       if (posRef.current && !searchedPlaceRef.current && !husketUtsnittRef.current) {
         map.setView([posRef.current.lat, posRef.current.lng], 13);
+        autoSenterRef.current = { lat: posRef.current.lat, lng: posRef.current.lng };
       }
 
       const onMoveEnd = () => {
@@ -1971,20 +2581,43 @@ export function MushroomMap({
             baseKart.addTo(map);
           }
         }
-        setPredictionCoords({
-          lat: Number(center.lat.toFixed(6)),
-          lon: Number(center.lng.toFixed(6))
-        });
         setViewport({ lat: Number(center.lat.toFixed(5)), lng: Number(center.lng.toFixed(5)), zoom: map.getZoom() });
+        // Lagbyttet og utsnittet over skjer med en gang. HENTINGENE venter
+        // til kartet har stått i ro: hvert «moveend» startet før fire
+        // hentinger (prognose, funn, fliser, registrerte funn) uten opphold.
+        if (moveLoadTimerRef.current) clearTimeout(moveLoadTimerRef.current);
+        moveLoadTimerRef.current = setTimeout(() => {
+          moveLoadTimerRef.current = null;
+          lastForUtsnitt();
+        }, FLYTT_RO_MS);
+      };
+
+      /** Hent alt som gjelder det utsnittet kartet står på nå. */
+      const lastForUtsnitt = () => {
+        // Kan fyre etter at kartet er fjernet (tidtakeren, eller den første
+        // lastingen rett under) — samme vern som i onMoveEnd.
+        if (mapRef.current !== map) return;
+        const center = map.getCenter();
+        // Tre desimaler (~100 m), ikke seks: hvert lille rykk i kartet ga en
+        // ny nøkkel i usePrediction og dermed et nytt kall til /api/prediction
+        // for et punkt serveren uansett runder av før vær og skog slås opp.
+        // Ikke grovere — svaret har tekst om skogen NÆR punktet. Samme
+        // presisjon som de andre stedene punktet settes (se predictionCoords).
+        setPredictionCoords(roundForProviderLookup(center.lat, center.lng));
         void loadFindingsRef.current();
         void loadPredictionTilesRef.current();
         void loadOccurrencesRef.current();
       };
 
       map.on('moveend', onMoveEnd);
+      // Første lasting skjer med en gang, uten å vente ut roen. Her sto i
+      // tillegg to ventede kall til funn og fliser rett etter — de samme
+      // hentingene to ganger ved hver åpning av kartet. Ingenting under
+      // venter på dem.
       onMoveEnd();
-      await loadFindingsRef.current();
-      await loadPredictionTilesRef.current();
+      if (moveLoadTimerRef.current) clearTimeout(moveLoadTimerRef.current);
+      moveLoadTimerRef.current = null;
+      lastForUtsnitt();
       // «Let etter denne arten»: arten er valgt fra første render; nå som kartet
       // står, regnes lovende områder ut rundt utsnittet (GPS eller søkt sted).
       if (initialSpeciesRef.current) {
@@ -2012,7 +2645,15 @@ export function MushroomMap({
       const map = mapRef.current;
       mapRef.current = null;
       map?.remove();
-      cleanupPopupRoots();
+      // En henting som ventet på at kartet skulle stå i ro, skal ikke fyre
+      // for en side brukeren har forlatt.
+      if (moveLoadTimerRef.current) clearTimeout(moveLoadTimerRef.current);
+      moveLoadTimerRef.current = null;
+      lastOccFetchRef.current = null;
+      lastOccDrawRef.current = null;
+      // Kartet er alt fjernet over; bare popup-røttene står igjen å rydde.
+      funnlagRef.current?.kast();
+      funnlagRef.current = null;
       clusterRef.current = null;
       heatLayerRef.current = null;
       topLayerRef.current = null;
@@ -2069,6 +2710,12 @@ export function MushroomMap({
         speciesNamesRef.current = nameMap;
         speciesEdibilityRef.current = ediMap;
         setSpeciesNamesVersion((v) => v + 1);
+        // Farge og form på funnmarkørene kommer fra artsdataene. Rakk
+        // markørene å bli tegnet først, sto de som brune standardprikker til
+        // neste panorering hentet alt på nytt — og nå som et utsnitt som alt
+        // er dekket ikke hentes på nytt, ville de blitt stående. Tegn om av
+        // radene vi har; det koster ingen henting.
+        if (lastOccDrawRef.current) void loadOccurrencesRef.current();
       });
   }, [locale, supabase, t]);
 
@@ -2097,10 +2744,14 @@ export function MushroomMap({
       // posRef oppdateres alltid — «Finn meg» og funnskjemaet trenger den —
       // men et husket utsnitt eller et søkt sted skal ikke yankes bort.
       posRef.current = { lat: latitude, lng: longitude };
+      // En nyere måling (fra «Finn meg» eller funnskjemaet) skal ikke byttes
+      // ut med den fra åpningen — den kan komme sent inn etter en kald start.
+      sisteGpsRef.current ??= { lat: latitude, lng: longitude };
       lagreHusketPosisjon(latitude, longitude); // forsidekortet starter her neste gang (husket-posisjon.ts)
       if (searchedPlaceRef.current || husketUtsnittRef.current) return;
       if (mapRef.current) {
         mapRef.current.setView([latitude, longitude], 13);
+        autoSenterRef.current = { lat: latitude, lng: longitude };
       }
       if (ventendeArtRef.current) {
         const id = ventendeArtRef.current;
@@ -2122,7 +2773,7 @@ export function MushroomMap({
   useEffect(() => {
     if (searchedPlaceRef.current || husketUtsnittRef.current) return;
     if (latitude != null && longitude != null) {
-      setPredictionCoords({ lat: latitude, lon: longitude });
+      setPredictionCoords(roundForProviderLookup(latitude, longitude));
     }
   }, [latitude, longitude]);
 
@@ -2133,6 +2784,15 @@ export function MushroomMap({
   useEffect(() => {
     void loadPredictionTiles();
   }, [loadPredictionTiles]);
+
+  // De registrerte funnene følger artsfilteret med en gang, som funnlaget og
+  // flisene over. De ble før bare hentet på nytt når kartet ble flyttet: ble
+  // en art valgt uten at «Lovende» flyttet kartet (utenfor sesong finnes ingen
+  // lovende områder å zoome til), eller ble arten nullstilt, sto laget igjen
+  // med forrige utvalg mens brikken og de to andre lagene sa noe annet.
+  useEffect(() => {
+    void loadOccurrences();
+  }, [loadOccurrences]);
 
   const panelData = useMemo<PredictionResponse | undefined>(() => {
     if (!prediction.data && tileHotspots.length === 0) return undefined;
@@ -2273,23 +2933,38 @@ export function MushroomMap({
     <div className="relative isolate h-[calc(100vh_-_13.25rem_-_env(safe-area-inset-top)_-_env(safe-area-inset-bottom))] min-h-[20rem] overflow-hidden rounded-xl border border-gray-200 supports-[height:100dvh]:h-[calc(100dvh_-_13.25rem_-_env(safe-area-inset-top)_-_env(safe-area-inset-bottom))]">
       <div ref={containerRef} className="h-full w-full" />
 
+      {/* Arket viser artsfilteret og tømmer det samme vei som brikken under
+          (clearSpeciesSearch). Sted og art velges i søkefeltet — arkets egne
+          søk skrev bare halve tilstanden, se MapFilters. */}
       <MapFilters
         filters={filters}
         onChange={setFilters}
-        onSelectPlace={(lat, lng) => mapRef.current?.setView([lat, lng], 13)}
+        speciesName={selectedSpeciesName}
+        onClearSpecies={clearSpeciesSearch}
       />
 
-      <div className="absolute left-1/2 top-3 z-[1000] flex w-[calc(100%-7rem)] max-w-md -translate-x-1/2 flex-col items-center gap-1">
+      {/* 8 px mellom radene (gap-2): hver rad er 36 px høy og har en treffflate
+          på 44 px, så flatene møtes akkurat — se trykkflate.ts.
+
+          z-[1001], ett hakk over pillen nederst og de runde knappene
+          (z-[1000]): menyene som åpnes i denne kolonnen når ned til dem på en
+          liten skjerm, og lå da UNDER pillen — nederste valg lot seg ikke
+          trykke på. Det åpne prognosepanelet ligger over igjen (z-[1002], se
+          HotspotPanel), som før.
+
+          max-h + min-h-0 på panelene: er kartet for lavt, ruller panelet inni
+          seg selv i stedet for å bli klippet av kartkanten. */}
+      <div className="absolute left-1/2 top-3 z-[1001] flex max-h-[calc(100%-1.5rem)] w-[calc(100%-7rem)] max-w-md -translate-x-1/2 flex-col items-center gap-2">
         {/* The species chip and the search box coexist: picking a species used
             to REPLACE the input, which made «steinsopp ved Hamar» impossible —
             you could have one or the other, never both. */}
         {selectedSpeciesName ? (
-          <div className="flex w-full items-center justify-between gap-2 rounded-full bg-forest-800 px-3 py-2 text-xs font-medium text-white shadow-lg">
+          <div className="flex w-full items-center justify-between gap-2 rounded-full bg-forest-800 px-3 py-1.5 text-xs font-medium text-white shadow-lg">
             <span className="truncate">🍄 {t('promisingSpotsFor', { species: selectedSpeciesName })}</span>
             <button
               type="button"
               onClick={clearSpeciesSearch}
-              className="shrink-0 rounded-full bg-white/20 px-2 py-0.5 font-semibold hover:bg-white/30"
+              className={`relative shrink-0 rounded-full bg-white/20 px-2.5 py-1 font-semibold hover:bg-white/30 ${TREFF_44}`}
             >
               {t('reset')}
             </button>
@@ -2300,17 +2975,30 @@ export function MushroomMap({
               {/* One box for BOTH questions: «hvilken sopp» and «hvor». The
                   place search used to be buried in the Filtre sheet, so
                   planning a trip («steinsopp ved Hamar») meant digging. */}
-              <input
-                value={speciesSearch}
-                onChange={(event) => searchSpeciesForSpots(event.target.value)}
-                placeholder={selectedSpeciesName ? t('searchPlaceOnly') : t('searchSpeciesOrPlace')}
-                className="w-full rounded-full bg-white/95 px-4 py-2 text-xs text-gray-800 shadow-lg backdrop-blur placeholder:text-gray-500 focus:outline-none"
-              />
+              {/* Feltet hadde bare en plassholder: ikke noe navn for en
+                  skjermleser, og fokusrammen var fjernet uten erstatning.
+                  Navnet følger plassholderen, så de to aldri sier hver sitt.
+                  Plassholderen er for lang for feltet på en telefon (16 px
+                  skrift på iOS, se globals.css) — den kuttes med «…» i
+                  stedet for midt i et ord. */}
+              {/* Etiketten har ingen tekst (navnet er aria-label). Den finnes
+                  for treffflaten: et trykk på en etikett setter fokus i
+                  feltet, og polstringen gir 4 px over og under det 36 px
+                  høye feltet uten å flytte noe. */}
+              <label className="-my-1 block py-1">
+                <input
+                  value={speciesSearch}
+                  onChange={(event) => searchSpeciesForSpots(event.target.value)}
+                  placeholder={selectedSpeciesName ? t('searchPlaceOnly') : t('searchSpeciesOrPlace')}
+                  aria-label={selectedSpeciesName ? t('searchPlaceOnly') : t('searchSpeciesOrPlace')}
+                  className="h-9 w-full rounded-full bg-white/95 px-4 text-xs text-gray-800 shadow-lg backdrop-blur placeholder:text-gray-500 placeholder-shown:text-ellipsis focus:outline-none focus-visible:ring-2 focus-visible:ring-forest-700"
+                />
+              </label>
               {speciesSuggestions.length > 0 || placeSuggestions.length > 0 ? (
                 <div className="absolute left-0 right-0 top-full z-[1001] mt-1 max-h-60 overflow-auto rounded-xl bg-white shadow-xl">
                   {speciesSuggestions.length > 0 ? (
                     <>
-                      <p className="px-3 pt-2 text-[10px] font-semibold uppercase tracking-wide text-gray-400">
+                      <p className="px-3 pt-2 text-[10px] font-semibold uppercase tracking-wide text-gray-600">
                         {t('groupSpecies')}
                       </p>
                       {speciesSuggestions.map((s) => (
@@ -2318,7 +3006,7 @@ export function MushroomMap({
                           key={`sp-${s.id}`}
                           type="button"
                           onClick={() => selectSpeciesForSpots(s.id, s.name)}
-                          className="block w-full px-3 py-2 text-left text-xs text-gray-800 hover:bg-gray-50"
+                          className="block min-h-[44px] w-full px-3 py-2 text-left text-xs text-gray-800 hover:bg-gray-50"
                         >
                           🍄 {s.name}
                         </button>
@@ -2327,7 +3015,7 @@ export function MushroomMap({
                   ) : null}
                   {placeSuggestions.length > 0 ? (
                     <>
-                      <p className="px-3 pt-2 text-[10px] font-semibold uppercase tracking-wide text-gray-400">
+                      <p className="px-3 pt-2 text-[10px] font-semibold uppercase tracking-wide text-gray-600">
                         {t('groupPlaces')}
                       </p>
                       {placeSuggestions.map((p) => (
@@ -2335,7 +3023,7 @@ export function MushroomMap({
                           key={`pl-${p.name}-${p.lat}-${p.lng}`}
                           type="button"
                           onClick={() => goToPlace(p)}
-                          className="block w-full px-3 py-2 text-left text-xs text-gray-800 hover:bg-gray-50"
+                          className="block min-h-[44px] w-full px-3 py-2 text-left text-xs text-gray-800 hover:bg-gray-50"
                         >
                           📍 {p.name}
                           <span className="ml-1 text-[10px] text-gray-500">{p.context}</span>
@@ -2356,14 +3044,14 @@ export function MushroomMap({
             }}
           />
         ) : null}
-        <div className="flex flex-wrap items-center justify-center gap-1.5">
+        <div className="flex flex-wrap items-center justify-center gap-x-1.5 gap-y-2">
           {/* Korte, stabile etiketter med vilje: den gamle «Skjul funn (minst
               6000)» brakk over tre linjer på mobil og dyttet alt under seg.
               Antallet bor nå i filterpanelet, der det leses i ro. */}
           <button
             type="button"
             onClick={toggleOccurrences}
-            className={`whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-medium shadow-lg backdrop-blur ${
+            className={`${VERKTOYKNAPP} ${
               showOccurrences ? 'bg-forest-800 text-white hover:bg-forest-700' : 'bg-white/95 text-gray-800 hover:bg-white'
             }`}
           >
@@ -2380,7 +3068,7 @@ export function MushroomMap({
               aria-expanded={occFiltersOpen}
               aria-controls="map-occ-filters"
               aria-label={t('occFiltersLabel')}
-              className={`inline-flex items-center gap-1 whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-medium shadow-lg backdrop-blur ${
+              className={`inline-flex items-center gap-1 ${VERKTOYKNAPP} ${
                 occFiltersOpen || occFilterCount > 0
                   ? 'bg-forest-800 text-white hover:bg-forest-700'
                   : 'bg-white/95 text-gray-800 hover:bg-white'
@@ -2394,22 +3082,16 @@ export function MushroomMap({
             type="button"
             onClick={() => (topSpots ? clearTopSpots() : void generateTopSpots())}
             disabled={topLoading}
-            className={`whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-medium shadow-lg backdrop-blur disabled:opacity-60 ${
+            className={`${VERKTOYKNAPP} disabled:opacity-60 ${
               topSpots ? 'bg-forest-800 text-white hover:bg-forest-700' : 'bg-white/95 text-gray-800 hover:bg-white'
             }`}
           >
             {topLoading ? t('searching') : topSpots ? t('hideSpots') : t('promisingSpotsButton')}
           </button>
-          {topSpots?.length && !topLoading ? (
-            <button
-              type="button"
-              onClick={eksporterTopSpotsGpx}
-              aria-label={t('gpxTopSpotsLabel')}
-              className="whitespace-nowrap rounded-full bg-white/95 px-3 py-1.5 text-xs font-medium text-gray-800 shadow-lg backdrop-blur hover:bg-white"
-            >
-              {t('gpxTopSpots')}
-            </button>
-          ) : null}
+          {/* GPX-knappen sto her, som femte knapp. Kolonnen rommer to knapper
+              i bredden på en telefon, så med lovende områder oppe ble det tre
+              rader oppå kartet — akkurat når brukeren vil se områdene. Den
+              ligger nå i «Mer», med hele navnet sitt. */}
           <button
             type="button"
             onClick={() => {
@@ -2419,7 +3101,7 @@ export function MushroomMap({
             }}
             aria-expanded={toolsOpen}
             aria-controls="map-more-tools"
-            className={`inline-flex items-center gap-1 whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-medium shadow-lg backdrop-blur ${
+            className={`inline-flex items-center gap-1 ${VERKTOYKNAPP} ${
               toolsOpen || offlineOpen || speciesSpots
                 ? 'bg-forest-800 text-white hover:bg-forest-700'
                 : 'bg-white/95 text-gray-800 hover:bg-white'
@@ -2430,16 +3112,18 @@ export function MushroomMap({
           </button>
         </div>
         {toolsOpen ? (
-          <div id="map-more-tools" className="w-full max-w-xs rounded-xl border border-gray-200 bg-white/95 p-2 shadow-xl backdrop-blur">
-            <div className="mb-1 flex items-center justify-between px-1">
+          <div id="map-more-tools" className="min-h-0 w-full max-w-xs overflow-y-auto overscroll-contain rounded-xl border border-gray-200 bg-white/95 p-2 shadow-xl backdrop-blur">
+            {/* mb-2, ikke mb-1: krysset er 44 px og når 8 px under raden sin.
+                Med 4 px ville det ligget over den øverste menyraden. */}
+            <div className="mb-2 flex items-center justify-between px-1">
               <p className="text-xs font-semibold text-gray-900">{t('moreToolsHeading')}</p>
               <button
                 type="button"
                 onClick={() => setToolsOpen(false)}
                 aria-label={t('closeTools')}
-                className="rounded-full p-1 text-gray-500 hover:bg-gray-100"
+                className={LUKKEKNAPP_KLASSER}
               >
-                <X className="h-3.5 w-3.5" />
+                <X className="h-4 w-4" aria-hidden />
               </button>
             </div>
             <div className="grid gap-1">
@@ -2454,12 +3138,12 @@ export function MushroomMap({
                     else void generateSpeciesSpots();
                   }}
                   disabled={speciesLoading}
-                  className="rounded-lg px-2 py-2 text-left text-xs font-medium text-gray-800 hover:bg-gray-100 disabled:opacity-60"
+                  className={`${MENYRAD} disabled:opacity-60`}
                 >
                   {speciesLoading ? t('loading') : speciesSpots ? `📸 ${t('hidePhotos')}` : t('photosButton')}
                 </button>
               ) : (
-                <Link href="/pricing" className="rounded-lg px-2 py-2 text-xs font-medium text-forest-900 hover:bg-gray-100">
+                <Link href="/pricing" className="block rounded-lg px-2 py-3.5 text-xs font-medium text-forest-900 hover:bg-gray-100">
                     ⭐ {kanFaaProve ? <ProveLofteTekst plan="premium" med={t('premiumTools')} utenProve={t('premiumToolsUtenProve')} /> : t('premiumToolsUtenProve')}
                   </Link>
               )}
@@ -2469,10 +3153,25 @@ export function MushroomMap({
                   setToolsOpen(false);
                   setOfflineOpen(true);
                 }}
-                className="rounded-lg px-2 py-2 text-left text-xs font-medium text-gray-800 hover:bg-gray-100"
+                className={MENYRAD}
               >
                 ⬇️ {t('offlineMap')}
               </button>
+              {/* Bare når det finnes lovende områder å ta med. Lå før som egen
+                  knapp i verktøyraden — se kommentaren der. */}
+              {topSpots?.length && !topLoading ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setToolsOpen(false);
+                    eksporterTopSpotsGpx();
+                  }}
+                  aria-label={t('gpxTopSpotsLabel')}
+                  className={MENYRAD}
+                >
+                  🧭 {t('gpxTopSpotsHeading')}
+                </button>
+              ) : null}
               {FLAGS.tripMode && !tripActive ? (
                 <button
                   type="button"
@@ -2480,7 +3179,7 @@ export function MushroomMap({
                     setToolsOpen(false);
                     startTrip();
                   }}
-                  className="rounded-lg px-2 py-2 text-left text-xs font-medium text-gray-800 hover:bg-gray-100"
+                  className={MENYRAD}
                 >
                   🎒 {t('trip')}
                 </button>
@@ -2499,7 +3198,7 @@ export function MushroomMap({
         {topAccess === 'free_limited' && topSpots ? (
           <Link
             href="/pricing"
-            className="flex items-center gap-1.5 rounded-full bg-amber-500 px-3 py-1.5 text-xs font-semibold text-white shadow-lg hover:bg-amber-600"
+            className={`relative flex items-center gap-1.5 rounded-full bg-amber-400 px-3 py-2.5 text-xs font-semibold text-forest-900 shadow-lg hover:bg-amber-500 ${TREFF_44}`}
           >
             🔒 {kanFaaProve ? <ProveLofteTekst med={t('seeAll12Premium')} utenProve={t('seeAll12PremiumUtenProve')} /> : t('seeAll12PremiumUtenProve')}
           </Link>
@@ -2507,10 +3206,12 @@ export function MushroomMap({
         {FLAGS.tripMode && tripActive ? (
           <div className="flex items-center gap-2 rounded-full bg-amber-700 px-3 py-1.5 text-xs font-medium text-white shadow-lg">
             <span>🎒 {t('tripFindsCount', { count: tripFinds.length })}</span>
+            {/* Mørkere flate, ikke lysere: hvit tekst på amber-700 med 20 %
+                hvitt over var 3,5:1. Med 20 % svart er den 7:1. */}
             <button
               type="button"
               onClick={endTrip}
-              className="rounded-full bg-white/20 px-2 py-0.5 font-semibold hover:bg-white/30"
+              className={`relative rounded-full bg-black/20 px-2.5 py-1 font-semibold hover:bg-black/30 ${TREFF_44}`}
             >
               {t('endTrip')}
             </button>
@@ -2521,29 +3222,32 @@ export function MushroomMap({
             dekket de en tredjedel av kartet på mobil. Nå bor de i et panel bak
             trakt-knappen: kartet er helten, filtrene er ett trykk unna. */}
         {showOccurrences && occFiltersOpen ? (
-          <div id="map-occ-filters" className="w-full max-w-xs rounded-xl border border-gray-200 bg-white/95 p-2 shadow-xl backdrop-blur">
-            <div className="mb-1 flex items-center justify-between px-1">
+          <div id="map-occ-filters" className="min-h-0 w-full max-w-xs overflow-y-auto overscroll-contain rounded-xl border border-gray-200 bg-white/95 p-2 shadow-xl backdrop-blur">
+            {/* Ingen px-1 på radene her (som menyen over har): de tre
+                årsvalgene trenger 204 px, og med 4 px innrykk på hver side var
+                det 203 igjen — den siste falt ned på en egen linje. */}
+            <div className="mb-1 flex items-center justify-between">
               <p className="text-xs font-semibold text-gray-900">{t('occFiltersHeading')}</p>
               <button
                 type="button"
                 onClick={() => setOccFiltersOpen(false)}
                 aria-label={t('closeOccFilters')}
-                className="rounded-full p-1 text-gray-500 hover:bg-gray-100"
+                className={LUKKEKNAPP_KLASSER}
               >
-                <X className="h-3.5 w-3.5" />
+                <X className="h-4 w-4" aria-hidden />
               </button>
             </div>
             {/* Antallet (og «minst»-forbeholdet fra hentetaket) leses her i ro
                 i stedet for å blåse opp knappen eller legge et eget banner
                 over kartet. */}
-            <p className="px-1 pb-1 text-[11px] text-gray-600">
+            <p className="pb-1 text-[11px] text-gray-600">
               {occTruncated
                 ? t('findingsTruncated', { count: OCCURRENCE_FETCH_LIMIT })
                 : occCount
                   ? t('occCountShown', { count: occCount })
                   : null}
             </p>
-            <div className="flex flex-wrap items-center gap-1 px-1 pb-1">
+            <div className="flex flex-wrap items-center gap-x-1 gap-y-2 pb-2">
               {(
                 [
                   ['all', t('filterAll')],
@@ -2555,7 +3259,7 @@ export function MushroomMap({
                   key={val}
                   type="button"
                   onClick={() => setOccEdibilityFilter(val)}
-                  className={`rounded-full px-2.5 py-1 text-[11px] font-medium ${
+                  className={`${FILTERVALG} ${
                     occEdibility === val ? 'bg-forest-800 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                   }`}
                 >
@@ -2563,12 +3267,12 @@ export function MushroomMap({
                 </button>
               ))}
             </div>
-            <div className="px-1 pb-1">
+            <div className="pb-2">
               <button
                 type="button"
                 onClick={toggleOccSeason}
-                className={`rounded-full px-2.5 py-1 text-[11px] font-medium ${
-                  occSeason ? 'bg-amber-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                className={`${FILTERVALG} ${
+                  occSeason ? 'bg-amber-700 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                 }`}
               >
                 {occSeason ? t('onlyInSeasonNow') : t('showAllTimes')}
@@ -2577,7 +3281,7 @@ export function MushroomMap({
             {/* Årsfilteret: ~72 % av punktene er fra før 2021, og gamle
                 herbariebelegg rendret som ferske prikker skjuler datasettets
                 sterkeste signal — datoene. */}
-            <div className="flex flex-wrap items-center gap-1 px-1 pb-1">
+            <div className="flex flex-wrap items-center gap-x-1 gap-y-2 pb-1">
               {(
                 [
                   ['all', t('yearAll')],
@@ -2589,7 +3293,7 @@ export function MushroomMap({
                   key={val}
                   type="button"
                   onClick={() => setOccYearFilter(val)}
-                  className={`rounded-full px-2.5 py-1 text-[11px] font-medium ${
+                  className={`${FILTERVALG} ${
                     occYear === val ? 'bg-forest-800 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                   }`}
                 >
@@ -2605,8 +3309,10 @@ export function MushroomMap({
           consolidated HotspotPanel below — shown for every query, not just when
           a species is selected. */}
 
+      {/* top-36: under søkefeltet og de to radene i verktøyraden, som nå er
+          136 px høye til sammen (var 110, og panelet sto på top-28). */}
       {offlineOpen ? (
-      <div className="absolute left-3 right-3 top-28 z-[1050] max-h-[calc(100%-8rem)] overflow-y-auto overscroll-contain rounded-xl border border-gray-200 bg-white/95 p-3 shadow-lg backdrop-blur sm:left-auto sm:w-72">
+      <div className="absolute left-3 right-3 top-36 z-[1050] max-h-[calc(100%-10rem)] overflow-y-auto overscroll-contain rounded-xl border border-gray-200 bg-white/95 p-3 shadow-lg backdrop-blur sm:left-auto sm:w-72">
         <div className="flex items-center justify-between gap-2">
           <p className="text-sm font-semibold text-gray-900">{t('offlineMap')}</p>
           <div className="flex items-center gap-2">
@@ -2615,9 +3321,9 @@ export function MushroomMap({
               type="button"
               onClick={() => setOfflineOpen(false)}
               aria-label={t('hideOfflineMap')}
-              className="rounded-full p-1 text-gray-500 hover:bg-gray-100"
+              className={LUKKEKNAPP_KLASSER}
             >
-              <X className="h-4 w-4" />
+              <X className="h-4 w-4" aria-hidden />
             </button>
           </div>
         </div>
@@ -2625,15 +3331,16 @@ export function MushroomMap({
         {showOfflineUpsell ? (
           <div className="mt-2 rounded border border-amber-300 bg-amber-50 px-2 py-2">
             <p className="text-xs text-amber-800">{t('offlineSaveRequiresPremium')}</p>
-            <Link href="/pricing" className="text-xs font-medium text-amber-900 underline">
+            <Link href="/pricing" className={`relative inline-block text-xs font-medium text-amber-900 underline ${TREFF_44}`}>
               {kanFaaProve ? <ProveLofteTekst med={t('upgradePlan')} utenProve={t('upgradePlanUtenProve')} /> : t('upgradePlanUtenProve')}
             </Link>
           </div>
         ) : null}
 
-        <label className="mt-2 block text-xs font-medium text-gray-700">
+        <label htmlFor={offlineNameId} className="mt-2 block text-xs font-medium text-gray-700">
           {t('areaName')}
           <input
+            id={offlineNameId}
             value={offlineName}
             onChange={(event) => setOfflineName(event.target.value)}
             className="mt-1 w-full rounded-lg border border-gray-300 px-2 py-1.5 text-xs"
@@ -2645,7 +3352,7 @@ export function MushroomMap({
           type="button"
           onClick={() => void saveCurrentAreaOffline()}
           disabled={billing.isLoading || !hasOfflineAccess || offlineBusy}
-          className="mt-2 inline-flex w-full items-center justify-center gap-1 rounded-lg bg-forest-800 px-2 py-2 text-xs font-medium text-white hover:bg-forest-700 disabled:cursor-not-allowed disabled:opacity-50"
+          className="mt-2 inline-flex min-h-[44px] w-full items-center justify-center gap-1 rounded-lg bg-forest-800 px-2 py-2 text-xs font-medium text-white hover:bg-forest-700 disabled:cursor-not-allowed disabled:opacity-50"
         >
           <Download className="h-3.5 w-3.5" />
           {offlineBusy ? t('saving') : t('saveMapArea')}
@@ -2653,18 +3360,20 @@ export function MushroomMap({
 
         {offlineStatus ? <p className="mt-2 text-[11px] text-gray-700">{offlineStatus}</p> : null}
 
-        <div className="mt-2 max-h-36 space-y-1 overflow-auto">
+        <div className="mt-2 max-h-52 space-y-1 overflow-auto">
           {offlineAreas.map((area) => (
             <div key={area.id} className="rounded-lg border border-gray-200 bg-white p-2">
               <p className="truncate text-xs font-medium text-gray-900">{area.name}</p>
               <p className="text-[11px] text-gray-600">
                 {t('tilesZoom', { tiles: area.cachedTiles, zoom: area.zoom })}
               </p>
-              <div className="mt-1 flex gap-1">
+              {/* «Slett» sto 4 px fra «Gå til», begge 26 px høye — og sletting
+                  kan ikke gjøres om uten dekning. Større flater, mer luft. */}
+              <div className="mt-1 flex gap-2">
                 <button
                   type="button"
                   onClick={() => focusSavedArea(area)}
-                  className="inline-flex items-center gap-1 rounded border border-gray-300 px-2 py-1 text-[11px] text-gray-800 hover:bg-gray-50"
+                  className={`${PANELKNAPP} border-gray-300 text-gray-800 hover:bg-gray-50`}
                 >
                   <Navigation className="h-3 w-3" />
                   {t('goTo')}
@@ -2672,7 +3381,7 @@ export function MushroomMap({
                 <button
                   type="button"
                   onClick={() => void deleteSavedArea(area.id)}
-                  className="inline-flex items-center gap-1 rounded border border-red-200 px-2 py-1 text-[11px] text-red-700 hover:bg-red-50"
+                  className={`${PANELKNAPP} border-red-200 text-red-700 hover:bg-red-50`}
                 >
                   <Trash2 className="h-3 w-3" />
                   {t('delete')}
@@ -2693,7 +3402,7 @@ export function MushroomMap({
           <button
             type="button"
             onClick={() => void clearTileCache()}
-            className="mt-1 inline-flex items-center gap-1 rounded border border-gray-300 px-2 py-1 text-[11px] font-medium text-gray-800 hover:bg-gray-50"
+            className={`mt-1 ${PANELKNAPP} border-gray-300 font-medium text-gray-800 hover:bg-gray-50`}
           >
             <Trash2 className="h-3 w-3" />
             {t('clearTileCache')}
@@ -2705,7 +3414,7 @@ export function MushroomMap({
             som faktisk blir med ut i skogen — MENS det ennå er dekning. */}
         <a
           href="/offline"
-          className="mt-2 inline-flex items-center gap-1 rounded border border-gray-300 px-2 py-1 text-[11px] font-medium text-gray-800 hover:bg-gray-50"
+          className={`mt-2 ${PANELKNAPP} border-gray-300 font-medium text-gray-800 hover:bg-gray-50`}
         >
           <Navigation className="h-3 w-3" />
           {t('openOfflineMap')}
@@ -2727,8 +3436,20 @@ export function MushroomMap({
 
       <button
         onClick={() => {
-          const senter = mapRef.current?.getCenter();
-          setAddSheetFallback(senter ? { lat: senter.lat, lng: senter.lng } : null);
+          const map = mapRef.current;
+          const senter = map?.getCenter();
+          setAddSheetKart(
+            map && senter
+              ? {
+                  senter: { lat: senter.lat, lng: senter.lng },
+                  flyttet: kartErFlyttet(
+                    { lat: senter.lat, lng: senter.lng },
+                    autoSenterRef.current,
+                    flyttetoleranseMeter(senter.lat, map.getZoom())
+                  )
+                }
+              : null
+          );
           setShowAddSheet(true);
         }}
         className="absolute bottom-4 right-4 z-[1000] h-14 w-14 rounded-full bg-forest-800 text-3xl text-white shadow-xl transition-colors hover:bg-forest-700"
@@ -2737,36 +3458,16 @@ export function MushroomMap({
         +
       </button>
 
-      {showIntro ? (
-        <div
-          className="absolute inset-0 z-[1100] flex items-end justify-center bg-black/30 p-4 sm:items-center"
-          onClick={dismissIntro}
-        >
-          <div className="max-w-sm rounded-2xl bg-white p-5 shadow-2xl" onClick={(event) => event.stopPropagation()}>
-            <p className="text-base font-semibold text-gray-900">{t('introTitle')}</p>
-            <ul className="mt-3 space-y-2 text-sm text-gray-700">
-              <li>📍 {t.rich('introFindings', { b: (chunks) => <b>{chunks}</b> })}</li>
-              <li>⭐ {t.rich('introSpots', { b: (chunks) => <b>{chunks}</b> })}</li>
-              <li>🛰️ {t.rich('introSatellite', { b: (chunks) => <b>{chunks}</b> })}</li>
-              <li>{t.rich('introLocate', { b: (chunks) => <b>{chunks}</b> })}</li>
-            </ul>
-            <button
-              type="button"
-              onClick={dismissIntro}
-              className="mt-4 w-full rounded-full bg-forest-800 px-4 py-2 text-sm font-medium text-white hover:bg-forest-700"
-            >
-              {t('introGotIt')}
-            </button>
-          </div>
-        </div>
-      ) : null}
+      {/* En ekte dialog (rolle, navn, Escape, fokus inn og tilbake) — se MapIntro. */}
+      {showIntro ? <MapIntro onLukk={dismissIntro} /> : null}
 
       {showAddSheet ? (
         <AddFindingSheet
-          latitude={latitude}
-          longitude={longitude}
-          fallbackLatitude={addSheetFallback?.lat ?? null}
-          fallbackLongitude={addSheetFallback?.lng ?? null}
+          kartsenter={addSheetKart?.senter ?? null}
+          kartFlyttet={addSheetKart?.flyttet ?? false}
+          onFerskPosisjon={(posisjon) => {
+            sisteGpsRef.current = { lat: posisjon.lat, lng: posisjon.lng };
+          }}
           initialSpeciesId={filters.speciesId}
           initialSpeciesName={selectedSpeciesName}
           onClose={() => setShowAddSheet(false)}
@@ -2776,7 +3477,9 @@ export function MushroomMap({
               // Et privat funn er usynlig i standardlaget (public_findings
               // ekskluderer private) — slå på «Kun mine funn» så brukeren SER
               // det de nettopp lagret. Filterendringen trigger loadFindings
-              // via useEffect-en som avhenger av filters.
+              // via useEffect-en som avhenger av filters. setFilters setter
+              // samtidig perioden til «alle» (nextMapFilters), så funnet synes
+              // også når det er lagt inn i etterkant med en eldre dato.
               setFilters((f) => ({ ...f, onlyMine: true }));
             } else {
               void loadFindings();

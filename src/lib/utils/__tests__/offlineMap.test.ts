@@ -144,3 +144,91 @@ describe('removeOfflineAreaTiles', () => {
     await expect(removeOfflineAreaTiles(AREA)).resolves.toBe(0);
   });
 });
+
+/**
+ * To lagrede områder som overlapper, DELER fliser: samme sted, zoom og
+ * bakgrunnskart gir samme URL. Slettingen av det ene tok derfor med seg kartet
+ * til det andre — det sto igjen i lista med «550 fliser» og var blankt uten
+ * dekning. Verst ved lagring med full liste: dekket det eldste området (som da
+ * kastes ut) samme sted som det nye, ble flisene til området som nettopp var
+ * lagret, slettet i samme øyeblikk.
+ */
+describe('removeOfflineAreaTiles — fliser andre lagrede områder deler, blir liggende', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  /** En cache med akkurat disse flisene i; `delete` fjerner dem som en ekte Cache. */
+  function settOppCache(urler: string[]) {
+    const lagret = new Set(urler);
+    const cache = { delete: vi.fn(async (url: string) => lagret.delete(url)) };
+    vi.stubGlobal('caches', { open: vi.fn(async () => cache) });
+    vi.stubGlobal('window', { caches: {} });
+    return lagret;
+  }
+
+  /** Samme skog lagret en gang til, forskjøvet litt østover — overlapper AREA. */
+  const NABO: OfflineArea = {
+    ...AREA,
+    id: 'omraade-2',
+    name: 'Nordmarka øst',
+    bounds: { ...OSLO_BOUNDS, west: OSLO_BOUNDS.west + 0.15, east: OSLO_BOUNDS.east + 0.15 }
+  };
+
+  it('testområdene overlapper faktisk, og har også fliser hver for seg', () => {
+    const a = new Set(offlineAreaTileUrls(AREA));
+    const b = new Set(offlineAreaTileUrls(NABO));
+    const felles = [...a].filter((url) => b.has(url));
+    expect(felles.length).toBeGreaterThan(0);
+    expect(felles.length).toBeLessThan(a.size);
+    expect(felles.length).toBeLessThan(b.size);
+  });
+
+  it('«Slett» på det ene området lar det andres kart stå helt', async () => {
+    const lagret = settOppCache([...offlineAreaTileUrls(AREA), ...offlineAreaTileUrls(NABO)]);
+    const naboFor = offlineAreaTileUrls(NABO);
+
+    const fjernet = await removeOfflineAreaTiles(AREA, [AREA, NABO]);
+
+    // Hver eneste flis naboen trenger, ligger der fortsatt.
+    for (const url of naboFor) expect(lagret.has(url), url).toBe(true);
+    // Og det som bare AREA eide, er borte — slettingen frigjør fortsatt lagring.
+    const bareArea = offlineAreaTileUrls(AREA).filter((url) => !naboFor.includes(url));
+    expect(bareArea.length).toBeGreaterThan(0);
+    for (const url of bareArea) expect(lagret.has(url), url).toBe(false);
+    expect(fjernet).toBe(bareArea.length);
+  });
+
+  it('lagring med full liste: området som kastes ut tar ikke med seg flisene til det som nettopp ble lagret', async () => {
+    // Samme sted lagret på nytt: det nye området og det eldste har nøyaktig
+    // de samme flisene.
+    const nytt: OfflineArea = { ...AREA, id: 'omraade-nytt', createdAt: '2026-09-20T07:00:00Z' };
+    const lagret = settOppCache(offlineAreaTileUrls(nytt));
+
+    const fjernet = await removeOfflineAreaTiles(AREA, [nytt, NABO]);
+
+    expect(fjernet).toBe(0);
+    expect(lagret.size).toBe(offlineAreaTileUrls(nytt).length);
+  });
+
+  it('området selv i lista over dem som skal beholdes verner ingenting — ellers ble aldri noe slettet', async () => {
+    const lagret = settOppCache(offlineAreaTileUrls(AREA));
+    const fjernet = await removeOfflineAreaTiles(AREA, [AREA]);
+    expect(fjernet).toBe(offlineAreaTileUrls(AREA).length);
+    expect(lagret.size).toBe(0);
+  });
+
+  it('et annet bakgrunnskart over samme sted er andre fliser, og verner ikke', async () => {
+    const sammeStedOsm: OfflineArea = { ...AREA, id: 'omraade-osm', tileTemplate: OSM_TILE_TEMPLATE };
+    const lagret = settOppCache([...offlineAreaTileUrls(AREA), ...offlineAreaTileUrls(sammeStedOsm)]);
+
+    await removeOfflineAreaTiles(AREA, [sammeStedOsm]);
+
+    for (const url of offlineAreaTileUrls(AREA)) expect(lagret.has(url)).toBe(false);
+    for (const url of offlineAreaTileUrls(sammeStedOsm)) expect(lagret.has(url)).toBe(true);
+  });
+
+  it('uten andre områder slettes alt området eier, som før', async () => {
+    const lagret = settOppCache(offlineAreaTileUrls(AREA));
+    expect(await removeOfflineAreaTiles(AREA)).toBe(offlineAreaTileUrls(AREA).length);
+    expect(lagret.size).toBe(0);
+  });
+});

@@ -62,6 +62,36 @@ export class NoTilesCachedError extends Error {
   }
 }
 
+/**
+ * Kastes av cacheMapTilesForArea når området trenger flere fliser enn én
+ * lagring tar (MAX_TILES_PER_SAVE). Ingenting er hentet eller lagret da.
+ *
+ * Før ble lista over fliser bare kuttet ved taket, uten et ord. Det som falt
+ * bort var det som sto sist i lista, og det er ikke tilfeldig hva som står
+ * sist: flisene legges ut nivå for nivå, vest mot øst. Med hele landet i
+ * utsnittet (zoom 4 på en telefon) tok det mest detaljerte nivået alle 550
+ * plassene med den vestlige delen av seg selv, og nivået brukeren faktisk så
+ * på — det offline-siden tegner — ble ikke lagret i det hele tatt. Kvitteringen
+ * sa «Område lagret. 550 kartfliser klare offline», og uten dekning var kartet
+ * blankt.
+ *
+ * Et område som ikke får plass, er ikke et halvt offline-kart; det er et som
+ * ikke kan lagres slik. Kallstedet ber brukeren zoome inn.
+ */
+export class OfflineAreaTooLargeError extends Error {
+  /** Hvor mange fliser området trenger. */
+  readonly tiles: number;
+  /** Hvor mange én lagring tar. */
+  readonly limit: number;
+
+  constructor(tiles: number, limit: number) {
+    super('The offline area needs more map tiles than one save can store');
+    this.name = 'OfflineAreaTooLargeError';
+    this.tiles = tiles;
+    this.limit = limit;
+  }
+}
+
 const STORAGE_KEY = 'mycelet.offline-areas.v1';
 
 // The three base-map tile templates, kept in one place so MushroomMap builds its
@@ -74,7 +104,57 @@ export const SATELLITE_TILE_TEMPLATE = 'https://server.arcgisonline.com/ArcGIS/r
 
 const DEFAULT_TILE_TEMPLATE = TERRAIN_TILE_TEMPLATE;
 const CACHE_NAME = 'mycelet-map-tiles-v1';
-const MAX_TILES_PER_SAVE = 550;
+/**
+ * Så mange fliser tar én lagring. Et vanlig utsnitt bruker langt færre: 20–35
+ * på en telefon og rundt 70 på en stor skjerm fra zoom 7 og innover, opptil
+ * 270 på zoom 5–6. Taket nås først når utsnittet dekker et helt land (zoom 4
+ * på en telefon, zoom 5 på en stor skjerm). Da avvises lagringen — se
+ * OfflineAreaTooLargeError.
+ */
+export const MAX_TILES_PER_SAVE = 550;
+
+/**
+ * Dypeste EKTE flisnivå hvert bakgrunnskart har. Kartet lar brukeren zoome
+ * dypere (til 20) ved å forstørre disse flisene, så det er disse tallene
+ * Leaflet-lagene i MushroomMap bruker som maxNativeZoom — og de offline-
+ * lagringen må holde seg innenfor: en flis på nivå 19 finnes ikke hos
+ * Kartverket.
+ */
+export const MAX_NATIVE_ZOOM: Readonly<Record<string, number>> = {
+  [TERRAIN_TILE_TEMPLATE]: 18,
+  [OSM_TILE_TEMPLATE]: 19,
+  [SATELLITE_TILE_TEMPLATE]: 19
+};
+
+/** Oversiktsnivået går aldri grovere enn dette. */
+const MIN_OVERVIEW_ZOOM = 8;
+
+/**
+ * Hvilke zoomnivåer som lagres for et utsnitt, og hvilket av dem som er
+ * «områdets» nivå.
+ *
+ *  - Nivået brukeren ser på står FØRST. Flisene hentes i den rekkefølgen de
+ *    står, og det er dette nivået offline-siden tegner. Dør nettet midt i
+ *    lagringen, er det dette som bør være komplett — før sto oversiktsnivået
+ *    først.
+ *  - Så oversikten (ett nivå ut, aldri grovere enn 8), så detaljene (ett nivå
+ *    inn).
+ *  - Ingenting dypere enn bakgrunnskartet faktisk har. Kartet kan stå på zoom
+ *    19–20 ved å forstørre nivå 18; da er det nivå 18 som skal lagres. Før ble
+ *    nivå 19 og 20 forsøkt hentet hos Kartverket, som ikke har dem: hver av de
+ *    flisene feilet, og området ble husket med et zoomnivå offline-siden ikke
+ *    fant én eneste flis for.
+ */
+export function offlineZoomLevels(
+  viewZoom: number,
+  template: string = DEFAULT_TILE_TEMPLATE
+): { zoom: number; zoomLevels: number[] } {
+  const deepest = MAX_NATIVE_ZOOM[template] ?? 18;
+  const zoom = Math.max(0, Math.min(deepest, Math.round(viewZoom)));
+  const overview = Math.max(MIN_OVERVIEW_ZOOM, zoom - 1);
+  const detail = Math.min(deepest, zoom + 1);
+  return { zoom, zoomLevels: Array.from(new Set([zoom, overview, detail])) };
+}
 
 // Lagringen hentet alle flisene (opptil 550) i én Promise.all uten frist. Én
 // flis som verken svarte eller feilet — det vanlige på én strek dekning — holdt
@@ -219,14 +299,28 @@ export function offlineAreaTileUrls(area: OfflineArea): string[] {
  * kan se eller rydde. På iOS øker det sjansen for at WKWebView kaster HELE
  * originens lagring under press — inkludert kartene han betalte for.
  *
+ * `behold` er områdene som fortsatt skal virke uten dekning etterpå. Fliser de
+ * også eier, blir liggende. To lagrede områder som overlapper, deler fliser —
+ * det er samme URL — og uten dette tok slettingen av det ene med seg kartet til
+ * det andre: området sto igjen i lista med «550 fliser» og var blankt i skogen.
+ * Verst var det ved lagring med full liste. Dekket det eldste området, som da
+ * kastes ut, samme sted som det nye (samme skog lagret før hver tur), ble
+ * flisene til området som NETTOPP var lagret, slettet i samme øyeblikk.
+ *
  * Returnerer antall fliser som faktisk lå der og ble fjernet.
  */
-export async function removeOfflineAreaTiles(area: OfflineArea): Promise<number> {
+export async function removeOfflineAreaTiles(area: OfflineArea, behold: readonly OfflineArea[] = []): Promise<number> {
   if (typeof window === 'undefined' || !('caches' in window)) return 0;
   try {
+    const vernet = new Set<string>();
+    for (const annet of behold) {
+      if (annet.id === area.id) continue;
+      for (const url of offlineAreaTileUrls(annet)) vernet.add(url);
+    }
+    const urls = offlineAreaTileUrls(area).filter((url) => !vernet.has(url));
     const cache = await caches.open(CACHE_NAME);
     const results = await Promise.all(
-      offlineAreaTileUrls(area).map(async (url) => {
+      urls.map(async (url) => {
         try {
           return (await cache.delete(url)) ? 1 : 0;
         } catch {
@@ -268,20 +362,41 @@ export async function estimateStorageMb(): Promise<number | null> {
   }
 }
 
+/**
+ * Alle flisene området trenger, i den rekkefølgen nivåene er oppgitt. IKKE
+ * kuttet: et kutt her er usynlig for den som lagrer — se
+ * OfflineAreaTooLargeError.
+ */
 function uniqueTileUrls(bounds: OfflineAreaBounds, zoomLevels: number[], template: string) {
   const merged = new Set<string>();
   zoomLevels.forEach((zoom) => {
     getTileUrlsForBounds(bounds, zoom, template).forEach((url) => merged.add(url));
   });
-  return Array.from(merged).slice(0, MAX_TILES_PER_SAVE);
+  return Array.from(merged);
+}
+
+/** Hvor mange fliser en lagring av området vil hente og lagre. */
+export function countTilesForArea(
+  bounds: OfflineAreaBounds,
+  zoomLevels: number[],
+  template: string = DEFAULT_TILE_TEMPLATE
+): number {
+  return uniqueTileUrls(bounds, zoomLevels, template).length;
 }
 
 /**
  * Laster ned og lagrer flisene for et område.
  *
  * Løses med tellingen når MINST ÉN flis ligger i cachen etterpå (også fliser
- * som lå der fra før). Avvises med NoTilesCachedError når ingen gjør det — et
- * område uten fliser skal ikke registreres som lagret. Se klassen over.
+ * som lå der fra før). `failed` er flisene som mangler: kallstedet skal si fra
+ * om dem, for et område med hull er ikke «klart offline».
+ *
+ * Avvises med
+ *  - OfflineAreaTooLargeError når området trenger flere fliser enn én lagring
+ *    tar. Ingenting er hentet da.
+ *  - NoTilesCachedError når ikke én flis ligger i cachen etterpå — et område
+ *    uten fliser skal ikke registreres som lagret.
+ * Se klassene over.
  */
 export async function cacheMapTilesForArea(
   bounds: OfflineAreaBounds,
@@ -295,6 +410,10 @@ export async function cacheMapTilesForArea(
   const urls = uniqueTileUrls(bounds, zoomLevels, template);
   if (urls.length === 0) {
     throw new NoTilesCachedError(0);
+  }
+  // FØR cachen åpnes og første flis hentes: alt eller ingenting.
+  if (urls.length > MAX_TILES_PER_SAVE) {
+    throw new OfflineAreaTooLargeError(urls.length, MAX_TILES_PER_SAVE);
   }
 
   const cache = await caches.open(CACHE_NAME);

@@ -86,6 +86,49 @@ describe('findingPopupElement', () => {
     expect(html).not.toContain('Slett funn');
   });
 
+  /**
+   * Samme arbeidsdeling for melding og blokkering: knappene bor i
+   * FindingPopup, men kartet avgjør om de skal vises (innlogget leser, andres
+   * funn) ved å sende handlingene gjennom denne fabrikken — eller la være.
+   */
+  it('sender melding og blokkering videre til popupen', () => {
+    const html = renderToString(
+      findingPopupElement({
+        finding,
+        locale: 'nb',
+        messages: nb as unknown as Record<string, unknown>,
+        onReport: async () => {},
+        onBlock: async () => {}
+      })
+    );
+    expect(html).toContain(nb.FindingPopup.report);
+    expect(html).toContain(nb.FindingPopup.block);
+  });
+
+  it('viser verken melding eller blokkering når kartet ikke sender handlingene', () => {
+    const html = renderToString(
+      findingPopupElement({ finding, locale: 'nb', messages: nb as unknown as Record<string, unknown> })
+    );
+    expect(html).not.toContain(nb.FindingPopup.report);
+    expect(html).not.toContain(nb.FindingPopup.block);
+  });
+
+  it('melding og blokkering virker i den løsrevne roten — tekstene kommer fra tre navnerom', () => {
+    // ReportButton, BlockUser og BlockedUsers må ligge i katalogen kartet
+    // sender inn. Mangler ett av dem, kaster popupen og roten står tom.
+    const html = renderToString(
+      findingPopupElement({
+        finding,
+        locale: 'sv',
+        messages: sv as unknown as Record<string, unknown>,
+        onReport: async () => {},
+        onBlock: async () => {}
+      })
+    );
+    expect(html).toContain(sv.FindingPopup.report);
+    expect(html).toContain(sv.FindingPopup.block);
+  });
+
   it('bruker det lokaliserte artsnavnet kartet sender inn', () => {
     const html = renderToString(
       findingPopupElement({

@@ -10,6 +10,8 @@ import { PredictionExplanation } from '@/components/prediction/PredictionExplana
 import { ProveLofteTekst } from '@/components/billing/ProveLofteTekst';
 import { getSpeciesDisplayName } from '@/lib/utils/species-name';
 import { COMPONENT_MAX } from '@/lib/utils/prediction';
+import { LUKKEKNAPP_KLASSER } from '@/components/ui/useDialogFokus';
+import { TREFF_44 } from './trykkflate';
 
 interface HotspotPanelProps {
   speciesId: number | null;
@@ -109,12 +111,24 @@ export function HotspotPanel({ speciesId, kanFaaProve = false, data, explanation
 
   // Collapsed: a compact pill that still shows the verdict at a glance, so the
   // map stays open. Tap to expand the full "hvorfor" + sources.
+  //
+  // Bredden er høyst kartflata minus 5rem, så pillen slutter 4 px før
+  // posisjonsknappen (📍), som står på samme høyde. Uten grensen la pillen seg
+  // over knappen — med «Traktkantarell» dekket den halve. Artsnavnet er det
+  // som gir etter (truncate); tallet og dommen står alltid hele.
+  //
+  // Hvor mye plass navnet får, er målt i nettleseren på en 375 px bred
+  // telefon (kartet er da 343 px): med 5rem og litt strammere luft (gap-1.5,
+  // px-2.5) får «Kantarell» plass sammen med alle fire dommene. Med 5,5rem og
+  // den gamle lufta ble den kuttet for to av dem.
+  //
+  // 36 px høy, med en usynlig treffflate på 44 px (se trykkflate.ts).
   if (!open) {
     return (
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="absolute left-3 bottom-20 z-[1000] inline-flex max-w-[calc(100%-1.5rem)] items-center gap-2 rounded-full bg-white/95 px-3 py-2 text-sm shadow-lg backdrop-blur hover:bg-white"
+        className={`absolute left-3 bottom-20 z-[1000] inline-flex max-w-[calc(100%-5rem)] items-center gap-1.5 rounded-full bg-white/95 px-2.5 py-2 text-sm shadow-lg backdrop-blur hover:bg-white ${TREFF_44}`}
       >
         {condition ? (
           <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${condition.dot}`} aria-hidden="true" />
@@ -134,7 +148,10 @@ export function HotspotPanel({ speciesId, kanFaaProve = false, data, explanation
   }
 
   return (
-    <div className="absolute left-3 bottom-20 z-[1000] w-[min(380px,calc(100%-1.5rem))] max-h-[calc(100%-9rem)] overflow-y-auto rounded-xl border border-gray-200 bg-white/95 p-3 shadow-lg backdrop-blur">
+    // z-[1002]: over verktøyraden øverst på kartet (z-[1001]), som det åpne
+    // panelet når opp i på en liten skjerm — krysset i hjørnet skal ikke
+    // havne under knappene der.
+    <div className="absolute left-3 bottom-20 z-[1002] w-[min(380px,calc(100%-1.5rem))] max-h-[calc(100%-9rem)] overflow-y-auto rounded-xl border border-gray-200 bg-white/95 p-3 shadow-lg backdrop-blur">
       <div className="flex items-baseline justify-between gap-2">
         <h3 className="text-sm font-semibold text-gray-900">
           {data?.species
@@ -154,13 +171,8 @@ export function HotspotPanel({ speciesId, kanFaaProve = false, data, explanation
               <span className="text-[10px] leading-tight text-gray-500">{t('scaleNote')}</span>
             </span>
           ) : null}
-          <button
-            type="button"
-            onClick={() => setOpen(false)}
-            aria-label={t('close')}
-            className="rounded-full p-1 text-gray-500 hover:bg-gray-100"
-          >
-            <X className="h-4 w-4" />
+          <button type="button" onClick={() => setOpen(false)} aria-label={t('close')} className={LUKKEKNAPP_KLASSER}>
+            <X className="h-4 w-4" aria-hidden />
           </button>
         </div>
       </div>
@@ -195,7 +207,7 @@ export function HotspotPanel({ speciesId, kanFaaProve = false, data, explanation
           {data.access === 'free_limited' ? (
             <div className="mt-2 rounded border border-amber-300 bg-amber-50 px-2 py-1.5">
               <p className="text-xs text-amber-800">{data.upsellMessage ?? t('freeLimited')}</p>
-              <Link href="/pricing" className="text-xs font-medium text-amber-900 underline">
+              <Link href="/pricing" className={`relative inline-block text-xs font-medium text-amber-900 underline ${TREFF_44}`}>
                 {kanFaaProve ? <ProveLofteTekst plan="premium" med={t('upgradeVegetation')} utenProve={t('upgradeVegetationUtenProve')} /> : t('upgradeVegetationUtenProve')}
               </Link>
             </div>
@@ -233,10 +245,16 @@ export function HotspotPanel({ speciesId, kanFaaProve = false, data, explanation
             {t('habitatDisclaimer')}
           </p>
 
+          {/* Ekte polstring med negativ marg, ikke en usynlig flate: knappen
+              står nederst i en rulleflate, og et ::after som stakk ut under
+              polstringen ville gjort panelet rullbart med et par piksler.
+              Teksten står der den sto (16 px over, 12 px under = panelets
+              egen polstring); treffflaten er 44 px høy. */}
           <button
             type="button"
             onClick={() => setShowDetails((v) => !v)}
-            className="mt-2 inline-flex items-center gap-1 text-[11px] font-medium text-gray-500 hover:text-gray-700"
+            aria-expanded={showDetails}
+            className="-mb-3 -mt-2 inline-flex items-center gap-1 pb-3 pt-4 text-[11px] font-medium text-gray-600 hover:text-gray-800"
           >
             {showDetails ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
             {showDetails ? t('hideTechnicalDetails') : t('showTechnicalDetails')}
@@ -267,7 +285,7 @@ export function HotspotPanel({ speciesId, kanFaaProve = false, data, explanation
               ) : (
                 <p className="text-gray-500">{t('componentsUnavailable')}</p>
               )}
-              {data.model?.version ? <p className="text-gray-400">{t('model', { version: data.model.version })}</p> : null}
+              {data.model?.version ? <p className="text-gray-600">{t('model', { version: data.model.version })}</p> : null}
             </div>
           ) : null}
         </>

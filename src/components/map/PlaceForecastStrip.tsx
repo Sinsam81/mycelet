@@ -7,6 +7,7 @@ import { intlLocale } from '@/lib/utils/intl-locale';
 import { pickBestForecastDay } from '@/lib/utils/forecast-best-day';
 import { forecastBand } from '@/lib/utils/forecast-scale';
 import { forecastBarHeights } from '@/lib/utils/forecast-bars';
+import { LUKKEKNAPP_KLASSER } from '@/components/ui/useDialogFokus';
 
 /** Fargeklasse per bånd. Båndet selv kommer fra den delte skalaen. */
 const BAND_CLASS = {
@@ -117,13 +118,10 @@ export function PlaceForecastStrip({ place, onClear }: PlaceForecastStripProps) 
             <p className="text-[11px] text-gray-500">{t('forecastUnavailable')}</p>
           )}
         </div>
-        <button
-          type="button"
-          onClick={onClear}
-          aria-label={t('reset')}
-          className="shrink-0 rounded-full p-1 text-gray-500 hover:bg-gray-100"
-        >
-          <X className="h-3.5 w-3.5" />
+        {/* 44 × 44 px (var 22). Krysset er den eneste veien ut av det søkte
+            stedet — se searchedPlace i MushroomMap. */}
+        <button type="button" onClick={onClear} aria-label={t('reset')} className={LUKKEKNAPP_KLASSER}>
+          <X className="h-4 w-4" aria-hidden />
         </button>
       </div>
 
@@ -140,7 +138,7 @@ export function PlaceForecastStrip({ place, onClear }: PlaceForecastStripProps) 
             const isBest = bestIndex != null && index === bestIndex;
             return (
               <div key={day.date} className="flex flex-1 flex-col items-center gap-0.5">
-                <span className={`text-[9px] font-semibold ${isBest ? 'text-forest-800' : 'text-gray-400'}`}>
+                <span className={`text-[9px] font-semibold ${isBest ? 'text-forest-800' : 'text-gray-600'}`}>
                   {safeScore}
                 </span>
                 <div

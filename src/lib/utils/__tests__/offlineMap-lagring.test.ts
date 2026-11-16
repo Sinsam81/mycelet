@@ -1,12 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  MAX_TILES_PER_SAVE,
   NoTilesCachedError,
+  OfflineAreaTooLargeError,
   TERRAIN_TILE_TEMPLATE,
   TILE_FETCH_CONCURRENCY,
   TILE_FETCH_TIMEOUT_MS,
   TILE_TIMEOUTS_BEFORE_GIVING_UP,
   cacheMapTilesForArea,
-  getTileUrlsForBounds
+  countTilesForArea,
+  getTileUrlsForBounds,
+  offlineZoomLevels
 } from '../offlineMap';
 
 /**
@@ -43,10 +47,18 @@ function settOppMiljo(fetchImpl: FetchImpl, alleredeLagret: string[] = []) {
       tilstand.samtidige -= 1;
     }
   });
+  const aapne = vi.fn(async () => cache);
+  /** URL-ene i den rekkefølgen de ble spurt etter. */
+  const spurt: string[] = [];
+  fetchMock.mockName('fetch');
+  const medLogg = vi.fn(async (req: Request, init?: { signal?: AbortSignal }) => {
+    spurt.push(req.url);
+    return fetchMock(req, init);
+  });
   vi.stubGlobal('window', { caches: {} });
-  vi.stubGlobal('caches', { open: vi.fn(async () => cache) });
-  vi.stubGlobal('fetch', fetchMock);
-  return { lagret, tilstand };
+  vi.stubGlobal('caches', { open: aapne });
+  vi.stubGlobal('fetch', medLogg);
+  return { lagret, tilstand, aapne, spurt };
 }
 
 /** En flis som aldri svarer — men som gir seg når forespørselen avbrytes, slik fetch gjør. */
@@ -185,5 +197,106 @@ describe('cacheMapTilesForArea: ingenting lagret', () => {
     expect(feil).toBeInstanceOf(Error);
     expect(feil.name).toBe('NoTilesCachedError');
     expect(feil.failed).toBe(7);
+  });
+});
+
+/**
+ * Et område som trenger flere fliser enn én lagring tar, avvises — helt.
+ *
+ * Lista over fliser ble før kuttet ved taket uten et ord. Det som falt bort var
+ * det som sto sist, og med et helt land i utsnittet var det nivået brukeren så
+ * på. Kvitteringen sa «550 kartfliser klare offline».
+ */
+describe('cacheMapTilesForArea: for stort område', () => {
+  /** Flisgrensene på et zoomnivå, så testen kan lage et område på nøyaktig N fliser. */
+  const lng = (x: number, z: number) => (x / 2 ** z) * 360 - 180;
+  const lat = (y: number, z: number) => (Math.atan(Math.sinh(Math.PI * (1 - (2 * y) / 2 ** z))) * 180) / Math.PI;
+  /** Et område som dekker nøyaktig `kolonner` × `rader` fliser på zoom 10, nord i Sør-Norge. */
+  const rutenett = (kolonner: number, rader: number) => {
+    const z = 10;
+    const x0 = 540;
+    const y0 = 290;
+    const litt = 1e-6;
+    return {
+      north: lat(y0, z) - litt,
+      south: lat(y0 + rader, z) + litt,
+      west: lng(x0, z) + litt,
+      east: lng(x0 + kolonner, z) - litt
+    };
+  };
+
+  it('testområdene har det antallet fliser testene sier', () => {
+    expect(MAX_TILES_PER_SAVE).toBe(550);
+    expect(countTilesForArea(rutenett(22, 25), [10], TERRAIN_TILE_TEMPLATE)).toBe(550);
+    expect(countTilesForArea(rutenett(23, 25), [10], TERRAIN_TILE_TEMPLATE)).toBe(575);
+  });
+
+  it('avviser før cachen åpnes og før én flis er hentet', async () => {
+    const { tilstand, aapne, lagret } = settOppMiljo(svarerOk);
+    const feil = await cacheMapTilesForArea(rutenett(23, 25), [10], TERRAIN_TILE_TEMPLATE).catch((e: unknown) => e);
+    expect(feil).toBeInstanceOf(OfflineAreaTooLargeError);
+    expect((feil as OfflineAreaTooLargeError).tiles).toBe(575);
+    expect((feil as OfflineAreaTooLargeError).limit).toBe(MAX_TILES_PER_SAVE);
+    expect(aapne).not.toHaveBeenCalled();
+    expect(tilstand.kall).toBe(0);
+    expect(lagret.size).toBe(0);
+  });
+
+  it('lagrer aldri en avkuttet del av et for stort område', async () => {
+    // Det gamle: de første 550 ble hentet, resten falt bort i stillhet.
+    const { lagret } = settOppMiljo(svarerOk);
+    await cacheMapTilesForArea(rutenett(23, 25), [10], TERRAIN_TILE_TEMPLATE).catch(() => undefined);
+    expect(lagret.size).toBe(0);
+  });
+
+  it('et område akkurat på taket lagres helt', async () => {
+    const { lagret } = settOppMiljo(svarerOk);
+    const resultat = await cacheMapTilesForArea(rutenett(22, 25), [10], TERRAIN_TILE_TEMPLATE);
+    expect(resultat).toEqual({ cached: 550, failed: 0 });
+    expect(lagret.size).toBe(550);
+  });
+
+  it('er en annen feil enn «ingen fliser lot seg lagre» — brukeren skal zoome inn, ikke vente på dekning', () => {
+    const feil = new OfflineAreaTooLargeError(900, 550);
+    expect(feil).toBeInstanceOf(Error);
+    expect(feil).not.toBeInstanceOf(NoTilesCachedError);
+    expect(feil.name).toBe('OfflineAreaTooLargeError');
+  });
+});
+
+/**
+ * Nivået brukeren ser på hentes FØRST. Det er det offline-siden tegner
+ * området på, så dør nettet midt i lagringen, er det dette som bør være
+ * komplett.
+ */
+describe('cacheMapTilesForArea: rekkefølgen', () => {
+  const { zoomLevels } = offlineZoomLevels(12, TERRAIN_TILE_TEMPLATE);
+  const nivaa12 = getTileUrlsForBounds(BOUNDS, 12, TERRAIN_TILE_TEMPLATE);
+  const alle = Array.from(new Set(zoomLevels.flatMap((z) => getTileUrlsForBounds(BOUNDS, z, TERRAIN_TILE_TEMPLATE))));
+
+  it('testområdet har fliser på alle tre nivåene', () => {
+    expect(zoomLevels).toEqual([12, 11, 13]);
+    expect(nivaa12.length).toBeGreaterThan(TILE_FETCH_CONCURRENCY);
+    expect(alle.length).toBeGreaterThan(nivaa12.length * 2);
+  });
+
+  it('spør etter flisene på områdets eget nivå før noen av de andre', async () => {
+    const { spurt } = settOppMiljo(svarerOk);
+    await cacheMapTilesForArea(BOUNDS, zoomLevels, TERRAIN_TILE_TEMPLATE);
+    expect(spurt).toHaveLength(alle.length);
+    expect(new Set(spurt.slice(0, nivaa12.length))).toEqual(new Set(nivaa12));
+  });
+
+  it('dør nettet midt i lagringen, er områdets eget nivå det som ligger komplett', async () => {
+    // Nettet svarer på akkurat så mange fliser som nivå 12 har, og faller så ut.
+    let svar = 0;
+    const { lagret } = settOppMiljo(async () => {
+      svar += 1;
+      if (svar > nivaa12.length) throw new TypeError('Failed to fetch');
+      return new Response('flis', { status: 200 });
+    });
+    const resultat = await cacheMapTilesForArea(BOUNDS, zoomLevels, TERRAIN_TILE_TEMPLATE);
+    expect(resultat).toEqual({ cached: nivaa12.length, failed: alle.length - nivaa12.length });
+    expect(new Set(lagret.keys())).toEqual(new Set(nivaa12));
   });
 });
