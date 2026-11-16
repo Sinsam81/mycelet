@@ -103,13 +103,19 @@ export default async function SoppvarselSide({
           </label>
           <label className="mt-3 block text-sm font-medium text-gray-700">
             {t.omrade}
+            {/* Første valg er en synlig ledetekst: uten tekst sto feltet tomt,
+                og så ut som om noe manglet. Det er fortsatt `disabled` og
+                feltet `required`: et tomt valg er nettleserens «placeholder
+                label option», så skjemaet kan ikke sendes uten et område. */}
             <select
               name="region"
               required
               className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
               defaultValue={forhandsvalgt}
             >
-              <option value="" disabled />
+              <option value="" disabled>
+                {t.velgOmrade}
+              </option>
               <optgroup label={t.norge}>
                 {norske.map((r) => (
                   <option key={r.name} value={r.name}>

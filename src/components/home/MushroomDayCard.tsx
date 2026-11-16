@@ -36,6 +36,8 @@ interface Flush {
   message: string;
   /** Hvorfor status er 'dormant' (flush.ts). Mangler i svar cachet før feltet kom. */
   reason?: 'offSeason' | 'cold' | 'speciesOffSeason';
+  /** Ordene er sesongkvalifisert — tidlig eller sent i sesongen (flush.ts). */
+  shoulder?: 'early' | 'late';
 }
 
 interface Forecast {
@@ -131,6 +133,21 @@ const FLUSH_TINT: Record<FlushStatus, string> = {
   dry: 'border-gray-200 bg-gray-50 text-gray-700',
   dormant: 'border-gray-200 bg-gray-50 text-gray-600'
 };
+
+/**
+ * Grønt er kortets «dra nå» — samme farge som en feiret ring. Et 'fruiting'
+ * med sesongkvalifiserte ord («men sent i sesongen», «men tidlig i sesongen»)
+ * tegnes gult, som 'building' og 'soon': flush.ts kvalifiserer bare når dommen
+ * over IKKE feirer, så ringen over er da alltid gul eller grå, og etter
+ * 17. november kan den ikke bli grønn i det hele tatt. Et grønt banner ville
+ * vært det eneste på skjermen som fortsatt sa «dra nå», under ord som sier
+ * «sent, mindre å finne» og over «Det er stille i alle områdene nå». Gult er
+ * appens «delvis» — det ordene sier. Statusen og tallene er de samme.
+ */
+export function flushTint(flush: { status: FlushStatus; shoulder?: 'early' | 'late' }): string {
+  if (flush.status === 'fruiting' && flush.shoulder) return FLUSH_TINT.building;
+  return FLUSH_TINT[flush.status];
+}
 
 // Tersklene og båndlogikken ligger i forecast-scale.ts, delt med
 // PlaceForecastStrip. De var fire ulike sett på samme skjerm.
@@ -423,7 +440,7 @@ export function MushroomDayCard({
           ) : null}
         </div>
       ) : data.flush ? (
-        <div className={`mt-3 rounded-xl border px-3 py-2 ${FLUSH_TINT[data.flush.status]}`}>
+        <div className={`mt-3 rounded-xl border px-3 py-2 ${flushTint(data.flush)}`}>
           <p className="text-sm font-semibold">{data.flush.title}</p>
           <p className="mt-0.5 text-xs opacity-90">{data.flush.message}</p>
         </div>

@@ -84,7 +84,7 @@ vi.mock('@/components/onboarding/OnboardingIntro', () => ({
   ONBOARDING_DONE_EVENT: 'mycelet:onboarding-done'
 }));
 
-const { MushroomDayCard, PROGNOSE_FERSK_MS, PROGNOSE_NYE_FORSOK, prognoseNokkel } = await import('../MushroomDayCard');
+const { MushroomDayCard, PROGNOSE_FERSK_MS, PROGNOSE_NYE_FORSOK, flushTint, prognoseNokkel } = await import('../MushroomDayCard');
 const { ProvGratisVedStart } = await import('@/components/billing/ProvGratisVedStart');
 
 // ── Prognosen ───────────────────────────────────────────────────────────────
@@ -486,6 +486,53 @@ describe('MushroomDayCard — utenom sesongen', () => {
     expect(screen.getAllByText('Utenom soppsesongen')).toHaveLength(1);
     expect(screen.getByRole('link', { name: /Se hva som har sesong nå/ }).getAttribute('href')).toBe('/calendar');
     expect(screen.getByRole('link', { name: /Dine steder fra sesongen/ }).getAttribute('href')).toBe('/mine-steder');
+  });
+});
+
+/**
+ * Banneret i skuldrene (flush.ts). Målt 16. november: et GRØNT «Forholdene er
+ * modne nå 🍄 — soppen kommer nå. Ta turen ut!» under en gul ring på 69. Nå er
+ * ordene sesongkvalifisert, og fargen følger ordene: grønt er kortets «dra nå».
+ */
+describe('MushroomDayCard — banneret i skuldrene', () => {
+  const medBanner = (flush: Record<string, unknown>) => () =>
+    Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ ...prognose(69), flush }) });
+
+  it('sent i sesongen: banneret er gult, som ringen over det', async () => {
+    svarPerRute[rute(OSLO)] = medBanner({
+      status: 'fruiting',
+      daysUntil: 0,
+      title: 'Fuktig og mildt — men sent i sesongen',
+      message: 'Forholdene er fortsatt gode nok for de sene artene.',
+      shoulder: 'late'
+    });
+    tegn();
+    await ring(69);
+    const banner = screen.getByText('Fuktig og mildt — men sent i sesongen').parentElement!;
+    expect(banner.className).toContain('bg-amber-50');
+    expect(banner.className).not.toContain('bg-forest-50');
+  });
+
+  it('høysesongens «modne nå» er fortsatt grønt', async () => {
+    svarPerRute[rute(OSLO)] = medBanner({
+      status: 'fruiting',
+      daysUntil: 0,
+      title: 'Forholdene er modne nå 🍄',
+      message: 'Fuktig mark og mildt vær.'
+    });
+    tegn();
+    await ring(69);
+    expect(screen.getByText('Forholdene er modne nå 🍄').parentElement!.className).toContain('bg-forest-50');
+  });
+
+  it('fargen per status: bare et kvalifisert «modne» bytter farge', () => {
+    expect(flushTint({ status: 'fruiting' })).toContain('bg-forest-50');
+    expect(flushTint({ status: 'fruiting', shoulder: 'late' })).toContain('bg-amber-50');
+    expect(flushTint({ status: 'fruiting', shoulder: 'early' })).toContain('bg-amber-50');
+    expect(flushTint({ status: 'soon', shoulder: 'late' })).toBe(flushTint({ status: 'soon' }));
+    expect(flushTint({ status: 'building', shoulder: 'late' })).toBe(flushTint({ status: 'building' }));
+    expect(flushTint({ status: 'dry' })).toContain('bg-gray-50');
+    expect(flushTint({ status: 'dormant' })).toContain('bg-gray-50');
   });
 });
 

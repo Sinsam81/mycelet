@@ -17,6 +17,7 @@ import { buildExplanation, type ExplanationWeather } from '@/lib/utils/predictio
 import { FORECAST_GREEN_MIN } from '@/lib/utils/forecast-scale';
 import { DEFAULT_LOCALE, type Locale } from '@/i18n/config';
 import { utenomSesongTekst } from '@/lib/sesong/utenom-sesong-tekst';
+import { sesongfaseForManed } from '@/lib/sesong/sesongtilstand';
 
 export interface MushroomDayAssessment {
   /** True only inside the broad mushroom season and when the score clears the bar. */
@@ -119,6 +120,87 @@ export function seasonWeight(month: number, dayOfMonth?: number): number {
   return from + (to - from) * t;
 }
 
+/** Skuldrene i soppsesongen — der ordene må si at det er tidlig eller sent. */
+export type SeasonShoulder = 'early' | 'late';
+
+/** Skuldermånedenes nivå i vekttabellen: juli (og november) midt i måneden, 22. */
+const SHOULDER_LEVEL = SEASON_WEIGHT_BY_MONTH[7 - 1];
+
+/**
+ * Hvilken skulder av soppsesongen dagen ligger i — eller null i høysesongen og
+ * utenom sesongen.
+ *
+ * Forsidekortet brukte de samme ordene midt i november som i september. Målt
+ * 16. november (Oslo): en gul ring på 69 med «Forholdene er ikke helt optimale
+ * akkurat nå», rett under den et grønt «Forholdene er modne nå 🍄 — soppen
+ * kommer nå. Ta turen ut!», og lenger ned «Det er stille i alle områdene nå».
+ * Tre beskjeder på én skjerm. Banneret (flush.ts) og dagens dom (verdictFor
+ * under) leser begge HERFRA, så de kan ikke skille lag om hvor i året vi er —
+ * samme lærdom som isInMushroomSeason over.
+ *
+ *  - 'late' = hele november: fasen 'ettersesong' i sesongtilstand.ts, den ENE
+ *    kilden for «hvor i soppåret er vi». Samme dag forsvinner haken «Hovedsesong
+ *    for sopp i Norge» fra kortet (prediction-explanation.ts), og alt banneret
+ *    projiserer 1–2 uker fram, lander mot eller etter 1. desember, der
+ *    sesongporten stenger.
+ *  - 'early' = fasen 'forsesong' (juni–juli), men bare så lenge sesongvekten
+ *    ennå er under skuldernivået (22) — juni og første halvdel av juli. Fra
+ *    15. juli stiger vekten mot høysesongen i august, kantarellen er gjerne i
+ *    gang, og fra 10. juli kan en dag med ideelt vær nå «Perfekt soppdag». Den
+ *    siste halvdelen av juli skal ikke kalles tidlig.
+ *
+ * Skuldrene er ikke speilbilder, med vilje: i november blir hver dag dårligere,
+ * og alt banneret lover, havner i desember; i juli blir hver dag bedre, og det
+ * banneret lover, havner i høysesongen. Det er bare ORDENE som skifter ved
+ * grensene — tallene, tersklene og optimal-porten er urørt, og vekten er glatt
+ * over begge.
+ *
+ * Uten `dayOfMonth` regnes dagen som midt i måneden: juni er tidlig, juli ikke.
+ */
+export function seasonShoulder(month: number, dayOfMonth?: number): SeasonShoulder | null {
+  const fase = sesongfaseForManed(month);
+  if (fase === 'ettersesong') return 'late';
+  if (fase === 'forsesong' && seasonWeight(month, dayOfMonth) < SHOULDER_LEVEL) return 'early';
+  return null;
+}
+
+/** Temperaturbåndet (°C) der flush-banneret kaller forholdene modne. Verdiene banneret alltid har brukt. */
+const FLUSH_MILD_MIN_C = 3;
+const FLUSH_MILD_MAX_C = 20;
+
+/**
+ * Er det mildt nok til at flush-banneret (flush.ts) kan kalle forholdene modne?
+ *
+ * Delt med dommen, fordi de to står rett over hverandre og ikke har samme
+ * temperaturskala: scoren gir temperaturpoeng helt opp til 22 °C, banneret
+ * slutter på 20. Mellom de to sa dommen «Fuktig nok — men det er tidlig i
+ * sesongen — Marka er fuktig og det har kommet nok regn» rett over banneret
+ * «Tørt — soppen venter på regn — Lite fukt og ingen regn i sikte» (10. juli,
+ * 21 °C, fuktig mark, tørr prognose). Dommen sier nå at marka er fuktig bare
+ * der banneret under sier det samme. Tallene og banneret er urørt.
+ */
+export function isMildForFlush(tempC: number): boolean {
+  return tempC >= FLUSH_MILD_MIN_C && tempC <= FLUSH_MILD_MAX_C;
+}
+
+interface VerdictText {
+  title: string;
+  message: string;
+}
+
+/**
+ * Dommene i en skulder (seasonShoulder). Grunntekstene sier «Alt stemmer»,
+ * «Vær og sesong er på plass» og «Temperatur og sesong stemmer» — i juni og
+ * november er det ikke sant, for der holder årstiden selv tallet nede, og «så
+ * følger soppen på 1–2 uker» lover i slutten av november sopp i desember.
+ */
+interface ShoulderCopy {
+  drySoil: VerdictText;
+  littleRain: VerdictText;
+  /** Fuktig nok og regn nok — det er årstiden som koster mest. */
+  season: VerdictText;
+}
+
 /**
  * User-facing copy per language. These strings are served straight to the client
  * (home card, push notification), so the caller must pass the reader's locale —
@@ -137,6 +219,7 @@ interface DayCopy {
   messageDrySoil: string;
   titleLittleRain: string;
   messageLittleRain: string;
+  shoulder: Record<SeasonShoulder, ShoulderCopy>;
   // Utenom sesongen: teksten ligger i src/lib/sesong/utenom-sesong-tekst.ts,
   // delt med flush.ts, så de to ikke kan skille lag igjen.
 }
@@ -173,6 +256,16 @@ const OPTIMAL_RAIN_MIN_MM = 15;
  */
 const EXPLAIN_SCORE_MIN = 65;
 
+/**
+ * Taket for hvert ledd i scoren (sesong 0–35, regn 0–30, temperatur 0–20,
+ * luftfuktighet 0–15). Dommen bruker dem til å se hvilket ledd som koster mest;
+ * verdiene er de samme som trinnene i assessMushroomDay har hatt hele tiden.
+ */
+const SEASON_MAX_PTS = Math.max(...SEASON_WEIGHT_BY_MONTH);
+const RAIN_MAX_PTS = 30;
+const TEMP_MAX_PTS = 20;
+const HUMIDITY_MAX_PTS = 15;
+
 const COPY: Record<Locale, DayCopy> = {
   nb: {
     titleOptimal: '🍄 Perfekt soppdag i dag!',
@@ -184,7 +277,43 @@ const COPY: Record<Locale, DayCopy> = {
       'Vær og sesong er på plass, men marka er fortsatt for tørr etter tørkeperioden. Den trenger et skikkelig regn, så følger soppen på 1–2 uker.',
     titleLittleRain: 'Mildt nok — men det har regnet for lite',
     messageLittleRain:
-      'Temperatur og sesong stemmer, men det har kommet lite nedbør de siste to ukene. Første ordentlige regnværet setter det i gang.'
+      'Temperatur og sesong stemmer, men det har kommet lite nedbør de siste to ukene. Første ordentlige regnværet setter det i gang.',
+    shoulder: {
+      early: {
+        drySoil: {
+          title: 'Tørr mark — og tidlig i sesongen',
+          message:
+            'Marka er for tørr etter tørkeperioden, og det er tidlig i sesongen. Et skikkelig regn setter det i gang, men færre arter er ute nå enn senere på sommeren og høsten.'
+        },
+        littleRain: {
+          title: 'For lite regn — og tidlig i sesongen',
+          message:
+            'Det har kommet lite nedbør de siste to ukene, og det er tidlig i sesongen. Første ordentlige regnværet setter det i gang, men færre arter er ute nå enn senere på sommeren og høsten.'
+        },
+        season: {
+          title: 'Fuktig nok — men det er tidlig i sesongen',
+          message:
+            'Marka er fuktig og det har kommet nok regn. Det som holder tallet mest nede, er årstiden: færre arter er ute nå enn senere på sommeren og høsten.'
+        }
+      },
+      late: {
+        drySoil: {
+          title: 'Tørr mark — og sesongen er på hell',
+          message:
+            'Marka er for tørr etter tørkeperioden, og det er sent på året. Et skikkelig regn kan fortsatt hjelpe de sene artene, men det er usikkert om det rekker før sesongen er over.'
+        },
+        littleRain: {
+          title: 'For lite regn — og sesongen er på hell',
+          message:
+            'Det har kommet lite nedbør de siste to ukene, og det er sent på året. Regn kan fortsatt hjelpe de sene artene, men det er usikkert om det rekker før sesongen er over.'
+        },
+        season: {
+          title: 'Fuktig nok — men sesongen er på hell',
+          message:
+            'Marka er fuktig og det har kommet nok regn. Det som holder tallet mest nede, er årstiden: det er sent på året, og færre arter er ute nå enn i høysesongen.'
+        }
+      }
+    }
   },
   sv: {
     titleOptimal: '🍄 Perfekt svampdag i dag!',
@@ -196,7 +325,43 @@ const COPY: Record<Locale, DayCopy> = {
       'Väder och säsong är på plats, men marken är fortfarande för torr efter torkan. Den behöver ett ordentligt regn, sedan följer svampen om 1–2 veckor.',
     titleLittleRain: 'Milt nog — men det har regnat för lite',
     messageLittleRain:
-      'Temperatur och säsong stämmer, men det har kommit lite nederbörd de senaste två veckorna. Första ordentliga regnet sätter i gång det.'
+      'Temperatur och säsong stämmer, men det har kommit lite nederbörd de senaste två veckorna. Första ordentliga regnet sätter i gång det.',
+    shoulder: {
+      early: {
+        drySoil: {
+          title: 'Torr mark — och tidigt på säsongen',
+          message:
+            'Marken är för torr efter torkan, och det är tidigt på säsongen. Ett ordentligt regn sätter i gång det, men färre arter har kommit nu än senare på sommaren och hösten.'
+        },
+        littleRain: {
+          title: 'För lite regn — och tidigt på säsongen',
+          message:
+            'Det har kommit lite nederbörd de senaste två veckorna, och det är tidigt på säsongen. Första ordentliga regnet sätter i gång det, men färre arter har kommit nu än senare på sommaren och hösten.'
+        },
+        season: {
+          title: 'Fuktigt nog — men det är tidigt på säsongen',
+          message:
+            'Marken är fuktig och det har kommit tillräckligt med regn. Det som håller nere siffran mest är årstiden: färre arter har kommit nu än senare på sommaren och hösten.'
+        }
+      },
+      late: {
+        drySoil: {
+          title: 'Torr mark — och säsongen är på upphällningen',
+          message:
+            'Marken är för torr efter torkan, och det är sent på året. Ett ordentligt regn kan fortfarande hjälpa de sena arterna, men det är osäkert om det hinner innan säsongen är slut.'
+        },
+        littleRain: {
+          title: 'För lite regn — och säsongen är på upphällningen',
+          message:
+            'Det har kommit lite nederbörd de senaste två veckorna, och det är sent på året. Regn kan fortfarande hjälpa de sena arterna, men det är osäkert om det hinner innan säsongen är slut.'
+        },
+        season: {
+          title: 'Fuktigt nog — men säsongen är på upphällningen',
+          message:
+            'Marken är fuktig och det har kommit tillräckligt med regn. Det som håller nere siffran mest är årstiden: det är sent på året, och färre arter är ute nu än under högsäsongen.'
+        }
+      }
+    }
   }
 };
 
@@ -210,28 +375,35 @@ export function assessMushroomDay(
    */
   dayOfMonth?: number
 ): MushroomDayAssessment {
-  let score = 0;
+  // Hvert ledd for seg, så dommen kan se HVA som holder tallet nede (verdictFor).
+  // Summen er nøyaktig den gamle: samme ledd, samme trinn, lagt sammen i samme
+  // rekkefølge — testen «scoren er den samme som før» låser det.
 
   // Season (0–35) — the strongest gate. Glatt over månedsskiftet, se seasonWeight.
-  score += seasonWeight(month, dayOfMonth);
+  const seasonPts = seasonWeight(month, dayOfMonth);
 
   // Cumulative rain (0–30) — a moist base is what drives fruiting.
   const rain = cumulativeRain(weather);
-  if (rain >= 40) score += 30;
-  else if (rain >= 20) score += 20;
-  else if (rain >= 10) score += 10;
+  const rainPts = rain >= 40 ? RAIN_MAX_PTS : rain >= 20 ? 20 : rain >= 10 ? 10 : 0;
 
   // Temperature (0–20) — mild is best.
   const t = weather.temperatureC;
-  if (t >= 10 && t <= 18) score += 20;
-  else if (t >= 6 && t <= 22) score += 10;
+  const tempPts = t >= 10 && t <= 18 ? TEMP_MAX_PTS : t >= 6 && t <= 22 ? 10 : 0;
 
   // Humidity (0–15).
   const h = weather.humidityPct;
-  if (h >= 80) score += 15;
-  else if (h >= 65) score += 8;
+  const humidityPts = h >= 80 ? HUMIDITY_MAX_PTS : h >= 65 ? 8 : 0;
 
-  score = Math.max(0, Math.min(100, Math.round(score)));
+  const score = Math.max(0, Math.min(100, Math.round(seasonPts + rainPts + tempPts + humidityPts)));
+
+  // Hva hvert ledd koster mot sitt eget tak. «Det er årstiden» sies bare når
+  // sesongleddet koster minst like mye som hvert av værleddene — ellers ville
+  // teksten pekt på feil årsak. 1. november med 15–20 mm regn på to uker:
+  // sesongen koster 7 poeng, regnet 20. 16. november ved 69 (dagen kortet ble
+  // målt): sesongen koster 14, temperaturen 10, luftfuktigheten 7.
+  const seasonCostsMost =
+    SEASON_MAX_PTS - seasonPts >=
+    Math.max(RAIN_MAX_PTS - rainPts, TEMP_MAX_PTS - tempPts, HUMIDITY_MAX_PTS - humidityPts);
 
   // Ringen viser 0–100, men teksten hadde bare TO tilstander. Da `optimal` er
   // portet på fire vilkår som ringen ikke kjenner, kunne tallet og ordene peke
@@ -256,7 +428,11 @@ export function assessMushroomDay(
     inSeasonWindow: boolean;
     rain: number;
     moistNow: boolean;
-  }): { title: string; message: string } {
+    shoulder: SeasonShoulder | null;
+    seasonCostsMost: boolean;
+    /** Banneret under kaller forholdene modne ved denne temperaturen (isMildForFlush). */
+    mildForFlush: boolean;
+  }): VerdictText {
     const { copy: c, optimal: ok, score: s, inSeasonWindow: iw, rain: r, moistNow: m } = input;
     if (ok) return { title: c.titleOptimal, message: c.messageOptimal };
     // Vinter og vår har hver sin tekst, og ingen av dem sier «kom tilbake» —
@@ -268,8 +444,24 @@ export function assessMushroomDay(
     // Under det er «ikke helt optimalt» en dekkende beskrivelse i seg selv.
     // NB: EXPLAIN_SCORE_MIN, ikke OPTIMAL_SCORE_MIN — se kommentaren ved dem.
     if (s >= EXPLAIN_SCORE_MIN) {
-      if (!m) return { title: c.titleDrySoil, message: c.messageDrySoil };
-      if (r < OPTIMAL_RAIN_MIN_MM) return { title: c.titleLittleRain, message: c.messageLittleRain };
+      // I en skulder (seasonShoulder) er årstiden med i forklaringen: «Alt
+      // stemmer — bortsett fra marka» er ikke sant når årstiden selv holder
+      // tallet nede, og banneret under (flush.ts) sier fra samme skulder at det
+      // er tidlig eller sent.
+      const sk = input.shoulder ? c.shoulder[input.shoulder] : null;
+      if (!m) return sk ? sk.drySoil : { title: c.titleDrySoil, message: c.messageDrySoil };
+      if (r < OPTIMAL_RAIN_MIN_MM) {
+        return sk ? sk.littleRain : { title: c.titleLittleRain, message: c.messageLittleRain };
+      }
+      // Portene slapp gjennom, men tallet nådde ikke feiringen. Er det årstiden
+      // som koster mest, sier vi det, i stedet for den intetsigende «ikke helt
+      // optimale» — den sto 16. november over 69 av 100, der sesongleddet var
+      // det som manglet.
+      //
+      // Bare der banneret under også kaller forholdene modne (isMildForFlush):
+      // teksten sier «Marka er fuktig», og over 20 °C sier banneret «Tørt» eller
+      // «Regn på vei». Der står den vanlige dommen, som før.
+      if (sk && input.seasonCostsMost && input.mildForFlush) return sk.season;
     }
     return { title: c.titleNormal, message: c.messageNormal };
   }
@@ -302,7 +494,17 @@ export function assessMushroomDay(
     .map((line) => line.text);
 
   const copy = COPY[locale] ?? COPY[DEFAULT_LOCALE];
-  const { title, message } = verdictFor({ copy, optimal, score, inSeasonWindow, rain, moistNow });
+  const { title, message } = verdictFor({
+    copy,
+    optimal,
+    score,
+    inSeasonWindow,
+    rain,
+    moistNow,
+    shoulder: seasonShoulder(month, dayOfMonth),
+    seasonCostsMost,
+    mildForFlush: isMildForFlush(t)
+  });
 
   return { optimal, score, title, message, reasons };
 }

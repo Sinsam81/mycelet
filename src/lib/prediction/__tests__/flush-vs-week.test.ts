@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { reconcileFlushWithWeek, type WeekDay } from '../flush-vs-week';
-import type { FlushAssessment } from '../flush';
+import { assessFlush, type FlushAssessment } from '../flush';
+import type { DailyForecast } from '@/lib/weather/forecast';
 
 /**
  * «Regn på vei — sopp om ~N dager» har utfallsrom 9–14 dager, mens stripen rett
@@ -101,5 +102,93 @@ describe('reconcileFlushWithWeek', () => {
   it('takler manglende eller kort stripe', () => {
     expect(reconcileFlushWithWeek(SOON, [], 'nb')).toEqual(SOON);
     expect(reconcileFlushWithWeek(SOON, uke([60]), 'nb')).toEqual(SOON);
+  });
+});
+
+/**
+ * Sent i sesongen (november) har flush.ts egne ord for «regn på vei»: «… usikkert
+ * om soppen rekker å følge etter før sesongen er over». Erstatningen over lover
+ * «en ny bølge om ~N dager», og 22. november lander det i desember, der dommen
+ * sier «Utenom soppsesongen». Målt: 45 av 72 sene «regn på vei» 22.–30. november
+ * ble skrevet om slik.
+ */
+describe('reconcileFlushWithWeek — sent i sesongen', () => {
+  const UKEDAG = ['søn', 'man', 'tir', 'ons', 'tor', 'fre', 'lør'];
+
+  /** Stripen med datoer, slik ruta sender den (WeekDayScore). */
+  function ukeFra(fra: string, scores: number[]): WeekDay[] {
+    return scores.map((score, i) => {
+      const d = new Date(`${fra}T12:00:00Z`);
+      d.setUTCDate(d.getUTCDate() + i);
+      return { date: d.toISOString().slice(0, 10), score, label: i === 0 ? 'I dag' : UKEDAG[d.getUTCDay()], isToday: i === 0 };
+    });
+  }
+
+  /** Tørr mark, 4 °C, regn i prognosen på dag `regndag` — flush.ts sitt sene «regn på vei». */
+  function sentRegnPaVei(dayOfMonth: number, regndag: number, locale: 'nb' | 'sv' = 'nb'): FlushAssessment {
+    const forecast: DailyForecast[] = ukeFra(`2026-11-${dayOfMonth}`, Array<number>(7).fill(0))
+      .slice(1)
+      .map((d, i) => ({ date: d.date!, tempC: 6, precipMm: i + 1 === regndag ? 10 : 0, humidityPct: 90 }));
+    return assessFlush(
+      { month: 11, dayOfMonth, soilMoistureIndex: 0.35, rain7dMm: 1.4, currentTempC: 4, forecast },
+      undefined,
+      locale
+    );
+  }
+
+  it('beholder de sene ordene og legger til ukas beste dag — ingen «ny bølge» inn i desember', () => {
+    const sent = sentRegnPaVei(22, 2);
+    expect(sent).toMatchObject({ status: 'soon', daysUntil: 10, shoulder: 'late', title: 'Regn på vei — men sent i sesongen' });
+
+    // 22. november er en søndag; tirsdag 24. stikker seg ut.
+    const ut = reconcileFlushWithWeek(sent, ukeFra('2026-11-22', [32, 41, 55, 50, 49, 48, 47]), 'nb');
+    expect(ut).toMatchObject({ status: 'soon', daysUntil: 10, shoulder: 'late', title: sent.title });
+    expect(ut.message).toBe(`${sent.message} Best blir det på tir (+23 poeng).`);
+    expect(ut.message).not.toMatch(/ny bølge|~10 dager/);
+  });
+
+  it('delt topp: «senere i uka», uten «enda bedre» — forholdene er ikke modne i dag', () => {
+    const sent = sentRegnPaVei(22, 2);
+    // Stripen 22. november fra gjennomgangen: 50 deles av tirsdag og onsdag.
+    const ut = reconcileFlushWithWeek(sent, ukeFra('2026-11-22', [32, 41, 50, 50, 49, 48, 47]), 'nb');
+    expect(ut.title).toBe(sent.title);
+    expect(ut.message).toBe(`${sent.message} Flere dager senere i uka ligger merkbart bedre an enn i dag (+18 poeng).`);
+    expect(ut.message).not.toMatch(/enda bedre|ny bølge/);
+  });
+
+  it('svarer på svensk', () => {
+    const sent = sentRegnPaVei(22, 2, 'sv');
+    const en = reconcileFlushWithWeek(sent, ukeFra('2026-11-22', [32, 41, 55, 50, 49, 48, 47]), 'sv');
+    expect(en.title).toBe('Regn på väg — men sent på säsongen');
+    expect(en.message).toBe(`${sent.message} Bäst blir det på tir (+23 poäng).`);
+    const delt = reconcileFlushWithWeek(sent, ukeFra('2026-11-22', [32, 41, 50, 50, 49, 48, 47]), 'sv');
+    expect(delt.message).toBe(
+      `${sent.message} Flera dagar senare i veckan ligger märkbart bättre till än i dag (+18 poäng).`
+    );
+    for (const m of [en.message, delt.message]) expect(m).not.toMatch(/ny våg|ännu bättre|[æøÆØ]/);
+  });
+
+  it('navngir ingen dag etter 30. november — da står de sene ordene alene', () => {
+    // 27. november: regnet kommer 1.–2. desember, og ukas topp er torsdag 3. desember.
+    const sent = sentRegnPaVei(27, 5);
+    const desemberuke = ukeFra('2026-11-27', [28, 37, 37, 36, 35, 45, 54]);
+    expect(reconcileFlushWithWeek(sent, desemberuke, 'nb')).toEqual(sent);
+    // Det samme for et sent «modent» banner.
+    const modent: FlushAssessment = { ...sent, status: 'fruiting', daysUntil: 0 };
+    expect(reconcileFlushWithWeek(modent, desemberuke, 'nb')).toEqual(modent);
+    // Er toppen fortsatt i november, legges den til som før.
+    const novembertopp = reconcileFlushWithWeek(modent, ukeFra('2026-11-24', [28, 45, 37, 36, 35, 30, 30]), 'nb');
+    expect(novembertopp.message).toBe(`${modent.message} Best blir det på ons (+17 poeng).`);
+  });
+
+  it('en jevn uke lar de sene ordene stå urørt', () => {
+    const sent = sentRegnPaVei(22, 2);
+    expect(reconcileFlushWithWeek(sent, ukeFra('2026-11-22', [32, 35, 38, 36, 34, 33, 32]), 'nb')).toEqual(sent);
+  });
+
+  it('i høysesongen er alt som før: stripens vinner leder, projeksjonen blir tillegget', () => {
+    const ut = reconcileFlushWithWeek(SOON, ukeFra('2026-10-01', [60, 70, 87, 72, 68, 65, 62]), 'nb');
+    expect(ut.title).toBe('Beste dagen denne uka: lør');
+    expect(ut.message).toContain('ny bølge om ~12 dager');
   });
 });

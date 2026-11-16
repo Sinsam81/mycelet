@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { assessFlush } from '@/lib/prediction/flush';
-import { isInMushroomSeason } from '@/lib/prediction/mushroom-day';
+import { assessMushroomDay, isInMushroomSeason, isMildForFlush, seasonShoulder } from '@/lib/prediction/mushroom-day';
 import { dayOfYearFromMonth, phenologyFactor } from '@/lib/prediction/phenology';
 import { PHENOLOGY } from '@/lib/prediction/phenology-data';
 import type { DailyForecast } from '@/lib/weather/forecast';
@@ -206,5 +206,273 @@ describe('sesongporten deles med ringen', () => {
     // Uten kurve for arten faller den tilbake på den generelle porten.
     const utenKurve = assessFlush({ ...VÅT_MILD_MAIDAG }, { genus: 'Morchella', speciesId: null, lat: 59.9 });
     expect(utenKurve.status).toBe('dormant');
+  });
+});
+
+/**
+ * Banneret i skuldrene.
+ *
+ * Målt 16. november 2026 (Oslo): «Forholdene er modne nå 🍄 — Fuktig mark og
+ * mildt vær — soppen kommer nå. Ta turen ut!» rett under en gul ring på 69 og
+ * over «Det er stille i alle områdene nå». 'fruiting' fyrer på fuktig mark og
+ * 3–20 °C hvor som helst i sesongvinduet, og hadde høysesongens ord i november
+ * som i september. Statusen er riktig — fukt og temperatur ER der. Det var
+ * ordene som ikke visste hvor i året vi var.
+ */
+describe('assessFlush — skuldrene', () => {
+  const MODENT = { soilMoistureIndex: 0.8, rain7dMm: 25, currentTempC: 8, forecast: [] as DailyForecast[] };
+  const SISTE_DAG = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+
+  const FASIT: Record<'nb' | 'sv', { tidlig: string; topp: string; sent: string }> = {
+    nb: {
+      tidlig: 'Fuktig og mildt — men tidlig i sesongen',
+      topp: 'Forholdene er modne nå 🍄',
+      sent: 'Fuktig og mildt — men sent i sesongen'
+    },
+    sv: {
+      tidlig: 'Fuktigt och milt — men tidigt på säsongen',
+      topp: 'Nu är det läge för svamp 🍄',
+      sent: 'Fuktigt och milt — men sent på säsongen'
+    }
+  };
+
+  it('gir riktige ord for et «modent» banner alle tolv måneder, på begge språk', () => {
+    for (const locale of ['nb', 'sv'] as const) {
+      for (let month = 1; month <= 12; month++) {
+        for (const dag of [1, 14, 15, SISTE_DAG[month - 1]]) {
+          const f = assessFlush({ ...MODENT, month, dayOfMonth: dag }, undefined, locale);
+          const hvor = `${dag}.${month} ${locale}`;
+          if (!isInMushroomSeason(month)) {
+            expect(f.status, hvor).toBe('dormant');
+            expect(f.reason, hvor).toBe('offSeason');
+            expect(f.shoulder, hvor).toBeUndefined();
+            continue;
+          }
+          // Statusen og tallet er de samme hele sesongen — bare ordene skifter.
+          expect(f.status, hvor).toBe('fruiting');
+          expect(f.daysUntil, hvor).toBe(0);
+          const ventet =
+            month === 11 ? 'sent' : month === 6 || (month === 7 && dag < 15) ? 'tidlig' : 'topp';
+          expect(f.title, hvor).toBe(FASIT[locale][ventet]);
+          expect(f.shoulder, hvor).toBe(ventet === 'sent' ? 'late' : ventet === 'tidlig' ? 'early' : undefined);
+          // Feiringens 🍄 hører høysesongen til.
+          expect(f.title.includes('🍄'), hvor).toBe(ventet === 'topp');
+        }
+      }
+    }
+  });
+
+  it('16. november: sent i sesongen, mindre å finne — og ingen oppfordring', () => {
+    const f = assessFlush({ ...MODENT, month: 11, dayOfMonth: 16 });
+    expect(f.message).toContain('sene artene');
+    expect(f.message).toContain('mindre å finne');
+    expect(f.message).not.toMatch(/soppen kommer nå|Ta turen ut/);
+    const sv = assessFlush({ ...MODENT, month: 11, dayOfMonth: 16 }, undefined, 'sv');
+    expect(sv.message).toContain('sena arterna');
+    expect(sv.message).toContain('mindre att hitta');
+  });
+
+  it('tidlig: færre arter ute — og andre halvdel av juli har høysesongens ord', () => {
+    const juni = assessFlush({ ...MODENT, month: 6, dayOfMonth: 20 });
+    expect(juni.message).toContain('færre arter');
+    expect(assessFlush({ ...MODENT, month: 7, dayOfMonth: 25 }).title).toBe('Forholdene er modne nå 🍄');
+  });
+
+  it('uten dag regnes dagen som midt i måneden: juni tidlig, juli høysesong, november sent', () => {
+    expect(assessFlush({ ...MODENT, month: 6 }).shoulder).toBe('early');
+    expect(assessFlush({ ...MODENT, month: 7 }).shoulder).toBeUndefined();
+    expect(assessFlush({ ...MODENT, month: 11 }).shoulder).toBe('late');
+  });
+
+  it('«på vei» og «regn på vei» lover ikke sopp i desember — men holder i en stigende sesong', () => {
+    const PÅ_VEI = { soilMoistureIndex: 0.4, rain7dMm: 18, currentTempC: 10, forecast: [] as DailyForecast[] };
+    const REGN_KOMMER = { soilMoistureIndex: 0.2, rain7dMm: 2, currentTempC: 10, forecast: fc([1, 10, 0]) };
+    for (let month = 6; month <= 11; month++) {
+      for (const dag of [1, 15, 28]) {
+        const hvor = `${dag}.${month}`;
+        const b = assessFlush({ ...PÅ_VEI, month, dayOfMonth: dag });
+        const s = assessFlush({ ...REGN_KOMMER, month, dayOfMonth: dag });
+        // Status og tall er de samme hele sesongen.
+        expect(b.status, hvor).toBe('building');
+        expect(b.daysUntil, hvor).toBe(5);
+        expect(s.status, hvor).toBe('soon');
+        expect(s.daysUntil, hvor).toBe(2 + 8); // regn dag 2 + generisk lag
+        if (month === 11) {
+          expect(b.shoulder, hvor).toBe('late');
+          expect(b.title, hvor).toBe('Det har regnet — men det er sent');
+          expect(s.shoulder, hvor).toBe('late');
+          expect(s.title, hvor).toBe('Regn på vei — men sent i sesongen');
+          expect(s.message, hvor).toContain('om 2 dager');
+          // «sopp om ~10 dager» og «så er forholdene gode» peker inn i desember.
+          expect(`${b.title} ${b.message} ${s.title} ${s.message}`, hvor).not.toMatch(/sopp om|forholdene gode/);
+        } else {
+          expect(b.shoulder, hvor).toBeUndefined();
+          expect(b.title, hvor).toBe('Soppen er på vei');
+          expect(s.shoulder, hvor).toBeUndefined();
+          expect(s.title, hvor).toBe('Regn på vei — sopp om ~10 dager');
+        }
+      }
+    }
+  });
+
+  it('svensk entall og flertall i «regn på väg» sent i sesongen', () => {
+    const s = (forecast: DailyForecast[]) =>
+      assessFlush({ soilMoistureIndex: 0.2, rain7dMm: 2, currentTempC: 10, forecast, month: 11, dayOfMonth: 20 }, undefined, 'sv');
+    expect(s(fc([10])).message).toContain('om 1 dag,');
+    expect(s(fc([0, 0, 10])).message).toContain('om 3 dagar');
+    expect(s(fc([10])).title).toBe('Regn på väg — men sent på säsongen');
+  });
+
+  it('kaller forholdene modne i nøyaktig det temperaturbåndet dommen leser (isMildForFlush)', () => {
+    for (const currentTempC of [2.5, 3, 12, 20, 20.5, 21, 22]) {
+      const f = assessFlush({ ...MODENT, currentTempC, month: 9, dayOfMonth: 15 });
+      expect(f.status === 'fruiting', `${currentTempC} °C`).toBe(isMildForFlush(currentTempC));
+    }
+  });
+
+  it('tørt er tørt hele året — ingen egne skulderord', () => {
+    const tørt = { soilMoistureIndex: 0.1, rain7dMm: 0, currentTempC: 10, forecast: fc([0, 0, 0]) };
+    for (const [month, dag] of [[6, 10], [9, 15], [11, 25]] as const) {
+      const f = assessFlush({ ...tørt, month, dayOfMonth: dag });
+      expect(f.status).toBe('dry');
+      expect(f.title).toBe('Tørt — soppen venter på regn');
+      expect(f.shoulder).toBeUndefined();
+    }
+  });
+
+  it('feirer der dommen over feirer — også i en skulder', () => {
+    // «🍄 Perfekt soppdag i dag!» over et gult «men sent i sesongen» ville vært
+    // en ny motsigelse. Mulig 1.–17. november og 10.–14. juli med ideelt vær.
+    const nov = assessFlush({ ...MODENT, month: 11, dayOfMonth: 3, dayOptimal: true });
+    expect(nov.title).toBe('Forholdene er modne nå 🍄');
+    expect(nov.shoulder).toBeUndefined();
+    const juli = assessFlush({ ...MODENT, month: 7, dayOfMonth: 12, dayOptimal: true });
+    expect(juli.title).toBe('Forholdene er modne nå 🍄');
+    // 'building' og 'soon' handler om dagene fram, ikke om i dag: sene uansett.
+    const påVei = assessFlush({
+      soilMoistureIndex: 0.4,
+      rain7dMm: 18,
+      currentTempC: 10,
+      forecast: [],
+      month: 11,
+      dayOfMonth: 3,
+      dayOptimal: true
+    });
+    expect(påVei.shoulder).toBe('late');
+  });
+
+  it('en art med egen kurve følger sin egen sesong, ikke de generelle skuldrene', () => {
+    const iSesongINovember = findSpeciesId(11, (f) => f > 0.3);
+    expect(iSesongINovember).not.toBeNull();
+    const f = assessFlush(
+      { ...MODENT, month: 11, dayOfMonth: 16 },
+      { genus: 'Craterellus', speciesId: iSesongINovember!, lat: TEST_LAT }
+    );
+    expect(f.status).toBe('fruiting');
+    expect(f.shoulder).toBeUndefined();
+  });
+
+  it('skulderordene finnes på begge språk, svensk er svensk, og ingen lover funn', () => {
+    const tilfeller = [
+      { ...MODENT, month: 6, dayOfMonth: 10 },
+      { ...MODENT, month: 11, dayOfMonth: 16 },
+      { soilMoistureIndex: 0.4, rain7dMm: 18, currentTempC: 10, forecast: [] as DailyForecast[], month: 11, dayOfMonth: 16 },
+      { soilMoistureIndex: 0.2, rain7dMm: 2, currentTempC: 10, forecast: fc([1, 10, 0]), month: 11, dayOfMonth: 16 }
+    ];
+    for (const inn of tilfeller) {
+      const nb = assessFlush(inn, undefined, 'nb');
+      const sv = assessFlush(inn, undefined, 'sv');
+      expect(nb.shoulder).toBeDefined();
+      expect(sv.shoulder).toBe(nb.shoulder);
+      expect(sv.title).not.toBe(nb.title);
+      expect(`${sv.title} ${sv.message}`).not.toMatch(/[æøÆØ]/);
+      expect(`${nb.title} ${nb.message}`).not.toMatch(/[äöÄÖ]/);
+      for (const tekst of [`${nb.title} ${nb.message}`, `${sv.title} ${sv.message}`]) {
+        expect(tekst).not.toContain('🍄');
+        expect(tekst).not.toMatch(/ta turen ut|ut i skogen|finner du|hittar du|garanter/i);
+        expect(tekst).not.toMatch(/kantarell|steinsopp|karljohan|piggsopp/i);
+      }
+    }
+  });
+});
+
+/**
+ * Banneret og dommen over det står i samme kort og skal være enige om hvor i
+ * året vi er. Begge leser seasonShoulder; dette låser at de faktisk gjør det,
+ * for hver måned og hvert slags vær — slik forsidekortet setter dem sammen
+ * (/api/mushroom-forecast sender dommens `optimal` til banneret).
+ */
+describe('banneret og dommen er enige om sesongen', () => {
+  const VÆR = [
+    { temperatureC: 8, humidityPct: 72, rain7dMm: 25, rain14dMm: 48, soil: 0.8 },
+    { temperatureC: 14, humidityPct: 90, rain7dMm: 30, rain14dMm: 60, soil: 0.9 },
+    { temperatureC: 14, humidityPct: 85, rain7dMm: 10, rain14dMm: 45, soil: 0.3 },
+    { temperatureC: 12, humidityPct: 85, rain7dMm: 6, rain14dMm: 12, soil: 0.7 },
+    { temperatureC: 4, humidityPct: 95, rain7dMm: 30, rain14dMm: 70, soil: 1 },
+    // Rundt bannerets øvre grense (isMildForFlush): scoren gir temperaturpoeng
+    // til 22 °C, banneret kaller det modent bare til 20.
+    { temperatureC: 20, humidityPct: 75, rain7dMm: 41.5, rain14dMm: 45, soil: 0.649 },
+    { temperatureC: 21, humidityPct: 75, rain7dMm: 41.5, rain14dMm: 45, soil: 0.649 },
+    { temperatureC: 22, humidityPct: 85, rain7dMm: 41.5, rain14dMm: 45, soil: 0.649 }
+  ];
+
+  /** Dommen som sier «Marka er fuktig og det har kommet nok regn» — tidlig og sent, begge språk. */
+  const FUKTIG_NOK = new Set([
+    'Fuktig nok — men det er tidlig i sesongen',
+    'Fuktig nok — men sesongen er på hell',
+    'Fuktigt nog — men det är tidigt på säsongen',
+    'Fuktigt nog — men säsongen är på upphällningen'
+  ]);
+
+  it('aldri «modne nå 🍄» under en skulderdom, aldri skulderord under «Perfekt soppdag»', () => {
+    for (const locale of ['nb', 'sv'] as const) {
+      for (let month = 1; month <= 12; month++) {
+        for (const dag of [1, 10, 14, 15, 16, 28]) {
+          for (const v of VÆR) {
+            const hvor = `${dag}.${month} ${locale} ${JSON.stringify(v)}`;
+            const dom = assessMushroomDay(
+              {
+                temperatureC: v.temperatureC,
+                humidityPct: v.humidityPct,
+                rain3dMm: v.rain7dMm / 2,
+                rain7dMm: v.rain7dMm,
+                rain14dMm: v.rain14dMm,
+                soilMoistureIndex: v.soil
+              },
+              month,
+              locale,
+              dag
+            );
+            const banner = assessFlush(
+              {
+                month,
+                dayOfMonth: dag,
+                dayOptimal: dom.optimal,
+                soilMoistureIndex: v.soil,
+                rain7dMm: v.rain7dMm,
+                currentTempC: v.temperatureC,
+                forecast: []
+              },
+              undefined,
+              locale
+            );
+            const skulder = seasonShoulder(month, dag);
+            if (banner.title.includes('🍄')) expect(skulder === null || dom.optimal, hvor).toBe(true);
+            if (dom.optimal) expect(banner.shoulder, hvor).toBeUndefined();
+            if (skulder && !dom.optimal && banner.status === 'fruiting') {
+              expect(banner.shoulder, hvor).toBe(skulder);
+            }
+            // Skulderord bare der det er en skulder.
+            if (banner.shoulder) expect(banner.shoulder, hvor).toBe(skulder);
+            // «Fuktig nok» står bare over et banner som også kaller forholdene
+            // modne — aldri over «Tørt — Lite fukt» (10. juli, 21 °C).
+            if (FUKTIG_NOK.has(dom.title)) {
+              expect(banner.status, hvor).toBe('fruiting');
+              expect(banner.shoulder, hvor).toBe(skulder);
+            }
+          }
+        }
+      }
+    }
   });
 });

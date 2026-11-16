@@ -119,9 +119,16 @@ export async function GET(request: NextRequest) {
 
     // Flush timing — "should I go now, or wait?" — from the moisture base now
     // plus the upcoming forecast rain.
+    //
+    // Dagen og dommen over banneret sendes med, så banneret sier det samme om
+    // sesongen som dommen: tidlig eller sent i en skulder, og feiringen bare der
+    // dommen også feirer (seasonShoulder i mushroom-day.ts). Begge følger
+    // Oslo-datoen, som alt er i mellomlagernøkkelen sammen med språket.
     const flush = assessFlush(
       {
         month,
+        dayOfMonth: iDag.dagIManeden,
+        dayOptimal: today.optimal,
         soilMoistureIndex: observed.soilMoistureIndex,
         rain7dMm: observed.rain7dMm ?? observed.rain3dMm * 2,
         currentTempC: observed.temperatureC,

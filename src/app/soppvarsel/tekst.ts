@@ -49,6 +49,9 @@ export const COPY = {
     skjemaTittel: 'Meld deg på',
     epost: 'E-postadressen din',
     omrade: 'Område',
+    // Første valg i nedtrekkslista, før et område er valgt. Samme ordlyd som
+    // områdevalget i profilkortet for soppvarselet (SoppvarselCard).
+    velgOmrade: 'Velg område …',
     norge: 'Norge',
     sverige: 'Sverige',
     knapp: 'Få soppvarsel',
@@ -87,6 +90,7 @@ export const COPY = {
     skjemaTittel: 'Anmäl dig',
     epost: 'Din e-postadress',
     omrade: 'Område',
+    velgOmrade: 'Välj område …',
     norge: 'Norge',
     sverige: 'Sverige',
     knapp: 'Få svampvarning',

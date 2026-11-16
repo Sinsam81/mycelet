@@ -12,7 +12,12 @@
  */
 import type { DailyForecast } from '@/lib/weather/forecast';
 import { dayOfYearFromMonth, phenologyFactor } from '@/lib/prediction/phenology';
-import { isInMushroomSeason } from '@/lib/prediction/mushroom-day';
+import {
+  isInMushroomSeason,
+  isMildForFlush,
+  seasonShoulder,
+  type SeasonShoulder
+} from '@/lib/prediction/mushroom-day';
 import { DEFAULT_LOCALE, type Locale } from '@/i18n/config';
 import { utenomSesongTekst } from '@/lib/sesong/utenom-sesong-tekst';
 
@@ -31,10 +36,31 @@ export interface FlushAssessment {
    * egne opplysninger og vises alltid.
    */
   reason?: 'offSeason' | 'cold' | 'speciesOffSeason';
+  /**
+   * Satt når ordene er sesongkvalifisert — 'early' (juni og første halvdel av
+   * juli) eller 'late' (november), se seasonShoulder i mushroom-day.ts. Status
+   * og tall er de samme; bare teksten er en annen. Forsidekortet farger da et
+   * 'fruiting' gult i stedet for grønt. Mangler i høysesongen, på en dag dommen
+   * over feirer, og når ordene ikke trengte det.
+   */
+  shoulder?: SeasonShoulder;
 }
 
 export interface FlushInput {
   month: number;
+  /**
+   * Dagen i måneden (Oslo-tid, samme dag som `month`). Skiller første og andre
+   * halvdel av juli — se seasonShoulder. Uten den regnes dagen som midt i
+   * måneden, og juli får høysesongens ord.
+   */
+  dayOfMonth?: number;
+  /**
+   * Dagens dom rett over banneret (assessMushroomDay) er `optimal`: kortet sier
+   * alt «🍄 Perfekt soppdag i dag!». Da står feiringen her også, selv i en
+   * skulder — et gult «men sent i sesongen» under den ville vært en ny
+   * motsigelse. Uten verdien regnes dagen som ikke feiret.
+   */
+  dayOptimal?: boolean;
   soilMoistureIndex: number | null;
   rain7dMm: number;
   currentTempC: number;
@@ -119,6 +145,25 @@ interface FlushCopy {
   soonMessage: (rainInDays: number) => string;
   dryTitle: string;
   dryMessage: string;
+  /**
+   * Skuldrene (seasonShoulder). Uten disse sto det «Forholdene er modne nå 🍄 —
+   * soppen kommer nå. Ta turen ut!» midt i november, under en gul ring og over
+   * «Det er stille i alle områdene nå».
+   *
+   * Tidlig har bare en egen 'fruiting'. 'building' og 'soon' peker 5–16 dager
+   * fram, og i juni og juli havner det i en sesong som stiger — ordene deres
+   * holder. I november havner det samme mot eller etter 1. desember, der
+   * sesongporten stenger, så der får alle tre egne ord. Ingen av dem lover funn,
+   * navngir arter eller har feiringens 🍄.
+   */
+  fruitingEarlyTitle: string;
+  fruitingEarlyMessage: string;
+  fruitingLateTitle: string;
+  fruitingLateMessage: string;
+  buildingLateTitle: string;
+  buildingLateMessage: string;
+  soonLateTitle: string;
+  soonLateMessage: (rainInDays: number) => string;
 }
 
 const COPY: Record<Locale, FlushCopy> = {
@@ -136,7 +181,19 @@ const COPY: Record<Locale, FlushCopy> = {
     soonMessage: (rainInDays) =>
       `Det er meldt regn om ${rainInDays} dag${rainInDays === 1 ? '' : 'er'}. Soppen følger gjerne ~1 uke etter.`,
     dryTitle: 'Tørt — soppen venter på regn',
-    dryMessage: 'Lite fukt og ingen regn i sikte. Sjansene er små inntil det kommer nedbør.'
+    dryMessage: 'Lite fukt og ingen regn i sikte. Sjansene er små inntil det kommer nedbør.',
+    fruitingEarlyTitle: 'Fuktig og mildt — men tidlig i sesongen',
+    fruitingEarlyMessage:
+      'Forholdene er gode nok for de artene som alt har kommet, men det er tidlig, og færre arter er ute enn senere på sommeren og høsten.',
+    fruitingLateTitle: 'Fuktig og mildt — men sent i sesongen',
+    fruitingLateMessage:
+      'Forholdene er fortsatt gode nok for de sene artene, men det er sent, og det er mindre å finne enn i høysesongen.',
+    buildingLateTitle: 'Det har regnet — men det er sent',
+    buildingLateMessage:
+      'Det regnet nylig, men så sent på året er det usikkert om det rekker å gi mer sopp før sesongen er over.',
+    soonLateTitle: 'Regn på vei — men sent i sesongen',
+    soonLateMessage: (rainInDays) =>
+      `Det er meldt regn om ${rainInDays} dag${rainInDays === 1 ? '' : 'er'}, men så sent på året er det usikkert om soppen rekker å følge etter før sesongen er over.`
   },
   sv: {
     tooColdTitle: 'För kallt just nu',
@@ -152,7 +209,19 @@ const COPY: Record<Locale, FlushCopy> = {
     soonMessage: (rainInDays) =>
       `Regn väntas om ${rainInDays} dag${rainInDays === 1 ? '' : 'ar'}. Svampen följer ofta ~1 vecka efter.`,
     dryTitle: 'Torrt — svampen väntar på regn',
-    dryMessage: 'Lite fukt och inget regn i sikte. Chanserna är små tills det kommer nederbörd.'
+    dryMessage: 'Lite fukt och inget regn i sikte. Chanserna är små tills det kommer nederbörd.',
+    fruitingEarlyTitle: 'Fuktigt och milt — men tidigt på säsongen',
+    fruitingEarlyMessage:
+      'Förhållandena är bra nog för de arter som redan har kommit, men det är tidigt och färre arter är ute än senare på sommaren och hösten.',
+    fruitingLateTitle: 'Fuktigt och milt — men sent på säsongen',
+    fruitingLateMessage:
+      'Förhållandena är fortfarande bra nog för de sena arterna, men det är sent och det finns mindre att hitta än under högsäsongen.',
+    buildingLateTitle: 'Det har regnat — men det är sent',
+    buildingLateMessage:
+      'Det regnade nyligen, men så här sent på året är det osäkert om det hinner ge mer svamp innan säsongen är slut.',
+    soonLateTitle: 'Regn på väg — men sent på säsongen',
+    soonLateMessage: (rainInDays) =>
+      `Regn väntas om ${rainInDays} dag${rainInDays === 1 ? '' : 'ar'}, men så här sent på året är det osäkert om svampen hinner följa efter innan säsongen är slut.`
   }
 };
 
@@ -220,12 +289,32 @@ export function assessFlush(
 
   const flushLagDays = flushLagFor(species);
 
-  const mildNow = currentTempC >= 3 && currentTempC <= 20;
+  // Hvor i sesongen vi er, fra samme kilde som dagens dom over banneret
+  // (seasonShoulder). Bare uten artskurve: har arten egen kurve, er det dens
+  // sesong som gjelder, ikke den generelle.
+  const shoulder = speciesCurve == null ? seasonShoulder(month, input.dayOfMonth) : null;
+
+  // 3–20 °C. Båndet ligger i mushroom-day.ts, delt med dommen over banneret,
+  // så dommen ikke kan si «Marka er fuktig» der banneret sier «Tørt».
+  const mildNow = isMildForFlush(currentTempC);
   // Moisture now: prefer the soil-water index, else a rain-based proxy.
   const wetNow = soilMoistureIndex != null ? soilMoistureIndex : clamp01(rain7dMm / 25);
 
   // Conditions ripe right now.
   if (wetNow >= 0.55 && mildNow) {
+    // Feiringen hører høysesongen til — og en skulderdag dommen over alt
+    // feirer. Ellers sier banneret at det er tidlig eller sent, slik ringen og
+    // dommen over det gjør.
+    if (shoulder && !input.dayOptimal) {
+      const tidlig = shoulder === 'early';
+      return {
+        status: 'fruiting',
+        daysUntil: 0,
+        title: tidlig ? copy.fruitingEarlyTitle : copy.fruitingLateTitle,
+        message: tidlig ? copy.fruitingEarlyMessage : copy.fruitingLateMessage,
+        shoulder
+      };
+    }
     return {
       status: 'fruiting',
       daysUntil: 0,
@@ -236,6 +325,17 @@ export function assessFlush(
 
   // It rained recently but the ground is drying / not yet peaked → on the way.
   if (rain7dMm >= 12 && mildNow) {
+    // «Gi det noen dager, så er forholdene gode» peker i november mot
+    // sesongslutt — og i siste del av måneden rett inn i desember.
+    if (shoulder === 'late') {
+      return {
+        status: 'building',
+        daysUntil: 5,
+        title: copy.buildingLateTitle,
+        message: copy.buildingLateMessage,
+        shoulder
+      };
+    }
     return {
       status: 'building',
       daysUntil: 5,
@@ -255,6 +355,17 @@ export function assessFlush(
 
   if (rainDay != null) {
     const daysUntil = rainDay + flushLagDays;
+    // «Sopp om ~12 dager» 25. november lover sopp i desember, utenom sesongen.
+    // Tallet står i svaret som før; i november lover ikke teksten det.
+    if (shoulder === 'late') {
+      return {
+        status: 'soon',
+        daysUntil,
+        title: copy.soonLateTitle,
+        message: copy.soonLateMessage(rainDay),
+        shoulder
+      };
+    }
     return {
       status: 'soon',
       daysUntil,
