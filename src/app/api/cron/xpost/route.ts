@@ -79,7 +79,8 @@ export async function GET(request: NextRequest) {
   if (!tileDate) return NextResponse.json({ ok: true, grunn: 'ingen-scorer' });
 
   // Fersk-sjekk med én dags slakk — som soppvarselet: står tallene stille,
-  // skal vi tie, ikke poste uke-gammelt vær som «i natt».
+  // skal vi tie, ikke poste uke-gammelt vær som «i natt». Slakken gjelder
+  // bare søndagsposten; et omslag krever dagens scorer (se under).
   const alderDager = (Date.parse(`${iDagIso}T00:00:00Z`) - Date.parse(`${tileDate}T00:00:00Z`)) / 86_400_000;
   if (alderDager > 1) {
     log.warn('xpost.scorer_utdatert', { tileDate, alderDager });
@@ -118,7 +119,15 @@ export async function GET(request: NextRequest) {
   // ── 2. Sett sammen dagens poster ──────────────────────────────────────────
   const planlagte: Array<{ type: 'omslag' | 'ukesoppsummering'; tekst: string }> = [];
 
-  const omslag = finnOmslag(grunnlag);
+  // Et omslag meldes bare fra DAGENS scorer. Fersk-sjekken over slipper
+  // gjennom tall som er én dag gamle (søndagsposten tåler det), men
+  // dedupe-nøkkelen er postedatoen: en natt uten nye scorer leste cronen
+  // gårsdagens tall på nytt, fant det samme omslaget og postet det ordrett
+  // igjen — med nytt pressevarsel og ny rad i den offentlige fasitloggen.
+  // Ingen nye scorer betyr ingen ny snuoperasjon.
+  const scorerErFraIDag = tileDate === iDagIso;
+  const omslag = scorerErFraIDag ? finnOmslag(grunnlag) : [];
+  if (!scorerErFraIDag) log.info('xpost.ingen_nye_scorer', { tileDate, iDag: iDagIso });
   const omslagsTekst = byggOmslagsPost(omslag);
   if (omslagsTekst) planlagte.push({ type: 'omslag', tekst: omslagsTekst });
 

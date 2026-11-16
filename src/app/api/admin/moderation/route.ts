@@ -5,6 +5,7 @@ import { logAdminAction } from '@/lib/audit/log';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { getClientKey, rateLimitResponse } from '@/lib/rate-limit/route';
 import { createRequestLogger } from '@/lib/log/request';
+import { apiFeil, loggFeil, type ApiFeilKode } from '@/lib/api/feil';
 import {
   AAPNE_RAPPORTSTATUSER,
   byggRapportvisning,
@@ -52,18 +53,18 @@ async function requireModerator() {
   } = await supabase.auth.getUser();
 
   if (!user) {
-    return { ok: false as const, status: 401, error: 'Ikke autentisert' };
+    return { ok: false as const, status: 401, kode: 'unauthenticated' as ApiFeilKode };
   }
 
   const { data: roleRow, error } = await supabase.from('moderator_roles').select('role').eq('user_id', user.id).maybeSingle();
   // Feilet oppslaget, vet vi ikke om brukeren er moderator. Da er svaret nei.
   if (error) {
-    return { ok: false as const, status: 500, error: 'Kunne ikke sjekke tilgang' };
+    return { ok: false as const, status: 500, kode: 'moderation_access_check_failed' as ApiFeilKode };
   }
 
   const role = roleRow?.role ?? null;
   if (role !== 'moderator' && role !== 'admin') {
-    return { ok: false as const, status: 403, error: 'Ingen tilgang' };
+    return { ok: false as const, status: 403, kode: 'forbidden' as ApiFeilKode };
   }
 
   return { ok: true as const, userId: user.id };
@@ -81,7 +82,7 @@ export async function GET(request: NextRequest) {
 
   const access = await requireModerator();
   if (!access.ok) {
-    return NextResponse.json({ error: access.error }, { status: access.status });
+    return apiFeil(access.kode, access.status);
   }
 
   const rateLimit = checkRateLimit(`admin-moderation:get:${getClientKey(request, access.userId)}`, 60, 60);
@@ -110,8 +111,8 @@ export async function GET(request: NextRequest) {
   ]);
 
   if (reportsRes.error) {
-    log.error('admin.moderation.list.db_error', reportsRes.error);
-    return NextResponse.json({ error: 'Kunne ikke hente rapporter' }, { status: 500 });
+    loggFeil(log, 'admin.moderation.list.db_error', reportsRes.error);
+    return apiFeil('moderation_reports_load_failed', 500);
   }
 
   const reports = (reportsRes.data ?? []) as ModerationReportRow[];
@@ -160,7 +161,7 @@ export async function GET(request: NextRequest) {
     ['forum_posts', postsRes],
     ['profiles', profilesRes]
   ] as const) {
-    if (res.error) log.warn('admin.moderation.list.enrich_failed', { table: navn, error: res.error.message });
+    if (res.error) log.warn('admin.moderation.list.enrich_failed', { table: navn, message: res.error.message });
   }
 
   const pending = oppsummerAapneRapporter({
@@ -180,8 +181,8 @@ export async function POST(request: NextRequest) {
 
   const access = await requireModerator();
   if (!access.ok) {
-    log.warn('admin.moderation.action.denied', { reason: access.error });
-    return NextResponse.json({ error: access.error }, { status: access.status });
+    log.warn('admin.moderation.action.denied', { reason: access.kode });
+    return apiFeil(access.kode, access.status);
   }
 
   const actorLog = log.child({ userId: access.userId });
@@ -196,25 +197,25 @@ export async function POST(request: NextRequest) {
   try {
     body = (await request.json()) as typeof body;
   } catch {
-    return NextResponse.json({ error: 'Ugyldig forespørsel' }, { status: 400 });
+    return apiFeil('invalid_request', 400);
   }
 
   const reportId = typeof body.reportId === 'string' ? body.reportId : '';
   const action = body.action;
   if (!reportId || !erModerationAction(action)) {
     actorLog.warn('admin.moderation.action.bad_request');
-    return NextResponse.json({ error: 'Mangler reportId eller gyldig action' }, { status: 400 });
+    return apiFeil('invalid_request', 400, { hint: 'reportId (string) og action (moderation action) kreves' });
   }
 
   const admin = createAdminClient();
 
   const { data: reportRow, error: reportError } = await admin.from('reports').select(REPORT_COLUMNS).eq('id', reportId).maybeSingle();
   if (reportError) {
-    actorLog.error('admin.moderation.action.report_lookup_failed', reportError);
-    return NextResponse.json({ error: 'Kunne ikke hente rapporten' }, { status: 500 });
+    loggFeil(actorLog, 'admin.moderation.action.report_lookup_failed', reportError);
+    return apiFeil('moderation_report_load_failed', 500);
   }
   if (!reportRow) {
-    return NextResponse.json({ error: 'Rapporten finnes ikke' }, { status: 404 });
+    return apiFeil('moderation_report_not_found', 404);
   }
   const report = reportRow as ModerationReportRow;
 
@@ -234,14 +235,14 @@ export async function POST(request: NextRequest) {
       .eq('id', maal.id)
       .maybeSingle();
     if (targetError) {
-      actorLog.error('admin.moderation.action.target_lookup_failed', targetError);
-      return NextResponse.json({ error: 'Kunne ikke hente innholdet' }, { status: 500 });
+      loggFeil(actorLog, 'admin.moderation.action.target_lookup_failed', targetError);
+      return apiFeil('moderation_content_load_failed', 500);
     }
     const target = targetRow as { user_id?: string | null; is_hidden?: boolean | null } | null;
     authorId = target?.user_id ?? null;
     varSkjult = target?.is_hidden === true;
     if (!targetRow && (action === 'hide' || action === 'unhide')) {
-      return NextResponse.json({ error: 'Innholdet finnes ikke lenger' }, { status: 404 });
+      return apiFeil('moderation_content_gone', 404);
     }
   }
 
@@ -250,13 +251,13 @@ export async function POST(request: NextRequest) {
 
   if (action === 'hide' || action === 'unhide') {
     if (!maal) {
-      return NextResponse.json({ error: 'Funn kan ikke skjules herfra ennå' }, { status: 400 });
+      return apiFeil('moderation_finding_not_hideable', 400);
     }
 
     const { error: hideError } = await admin.from(maal.table).update({ is_hidden: action === 'hide' }).eq('id', maal.id);
     if (hideError) {
-      actorLog.error('admin.moderation.action.hide_failed', hideError);
-      return NextResponse.json({ error: 'Kunne ikke oppdatere innholdet' }, { status: 500 });
+      loggFeil(actorLog, 'admin.moderation.action.hide_failed', hideError);
+      return apiFeil('moderation_content_update_failed', 500);
     }
 
     if (action === 'hide') {
@@ -266,13 +267,13 @@ export async function POST(request: NextRequest) {
         .update({ status: 'resolved', resolved_at: naa })
         .eq(maal.column, maal.id)
         .in('status', aapneStatuser);
-      if (siblingsError) actorLog.warn('admin.moderation.action.resolve_failed', { error: siblingsError.message });
+      if (siblingsError) actorLog.warn('admin.moderation.action.resolve_failed', { message: siblingsError.message });
 
       // Ble innholdet skjult fra en rapport som alt var avvist, skal også den
       // stå som løst — ellers sier rapporten «avvist» om innhold som er fjernet.
       if (report.status === 'dismissed') {
         const { error: ownError } = await admin.from('reports').update({ status: 'resolved', resolved_at: naa }).eq('id', report.id);
-        if (ownError) actorLog.warn('admin.moderation.action.resolve_failed', { error: ownError.message });
+        if (ownError) actorLog.warn('admin.moderation.action.resolve_failed', { message: ownError.message });
       }
     } else if (varSkjult) {
       // Skjulingen var svaret på rapportene. Vises innholdet igjen, er de
@@ -286,7 +287,7 @@ export async function POST(request: NextRequest) {
         .update({ status: 'reviewed', resolved_at: null })
         .eq(maal.column, maal.id)
         .eq('status', 'resolved');
-      if (reopenError) actorLog.warn('admin.moderation.action.reopen_failed', { error: reopenError.message });
+      if (reopenError) actorLog.warn('admin.moderation.action.reopen_failed', { message: reopenError.message });
     }
   } else {
     // `resolved_at` settes bare ved avslutning: opprydningsjobben sletter
@@ -295,8 +296,8 @@ export async function POST(request: NextRequest) {
       action === 'reviewed' ? { status: 'reviewed' } : { status: action === 'dismiss' ? 'dismissed' : 'resolved', resolved_at: naa };
     const { error: statusError } = await admin.from('reports').update(update).eq('id', report.id);
     if (statusError) {
-      actorLog.error('admin.moderation.action.status_failed', statusError);
-      return NextResponse.json({ error: 'Kunne ikke oppdatere rapporten' }, { status: 500 });
+      loggFeil(actorLog, 'admin.moderation.action.status_failed', statusError);
+      return apiFeil('moderation_report_update_failed', 500);
     }
   }
 

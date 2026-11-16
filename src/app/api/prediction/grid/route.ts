@@ -22,6 +22,7 @@ import { getSpeciesDisplayName } from '@/lib/utils/species-name';
 import { isRecommendableSpecies } from '@/lib/prediction/recommendable';
 import { festBoksTilOppslagspresisjon } from '@/lib/map/oppslagsboks';
 import { DEFAULT_LOCALE, type Locale } from '@/i18n/config';
+import { osloIDag } from '@/lib/api/oslo-dag';
 
 // Surfaced verbatim as toasts on the map, so they follow the reader's language.
 const COPY: Record<
@@ -203,7 +204,8 @@ export async function GET(request: NextRequest) {
 
     const centerLat = (minLat + maxLat) / 2;
     const centerLng = (minLng + maxLng) / 2;
-    const month = new Date().getMonth() + 1;
+    // Oslo-måneden, ikke UTC-serverens (se src/lib/api/oslo-dag.ts).
+    const month = osloIDag(new Date()).maaned;
     const dayOfYear = dayOfYearOf(new Date());
 
     const bounds = { minLat, minLng, maxLat, maxLng };

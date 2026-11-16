@@ -108,13 +108,35 @@ const securityHeaders = [
   }
 ];
 
+/**
+ * Verter /_next/image får hente og skalere bilder fra.
+ *
+ * Ingen komponent bruker next/image i dag (artsbildene er vanlige <img> mot
+ * Commons, se src/components/species/Artsbilde.tsx), så listen styrer bare
+ * hva bildeoptimereren vår kan brukes som mellomtjener for. Den sto før på
+ * `**.supabase.co` og `**.kindwise.com`: ethvert Supabase-prosjekt i verden
+ * kunne skaleres på vår regning. Nå er det bare vårt eget prosjekt, utledet
+ * av NEXT_PUBLIC_SUPABASE_URL når konfigurasjonen lastes (Next leser .env før
+ * next.config.js). Mangler eller er variabelen ugyldig, blir listen tom —
+ * bygget går, og optimereren slipper ingen ekstern vert gjennom.
+ * Kindwise-bildene vises med <img> og trenger ingen oppføring her.
+ */
+function bildeverter() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  if (!url) return [];
+  try {
+    const { protocol, hostname } = new URL(url);
+    if (protocol !== 'https:' || !hostname) return [];
+    return [{ protocol: 'https', hostname, pathname: '/storage/v1/**' }];
+  } catch {
+    return [];
+  }
+}
+
 const nextConfig = {
   reactStrictMode: true,
   images: {
-    remotePatterns: [
-      { protocol: 'https', hostname: '**.supabase.co' },
-      { protocol: 'https', hostname: '**.kindwise.com' }
-    ]
+    remotePatterns: bildeverter()
   },
   async headers() {
     // These endpoints return prose (prediction verdicts, flush banners, weekday

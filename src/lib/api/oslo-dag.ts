@@ -32,3 +32,13 @@ export function osloIDag(naa: Date): OsloDag {
   const { osloDato, maaned } = sesongtilstand(naa);
   return { dato: osloDato, maaned, dagIManeden: Number(osloDato.slice(8, 10)) };
 }
+
+/**
+ * Dag i året (1–366) for Oslo-datoen — det fenologikurvene slås opp på.
+ * `dayOfYearOf(new Date())` regnet i UTC og lå en dag bak mellom midnatt og
+ * kl. 01/02 norsk tid, også over et månedsskifte.
+ */
+export function osloDagIAaret(naa: Date): number {
+  const [aar, maaned, dag] = osloIDag(naa).dato.split('-').map(Number);
+  return Math.floor((Date.UTC(aar, maaned - 1, dag) - Date.UTC(aar, 0, 1)) / 86_400_000) + 1;
+}

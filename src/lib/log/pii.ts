@@ -125,12 +125,27 @@ export function redactPII(value: unknown, seen: WeakSet<object> = new WeakSet())
 
   // Errors get serialized with name, message, stack — but we redact emails
   // inside the message and stack just in case.
+  //
+  // Own fields come along too: PostgrestError extends Error and keeps
+  // code/details/hint as own properties, and Node errors carry code/errno.
+  // Without them a failed query logged only «permission denied …» and lost
+  // the code that says which policy refused it. `cause` is walked the same
+  // way, so a wrapped error is not reduced to its outer message.
   if (value instanceof Error) {
-    return {
+    if (seen.has(value)) return '<cycle>';
+    seen.add(value);
+    const out: Record<string, unknown> = {
       name: value.name,
       message: redactPII(value.message, seen),
       stack: typeof value.stack === 'string' ? redactPII(value.stack, seen) : undefined
     };
+    for (const [key, child] of Object.entries(value)) {
+      if (key === 'name' || key === 'message' || key === 'stack') continue;
+      out[key] = shouldRedactKey(key) ? REDACTION_PLACEHOLDER : redactPII(child, seen);
+    }
+    const cause = (value as { cause?: unknown }).cause;
+    if (cause !== undefined && !('cause' in out)) out.cause = redactPII(cause, seen);
+    return out;
   }
 
   // Defend against cyclic references.

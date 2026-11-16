@@ -10,8 +10,19 @@ interface PredictionParams {
   speciesId?: number | null;
 }
 
-/** Reserveteksten når svaret ikke bar en egen feilmelding. */
+/**
+ * Reserveteksten når svaret ikke bar en egen feilmelding. Bare for loggen og
+ * utviklere: kartet viser sin egen oversatte tekst når `isError` er satt, og
+ * leser aldri `error.message`. En flate som vil vise feilen, forgrener på
+ * `code` og henter teksten fra meldingskatalogen.
+ */
 export const PREDIKSJON_FEILTEKST = 'Kunne ikke hente prediksjon';
+
+/** Stabil kode når svaret ikke bar sin egen (plattformens HTML-side, ødelagt kropp). */
+export const PREDIKSJON_FEILKODE = 'prediction_unavailable';
+
+/** Feilen kroken kaster: teksten som før, pluss en kode klienter kan forgrene på. */
+export type PrediksjonsFeil = Error & { code: string };
 
 /**
  * Henter prediksjonen for et punkt. Eksportert for å kunne testes uten React.
@@ -45,10 +56,13 @@ export async function hentPrediksjon({
   }
 
   const response = await fetch(`/api/prediction?${params.toString()}`);
-  const data = (await response.json().catch(() => null)) as (PredictionResponse & { error?: string }) | null;
+  const data = (await response.json().catch(() => null)) as (PredictionResponse & { error?: string; code?: string }) | null;
 
   if (!response.ok || !data) {
-    throw new Error(data?.error ?? PREDIKSJON_FEILTEKST);
+    const feil: PrediksjonsFeil = Object.assign(new Error(data?.error ?? PREDIKSJON_FEILTEKST), {
+      code: typeof data?.code === 'string' ? data.code : PREDIKSJON_FEILKODE
+    });
+    throw feil;
   }
 
   return data;

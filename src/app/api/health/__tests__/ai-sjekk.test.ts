@@ -26,10 +26,10 @@ describe('helsesjekkens AI-sjekk', () => {
   it('kjører BARE uten ?fast=1 — den gjør et nettkall', () => {
     // Kallet, ikke definisjonen: «async function checkAi()» står øverst i fila.
     const foerFastGrenen = kilde.slice(0, kilde.indexOf('if (!fast)'));
-    expect(foerFastGrenen).not.toContain(', checkAi()');
+    expect(foerFastGrenen).not.toContain('checkAi(log)');
     expect(foerFastGrenen).not.toContain('ai: checkAi()');
     const iFastGrenen = kilde.slice(kilde.indexOf('if (!fast)'));
-    expect(iFastGrenen).toMatch(/Promise\.all\(\[[^\]]*checkAi\(\)/);
+    expect(iFastGrenen).toMatch(/Promise\.all\(\[[^\]]*checkAi\(log\)/);
   });
 
   it('spør Kindwise høyst hvert femte minutt', () => {

@@ -101,6 +101,9 @@ vi.mock('@/lib/audit/log', () => ({ logAdminAction: (entry: Record<string, unkno
 
 vi.mock('@/lib/rate-limit', () => ({ checkRateLimit: () => ({ allowed: true }) }));
 
+let sprak: 'nb' | 'sv' = 'nb';
+vi.mock('@/i18n/locale', () => ({ getUserLocale: async () => sprak }));
+
 vi.mock('@/lib/log/request', () => {
   const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn(), trace: vi.fn(), child: () => logger };
   return { createRequestLogger: () => logger };
@@ -123,6 +126,7 @@ afterEach(() => {
 });
 
 beforeEach(() => {
+  sprak = 'nb';
   bruker = { id: 'mod-1' };
   rolle = 'moderator';
   rolleFeil = false;
@@ -165,6 +169,23 @@ describe('tilgang', () => {
     expect((await POST(post({ reportId: 'r-post', action: 'hide' }))).status).toBe(403);
     expect(adminKall).toHaveLength(0);
     expect(tabeller.forum_posts[0].is_hidden).toBe(false);
+  });
+
+  it('feilsvarene har stabil kode og følger leserens språk', async () => {
+    rolle = null;
+    sprak = 'sv';
+    const nekt = await POST(post({ reportId: 'r-post', action: 'hide' }));
+    expect(await nekt.json()).toEqual({ code: 'forbidden', error: 'Du har inte åtkomst till detta.' });
+
+    rolle = 'moderator';
+    const mangler = await POST(post({ reportId: 'finnes-ikke', action: 'hide' }));
+    expect(mangler.status).toBe(404);
+    expect(await mangler.json()).toEqual({ code: 'moderation_report_not_found', error: 'Anmälan finns inte.' });
+
+    sprak = 'nb';
+    const funn = await POST(post({ reportId: 'r-funn', action: 'hide' }));
+    expect(funn.status).toBe(400);
+    expect(await funn.json()).toEqual({ code: 'moderation_finding_not_hideable', error: 'Funn kan ikke skjules herfra ennå.' });
   });
 
   it('feiler rolleoppslaget, er svaret nei', async () => {

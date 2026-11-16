@@ -1,4 +1,5 @@
-import { describe, expect, it, beforeEach, vi } from 'vitest';
+import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
+import { PostgrestError } from '@supabase/postgrest-js';
 import { _createTestLogger } from '../index';
 
 interface CapturedLine {
@@ -124,6 +125,134 @@ describe('Logger', () => {
       expect(typeof parsed.ts).toBe('string');
     } finally {
       vi.unstubAllEnvs();
+    }
+  });
+
+  describe('log.error with something other than an Error second', () => {
+    // Real logger, both output formats: the point is what reaches the line.
+    for (const format of ['dev', 'prod'] as const) {
+      describe(format, () => {
+        beforeEach(() => {
+          if (format === 'prod') vi.stubEnv('NODE_ENV', 'production');
+          else vi.stubEnv('NODE_ENV', 'development');
+        });
+        afterEach(() => {
+          vi.unstubAllEnvs();
+        });
+
+        function linje(): string {
+          return captured.lines[0].line;
+        }
+        function felter(): Record<string, unknown> {
+          const l = linje();
+          if (format === 'prod') return JSON.parse(l);
+          const start = l.indexOf('{');
+          return start >= 0 ? JSON.parse(l.slice(start)) : {};
+        }
+
+        it('writes the fields of a plain PostgREST error object, never [object Object]', () => {
+          const log = _createTestLogger({ level: 'error', writer: captured.writer });
+          log.error('db.failed', {
+            message: 'new row violates row-level security policy',
+            code: '42501',
+            details: null,
+            hint: 'check the policy'
+          });
+          expect(linje()).not.toContain('[object Object]');
+          const err = felter().err as Record<string, unknown>;
+          expect(err.code).toBe('42501');
+          expect(err.message).toBe('new row violates row-level security policy');
+          expect(err.hint).toBe('check the policy');
+          expect(err.name).toBe('NonError');
+        });
+
+        it('keeps code/details/hint of a real PostgrestError (it extends Error)', () => {
+          const log = _createTestLogger({ level: 'error', writer: captured.writer });
+          const feil = new PostgrestError({
+            message: 'relation does not exist',
+            details: 'det@x.no asked',
+            hint: 'run the migration',
+            code: 'PGRST205'
+          });
+          log.error('db.failed', feil, { table: 'bruksdager' });
+          const f = felter();
+          const err = f.err as Record<string, unknown>;
+          expect(err.code).toBe('PGRST205');
+          expect(err.hint).toBe('run the migration');
+          expect(err.message).toBe('relation does not exist');
+          expect(err.details).toBe('d***@x.no asked');
+          expect(f.table).toBe('bruksdager');
+        });
+
+        it('treats a plain context object passed second as context', () => {
+          const log = _createTestLogger({ level: 'error', writer: captured.writer });
+          log.error('home.user_findings_failed', {
+            userId: '8e23c7b6-6d4c-4357-a118-3f3554c41caf',
+            message: 'timeout',
+            email: 'ola@x.no',
+            token: 'hemmelig-123'
+          });
+          const l = linje();
+          expect(l).not.toContain('[object Object]');
+          expect(l).not.toContain('NonError');
+          expect(l).not.toContain('ola@x.no');
+          expect(l).not.toContain('hemmelig-123');
+          expect(l).toContain('o***@x.no');
+          expect(l).toContain('timeout');
+          if (format === 'prod') {
+            const f = felter();
+            expect(f.userId).toBe('8e23c7b6-6d4c-4357-a118-3f3554c41caf');
+            expect(f.message).toBe('timeout');
+            expect(f.err).toBeUndefined();
+          } else {
+            expect(l).toContain('user=8e23c7b6');
+          }
+        });
+
+        it('writes an error object with context given third, redacted', () => {
+          const log = _createTestLogger({ level: 'error', writer: captured.writer });
+          log.error('xpost.failed', { message: 'Bearer abcdefghijklmnop failed for kari@y.se', code: 401 }, { type: 'flip' });
+          const l = linje();
+          expect(l).not.toContain('abcdefghijklmnop');
+          expect(l).not.toContain('kari@y.se');
+          const f = felter();
+          expect(f.type).toBe('flip');
+          expect((f.err as Record<string, unknown>).code).toBe(401);
+        });
+
+        it('keeps the cause of a wrapped Error', () => {
+          const log = _createTestLogger({ level: 'error', writer: captured.writer });
+          const indre = Object.assign(new Error('socket hang up'), { code: 'ECONNRESET' });
+          log.error('fetch.failed', new Error('fetch failed', { cause: indre }));
+          const err = felter().err as Record<string, unknown>;
+          expect(err.message).toBe('fetch failed');
+          expect((err.cause as Record<string, unknown>).code).toBe('ECONNRESET');
+        });
+
+        it('survives an Error whose cause points back at itself', () => {
+          const log = _createTestLogger({ level: 'error', writer: captured.writer });
+          const e = new Error('loop') as Error & { cause?: unknown };
+          e.cause = e;
+          log.error('loop.failed', e);
+          expect(linje()).toContain('loop');
+        });
+
+        it('still writes null and numbers as NonError', () => {
+          const log = _createTestLogger({ level: 'error', writer: captured.writer });
+          log.error('weird', null);
+          log.error('weird', 42);
+          expect(captured.lines[0].line).toContain('null');
+          expect(captured.lines[1].line).toContain('42');
+        });
+
+        it('keeps context alone when no error is given', () => {
+          const log = _createTestLogger({ level: 'error', writer: captured.writer });
+          log.error('plain', undefined, { region: 'oslo' });
+          const l = linje();
+          expect(l).toContain('oslo');
+          expect(l).not.toContain('NonError');
+        });
+      });
     }
   });
 });

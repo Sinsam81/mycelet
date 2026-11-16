@@ -192,6 +192,45 @@ const TEKSTER = {
   admin_remove_failed: {
     nb: 'Kunne ikke fjerne.',
     sv: 'Kunde inte ta bort.'
+  },
+
+  // ── Moderering (/api/admin/moderation) ─────────────────────────────────────
+  // Moderatorer kan være svenske; klienten forgrener bare på statuskoden.
+  moderation_access_check_failed: {
+    nb: 'Kunne ikke sjekke tilgangen din.',
+    sv: 'Kunde inte kontrollera din behörighet.'
+  },
+  moderation_reports_load_failed: {
+    nb: 'Kunne ikke hente rapportene.',
+    sv: 'Kunde inte hämta anmälningarna.'
+  },
+  moderation_report_load_failed: {
+    nb: 'Kunne ikke hente rapporten.',
+    sv: 'Kunde inte hämta anmälan.'
+  },
+  moderation_report_not_found: {
+    nb: 'Rapporten finnes ikke.',
+    sv: 'Anmälan finns inte.'
+  },
+  moderation_content_load_failed: {
+    nb: 'Kunne ikke hente innholdet.',
+    sv: 'Kunde inte hämta innehållet.'
+  },
+  moderation_content_gone: {
+    nb: 'Innholdet finnes ikke lenger.',
+    sv: 'Innehållet finns inte längre.'
+  },
+  moderation_finding_not_hideable: {
+    nb: 'Funn kan ikke skjules herfra ennå.',
+    sv: 'Fynd kan inte döljas härifrån ännu.'
+  },
+  moderation_content_update_failed: {
+    nb: 'Kunne ikke oppdatere innholdet.',
+    sv: 'Kunde inte uppdatera innehållet.'
+  },
+  moderation_report_update_failed: {
+    nb: 'Kunne ikke oppdatere rapporten.',
+    sv: 'Kunde inte uppdatera anmälan.'
   }
 } as const satisfies Record<string, Record<Locale, string>>;
 

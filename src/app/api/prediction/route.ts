@@ -15,7 +15,6 @@ import { averageTiles } from '@/lib/prediction/tile-average';
 import { nearestForestTile } from '@/lib/prediction/nearest-forest-tile';
 import { PREDICTION_SPECIES_LATIN_NAMES } from '@/lib/prediction/prediction-species';
 import { isRecommendableSpecies } from '@/lib/prediction/recommendable';
-import { dayOfYearOf } from '@/lib/prediction/phenology';
 import { weightedOccurrenceDensity, OCCURRENCE_FETCH_LIMIT } from '@/lib/prediction/occurrences';
 import { getElevation } from '@/lib/terrain';
 import { roundForProviderLookup } from '@/lib/privacy/provider-precision';
@@ -24,6 +23,7 @@ import { createRequestLogger } from '@/lib/log/request';
 import { loggFeil } from '@/lib/api/feil';
 import { getUserLocale } from '@/i18n/locale';
 import { DEFAULT_LOCALE, type Locale } from '@/i18n/config';
+import { osloDagIAaret, osloIDag } from '@/lib/api/oslo-dag';
 
 // The client renders these verbatim (it prefers the server string over its own
 // translated fallback), so they follow the reader's language.
@@ -411,7 +411,8 @@ export async function GET(request: NextRequest) {
       // Se src/lib/prediction/nearest-forest-tile.ts.
       const nearestForest = nearestForestTile(cells, lat, lon);
       const forestTile: PredictionTileRow | null = nearestForest?.tile ?? null;
-      const seasonal = computeSeasonalScore(new Date().getMonth() + 1);
+      // Oslo-måneden: serveren går i UTC, og 1. juni kl. 00.30 er juni her.
+      const seasonal = computeSeasonalScore(osloIDag(requestedAt).maaned);
       const vegetation = averaged.vegetation;
       const moisture = averaged.moisture;
       const terrain = averaged.terrain;
@@ -636,7 +637,8 @@ export async function GET(request: NextRequest) {
     const currentTemp = weather.temperatureC;
     const currentHumidity = weather.humidityPct;
     const rain3dMm = weather.rain3dMm;
-    const month = new Date().getMonth() + 1;
+    // Måned og dag i året i Oslo, ikke på UTC-serveren (se src/lib/api/oslo-dag.ts).
+    const month = osloIDag(new Date()).maaned;
 
     if (findingsRes.error) {
       loggFeil(log, 'prediction.findings_rpc_failed', findingsRes.error);
@@ -656,7 +658,7 @@ export async function GET(request: NextRequest) {
       lat,
       lon,
       month,
-      dayOfYear: dayOfYearOf(new Date()),
+      dayOfYear: osloDagIAaret(new Date()),
       weather: { temperature: currentTemp, humidity: currentHumidity, rain3dMm, soilMoistureIndex: weather.soilMoistureIndex },
       forest,
       recent30d,

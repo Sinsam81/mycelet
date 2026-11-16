@@ -16,6 +16,7 @@ import { KINDWISE_TIMEOUT_MS } from '@/lib/identifications/config';
 import { tellRader } from '@/lib/supabase/tabell-finnes';
 import { getUserLocale } from '@/i18n/locale';
 import { DEFAULT_LOCALE, type Locale } from '@/i18n/config';
+import { osloIDag } from '@/lib/api/oslo-dag';
 
 const PLANTID_API_URL = 'https://mushroom.kindwise.com/api/v1/identification';
 
@@ -540,7 +541,9 @@ export async function POST(request: NextRequest) {
     }
     const suggestionsRaw: PlantIdSuggestion[] = plantIdData?.result?.classification?.suggestions ?? [];
 
-    const month = new Date().getMonth() + 1;
+    // Oslo-måneden: serveren går i UTC, og «i sesong» skal gjelde måneden
+    // brukeren står i — også rett etter midnatt ved et månedsskifte.
+    const month = osloIDag(new Date()).maaned;
 
     // Berikelsen — katalogoppslag, spiselighet og farlige forvekslingsarter —
     // bor i src/lib/identifications/enrich.ts. Grunnen er at

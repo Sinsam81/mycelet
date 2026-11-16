@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { osloIDag } from '../oslo-dag';
+import { osloDagIAaret, osloIDag } from '../oslo-dag';
 
 /**
  * Serveren går i UTC, leseren står i Norge eller Sverige. Mellom midnatt og
@@ -37,5 +37,22 @@ describe('osloIDag', () => {
 
   it('dagen i måneden er et tall uten ledende null', () => {
     expect(osloIDag(new Date('2026-07-05T12:00:00Z')).dagIManeden).toBe(5);
+  });
+});
+
+describe('osloDagIAaret', () => {
+  it('følger Oslo-datoen, ikke UTC', () => {
+    // 22.30 UTC 31. mai = 00.30 1. juni i Oslo: dag 152, ikke 151.
+    expect(osloDagIAaret(new Date('2026-05-31T22:30:00Z'))).toBe(152);
+    expect(osloDagIAaret(new Date('2026-05-31T21:30:00Z'))).toBe(151);
+  });
+
+  it('1. januar er dag 1, og årsskiftet følger Oslo', () => {
+    expect(osloDagIAaret(new Date('2026-12-31T23:10:00Z'))).toBe(1);
+    expect(osloDagIAaret(new Date('2026-12-31T12:00:00Z'))).toBe(365);
+  });
+
+  it('skuddår har 366 dager', () => {
+    expect(osloDagIAaret(new Date('2028-12-31T12:00:00Z'))).toBe(366);
   });
 });

@@ -7,6 +7,7 @@ import { enrichSuggestions, type BaseSuggestion } from '@/lib/identifications/en
 import { IDENTIFY_HISTORY_BUCKET } from '@/lib/identifications/config';
 import { getUserLocale } from '@/i18n/locale';
 import { DEFAULT_LOCALE, type Locale } from '@/i18n/config';
+import { osloIDag } from '@/lib/api/oslo-dag';
 
 export const runtime = 'nodejs';
 
@@ -126,7 +127,9 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   // Sesongvurderingen bruker måneden identifiseringen BLE GJORT, ikke dagens:
   // «i sesong nå» på en septemberidentifisering man ser på i januar er svar på
   // et spørsmål ingen stilte.
-  const observedMonth = new Date(row.created_at).getMonth() + 1;
+  // I Oslo-tid: en identifisering 1. november kl. 00.30 norsk tid er gjort i
+  // november, selv om UTC-serveren fortsatt ser 31. oktober.
+  const observedMonth = osloIDag(new Date(row.created_at)).maaned;
   const { suggestions, safetyDataIncomplete } = await enrichSuggestions(
     supabase,
     (row.suggestions ?? []).map((s) => ({

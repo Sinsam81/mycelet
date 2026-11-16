@@ -12,7 +12,6 @@ import {
 } from '@/lib/weather/samples';
 import { getForestProperties, buildSpeciesHabitatPreferences, computeHabitatScore } from '@/lib/forest';
 import { computeCellPrediction } from '@/lib/prediction/cell-score';
-import { dayOfYearOf } from '@/lib/prediction/phenology';
 import { weightedOccurrenceDensity, OCCURRENCE_FETCH_LIMIT } from '@/lib/prediction/occurrences';
 import { getElevation } from '@/lib/terrain';
 import { FORSKYVNINGSVINDU_LEVENDE_MS, provSkogIRuter, skogavstandKm } from '@/lib/prediction/skogprover';
@@ -26,6 +25,7 @@ import { getSpeciesDisplayName } from '@/lib/utils/species-name';
 import { isRecommendableSpecies } from '@/lib/prediction/recommendable';
 import { loggFeil } from '@/lib/api/feil';
 import { roundForProviderLookup } from '@/lib/privacy/provider-precision';
+import { osloDagIAaret, osloIDag } from '@/lib/api/oslo-dag';
 
 /**
  * "Soppbilder på kartet" — for each species in season, find the single best
@@ -171,8 +171,11 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: copy.premiumRequired, upsell: true }, { status: 403 });
     }
 
-    const month = new Date().getMonth() + 1;
-    const dayOfYear = dayOfYearOf(new Date());
+    // Oslo, ikke UTC-serveren: ved et månedsskifte svarte ruta for feil måned
+    // i en til to timer etter midnatt (se src/lib/api/oslo-dag.ts).
+    const naa = new Date();
+    const month = osloIDag(naa).maaned;
+    const dayOfYear = osloDagIAaret(naa);
 
     // Feilen MÅ leses. Uten den ble speciesRows null, candidates [], og ruta
     // svarte 200 med «Ingen arter med bilde er i sesong nå» til en betalende

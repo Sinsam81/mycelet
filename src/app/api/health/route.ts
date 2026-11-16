@@ -4,7 +4,13 @@ import { NYERE_TABELLER, erManglendeTabell } from '@/lib/supabase/tabell-finnes'
 import { checkRateLimit } from '@/lib/rate-limit';
 import { getClientKey, rateLimitResponse } from '@/lib/rate-limit/route';
 import { createRequestLogger } from '@/lib/log/request';
-import { erAiNokkelSatt, hentKindwiseStatus } from '@/lib/identifications/kindwise-status';
+import {
+  erAiNokkelSatt,
+  hentKindwiseStatus,
+  kindwiseTilstand,
+  type KindwiseTilstand
+} from '@/lib/identifications/kindwise-status';
+import { KINDWISE_KREDITT_VARSEL } from '@/lib/rapport/dagsrapport';
 
 /**
  * Health check endpoint for uptime monitoring (UptimeRobot, BetterUptime,
@@ -55,8 +61,8 @@ interface HealthResponse {
   checks: {
     envVars: CheckResult;
     epost: CheckResult;
-    /** Kindwise-nøkkelen: gyldig, og med kreditter igjen? Bare uten ?fast=1. */
-    ai?: CheckResult;
+    /** Kindwise-nøkkelen: gyldig, og med kreditter igjen? Bare uten ?fast=1. Grov tilstand, aldri tall. */
+    ai?: CheckResult & { tilstand: KindwiseTilstand };
     database?: CheckResult;
     auditLogTable?: CheckResult;
     /** Tabeller fra nyere migrasjoner: finnes de? Bare uten ?fast=1, aldri 503. */
@@ -115,33 +121,42 @@ function checkEpost(): CheckResult {
  * teller feilede kall mot vellykkede.)
  *
  * Kindwise spørres høyst hvert femte minutt uansett hvor ofte proben kaller;
- * ruta er offentlig, og de skal ikke få vår trafikk. Sier bare OM nøkkelen
- * virker og hvor mange kreditter som er igjen — aldri nøkkelen.
+ * ruta er offentlig, og de skal ikke få vår trafikk. Svaret er bare `ok` og en
+ * grov `tilstand` (ok / lav / sperret / utilgjengelig / mangler-nokkel) —
+ * aldri nøkkelen, aldri antall kreditter, aldri Kindwise sin svartekst. Før
+ * sto «N kreditter igjen» her, lesbart for alle. Tallene står i eierens
+ * dagsrapport; detaljen fra Kindwise går til serverloggen.
  */
 const AI_CACHE_MS = 5 * 60 * 1000;
-let aiCache: { ts: number; resultat: CheckResult } | null = null;
+type AiSjekk = NonNullable<HealthResponse['checks']['ai']>;
+let aiCache: { ts: number; resultat: AiSjekk } | null = null;
 
-async function checkAi(): Promise<CheckResult> {
+const AI_MELDING: Record<KindwiseTilstand, string> = {
+  ok: 'Kindwise svarer, nøkkelen virker.',
+  lav: 'Kindwise svarer, men det er få kreditter igjen.',
+  sperret: 'Kindwise avviser nøkkelen. Hvert AI-kall feiler.',
+  utilgjengelig: 'Kindwise svarte ikke.',
+  'mangler-nokkel': 'AI er ikke konfigurert — PLANTID_API_KEY mangler eller er plassholderen. /api/identify svarer 503.'
+};
+
+function aiSjekk(tilstand: KindwiseTilstand): AiSjekk {
+  return { ok: tilstand === 'ok' || tilstand === 'lav', tilstand, message: AI_MELDING[tilstand] };
+}
+
+async function checkAi(log: ReturnType<typeof createRequestLogger>): Promise<AiSjekk> {
   const apiKey = process.env.PLANTID_API_KEY;
-  if (!erAiNokkelSatt(apiKey)) {
-    return { ok: false, message: 'AI er ikke konfigurert — PLANTID_API_KEY mangler eller er plassholderen. /api/identify svarer 503.' };
-  }
+  if (!erAiNokkelSatt(apiKey)) return aiSjekk('mangler-nokkel');
   if (aiCache && Date.now() - aiCache.ts < AI_CACHE_MS) return aiCache.resultat;
 
   const r = await hentKindwiseStatus(apiKey);
-  let resultat: CheckResult;
-  if (!r.ok) {
-    resultat = {
-      ok: false,
-      message: r.httpStatus === 401 || r.httpStatus === 403
-        ? `Kindwise avviser nøkkelen (${r.httpStatus}). Hvert AI-kall feiler.`
-        : `Kindwise svarte ikke (${r.httpStatus ?? 'nett'}): ${r.feil}`
-    };
-  } else if (!r.status.aktiv || !r.status.kanBruke) {
-    resultat = { ok: false, message: `Kindwise: nøkkelen kan ikke brukes${r.status.grunn ? ` (${r.status.grunn})` : ''} — ${r.status.igjen ?? '?'} kreditter igjen.` };
-  } else {
-    resultat = { ok: true, message: `${r.status.igjen ?? '?'} kreditter igjen` };
+  const tilstand = kindwiseTilstand(r, KINDWISE_KREDITT_VARSEL);
+  if (tilstand !== 'ok') {
+    // Detaljen hører hjemme i serverloggen, ikke i det offentlige svaret.
+    log.warn('health.ai_detalj', r.ok
+      ? { tilstand, grunn: r.status.grunn, igjen: r.status.igjen }
+      : { tilstand, httpStatus: r.httpStatus, feil: r.feil });
   }
+  const resultat = aiSjekk(tilstand);
   aiCache = { ts: Date.now(), resultat };
   return resultat;
 }
@@ -259,7 +274,7 @@ export async function GET(request: NextRequest) {
     const [database, auditLogTable, ai, tabeller] = await Promise.all([
       checkDatabase(),
       checkAuditLogTable(),
-      checkAi(),
+      checkAi(log),
       checkNyereTabeller()
     ]);
     checks.database = database;

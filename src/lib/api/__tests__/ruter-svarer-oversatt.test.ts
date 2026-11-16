@@ -25,18 +25,16 @@ import { describe, expect, it } from 'vitest';
 const API = join(process.cwd(), 'src', 'app', 'api');
 
 /**
- * Ruter testen ikke gjelder, og hvorfor. De tre siste er brukervendte og står
- * her bare fordi de ikke er flyttet ennå — fjern linja når ruta er flyttet,
- * så vokter testen den også.
+ * Ruter testen ikke gjelder, og hvorfor. Alle er maskin-til-maskin eller
+ * eierens egen diagnostikk. findings/, billing/status/ og admin/moderation/
+ * sto her som «IKKE FLYTTET» til november 2026; nå svarer de på leserens
+ * språk og voktes som resten. En brukervendt rute skal ikke inn her igjen.
  */
 const UTENFOR: ReadonlyArray<{ sti: string; hvorfor: string }> = [
   { sti: 'cron/', hvorfor: 'maskin-til-maskin bak CRON_SECRET; svaret leses i Vercel-loggen' },
   { sti: 'stripe/', hvorfor: 'webhook: mottakeren er Stripe' },
   { sti: 'revenuecat/', hvorfor: 'webhook: mottakeren er RevenueCat' },
-  { sti: 'health/', hvorfor: 'driftsdiagnostikk for eieren, konkret med vilje' },
-  { sti: 'findings/', hvorfor: 'IKKE FLYTTET: svarer hardkodet norsk' },
-  { sti: 'billing/status/', hvorfor: 'IKKE FLYTTET: svarer hardkodet norsk og sender error.message i details' },
-  { sti: 'admin/moderation/', hvorfor: 'IKKE FLYTTET: svarer hardkodet norsk' }
+  { sti: 'health/', hvorfor: 'driftsdiagnostikk for eieren, konkret med vilje' }
 ];
 
 function rutefiler(mappe: string): string[] {
@@ -63,7 +61,15 @@ describe('feilsvar fra API-rutene', () => {
     // Uten denne ville en flyttet mappe gitt en test som består på null filer.
     expect(alle.length).toBeGreaterThan(40);
     expect(voktet.length).toBeGreaterThan(20);
-    for (const forventet of ['me/delete/route.ts', 'spot-feedback/route.ts', 'identify/route.ts', 'places/route.ts']) {
+    for (const forventet of [
+      'me/delete/route.ts',
+      'spot-feedback/route.ts',
+      'identify/route.ts',
+      'places/route.ts',
+      'findings/route.ts',
+      'billing/status/route.ts',
+      'admin/moderation/route.ts'
+    ]) {
       expect(voktet.map((r) => r.navn)).toContain(forventet);
     }
   });
@@ -86,6 +92,10 @@ describe('feilsvar fra API-rutene', () => {
         .map((linje) => `${navn}: ${linje.trim()}`)
     );
     expect(treff, 'logg den med loggFeil og svar med apiFeil — databasens tekst hører hjemme i loggen').toEqual([]);
+  });
+
+  it('ingen unntak står merket som «ikke flyttet»', () => {
+    expect(UTENFOR.filter((u) => /IKKE FLYTTET/.test(u.hvorfor))).toEqual([]);
   });
 
   it('unntakslista peker bare på mapper som finnes', () => {

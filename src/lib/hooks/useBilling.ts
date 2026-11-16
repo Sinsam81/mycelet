@@ -29,8 +29,19 @@ export interface BillingStatusResult {
  */
 export const BILLING_STATUS_KEY = ['billing-status'] as const;
 
-/** Reserveteksten når svaret ikke bar en egen feilmelding. */
+/**
+ * Reserveteksten når svaret ikke bar en egen feilmelding. Bare for loggen og
+ * utviklere: ingen flate viser `error.message` fra denne kroken (headeren og
+ * kartet leser bare om statusen kom). En flate som vil vise feilen, forgrener
+ * på `code` og henter teksten fra meldingskatalogen.
+ */
 export const BETALINGSSTATUS_FEILTEKST = 'Kunne ikke hente betalingsstatus';
+
+/** Stabil kode når svaret ikke bar sin egen (plattformens HTML-side, ødelagt kropp). */
+export const BETALINGSSTATUS_FEILKODE = 'billing_status_unavailable';
+
+/** Feilen kroken kaster: teksten som før, pluss en kode klienter kan forgrene på. */
+export type BetalingsstatusFeil = Error & { code: string };
 
 /**
  * Henter betalingsstatusen. `null` betyr «ikke logget inn» (401) — det er et
@@ -44,9 +55,12 @@ export const BETALINGSSTATUS_FEILTEKST = 'Kunne ikke hente betalingsstatus';
 export async function hentBetalingsstatus(): Promise<BillingStatusResult | null> {
   const response = await fetch('/api/billing/status', { cache: 'no-store' });
   if (response.status === 401) return null;
-  const data = (await response.json().catch(() => null)) as (BillingStatusResult & { error?: string }) | null;
+  const data = (await response.json().catch(() => null)) as (BillingStatusResult & { error?: string; code?: string }) | null;
   if (!response.ok || !data) {
-    throw new Error(data?.error ?? BETALINGSSTATUS_FEILTEKST);
+    const feil: BetalingsstatusFeil = Object.assign(new Error(data?.error ?? BETALINGSSTATUS_FEILTEKST), {
+      code: typeof data?.code === 'string' ? data.code : BETALINGSSTATUS_FEILKODE
+    });
+    throw feil;
   }
   return data;
 }

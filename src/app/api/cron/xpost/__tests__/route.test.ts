@@ -217,3 +217,43 @@ describe('X-posteren — en natt uten lagrede regionscorer', () => {
     expect(postet).toEqual([]);
   });
 });
+
+describe('X-posteren — en natt uten NYE regionscorer', () => {
+  it('omslaget fra i går postes ikke en gang til når dagens scorer mangler', async () => {
+    // ⚠️ REGRESJONSVAKT. Fersk-sjekken godtar scorer som er én dag gamle, og
+    // dedupe-nøkkelen er postedatoen. Uten nye scorer natt til D+1 leste
+    // cronen D sine tall på nytt, fant det samme omslaget og postet det ordrett
+    // en gang til — med nytt pressevarsel og ny rad i den offentlige fasitloggen.
+    scorer = [
+      { region: 'Oslo', tile_date: D_MINUS_2, score: 66 },
+      { region: 'Oslo', tile_date: D_MINUS_1, score: 70 },
+      { region: 'Oslo', tile_date: D, score: 89 }
+    ];
+    expect(await kjor(D)).toMatchObject({ ok: true, publisert: 1 });
+    expect(postet).toHaveLength(1);
+    expect(presse).toHaveLength(1);
+    expect(hendelser).toHaveLength(1);
+
+    // Natt til D+1: ingenting nytt lagret.
+    const svar = await kjor(D_PLUSS_1);
+    expect(svar).toMatchObject({ ok: true, grunn: 'ingenting-aa-poste', tileDate: D });
+    expect(postet).toHaveLength(1);
+    expect(presse).toHaveLength(1);
+    expect(hendelser).toHaveLength(1);
+  });
+
+  it('søndagsoppsummeringen går fortsatt med gårsdagens scorer', async () => {
+    // 13. september 2026 er en søndag.
+    scorer = [{ region: 'Oslo', tile_date: '2026-09-12', score: 75 }];
+    const svar = await kjor('2026-09-13');
+    expect(svar).toMatchObject({ ok: true, publisert: 1 });
+    expect(xInnlegg.map((x) => x.type)).toEqual(['ukesoppsummering']);
+    expect(hendelser).toEqual([]);
+  });
+
+  it('scorer eldre enn én dag: ingenting postes', async () => {
+    scorer = [{ region: 'Oslo', tile_date: '2026-09-11', score: 75 }];
+    expect(await kjor('2026-09-13')).toMatchObject({ ok: true, grunn: 'scorer-utdatert' });
+    expect(postet).toEqual([]);
+  });
+});

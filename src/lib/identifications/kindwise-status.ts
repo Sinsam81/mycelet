@@ -89,3 +89,23 @@ export async function hentKindwiseStatus(
     return { ok: false, httpStatus: null, feil: err instanceof Error ? err.message : 'ukjent feil' };
   }
 }
+
+/**
+ * Grov tilstand for den OFFENTLIGE helsesjekken. /api/health er åpen for
+ * alle, så den sier bare om AI-en virker — aldri hvor mange kreditter som er
+ * igjen eller hva Kindwise svarte. Tallene står i eierens dagsrapport.
+ *
+ *   ok             — nøkkelen virker og det er nok kreditter
+ *   lav            — virker, men under varselgrensen (kjøp flere)
+ *   sperret        — Kindwise avviser nøkkelen eller sier den ikke kan brukes
+ *   utilgjengelig  — Kindwise svarte ikke (nett, 5xx, rart svar)
+ *   mangler-nokkel — PLANTID_API_KEY er ikke satt
+ */
+export type KindwiseTilstand = 'ok' | 'lav' | 'sperret' | 'utilgjengelig' | 'mangler-nokkel';
+
+export function kindwiseTilstand(r: KindwiseStatusResultat, lavGrense: number): KindwiseTilstand {
+  if (!r.ok) return r.httpStatus === 401 || r.httpStatus === 403 ? 'sperret' : 'utilgjengelig';
+  if (!r.status.aktiv || !r.status.kanBruke) return 'sperret';
+  if (r.status.igjen != null && r.status.igjen < lavGrense) return 'lav';
+  return 'ok';
+}

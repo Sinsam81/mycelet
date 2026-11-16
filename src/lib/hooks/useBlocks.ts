@@ -84,24 +84,38 @@ function useInvalidateAfterBlockChange() {
   return () => invalidateAfterBlockChange(queryClient);
 }
 
+/**
+ * Writes the block row. Insert-or-ignore (ON CONFLICT DO NOTHING), never a
+ * plain upsert: blocked_users has no UPDATE policy (migrations 032 and 058),
+ * so a plain upsert on a row that already exists takes the DO UPDATE path,
+ * RLS rejects it, and the user was told «Kunne ikke blokkere» about someone
+ * who IS blocked — e.g. after a double tap or a stale list. The map's own
+ * block write does the same.
+ *
+ * Exported for the test of the request shape.
+ */
+export async function blokkerBruker(
+  supabase: Pick<ReturnType<typeof createClient>, 'auth' | 'from'>,
+  blockedId: string
+): Promise<void> {
+  const {
+    data: { user }
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error('not_authenticated');
+  if (user.id === blockedId) throw new Error('cannot_block_self');
+
+  // Blocking twice is not an error from the user's point of view.
+  const { error } = await supabase
+    .from('blocked_users')
+    .upsert({ blocker_id: user.id, blocked_id: blockedId }, { onConflict: 'blocker_id,blocked_id', ignoreDuplicates: true });
+  if (error) throw error;
+}
+
 export function useBlockUser() {
   const invalidate = useInvalidateAfterBlockChange();
 
   return useMutation({
-    mutationFn: async (blockedId: string) => {
-      const supabase = createClient();
-      const {
-        data: { user }
-      } = await supabase.auth.getUser();
-      if (!user) throw new Error('not_authenticated');
-      if (user.id === blockedId) throw new Error('cannot_block_self');
-
-      // Blocking twice is not an error from the user's point of view.
-      const { error } = await supabase
-        .from('blocked_users')
-        .upsert({ blocker_id: user.id, blocked_id: blockedId }, { onConflict: 'blocker_id,blocked_id' });
-      if (error) throw error;
-    },
+    mutationFn: (blockedId: string) => blokkerBruker(createClient(), blockedId),
     onSuccess: invalidate
   });
 }

@@ -50,20 +50,21 @@ function kildefiler(katalog: string): string[] {
 const KONTEKST_SOM_FEIL = /\.error\(\s*(['"`])[^'"`]+\1\s*,\s*\{/g;
 
 describe('feillogging i varselkoden', () => {
-  it('premisset: et kontekstobjekt som andre argument blir «[object Object]»', () => {
+  it('premisset: loggeren skriver nå et kontekstobjekt som andre argument med feltene sine', () => {
+    // Før skrev loggeren dette som «[object Object]». Roten er rettet i
+    // src/lib/log (kontekstobjekt og PostgREST-feilobjekt skrives med feltene
+    // sine), så regelen under er nå en stilregel for varselkoden, ikke lenger
+    // det eneste som holder feilteksten i loggen.
     const linjer: string[] = [];
     const log = _createTestLogger({ level: 'debug', writer: { write: (linje) => linjer.push(linje) } });
 
     log.error('feil.bruk', { message: 'duplicate key value' });
-    expect(linjer[0]).toContain('[object Object]');
-    expect(linjer[0]).not.toContain('duplicate key value');
+    expect(linjer[0]).not.toContain('[object Object]');
+    expect(linjer[0]).toContain('duplicate key value');
 
     log.error('riktig.bruk', undefined, { message: 'duplicate key value' });
     expect(linjer[1]).toContain('duplicate key value');
     expect(linjer[1]).not.toContain('[object Object]');
-
-    // Ryker denne testen, har loggeren begynt å ta imot kontekst som andre
-    // argument. Da kan regelen under fjernes.
   });
 
   it('mønsteret treffer feilbruken og slipper riktig bruk gjennom', () => {

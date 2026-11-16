@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { BETALINGSSTATUS_FEILTEKST, hentBetalingsstatus } from '../useBilling';
-import { PREDIKSJON_FEILTEKST, hentPrediksjon } from '../usePrediction';
+import { BETALINGSSTATUS_FEILKODE, BETALINGSSTATUS_FEILTEKST, hentBetalingsstatus } from '../useBilling';
+import { PREDIKSJON_FEILKODE, PREDIKSJON_FEILTEKST, hentPrediksjon } from '../usePrediction';
 
 /**
  * En feil på plattformnivå (Vercels 504 når en rute bruker for lang tid, 502
@@ -55,6 +55,13 @@ describe('hentPrediksjon', () => {
     expect(feil).toBeInstanceOf(Error);
     expect(feil).not.toBeInstanceOf(SyntaxError);
     expect((feil as Error).message).toBe(PREDIKSJON_FEILTEKST);
+    expect((feil as { code?: string }).code).toBe(PREDIKSJON_FEILKODE);
+  });
+
+  it('rutas egen kode følger med når svaret har en', async () => {
+    stubbHent(svarMed(JSON.stringify({ error: 'For mange forespørsler', code: 'rate_limited' }), 429));
+    const feil = await hentPrediksjon(PUNKT).catch((e: unknown) => e);
+    expect((feil as { code?: string }).code).toBe('rate_limited');
   });
 
   it('et 200-svar som ikke er JSON er også en feil, ikke et tomt resultat', async () => {
@@ -92,6 +99,13 @@ describe('hentBetalingsstatus', () => {
     expect(feil).toBeInstanceOf(Error);
     expect(feil).not.toBeInstanceOf(SyntaxError);
     expect((feil as Error).message).toBe(BETALINGSSTATUS_FEILTEKST);
+    expect((feil as { code?: string }).code).toBe(BETALINGSSTATUS_FEILKODE);
+  });
+
+  it('rutas egen kode følger med når svaret har en', async () => {
+    stubbHent(svarMed(JSON.stringify({ error: 'For mange forespørsler', code: 'rate_limited' }), 429));
+    const feil = await hentBetalingsstatus().catch((e: unknown) => e);
+    expect((feil as { code?: string }).code).toBe('rate_limited');
   });
 
   it('et 200-svar som ikke er JSON blir aldri lest som «gratis»', async () => {
