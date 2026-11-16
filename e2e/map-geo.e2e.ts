@@ -183,16 +183,22 @@ test.describe('Trykkflater på kartet', () => {
     // Med GPX som femte knapp ble det tre rader oppå kartet. Knappene er nå
     // fire, og kolonnen rommer to i bredden.
     await openMap(page);
-    const topper = new Set<number>();
+    // Radene telles på knappenes MIDTLINJE, ikke på toppkanten: pillene og den
+    // runde filterknappen har ulik høyde og er midtstilt i raden, så toppene
+    // deres skiller seg med et par piksler selv om de står side om side.
+    const midter: number[] = [];
     for (const navn of [/Skjul funn|Vis funn/, 'Filtrer funnene', /Lovende/]) {
       const boks = await page.getByRole('button', { name: navn }).boundingBox();
       expect(boks, `fant ikke knappen ${String(navn)}`).not.toBeNull();
-      topper.add(Math.round(boks!.y));
+      midter.push(boks!.y + boks!.height / 2);
     }
     const mer = await page.getByRole('button', { name: 'Mer', exact: true }).boundingBox();
     expect(mer).not.toBeNull();
-    topper.add(Math.round(mer!.y));
-    expect(topper.size).toBeLessThanOrEqual(2);
+    midter.push(mer!.y + mer!.height / 2);
+    midter.sort((a, b) => a - b);
+    // En ny rad begynner der midtlinja hopper mer enn en halv knappehøyde.
+    const rader = midter.reduce((antall, midt, i) => (i > 0 && midt - midter[i - 1] > 18 ? antall + 1 : antall), 1);
+    expect(rader).toBeLessThanOrEqual(2);
   });
 });
 

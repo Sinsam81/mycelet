@@ -149,7 +149,12 @@ const nextConfig = {
       // en ekte URL — ikke bare som filen /offline/index.html.
       { source: '/offline', destination: '/offline/index.html' }
     ];
-  }
+  },
+  // Next sin utviklerknapp («N») ligger nede til venstre — oppå Hjem-fanen i
+  // telefonbredde. Et trykk midt på fanen traff knappen, så bunnmenyen kunne
+  // ikke prøves lokalt slik den virker i produksjon (e2e/cookie-consent.e2e.ts
+  // sto rød på «/» av den grunn). Feilvinduet ved kjørefeil vises som før.
+  devIndicators: false
 };
 
 const withNextIntl = require('next-intl/plugin')('./src/i18n/request.ts');
