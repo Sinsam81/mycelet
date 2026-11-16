@@ -144,15 +144,6 @@ type LeafletType = typeof import('leaflet');
  */
 const OCCURRENCE_FETCH_LIMIT = 6000;
 
-const FOREST_LABEL: Record<string, string> = {
-  gran: 'granskog',
-  furu: 'furuskog',
-  bar: 'barskog',
-  lauv: 'løvskog',
-  blandet: 'blandingsskog',
-  apent: 'åpent landskap'
-};
-
 /**
  * Ett av de anbefalte stedene fra /api/prediction/grid?top=N.
  *

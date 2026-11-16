@@ -56,6 +56,12 @@ import { DEFAULT_LOCALE, isLocale, type Locale } from '@/i18n/config';
  */
 
 export const runtime = 'nodejs';
+// Verste tilfelle: generateLink, så sendEpost med sin egen frist på 15 s, ett
+// nytt forsøk etter 1 s og en frist til — rundt 32 s. Uten et eget tak arver
+// ruta plattformens standard, som kan avbryte den midt i andre forsøk; da har
+// lenken alt sperret Supabases egen e-post i 60 s, og brukeren får verken vår
+// eller deres.
+export const maxDuration = 40;
 
 const VINDU_SEKUNDER = 15 * 60;
 const MAKS_PER_KLIENT = 5;
