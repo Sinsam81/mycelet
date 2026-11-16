@@ -513,6 +513,7 @@
     "cameraDenied": "Mycelet har ikke tilgang til kameraet. Slå det på under Mycelet i Innstillinger-appen.",
     "photosDenied": "Mycelet har ikke tilgang til bildene dine. Gi tilgang under Mycelet i Innstillinger-appen, eller ta et nytt bilde.",
     "photoUnavailable": "Bildet kunne ikke lastes. Ligger det bare i iCloud, åpner du det i Bilder først, eller tar et nytt bilde.",
+    "imageUnreadable": "Bildet kunne ikke leses. Velg et annet bilde, eller ta et nytt.",
     "identifyFailed": "Identifikasjon feilet",
     "couldNotGetImage": "Kunne ikke hente bilde.",
     "networkError": "Fikk ikke kontakt med serveren. Sjekk dekningen og prøv igjen.",

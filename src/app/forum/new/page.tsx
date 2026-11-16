@@ -14,11 +14,21 @@ import { buildUserUploadPath } from '@/lib/storage/upload-path';
 import { createClient } from '@/lib/supabase/client';
 import { reencodeImageForUpload } from '@/lib/utils/image';
 import { isNativePlatform } from '@/lib/native/platform';
-import { captureNativePhoto } from '@/lib/native/camera';
+import { captureNativePhoto, kameraFeil, type KameraFeil } from '@/lib/native/camera';
 import { intlLocale } from '@/lib/utils/intl-locale';
 import { getJoinedSpeciesName } from '@/lib/utils/species-name';
 
 type Category = 'find' | 'question' | 'tip' | 'discussion';
+
+/**
+ * Meldingsnøkkel (navnerommet Identify) for hver kjente avvisning fra
+ * kamerapluginen — samme tabell og samme tekster som identifiser-siden bruker.
+ */
+const KAMERA_FEIL_TEKST: Record<KameraFeil, 'cameraDenied' | 'photosDenied' | 'photoUnavailable'> = {
+  'kamera-avslatt': 'cameraDenied',
+  'bilder-avslatt': 'photosDenied',
+  'bilde-utilgjengelig': 'photoUnavailable'
+};
 
 // Next 15+ requires useSearchParams() inside a Suspense boundary; default
 // export at the bottom wraps NewForumPostInner.
@@ -26,6 +36,7 @@ function NewForumPostInner() {
   const t = useTranslations('ForumNew');
   const locale = useLocale();
   const tFilter = useTranslations('ContentFilter');
+  const tKamera = useTranslations('Identify');
   const forumError = useForumErrorMessage();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -100,7 +111,11 @@ function NewForumPostInner() {
       const file = await captureNativePhoto(locale);
       if (file) addFiles([file]);
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('couldNotGetImage'));
+      // Aldri err.message: pluginen avviser med faste engelske strenger («User
+      // denied access to photos»). De vi kjenner igjen får forklaringen som
+      // sier hva brukeren kan gjøre; resten får katalogens tekst.
+      const kjent = kameraFeil(err);
+      setError(kjent ? tKamera(KAMERA_FEIL_TEKST[kjent]) : t('couldNotGetImage'));
     }
   };
 

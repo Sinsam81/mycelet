@@ -9,6 +9,59 @@
  * on the map. Re-encoding also shrinks uploads (faster on forest networks).
  */
 
+/**
+ * Hvorfor et bilde ikke lot seg behandle.
+ *
+ *   • `ulesbart`      — nettleseren klarte ikke å dekode fila (skadet, eller
+ *                       et format den ikke leser). Brukeren kan velge et annet
+ *                       bilde, så dette er den ene koden som fortjener sin
+ *                       egen tekst.
+ *   • `canvas`        — ingen 2D-kontekst (typisk for lite minne).
+ *   • `komprimering`  — canvas.toBlob ga ingenting.
+ *   • `ugyldig-data`  — en data:-URL uten innhold.
+ */
+export type BildeFeilKode = 'ulesbart' | 'canvas' | 'komprimering' | 'ugyldig-data';
+
+const BILDE_FEIL_TEKST: Record<BildeFeilKode, string> = {
+  ulesbart: 'Kunne ikke lese bilde.',
+  canvas: 'Kunne ikke initialisere canvas.',
+  komprimering: 'Kunne ikke komprimere bilde.',
+  'ugyldig-data': 'Ugyldig bilde-data.'
+};
+
+/**
+ * Feilen bildefunksjonene her kaster.
+ *
+ * De kastet `new Error('Kunne ikke lese bilde.')`, og sidene viste
+ * `err.message` rått — så en svensk bruker som valgte et bilde nettleseren
+ * ikke kunne lese, fikk norsk tekst. En tekst kan ikke oversettes der den
+ * vises; en kode kan. Kallstedet slår opp sin egen oversatte tekst med
+ * `bildeFeilKode(err)`, samme mønster som `kameraFeil` i native/camera.ts.
+ *
+ * `message` er fortsatt den norske setningen, av to grunner: den er lesbar i
+ * Sentry, og kallsteder som ikke er flyttet ennå viser det samme som før i
+ * stedet for en intern kode.
+ */
+export class BildeFeil extends Error {
+  readonly kode: BildeFeilKode;
+
+  constructor(kode: BildeFeilKode) {
+    super(BILDE_FEIL_TEKST[kode]);
+    this.name = 'BildeFeil';
+    this.kode = kode;
+  }
+}
+
+/** Koden hvis feilen er en BildeFeil, ellers null. Leser feltet, ikke klassen. */
+export function bildeFeilKode(feil: unknown): BildeFeilKode | null {
+  if (!feil || typeof feil !== 'object') return null;
+  const kode = (feil as { kode?: unknown }).kode;
+  // hasOwnProperty, ikke `in`: «toString» finnes på alle objekter.
+  return typeof kode === 'string' && Object.prototype.hasOwnProperty.call(BILDE_FEIL_TEKST, kode)
+    ? (kode as BildeFeilKode)
+    : null;
+}
+
 function drawToCanvas(file: Blob, maxDim: number): Promise<HTMLCanvasElement> {
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -26,7 +79,7 @@ function drawToCanvas(file: Blob, maxDim: number): Promise<HTMLCanvasElement> {
       const ctx = canvas.getContext('2d');
       if (!ctx) {
         URL.revokeObjectURL(img.src);
-        reject(new Error('Kunne ikke initialisere canvas.'));
+        reject(new BildeFeil('canvas'));
         return;
       }
 
@@ -39,7 +92,7 @@ function drawToCanvas(file: Blob, maxDim: number): Promise<HTMLCanvasElement> {
 
     img.onerror = () => {
       URL.revokeObjectURL(img.src);
-      reject(new Error('Kunne ikke lese bilde.'));
+      reject(new BildeFeil('ulesbart'));
     };
 
     img.src = URL.createObjectURL(file);
@@ -65,7 +118,7 @@ export function base64ToBlob(base64: string, mimeType: string): Blob {
 /** Decode a data:-URL (e.g. canvas.toDataURL output) to a Blob without fetch(). */
 export function dataUrlToBlob(dataUrl: string): Blob {
   const [header, base64] = dataUrl.split(',');
-  if (!base64) throw new Error('Ugyldig bilde-data.');
+  if (!base64) throw new BildeFeil('ugyldig-data');
   const mimeType = header.match(/^data:([^;]+)/)?.[1] ?? 'application/octet-stream';
   return base64ToBlob(base64, mimeType);
 }
@@ -89,7 +142,7 @@ export async function reencodeBase64ForHistory(
   const canvas = await drawToCanvas(base64ToBlob(base64, 'image/jpeg'), maxDim);
   return new Promise((resolve, reject) => {
     canvas.toBlob(
-      (blob) => (blob ? resolve(blob) : reject(new Error('Kunne ikke komprimere bilde.'))),
+      (blob) => (blob ? resolve(blob) : reject(new BildeFeil('komprimering'))),
       'image/jpeg',
       quality
     );
@@ -108,7 +161,7 @@ export async function reencodeImageForUpload(file: File, maxDim = 2000): Promise
   const canvas = await drawToCanvas(file, maxDim);
   return new Promise((resolve, reject) => {
     canvas.toBlob(
-      (blob) => (blob ? resolve(blob) : reject(new Error('Kunne ikke komprimere bilde.'))),
+      (blob) => (blob ? resolve(blob) : reject(new BildeFeil('komprimering'))),
       'image/jpeg',
       0.85
     );

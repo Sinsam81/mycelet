@@ -406,7 +406,10 @@ function PricingInner() {
       }
 
       if (!response.ok) {
-        setStatusError(data?.error ?? t('errorLoadStatus'));
+        // Katalogens tekst, ikke serverens. `data.error ?? t(...)` viste
+        // rutens hardkodede norske tekst til svenske brukere, og den sa ikke
+        // mer enn katalogen gjør.
+        setStatusError(t('errorLoadStatus'));
         return null;
       }
 
@@ -450,7 +453,8 @@ function PricingInner() {
       // eksempel hvorfor et planbytte er sperret og hva brukeren skal gjøre —
       // og uten dette så brukeren bare overskriften.
       if (!response.ok) {
-        throw new Error([data?.error, data?.details].filter(Boolean).join(' ') || t('errorCheckout'));
+        setStatusError([data?.error, data?.details].filter(Boolean).join(' ') || t('errorCheckout'));
+        return;
       }
       if (data?.url) {
         const value = plan === 'premium' ? PREMIUM_MONTHLY : SEASON_YEARLY;
@@ -468,8 +472,11 @@ function PricingInner() {
         });
         window.location.href = data.url;
       }
-    } catch (error) {
-      setStatusError(error instanceof Error ? error.message : t('errorCheckout'));
+    } catch {
+      // Hit kommer bare nettverksfeil og svar som ikke er JSON. Meldingen i
+      // dem er nettleserens egen engelske («Load failed»), aldri vår — rutens
+      // oversatte tekst er vist over.
+      setStatusError(t('errorCheckout'));
     } finally {
       setLoadingPlan(null);
     }
@@ -480,10 +487,14 @@ function PricingInner() {
       setOpeningPortal(true);
       const response = await fetch('/api/billing/portal', { method: 'POST' });
       const data = await response.json();
-      if (!response.ok) throw new Error(data?.error ?? t('errorOpenPortal'));
+      if (!response.ok) {
+        setStatusError(data?.error ?? t('errorOpenPortal'));
+        return;
+      }
       if (data?.url) window.location.href = data.url;
-    } catch (error) {
-      setStatusError(error instanceof Error ? error.message : t('errorOpenPortal'));
+    } catch {
+      // Samme regel som i startCheckout: aldri nettleserens egen feiltekst.
+      setStatusError(t('errorOpenPortal'));
     } finally {
       setOpeningPortal(false);
     }

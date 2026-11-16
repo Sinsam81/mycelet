@@ -55,14 +55,22 @@ export function RetentionWarningBanner() {
     setLoading(true);
     try {
       const response = await fetch('/api/me/extend-retention', { method: 'POST' });
-      const data = await response.json();
+      // Et svar som ikke er JSON (plattformens egen feilside) er også en feil,
+      // men skal ikke vises som «Unexpected token <».
+      const data = await response.json().catch(() => null);
       if (!response.ok) {
-        throw new Error(data?.error ?? t('cancelError'));
+        // Rutens feiltekster er på leserens språk (apiFeil og rate-limit).
+        toast.error(data?.error ?? t('cancelError'));
+        return;
       }
+      // Også bekreftelsen kommer oversatt fra ruta, som vet om det faktisk
+      // fantes en planlagt sletting å avbryte.
       toast.success(data?.message ?? t('cancelSuccess'));
       setWarning(null);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : t('cancelError'));
+      // Nettverksfeil. Aldri err.message: det er nettleserens egen engelske
+      // tekst («Load failed»), ikke noe vi har skrevet.
+      toast.error(t('cancelError'));
     } finally {
       setLoading(false);
     }

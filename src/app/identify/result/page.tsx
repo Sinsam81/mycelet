@@ -176,8 +176,11 @@ function IdentifyResultView() {
       });
 
       if (!saveResponse.ok) {
-        const body = await saveResponse.json().catch(() => null);
-        throw new Error(body?.error || t('errorSaveFailed'));
+        // Katalogens tekst, ikke serverens. `body.error || t(...)` viste rutens
+        // hardkodede norske tekst til svenske brukere, og den sa ikke mer enn
+        // katalogen gjør. Statusen bærer det eneste skillet brukeren kan gjøre
+        // noe med.
+        throw new Error(saveResponse.status === 401 ? t('errorNotLoggedIn') : t('errorSaveFailed'));
       }
       // Koble historikkraden til funnet, slik at lista kan vise «lagret som
       // funn» i stedet for å invitere til en duplikat-lagring. Best effort:
@@ -211,7 +214,9 @@ function IdentifyResultView() {
       // etterfulgt av et kart uten funnet leses som at lagringen feilet.
       router.push('/map?mine=1');
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('errorSaveFailed'));
+      // En brutt forbindelse er en TypeError med nettleserens egen engelske
+      // tekst («Load failed»). Feilene vi kaster selv over er alt oversatt.
+      setError(err instanceof Error && !(err instanceof TypeError) ? err.message : t('errorSaveFailed'));
     } finally {
       setSaving(false);
     }

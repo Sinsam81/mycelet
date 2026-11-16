@@ -3,6 +3,7 @@ import { searchPlacesServer } from '@/lib/utils/place-search';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { getClientKey, rateLimitResponse } from '@/lib/rate-limit/route';
 import { createRequestLogger } from '@/lib/log/request';
+import { apiFeil } from '@/lib/api/feil';
 
 /**
  * Place-name search for the map (Norway + Sweden).
@@ -25,7 +26,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ places: [] });
   }
   if (query.length > 80) {
-    return NextResponse.json({ error: 'Søketekst for lang' }, { status: 400 });
+    return apiFeil('search_too_long', 400);
   }
 
   // Typeahead fires often; keep it generous but bounded per client.

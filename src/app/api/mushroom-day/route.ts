@@ -6,6 +6,8 @@ import { getClientKey, rateLimitResponse } from '@/lib/rate-limit/route';
 import { createRequestLogger } from '@/lib/log/request';
 import { getUserLocale } from '@/i18n/locale';
 import { observedRainWindows } from '@/lib/weather/windows';
+import { roundForProviderLookup } from '@/lib/privacy/provider-precision';
+import { osloIDag } from '@/lib/api/oslo-dag';
 import { DEFAULT_LOCALE, type Locale } from '@/i18n/config';
 
 // Feilstrengene vises rått i grensesnittet, så de følger leserens språk —
@@ -67,19 +69,30 @@ export async function GET(request: NextRequest) {
     return rateLimitResponse(rl);
   }
 
-  const now = new Date();
-  const month = now.getMonth() + 1;
-  const dayOfMonth = now.getDate();
+  // «I dag» er dagen i Oslo. Serveren går i UTC, og måneden og dagen ble tatt
+  // fra dens klokke: mellom midnatt og kl. 01/02 norsk tid var det fortsatt i
+  // går — og 1. juni kl. 00.30 fortsatt mai, som er utenom sesongen. Se
+  // src/lib/api/oslo-dag.ts.
+  const iDag = osloIDag(new Date());
+  const month = iDag.maaned;
+  const dayOfMonth = iDag.dagIManeden;
   // Datoen, ikke bare måneden, er del av cache-nøkkelen: sesongleddet glir nå
   // fra dag til dag (se mushroom-day.ts), så et svar fra i går er et annet svar.
-  const cacheKey = `${lat.toFixed(2)},${lon.toFixed(2)},${now.toISOString().slice(0, 10)},${locale}`;
+  // Samme Oslo-dato som vurderingen bruker — ellers ville et svar regnet ut
+  // kl. 23.50 blitt servert som «i dag» til kl. 00.20.
+  const cacheKey = `${lat.toFixed(2)},${lon.toFixed(2)},${iDag.dato},${locale}`;
   const cached = dayCache.get(cacheKey);
   if (cached && Date.now() - cached.at < CACHE_TTL_MS) {
     return NextResponse.json(cached.payload);
   }
 
   try {
-    const weather = await fetchWeatherSummary({ lat, lon });
+    // Punktet er leserens posisjon. Dagens klienter sender to desimaler, men
+    // ruta er åpen og tok imot hva som helst — og sendte det videre urørt til
+    // værleverandøren. Samme regel som /api/prediction: eksterne oppslag får
+    // områdepresisjon (~110 m), se provider-precision.ts. Svaret er det samme;
+    // nærmeste værstasjon ligger uansett kilometer unna.
+    const weather = await fetchWeatherSummary(roundForProviderLookup(lat, lon));
     if (!weather) {
       return NextResponse.json({ error: copy.noWeather }, { status: 502 });
     }

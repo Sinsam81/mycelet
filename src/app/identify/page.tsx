@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/Button';
 import { getOptionalPosition, NATIV_FRIST_MARGIN_MS, POSISJON_TIMEOUT_MS, PosisjonTidsavbrudd } from '@/lib/hooks/useGeolocation';
 import { useErMontert } from '@/lib/hooks/useErMontert';
 import { IdentifyError, useIdentify } from '@/lib/hooks/useIdentify';
-import { base64ToBlob, optimizeImageForIdentification, reencodeBase64ForHistory } from '@/lib/utils/image';
+import { base64ToBlob, bildeFeilKode, optimizeImageForIdentification, reencodeBase64ForHistory } from '@/lib/utils/image';
 import { createClient } from '@/lib/supabase/client';
 import {
   HISTORY_IMAGE_MAX_DIM,
@@ -187,7 +187,11 @@ export default function IdentifyPage() {
       });
     } catch (err) {
       meldIdentifiseringsfeil({ steg: 'bilde', feil: err });
-      setError(err instanceof Error ? err.message : t('couldNotGetImage'));
+      // Aldri err.message rått: image.ts kaster norske setninger, og alt annet
+      // som kan ryke her er nettleserens egen engelske tekst. Koden velger
+      // oversettelsen — et bilde nettleseren ikke kan lese får sin egen tekst,
+      // fordi brukeren kan gjøre noe med det.
+      setError(bildeFeilKode(err) === 'ulesbart' ? t('imageUnreadable') : t('couldNotGetImage'));
     } finally {
       setOptimizing(false);
     }
@@ -286,7 +290,10 @@ export default function IdentifyPage() {
       //     identifiseringer» først, og lenka dit vises under den.
       // Alt annet som ikke er rutens JSON (Vercels 413/504 er HTML) får
       // katalogens tekst. Teksten i selve feilen er da hardkodet norsk og ment
-      // for Sentry — vist rått fikk svenske brukere norsk.
+      // for Sentry — vist rått fikk svenske brukere norsk. Det samme gjelder
+      // feil som ikke kommer fra kallet i det hele tatt (en full
+      // sessionStorage): der er teksten nettleserens egen, på engelsk. Bare
+      // rutens JSON-svar (IdentifyError med json) er på leserens språk.
       const svarKanLigge =
         err instanceof IdentifyError && (err.code === 'timeout' || err.code === 'response_lost');
       const message =
@@ -298,7 +305,7 @@ export default function IdentifyPage() {
               ? t('uploadStalledError')
               : err instanceof IdentifyError && err.json !== true
                 ? t('identifyFailed')
-                : err instanceof Error
+                : err instanceof IdentifyError
                   ? err.message
                   : t('identifyFailed');
       // Forgrener på kode, ikke på tekst. Den forrige varianten leste
@@ -337,7 +344,9 @@ export default function IdentifyPage() {
       const kjent = kameraFeil(err);
       // Pluginens avvisninger heter alle «Error»; koden skiller dem i Sentry.
       meldIdentifiseringsfeil({ steg: 'kamera', kode: kjent ?? undefined, feil: err });
-      setError(kjent ? t(KAMERA_FEIL_TEKST[kjent]) : err instanceof Error ? err.message : t('couldNotGetImage'));
+      // En avvisning vi ikke kjenner igjen er pluginens engelske streng. Den
+      // står i Sentry (linja over); brukeren får katalogens tekst.
+      setError(kjent ? t(KAMERA_FEIL_TEKST[kjent]) : t('couldNotGetImage'));
     } finally {
       henterBildeRef.current = false;
       setOptimizing(false);

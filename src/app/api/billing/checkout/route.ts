@@ -11,6 +11,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { getClientKey, rateLimitResponse } from '@/lib/rate-limit/route';
 import { createRequestLogger } from '@/lib/log/request';
+import { loggFeil } from '@/lib/api/feil';
 import { getUserLocale } from '@/i18n/locale';
 import { DEFAULT_LOCALE, type Locale } from '@/i18n/config';
 
@@ -253,8 +254,9 @@ export async function POST(request: NextRequest) {
 
     if (upsertError) {
       // Databasens egen feiltekst (tabellnavn, kolonner, constraint-navn) er
-      // for loggen. Kunden får noe de kan handle på.
-      userLog.error('billing.checkout.subscription_upsert_failed', upsertError);
+      // for loggen. Kunden får noe de kan handle på. loggFeil, fordi
+      // log.error gjør et rent feilobjekt om til «[object Object]».
+      loggFeil(userLog, 'billing.checkout.subscription_upsert_failed', upsertError);
       return NextResponse.json({ error: billingCopy('saveFailed', locale) }, { status: 500 });
     }
 

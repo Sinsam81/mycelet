@@ -61,11 +61,14 @@ function BadgeEditor({
       });
       const data = await response.json();
       if (!response.ok) {
-        throw new Error(data?.error ?? t('errorSave'));
+        // Rutens tekst er på leserens språk (apiFeil). Det som havner i catch
+        // under er nettverksfeil — nettleserens egen engelske tekst vises aldri.
+        setError(data?.error ?? t('errorSave'));
+        return;
       }
       await onSaved();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t('errorSave'));
+    } catch {
+      setError(t('errorSave'));
     } finally {
       setSaving(false);
     }
@@ -80,11 +83,12 @@ function BadgeEditor({
       });
       const data = await response.json();
       if (!response.ok) {
-        throw new Error(data?.error ?? t('errorRemove'));
+        setError(data?.error ?? t('errorRemove'));
+        return;
       }
       await onRemoved();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t('errorRemove'));
+    } catch {
+      setError(t('errorRemove'));
     } finally {
       setRemoving(false);
     }
@@ -155,11 +159,12 @@ export default function ForumTrustAdminPage() {
       });
       const data = await response.json();
       if (!response.ok) {
-        throw new Error(data?.error ?? t('errorLoad'));
+        setError(data?.error ?? t('errorLoad'));
+        return;
       }
       setRows((data?.users ?? []) as UserRow[]);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t('errorLoad'));
+    } catch {
+      setError(t('errorLoad'));
     } finally {
       setLoading(false);
     }

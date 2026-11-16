@@ -3,6 +3,26 @@ import { createClient } from '@/lib/supabase/server';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { getClientKey, rateLimitResponse } from '@/lib/rate-limit/route';
 import { createRequestLogger } from '@/lib/log/request';
+import { apiFeil, apiSprak, loggFeil } from '@/lib/api/feil';
+import type { Locale } from '@/i18n/config';
+
+/**
+ * Bekreftelsen banneret viser som toast. Generert på serveren, så next-intl
+ * dekker den ikke: en svensk bruker som trykket «Behåll konto» fikk norsk
+ * «Sletting av kontoen din er avbrutt.» på den vellykkede stien, selv om
+ * sv.json har teksten. `avbrutt` er ordrett `cancelSuccess` i
+ * RetentionWarningBanner-navnerommet, på begge språk.
+ */
+const BEKREFTELSE: Record<Locale, { avbrutt: string; ikkePlanlagt: string }> = {
+  nb: {
+    avbrutt: 'Sletting av kontoen din er avbrutt.',
+    ikkePlanlagt: 'Kontoen din var ikke planlagt slettet — ingen handling nødvendig.'
+  },
+  sv: {
+    avbrutt: 'Raderingen av ditt konto är avbruten.',
+    ikkePlanlagt: 'Ditt konto var inte schemalagt att raderas — ingen åtgärd behövs.'
+  }
+};
 
 /**
  * Extend retention — clears the user's row in account_deletion_warnings.
@@ -26,7 +46,7 @@ export async function POST(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   if (!user) {
-    return NextResponse.json({ error: 'Ikke autentisert' }, { status: 401 });
+    return apiFeil('unauthenticated', 401);
   }
 
   const userLog = log.child({ userId: user.id });
@@ -47,18 +67,19 @@ export async function POST(request: NextRequest) {
     .select('user_id');
 
   if (error) {
-    userLog.error('me.extend_retention.delete_failed', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    // Svaret var `error.message` — den rå Postgres-meldingen, på engelsk, i
+    // en toast. Den hører hjemme i loggen.
+    loggFeil(userLog, 'me.extend_retention.delete_failed', error);
+    return apiFeil('retention_cancel_failed', 500);
   }
 
   const cleared = (data ?? []).length > 0;
   userLog.info('me.extend_retention.success', { cleared });
 
+  const tekst = BEKREFTELSE[await apiSprak()];
   return NextResponse.json({
     ok: true,
     cleared,
-    message: cleared
-      ? 'Sletting av kontoen din er avbrutt.'
-      : 'Kontoen din var ikke planlagt slettet — ingen handling nødvendig.'
+    message: cleared ? tekst.avbrutt : tekst.ikkePlanlagt
   });
 }

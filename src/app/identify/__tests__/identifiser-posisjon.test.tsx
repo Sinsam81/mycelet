@@ -4,6 +4,7 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { NextIntlClientProvider } from 'next-intl';
 import type { ReactNode } from 'react';
 import nb from '../../../../messages/nb.json';
+import sv from '../../../../messages/sv.json';
 
 /**
  * «Gjenkjenningen virker ikke i appen» (eieren, 17. okt 2026): GPS-pluginen i
@@ -19,8 +20,11 @@ vi.mock('next/link', () => ({ default: ({ href, children }: { href: string; chil
 vi.mock('@/components/layout/PageWrapper', () => ({ PageWrapper: ({ children }: { children: ReactNode }) => <div>{children}</div> }));
 vi.mock('@/lib/native/platform', () => ({ isNativePlatform: () => true }));
 vi.mock('@/lib/supabase/client', () => ({ createClient: () => ({}) }));
-vi.mock('@/lib/utils/image', () => ({
-  optimizeImageForIdentification: vi.fn(async () => 'QUJD'),
+// BildeFeil og bildeFeilKode er de ekte: siden oversetter ut fra koden i dem.
+const optimaliser = vi.hoisted(() => vi.fn(async (_fil: File) => 'QUJD'));
+vi.mock('@/lib/utils/image', async (original) => ({
+  ...(await original<typeof import('@/lib/utils/image')>()),
+  optimizeImageForIdentification: optimaliser,
   base64ToBlob: () => new Blob(['x'], { type: 'image/jpeg' }),
   reencodeBase64ForHistory: vi.fn()
 }));
@@ -95,9 +99,9 @@ async function flush() {
   }
 }
 
-function tegn() {
+function tegn(sprak: 'nb' | 'sv' = 'nb') {
   return render(
-    <NextIntlClientProvider locale="nb" messages={nb}>
+    <NextIntlClientProvider locale={sprak} messages={sprak === 'nb' ? nb : sv}>
       <IdentifyPage />
     </NextIntlClientProvider>
   );
@@ -214,6 +218,65 @@ describe('kamera- og bildetilgang avslått', () => {
     expect(screen.queryByText('User denied access to photos')).toBeNull();
     expect(meld).toHaveBeenCalledWith(expect.objectContaining({ steg: 'kamera' }));
   });
+
+  it('en avvisning siden ikke kjenner igjen vises aldri som pluginens rå engelske tekst', async () => {
+    captureNativePhoto.mockRejectedValueOnce(new Error('Unable to resolve image picker'));
+    tegn();
+    await flush();
+    fireEvent.click(screen.getByRole('button', { name: nb.Identify.takeOrChoosePhoto }));
+    await flush();
+    expect(screen.getByText(nb.Identify.couldNotGetImage)).toBeTruthy();
+    expect(screen.queryByText('Unable to resolve image picker')).toBeNull();
+    // Den rå teksten er ikke borte — den står i Sentry.
+    expect(meld).toHaveBeenCalledWith(expect.objectContaining({ steg: 'kamera' }));
+  });
+});
+
+/**
+ * image.ts kastet `new Error('Kunne ikke lese bilde.')`, og siden viste
+ * `err.message` rått — norsk til svenske brukere. Nå bærer feilen en kode, og
+ * siden velger teksten fra katalogen.
+ */
+describe('bildet lar seg ikke behandle', () => {
+  async function velgBildeSomFeiler(feil: unknown, sprak: 'nb' | 'sv' = 'nb') {
+    const { BildeFeil } = await import('@/lib/utils/image');
+    optimaliser.mockRejectedValueOnce(typeof feil === 'string' ? new BildeFeil(feil as never) : feil);
+    tegn(sprak);
+    await flush();
+    const katalog = sprak === 'nb' ? nb : sv;
+    fireEvent.click(screen.getByRole('button', { name: katalog.Identify.takeOrChoosePhoto }));
+    await flush();
+  }
+
+  it('et bilde nettleseren ikke kan lese får sin egen tekst — med noe brukeren kan gjøre', async () => {
+    await velgBildeSomFeiler('ulesbart');
+    expect(screen.getByText(nb.Identify.imageUnreadable)).toBeTruthy();
+    expect(screen.queryByText('Kunne ikke lese bilde.')).toBeNull();
+    expect(meld).toHaveBeenCalledWith(expect.objectContaining({ steg: 'bilde' }));
+  });
+
+  it('en svensk bruker får den på svensk, ikke den norske setningen fra image.ts', async () => {
+    await velgBildeSomFeiler('ulesbart', 'sv');
+    expect(screen.getByText(sv.Identify.imageUnreadable)).toBeTruthy();
+    expect(screen.queryByText('Kunne ikke lese bilde.')).toBeNull();
+    expect(sv.Identify.imageUnreadable).not.toBe(nb.Identify.imageUnreadable);
+  });
+
+  it('de andre bildefeilene får den generelle teksten fra katalogen', async () => {
+    await velgBildeSomFeiler('canvas', 'sv');
+    expect(screen.getByText(sv.Identify.couldNotGetImage)).toBeTruthy();
+    expect(screen.queryByText('Kunne ikke initialisere canvas.')).toBeNull();
+  });
+
+  it('nettleserens egne feil vises aldri rått', async () => {
+    // En DOMException er en Error i nettleseren. I jsdom er den det ikke, så
+    // testen bygger feilen slik den ser ut for siden: en Error med navnet.
+    await velgBildeSomFeiler(
+      Object.assign(new Error('The string to be decoded is not correctly encoded.'), { name: 'InvalidCharacterError' })
+    );
+    expect(screen.getByText(nb.Identify.couldNotGetImage)).toBeTruthy();
+    expect(screen.queryByText(/not correctly encoded/)).toBeNull();
+  });
 });
 
 describe('forespørselen som aldri får et brukbart svar', () => {
@@ -300,6 +363,13 @@ describe('forespørselen som aldri får et brukbart svar', () => {
     await identifiserMedFeil(new IdentifyError('diagnosetekst til Sentry', 'noe_nytt'));
     expect(screen.getByText(nb.Identify.identifyFailed)).toBeTruthy();
     expect(screen.queryByText('diagnosetekst til Sentry')).toBeNull();
+  });
+
+  it('en feil som ikke kom fra kallet (full sessionStorage) vises aldri som nettleserens engelske tekst', async () => {
+    // Samme forbehold som over: en Error med navnet, slik nettleseren gir den.
+    await identifiserMedFeil(Object.assign(new Error('The quota has been exceeded.'), { name: 'QuotaExceededError' }));
+    expect(screen.getByText(nb.Identify.identifyFailed)).toBeTruthy();
+    expect(screen.queryByText('The quota has been exceeded.')).toBeNull();
   });
 
   it('rutens egne feil vises fortsatt med serverens oversatte tekst', async () => {

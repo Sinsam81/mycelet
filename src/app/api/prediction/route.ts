@@ -21,6 +21,7 @@ import { getElevation } from '@/lib/terrain';
 import { roundForProviderLookup } from '@/lib/privacy/provider-precision';
 import { previousDate, withinCronGraceWindow } from '@/lib/prediction/tile-freshness';
 import { createRequestLogger } from '@/lib/log/request';
+import { loggFeil } from '@/lib/api/feil';
 import { getUserLocale } from '@/i18n/locale';
 import { DEFAULT_LOCALE, type Locale } from '@/i18n/config';
 
@@ -342,8 +343,9 @@ export async function GET(request: NextRequest) {
     if (tileRes.error) {
       // Databasens egen feiltekst hører hjemme i loggen, ikke i svaret til en
       // uautentisert kaller — den avslørte kolonnetyper og at laget under er
-      // PostgreSQL. log.error over har hele meldingen.
-      log.error('prediction.tile_rpc_failed', tileRes.error);
+      // PostgreSQL. loggFeil skriver koden og meldingen; log.error alene
+      // gjorde feilobjektet om til «[object Object]».
+      loggFeil(log, 'prediction.tile_rpc_failed', tileRes.error);
       return NextResponse.json({ error: copy.failed }, { status: 500 });
     }
 
@@ -637,7 +639,7 @@ export async function GET(request: NextRequest) {
     const month = new Date().getMonth() + 1;
 
     if (findingsRes.error) {
-      log.error('prediction.findings_rpc_failed', findingsRes.error);
+      loggFeil(log, 'prediction.findings_rpc_failed', findingsRes.error);
       return NextResponse.json({ error: copy.failed }, { status: 500 });
     }
 

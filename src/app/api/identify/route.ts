@@ -13,6 +13,7 @@ import { enrichSuggestions } from '@/lib/identifications/enrich';
 import { recordIdentification } from '@/lib/identifications/record';
 import { erAiNokkelSatt } from '@/lib/identifications/kindwise-status';
 import { KINDWISE_TIMEOUT_MS } from '@/lib/identifications/config';
+import { tellRader } from '@/lib/supabase/tabell-finnes';
 import { getUserLocale } from '@/i18n/locale';
 import { DEFAULT_LOCALE, type Locale } from '@/i18n/config';
 
@@ -228,19 +229,30 @@ export async function POST(request: NextRequest) {
       let usageCount: number | null = null;
       try {
         const admin = createAdminClient();
-        const { count, error: countError } = await admin
-          .from('ai_identifications')
-          .select('*', { count: 'exact', head: true })
-          .eq('user_id', user.id)
-          .gte('created_at', oneDayAgo);
-        if (countError) {
+        // tellRader, ikke `count ?? 0`. Tellingen er et HEAD-kall, og mot en
+        // tabell som ikke finnes gir det verken feil eller tall
+        // (tabell-finnes.ts). Den gamle sjekken så etter feilkoden 42P01 og
+        // kunne derfor aldri slå ut: uten migrasjon 020 ble forbruket lest
+        // som 0, reserven under ble aldri brukt, og gratiskvoten var borte
+        // uten at noe sa fra.
+        const telling = await tellRader(
+          admin
+            .from('ai_identifications')
+            .select('*', { count: 'exact', head: true })
+            .eq('user_id', user.id)
+            .gte('created_at', oneDayAgo)
+        );
+        if (telling.feil !== undefined) {
           // Anything other than "table missing" is a real failure.
-          if (countError.code !== '42P01') {
-            return errorResponse('rate_limit_check_failed', 500, locale);
-          }
-        } else {
-          usageCount = count ?? 0;
+          userLog.warn('identify.quota_count_failed', { message: telling.feil });
+          return errorResponse('rate_limit_check_failed', 500, locale);
+        }
+        if (telling.antall !== undefined) {
+          usageCount = telling.antall;
           kvoteKlient = admin;
+        } else {
+          // Tabellen mangler: usageCount står som null, og reserven tar over.
+          userLog.warn('identify.quota_table_missing', { tabell: 'ai_identifications', migrasjon: '020' });
         }
       } catch {
         // Service-role client unavailable — fall through to the legacy count.
@@ -253,16 +265,25 @@ export async function POST(request: NextRequest) {
         // Alle andre lesesteder filtrerer bort slettede funn (migrasjon 056),
         // men kvoten teller KALL, ikke funn. Filtrerte vi her, ville
         // «identifiser → lagre → slett» gitt en ny gratis AI-runde hver gang.
-        const { count: legacy, error: legacyError } = await supabase
-          .from('findings')
-          .select('*', { count: 'exact', head: true })
-          .eq('user_id', user.id)
-          .eq('ai_used', true)
-          .gte('created_at', oneDayAgo);
-        if (legacyError) {
+        const legacy = await tellRader(
+          supabase
+            .from('findings')
+            .select('*', { count: 'exact', head: true })
+            .eq('user_id', user.id)
+            .eq('ai_used', true)
+            .gte('created_at', oneDayAgo)
+        );
+        // Samme regel for reserven: «ikke noe tall» er ikke «null brukt». Uten
+        // en telling kan ikke taket håndheves, og da skal kallet stoppe her —
+        // kvoten skal aldri stille bli 0.
+        if (legacy.antall === undefined) {
+          userLog.warn('identify.quota_count_failed', {
+            message: legacy.feil ?? 'ingen telling',
+            reserve: true
+          });
           return errorResponse('rate_limit_check_failed', 500, locale);
         }
-        usageCount = legacy ?? 0;
+        usageCount = legacy.antall;
       }
 
       // Billig forhåndssjekk: den som alt står på taket, avvises uten en
@@ -343,20 +364,24 @@ export async function POST(request: NextRequest) {
           userLog.warn('identify.reservation_failed', { message: reserverError?.message });
         } else {
           reservertId = reservert.id as number | string;
-          const { count: plass, error: plassError } = await adminKlient
-            .from('ai_identifications')
-            .select('*', { count: 'exact', head: true })
-            .eq('user_id', user.id)
-            .gte('created_at', oneDayAgo)
-            .lte('id', reservertId);
-          if (plassError) {
-            // Raden er skrevet og forhåndssjekken besto — fortsett.
-            userLog.warn('identify.reservation_recount_failed', { message: plassError.message });
-          } else if ((plass ?? 0) > FREE_DAILY_AI_LIMIT) {
+          const plass = await tellRader(
+            adminKlient
+              .from('ai_identifications')
+              .select('*', { count: 'exact', head: true })
+              .eq('user_id', user.id)
+              .gte('created_at', oneDayAgo)
+              .lte('id', reservertId)
+          );
+          if (plass.antall === undefined) {
+            // Raden er skrevet og forhåndssjekken besto — fortsett. Det
+            // gjelder også et svar uten tall: `count ?? 0` leste det som
+            // plass null, altså «hele kvoten igjen».
+            userLog.warn('identify.reservation_recount_failed', { message: plass.feil ?? 'ingen telling' });
+          } else if (plass.antall > FREE_DAILY_AI_LIMIT) {
             await frigiReservasjon('over_tak');
-            return kvoteNadd(plass ?? 0);
+            return kvoteNadd(plass.antall);
           } else {
-            freeQuotaRemaining = Math.max(0, FREE_DAILY_AI_LIMIT - (plass ?? 0));
+            freeQuotaRemaining = Math.max(0, FREE_DAILY_AI_LIMIT - plass.antall);
           }
         }
       } catch (reserverThrow) {

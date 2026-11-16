@@ -11,6 +11,7 @@ import { getUserLocale } from '@/i18n/locale';
 import { DEFAULT_LOCALE, isLocale, type Locale } from '@/i18n/config';
 import { REGION_CONDITION_THRESHOLDS, regionScore } from '@/lib/prediction/region-score';
 import { erArtISesong } from '@/lib/sesong/art-i-sesong';
+import { apiFeil, loggFeil } from '@/lib/api/feil';
 
 /**
  * «Hvor i landet er det best akkurat nå?»
@@ -92,8 +93,10 @@ export async function GET(request: NextRequest) {
     .limit(1)
     .maybeSingle();
   if (datoErr) {
-    log.error('prediction_regions.date_failed', { message: datoErr.message });
-    return NextResponse.json({ error: 'Kunne ikke hente rasterdato' }, { status: 500 });
+    loggFeil(log, 'prediction_regions.date_failed', datoErr);
+    // Samme kode for begge stegene: leseren trenger ikke vite om det var
+    // datoen eller flisene som røk — det står i loggen.
+    return apiFeil('regions_unavailable', 500, { locale });
   }
   const tileDate = datoRad?.tile_date as string | undefined;
   if (!tileDate) return NextResponse.json({ tileDate: null, regions: [] });
@@ -110,8 +113,8 @@ export async function GET(request: NextRequest) {
       .order('id', { ascending: true })
       .range(fra, fra + 999);
     if (error) {
-      log.error('prediction_regions.tiles_failed', { message: error.message });
-      return NextResponse.json({ error: 'Kunne ikke hente fliser' }, { status: 500 });
+      loggFeil(log, 'prediction_regions.tiles_failed', error);
+      return apiFeil('regions_unavailable', 500, { locale });
     }
     rows.push(...((data ?? []) as TileRow[]));
     if ((data ?? []).length < 1000) break;

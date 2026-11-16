@@ -34,6 +34,17 @@ let reserverFeiler = false;
 let adminMangler = false;
 /** Reservefunn i den gamle findings-tellingen. */
 let legacyFunn = 0;
+/**
+ * Migrasjon 020 er ikke kjørt. HEAD-tellingen gir da verken feil eller tall
+ * (postgrest-js gjør 404 med tom kropp om til 204), og skriving gir PGRST205.
+ */
+let tabellMangler = false;
+/** HEAD-tellingen feiler på ordentlig: 503 uten kropp, altså tom melding og ingen kode. */
+let tellingFeiler = false;
+/** Omtellingen etter reservasjonen (den med .lte på id) kommer uten tall. */
+let omtellingUtenTall = false;
+/** Reserven (findings-tellingen) kommer uten tall. */
+let legacyUtenTall = false;
 
 function seed(antall: number) {
   for (let i = 0; i < antall; i++) {
@@ -69,6 +80,7 @@ vi.mock('@/lib/supabase/admin', () => ({
     return {
       from: (tabell: string) => {
         const filtre: Array<(r: Rad) => boolean> = [];
+        let harLte = false;
         let modus: 'select' | 'insert' | 'delete' = 'select';
         let innsatt: Rad | null = null;
         let insertFeil: { message: string } | null = null;
@@ -85,6 +97,7 @@ vi.mock('@/lib/supabase/admin', () => ({
             return builder;
           },
           lte: (kol: keyof Rad, verdi: string | number) => {
+            harLte = true;
             filtre.push((r) => r[kol] <= verdi);
             return builder;
           },
@@ -92,6 +105,8 @@ vi.mock('@/lib/supabase/admin', () => ({
             modus = 'insert';
             if (tabell === 'ai_identifiseringsfeil') {
               feilrader.push(rad);
+            } else if (tabellMangler) {
+              insertFeil = { message: "Could not find the table 'public.ai_identifications' in the schema cache" };
             } else if (reserverFeiler) {
               insertFeil = { message: 'insert avvist' };
             } else {
@@ -108,7 +123,13 @@ vi.mock('@/lib/supabase/admin', () => ({
           then: (resolve: (v: unknown) => unknown, reject?: (e: unknown) => unknown) => {
             let svar: unknown;
             if (modus === 'select') {
-              svar = { count: treff().length, error: null };
+              if (tabellMangler || (harLte && omtellingUtenTall)) {
+                svar = { count: null, error: null, status: 204 };
+              } else if (tellingFeiler) {
+                svar = { count: null, error: { message: '' }, status: 503 };
+              } else {
+                svar = { count: treff().length, error: null };
+              }
             } else if (modus === 'delete') {
               const bort = treff();
               slettet.push(...bort.map((r) => r.id));
@@ -155,7 +176,9 @@ vi.mock('@/lib/supabase/server', () => {
         Promise.resolve({ data: name === 'mushroom_species' ? KANTARELL : null, error: null }),
       then: (resolve: (v: unknown) => unknown) =>
         Promise.resolve(
-          name === 'findings' ? { count: legacyFunn, error: null } : { data: [], error: null }
+          name === 'findings'
+            ? { count: legacyUtenTall ? null : legacyFunn, error: null }
+            : { data: [], error: null }
         ).then(resolve)
     };
     return builder;
@@ -210,6 +233,10 @@ beforeEach(() => {
   reserverFeiler = false;
   adminMangler = false;
   legacyFunn = 0;
+  tabellMangler = false;
+  tellingFeiler = false;
+  omtellingUtenTall = false;
+  legacyUtenTall = false;
   kindwiseKall = 0;
   // Burst-vernet (20/min) er nøklet på bruker-ID og deles ellers av alle
   // testene i fila.
@@ -339,6 +366,65 @@ describe('reservasjonen før det betalte kallet', () => {
     expect(avvist.status).toBe(429);
     expect((await avvist.json()).code).toBe('daily_quota');
     expect(rader).toHaveLength(0);
+  });
+});
+
+/**
+ * Tellingen er et HEAD-kall. Mot en tabell som ikke finnes gir det verken feil
+ * eller tall, og ruta leste `count ?? 0` — altså «ingen brukt». Sjekken som
+ * skulle fange en manglende tabell så etter feilkoden 42P01, som aldri kommer
+ * på den veien, så reserven under ble aldri brukt. Uten migrasjon 020 hadde
+ * gratiskontoene ingen grense, og ingenting sa fra.
+ */
+describe('når telleren ikke gir noe tall', () => {
+  it('mangler ai_identifications, holder den gamle funn-tellingen taket — forbruket leses ikke som 0', async () => {
+    tabellMangler = true;
+    legacyFunn = FREE_DAILY_AI_LIMIT;
+    const res = await POST(makeRequest());
+    expect(res.status).toBe(429);
+    expect((await res.json()).code).toBe('daily_quota');
+    expect(kindwiseKall).toBe(0);
+  });
+
+  it('… og under taket går kallet gjennom på reserven, uten reservasjon', async () => {
+    tabellMangler = true;
+    legacyFunn = FREE_DAILY_AI_LIMIT - 2;
+    const res = await POST(makeRequest());
+    expect(res.status).toBe(200);
+    expect((await res.json()).freeQuotaRemaining).toBe(1);
+    expect(kindwiseKall).toBe(1);
+    expect(slettet).toHaveLength(0);
+  });
+
+  it('en ekte feil i tellingen stopper kallet — 500, og Kindwise kalles ikke', async () => {
+    // HEAD har ingen kropp, så feilen kommer uten kode og med tom melding.
+    tellingFeiler = true;
+    const res = await POST(makeRequest());
+    expect(res.status).toBe(500);
+    expect((await res.json()).code).toBe('rate_limit_check_failed');
+    expect(kindwiseKall).toBe(0);
+  });
+
+  it('gir heller ikke reserven noe tall, stopper kallet — kvoten blir aldri stille 0', async () => {
+    tabellMangler = true;
+    legacyUtenTall = true;
+    const res = await POST(makeRequest());
+    expect(res.status).toBe(500);
+    expect((await res.json()).code).toBe('rate_limit_check_failed');
+    expect(kindwiseKall).toBe(0);
+  });
+
+  it('omtellingen etter reservasjonen uten tall: kallet går videre, og hintet lover ikke hele kvoten', async () => {
+    seed(FREE_DAILY_AI_LIMIT - 1);
+    omtellingUtenTall = true;
+    const res = await POST(makeRequest());
+    expect(res.status).toBe(200);
+    expect(kindwiseKall).toBe(1);
+    // Forhåndssjekken talte fire brukt, så dette var det siste. `count ?? 0`
+    // leste omtellingen som plass null og meldte fem igjen.
+    expect((await res.json()).freeQuotaRemaining).toBe(0);
+    // Reservasjonen er kvoteraden — den blir stående.
+    expect(rader).toHaveLength(FREE_DAILY_AI_LIMIT);
   });
 });
 

@@ -6,6 +6,8 @@ import { getClientKey, rateLimitResponse } from '@/lib/rate-limit/route';
 import { createRequestLogger } from '@/lib/log/request';
 import { LEGAL_ENTITY } from '@/lib/legal/entity';
 import { IDENTIFY_HISTORY_BUCKET } from '@/lib/identifications/config';
+import { apiFeil } from '@/lib/api/feil';
+import { filterVerdi } from '@/lib/api/postgrest-filter';
 
 /**
  * GDPR Article 15 — right of access.
@@ -64,7 +66,7 @@ export async function GET(request: NextRequest) {
 
   if (!user) {
     log.info('account.export.unauthenticated');
-    return NextResponse.json({ error: 'Ikke autentisert' }, { status: 401 });
+    return apiFeil('unauthenticated', 401);
   }
 
   const userLog = log.child({ userId: user.id });
@@ -91,16 +93,9 @@ export async function GET(request: NextRequest) {
     admin = createAdminClient();
   } catch {
     userLog.error('account.export.no_service_role_key');
-    return NextResponse.json(
-      {
-        error: 'Kunne ikke hente ut alle dataene dine',
-        details:
-          'Eksporten ble avbrutt på grunn av en serverfeil. Du har IKKE fått en ufullstendig fil. Prøv igjen om litt — vedvarer feilen, kontakt ' +
-          LEGAL_ENTITY.privacyEmail +
-          '.'
-      },
-      { status: 500 }
-    );
+    // Tekstene bor i src/lib/api/feil.ts, på norsk og svensk. `details` sier
+    // det som betyr noe: brukeren sitter IKKE med en ufullstendig fil.
+    return apiFeil('export_incomplete', 500, { detaljer: 'export_server_error_details' });
   }
 
   // All queries scoped to the authenticated user_id. RLS would also enforce
@@ -183,13 +178,19 @@ export async function GET(request: NextRequest) {
     // på med samme e-post via /soppvarsel — de har user_id null og finnes
     // bare via adressen, derfor tjenesterollen. Tokenene (bekreftelse,
     // avmelding) er nøkler, ikke opplysninger om brukeren, og utelates.
+    //
+    // filterVerdi, ikke anførselstegn skrevet for hånd: `.or()` tar filteret
+    // som tekst, og en adresse med `"` i seg ville lukket verdien og latt
+    // resten bli lest som et vilkår til — i en spørring med tjenesterollen,
+    // mot en tabell full av andres adresser. Supabase slipper ikke en slik
+    // adresse inn i dag; vernet skal ikke hvile på det.
     alertSubscriptions: {
       shape: 'many',
       query: hentAlle((fra, til) =>
         admin
           .from('alert_subscriptions')
           .select('id,user_id,email,region,locale,active,confirmed_at,last_notified_at,last_notified_score,created_at,kilde,forste_apnet_at,sist_apnet_at')
-          .or(epost ? `user_id.eq.${user.id},email.eq."${epost}"` : `user_id.eq.${user.id}`)
+          .or(epost ? `user_id.eq.${user.id},email.eq.${filterVerdi(epost)}` : `user_id.eq.${user.id}`)
           .order('id')
           .range(fra, til)
       )
@@ -244,16 +245,7 @@ export async function GET(request: NextRequest) {
       // never in the response body.
       firstError: results[failed[0]].error?.message
     });
-    return NextResponse.json(
-      {
-        error: 'Kunne ikke hente ut alle dataene dine',
-        details:
-          'Eksporten ble avbrutt fordi minst ett datasett ikke kunne leses. Du har IKKE fått en ufullstendig fil. Prøv igjen om litt — vedvarer feilen, kontakt ' +
-          LEGAL_ENTITY.privacyEmail +
-          '.'
-      },
-      { status: 500 }
-    );
+    return apiFeil('export_incomplete', 500, { detaljer: 'export_dataset_failed_details' });
   }
 
   // Bildene i identifiseringshistorikken ligger i en PRIVAT bøtte. En bar

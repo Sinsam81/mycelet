@@ -20,11 +20,18 @@ let queriedWithAdmin: string[] = [];
 let adminFilters: Array<[string, string, unknown]> = [];
 /** Simulerer at SUPABASE_SERVICE_ROLE_KEY mangler. */
 let adminClientAvailable = true;
+/** Leserens språk. Feilsvarene skal følge det. */
+let sprak: 'nb' | 'sv' = 'nb';
+
+vi.mock('@/i18n/locale', () => ({ getUserLocale: async () => sprak }));
 /** Svaret fra signeringen av historikkbildene. */
 let signedUrls: { data: { path: string; signedUrl: string }[] | null; error: { message: string } | null } = {
   data: [],
   error: null
 };
+
+/** Filterstrengene som ble sendt til `.or()` — der settes verdier inn som tekst. */
+let orFiltre: string[] = [];
 
 /**
  * Minimal Supabase-etterligning. Query-byggeren er «thenable», så både
@@ -41,7 +48,10 @@ function makeQuery(result: TableResult, onEq?: (column: string, value: unknown) 
       onEq?.(column, value);
       return builder;
     },
-    or: () => builder,
+    or: (filter: string) => {
+      orFiltre.push(filter);
+      return builder;
+    },
     order: () => builder,
     range: (a: number, b: number) => {
       fra = a;
@@ -116,8 +126,10 @@ beforeEach(() => {
   queriedWithSession = [];
   queriedWithAdmin = [];
   adminFilters = [];
+  orFiltre = [];
   adminClientAvailable = true;
   signedUrls = { data: [], error: null };
+  sprak = 'nb';
 });
 
 describe('GET /api/me/export', () => {
@@ -306,6 +318,30 @@ describe('GET /api/me/export', () => {
       const body = JSON.parse(await (await GET(makeRequest())).text());
       expect(body.details).toContain('privacy@mycelet.com');
     });
+
+    it('en svensk bruker får hele forklaringen på svensk, med en stabil kode', async () => {
+      // Begge tekstene var hardkodet norsk. Det viktigste i dem — at fila IKKE
+      // er ufullstendig — skal ikke stå på et annet språk enn resten av appen.
+      sprak = 'sv';
+      tableResponses = { findings: { data: null, error: { message: 'boom' } } };
+      const res = await GET(makeRequest());
+      expect(res.status).toBe(500);
+      const body = JSON.parse(await res.text());
+      expect(body.code).toBe('export_incomplete');
+      expect(body.error).toBe('Kunde inte hämta ut alla dina data.');
+      expect(body.details).toMatch(/INTE fått en ofullständig fil/);
+      expect(body.details).toContain('privacy@mycelet.com');
+      expect(`${body.error} ${body.details}`).not.toMatch(/IKKE|Kunne|ufullstendig/);
+    });
+
+    it('mangler tjenestenøkkelen, sier svaret «serverfeil» — også det på leserens språk', async () => {
+      sprak = 'sv';
+      adminClientAvailable = false;
+      const body = JSON.parse(await (await GET(makeRequest())).text());
+      expect(body.code).toBe('export_incomplete');
+      expect(body.details).toMatch(/serverfel/);
+      expect(body.details).toMatch(/INTE fått en ofullständig fil/);
+    });
   });
 
   it('tom tabell er ikke en feil — den eksporteres som tom', async () => {
@@ -402,6 +438,26 @@ describe('identifiseringshistorikken (art. 15)', () => {
     expect(body._manifest.datasets.blockedUsers).toBe(1);
     expect(queriedWithAdmin).toContain('alert_subscriptions');
     expect(queriedWithSession).toContain('blocked_users');
+  });
+
+  it('adressen står som én verdi i varselfilteret, med små bokstaver', async () => {
+    currentUser = { ...(currentUser as NonNullable<typeof currentUser>), email: 'Test@Example.com' };
+    await GET(makeRequest());
+    expect(orFiltre).toEqual([`user_id.eq.${currentUser!.id},email.eq."test@example.com"`]);
+  });
+
+  it('en adresse med anførselstegn kan ikke åpne et vilkår til i varselfilteret', async () => {
+    // Tjenesterollen leser en tabell full av andres adresser. Sto adressen rett
+    // i filterstrengen, ville `"` lukket verdien og resten blitt et eget vilkår.
+    currentUser = {
+      ...(currentUser as NonNullable<typeof currentUser>),
+      email: 'x",user_id.not.is.null,email.eq."y@example.com'
+    };
+    await GET(makeRequest());
+    expect(orFiltre).toHaveLength(1);
+    // Utenfor anførselstegnene finnes bare de to vilkårene ruta selv skrev.
+    const utenforSitat = orFiltre[0].replace(/"(?:[^"\\]|\\.)*"/g, '«»');
+    expect(utenforSitat).toBe(`user_id.eq.${currentUser!.id},email.eq.«»`);
   });
 
   it('kontoens metadata (kilde, vilkårssamtykke) og innloggingsidentiteter er med', async () => {
