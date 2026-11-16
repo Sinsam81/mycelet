@@ -334,6 +334,18 @@ export default async function SpeciesDetailPage({ params }: SpeciesDetailPagePro
   const toxinInfo = stripPoisonHotline(species.toxin_info);
   const symptoms = stripPoisonHotline(species.symptoms);
 
+  // Står det norsk brødtekst fra basen på siden (merket lang="nb" over), får en
+  // svensk leser én linje om det — ellers ser det ut som appen skriver svensk
+  // slik. Teksten vises fortsatt: gift-, symptom- og skilletekst er
+  // sikkerhetstekst og skjules aldri. Norske lesere ser ingen endring.
+  const norskProsaOverst = Boolean(
+    norskProsa &&
+      ((isToxic && (toxinInfo || symptoms)) || (noteTone && species.edibility_notes) || species.description)
+  );
+  const norskForvekslingsprosa = Boolean(
+    norskProsa && forvekslinger.kort.some((kort) => kort.likhet || kort.skille)
+  );
+
   // Strukturerte data: forteller søkemotorer og AI-crawlere at siden handler om
   // én bestemt art — alle navnene vi har på den, slekt og familie, bildet med
   // fotograf og lisens. schema.org/Taxon er typen for akkurat dette. ALDRI
@@ -397,6 +409,8 @@ export default async function SpeciesDetailPage({ params }: SpeciesDetailPagePro
                 <EdibilityBadge edibility={species.edibility} />
               </div>
             </header>
+
+            {norskProsaOverst ? <p className="text-xs text-gray-600">{t('norwegianProseNote')}</p> : null}
 
             {isToxic ? (
               <div
@@ -655,6 +669,10 @@ export default async function SpeciesDetailPage({ params }: SpeciesDetailPagePro
               <p className="rounded-2xl border border-gray-300 bg-gray-50 px-4 py-3 text-sm text-gray-800">
                 {t('lookAlikesOwnNotRecorded', { count: forvekslinger.kort.length })}
               </p>
+            ) : null}
+
+            {norskForvekslingsprosa ? (
+              <p className="text-xs text-gray-600">{t('norwegianLookAlikeNote')}</p>
             ) : null}
 
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

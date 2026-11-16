@@ -3,6 +3,7 @@ import { renderToString } from 'react-dom/server';
 import { NextIntlClientProvider } from 'next-intl';
 import { timeZoneForLocale } from '@/i18n/config';
 import { art } from '@/lib/species/__tests__/artskatalog-fixture';
+import { ORDBLOKK_KLASSER } from '../Artsnavn';
 import { SpeciesCard } from '../SpeciesCard';
 import nb from '../../../../messages/nb.json';
 import sv from '../../../../messages/sv.json';
@@ -62,5 +63,23 @@ describe('kortet sier hva arten er', () => {
     expect(html).toContain('Vit flugsvamp');
     expect(html).not.toContain('Hvit fluesopp');
     expect(html).toContain(sv.EdibilityBadge.deadly);
+  });
+});
+
+describe('lange navn bryter i stedet for å bli kuttet av kortkanten', () => {
+  // To kolonner gir navnet 139,5 px på en 375 px skjerm; «Brunkjøttbukkesopp»
+  // er 167 px i Fraunces 700, og kortet har overflow-hidden.
+  it('navnet er en overskrift av ordblokker, og det latinske navnet kan brytes', () => {
+    const html = render('Brunkjøttbukkesopp', BILDE);
+    expect(html).toMatch(
+      new RegExp(`<h3 class="[^"]*"><span class="${ORDBLOKK_KLASSER}">Brunkjøttbukkesopp</span></h3>`)
+    );
+    expect(html).toContain('<p class="break-words text-xs italic text-gray-600">');
+  });
+
+  it('svensk: «Snöbollschampinjon» får samme behandling', () => {
+    expect(render('Snøballsjampinjong', BILDE, 'sv')).toContain(
+      `<span class="${ORDBLOKK_KLASSER}">Snöbollschampinjon</span>`
+    );
   });
 });

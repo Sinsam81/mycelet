@@ -220,3 +220,41 @@ describe('uten nett', () => {
     }
   });
 });
+
+describe('startdata fra serveren (/species rendres på serveren)', () => {
+  function rendrerMedStart(filtre: ArtslisteFiltre, start: Parameters<typeof useSpecies>[1]) {
+    const klient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={klient}>{children}</QueryClientProvider>
+    );
+    return renderHook((props: ArtslisteFiltre) => useSpecies(props, start), { wrapper, initialProps: filtre });
+  }
+
+  it('lista står der i første rendring, og nettleseren henter den ikke på nytt', async () => {
+    const { result, rerender } = rendrerMedStart(INGEN, { startliste: [...ARTSKATALOG], maaned: SEPTEMBER });
+    expect(result.current.isLoading).toBe(false);
+    expect(result.current.data).toEqual(filtrerArtsliste(ARTSKATALOG, INGEN, 'nb', SEPTEMBER));
+
+    // Startlista er hele katalogen, ikke et filtersvar: filtrene virker på den.
+    rerender({ ...INGEN, query: 'kantarell' });
+    expect(navn(result.current.data)).toEqual(['Kantarell', 'Blek kantarell', 'Falsk kantarell', 'Traktkantarell']);
+
+    await new Promise((ferdig) => setTimeout(ferdig, 20));
+    expect(mock.from).not.toHaveBeenCalled();
+  });
+
+  it('«kun i sesong nå» bruker serverens måned, ikke klokka i nettleseren', () => {
+    // Klokka står i september; serveren rendret desember.
+    const filtre = { ...INGEN, inSeasonNow: true };
+    const { result } = rendrerMedStart(filtre, { startliste: [...ARTSKATALOG], maaned: 12 });
+    expect(result.current.data).toEqual(filtrerArtsliste(ARTSKATALOG, filtre, 'nb', 12));
+    expect(result.current.data).not.toEqual(filtrerArtsliste(ARTSKATALOG, filtre, 'nb', SEPTEMBER));
+  });
+
+  it('uten startliste (serveren fikk ikke svar) henter kroken selv, som før', async () => {
+    const { result } = rendrerMedStart(INGEN, { startliste: undefined, maaned: SEPTEMBER });
+    expect(result.current.isLoading).toBe(true);
+    await waitFor(() => expect(result.current.data).toHaveLength(ARTSKATALOG.length));
+    expect(mock.from).toHaveBeenCalledTimes(1);
+  });
+});

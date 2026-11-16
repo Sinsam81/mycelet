@@ -5,10 +5,12 @@ import Link from 'next/link';
 import { useLocale, useTranslations } from 'next-intl';
 import { AlertTriangle, MapPin } from 'lucide-react';
 import { EdibilityBadge } from '@/components/ui/EdibilityBadge';
+import { Artsnavn } from '@/components/species/Artsnavn';
 import { isDangerousEdibility } from '@/lib/utils/edibility';
 import { isMonthInMask, latitudeBand, peakMask, type LatitudeBand } from '@/lib/utils/season-region';
 import type { Edibility } from '@/types/species';
 import { getSpeciesDisplayName } from '@/lib/utils/species-name';
+import { commonsThumb } from '@/lib/species/commons-thumb';
 import {
   getCurrentPositionIfGranted,
   getCurrentPositionOnce,
@@ -29,6 +31,9 @@ export interface CalendarSpecies {
   peak_season_end: number | null;
   primary_image_url: string | null;
 }
+
+/** Bildet i raden er h-14 w-14 (56 CSS-px); × 3 for de skarpeste telefonskjermene. */
+const MINIATYR_BREDDE_PX = 56 * 3;
 
 const MONTH_KEYS = [
   'monthJanuary', 'monthFebruary', 'monthMarch', 'monthApril', 'monthMay', 'monthJune',
@@ -57,8 +62,12 @@ function SpeciesRowLink({ s, peak, dangerous }: { s: CalendarSpecies; peak?: boo
         {s.primary_image_url ? (
           // I september er det over 70 kort på siden. Uten `loading="lazy"`
           // hentet nettleseren alle bildene med én gang, også de langt nede.
+          // Ruta er 56 CSS-piksler — 168 fysiske på en telefon med tre piksler
+          // per punkt — men halvparten av artene har bildet lagret i 500 px
+          // bredde. Commons' minste faste trinn (330) er nok: samme fil, samme
+          // vert og samme kreditering, rundt halvparten av bytene.
           <img
-            src={s.primary_image_url}
+            src={commonsThumb(s.primary_image_url, MINIATYR_BREDDE_PX)}
             alt={displayName}
             loading="lazy"
             decoding="async"
@@ -67,9 +76,14 @@ function SpeciesRowLink({ s, peak, dangerous }: { s: CalendarSpecies; peak?: boo
         ) : null}
       </div>
       <div className="min-w-0 flex-1">
-        <p className={`truncate font-serif text-base font-bold ${dangerous ? 'text-red-950' : 'text-forest-900'}`}>
-          {displayName}
-        </p>
+        {/* Ikke truncate: på en 320 px skjerm ble «Bleklodden steinsopp» til
+            «Bleklodden steins…». Navnet er det raden finnes for, så det bryter
+            heller over to linjer. */}
+        <Artsnavn
+          as="p"
+          navn={displayName}
+          className={`font-serif text-base font-bold leading-tight ${dangerous ? 'text-red-950' : 'text-forest-900'}`}
+        />
         <p className="truncate text-xs italic text-gray-600">{s.latin_name}</p>
         <div className="mt-1 flex items-center gap-1.5">
           <EdibilityBadge edibility={s.edibility} />

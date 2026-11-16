@@ -1124,6 +1124,8 @@
     "lookAlikesOwnNotRecorded": "Vi har ännu inte fört in vad den här arten själv kan förväxlas med. Det som står nedan är hämtat från {count, plural, =1 {en annan arts förväxlingslista} other {andra arters förväxlingslistor}}, så farliga förväxlingsarter kan saknas — att de inte står här betyder INTE att arten är säker att plocka. Låt alltid svampen bedömas av svampkontroll eller en expert innan du äter.",
     "whyConfused": "Varför de förväxlas:",
     "howToTellApart": "Hur man skiljer:",
+    "norwegianProseNote": "Texterna om arten finns än så länge bara på norska.",
+    "norwegianLookAlikeNote": "Texterna om förväxlingarna finns än så länge bara på norska.",
     "lookAlikesUnavailable": "Vi kunde inte hämta förväxlingsarterna för den här arten just nu. Att det inte står några farliga förväxlingar här betyder därför INTE att det inte finns några. Ladda om sidan, eller låt svampen bedömas av svampkontroll innan du äter den.",
     "seasonNote": "Säsongsfönstret visar när arten normalt går att hitta i Norden — det säger ingenting om förhållandena just nu. Kartan bedömer dagens förhållanden där du är.",
     "lookAlikesNoneRecorded": "Vi har ännu inte fört in några förväxlingsarter för den här arten. Att det inte står någon varning här betyder INTE att arten är säker att plocka — det betyder att vi inte har någon täckning att lova. Låt alltid svampen bedömas av svampkontroll eller en expert innan du äter."
@@ -1302,6 +1304,7 @@
     "dangerousLookAlike": "Farlig dubbelgångare",
     "whyConfused": "Varför de förväxlas:",
     "howToTell": "Så skiljer du dem åt:",
+    "norwegianTextNote": "Texterna om förväxlingen finns än så länge bara på norska.",
     "readMore": "Läs allt om {name} →",
     "alsoConfusedWith": "Också lätt att förväxla med: {names}"
   },

@@ -4,6 +4,7 @@ import { NextIntlClientProvider } from 'next-intl';
 import { timeZoneForLocale } from '@/i18n/config';
 import { ARTSKATALOG } from '@/lib/species/__tests__/artskatalog-fixture';
 import { compareSpeciesByDisplayName } from '@/lib/utils/species-name';
+import { ORDBLOKK_KLASSER } from '@/components/species/Artsnavn';
 import { SeasonNow, type CalendarSpecies } from '../SeasonNow';
 import nb from '../../../../messages/nb.json';
 import sv from '../../../../messages/sv.json';
@@ -42,12 +43,22 @@ function katalog(locale: 'nb' | 'sv'): CalendarSpecies[] {
     .map((art) => ({ ...art, primary_image_url: `https://bilder.example.org/${art.id}.jpg` }));
 }
 
-function render(month: number, locale: 'nb' | 'sv' = 'nb', species: CalendarSpecies[] = katalog(locale)) {
+function rendreRaa(month: number, locale: 'nb' | 'sv' = 'nb', species: CalendarSpecies[] = katalog(locale)) {
   return renderToString(
     <NextIntlClientProvider locale={locale} timeZone={timeZoneForLocale(locale)} messages={locale === 'sv' ? sv : nb}>
       <SeasonNow species={species} month={month} />
     </NextIntlClientProvider>
   );
+}
+
+/**
+ * Artsnavnet står ord for ord i hver sin ordblokk (Artsnavn, så langt navn
+ * bryter i stedet for å bli kuttet). Testene under leser navnet som tekst, så
+ * blokkene skrelles av her; testen «navnet bryter» ser på dem direkte.
+ */
+const ORDBLOKK = new RegExp(`<span class="${ORDBLOKK_KLASSER}">([^<]*)</span>`, 'g');
+function render(month: number, locale: 'nb' | 'sv' = 'nb', species: CalendarSpecies[] = katalog(locale)) {
+  return rendreRaa(month, locale, species).replace(ORDBLOKK, '$1');
 }
 
 /** Siden er en rekke <article>-blokker; hver test ser på én av dem. */
@@ -212,6 +223,20 @@ describe('neste ut', () => {
   });
 });
 
+describe('artsnavnet bryter i stedet for å bli kuttet', () => {
+  it('ingen «truncate» på navnet, og hvert ord er en ordblokk', () => {
+    // «Bleklodden steinsopp» ble «Bleklodden steins…» på en 320 px skjerm.
+    const blokk = blokkMed(rendreRaa(9), overskrift(nb.SeasonNow.inSeasonNowHeading, nb.SeasonNow.monthSeptember));
+    const etKort = kort(blokk).find((k) => k.includes('alt="Bleklodden steinsopp"'));
+    expect(etKort).toBeDefined();
+    const navn = /<p class="([^"]*)">(.*?)<\/p>/.exec(etKort ?? '');
+    expect(navn?.[1]).not.toContain('truncate');
+    expect(navn?.[2]).toBe(
+      `<span class="${ORDBLOKK_KLASSER}">Bleklodden</span> <span class="${ORDBLOKK_KLASSER}">steinsopp</span>`
+    );
+  });
+});
+
 describe('bildene lastes først når kortet nærmer seg skjermen', () => {
   it('hvert bilde har loading="lazy" og decoding="async" — september har over 70 kort', () => {
     const bilder = render(9).match(/<img[^>]*>/g) ?? [];
@@ -220,6 +245,23 @@ describe('bildene lastes først når kortet nærmer seg skjermen', () => {
       expect(img).toContain('loading="lazy"');
       expect(img).toContain('decoding="async"');
     }
+  });
+
+  it('raden ber Commons om 330 px-utgaven, ikke 500 — ruta er 56 px bred', () => {
+    const commons = (bredde: number, fil: string) =>
+      `https://upload.wikimedia.org/wikipedia/commons/thumb/a/ab/${fil}/${bredde}px-${fil}`;
+    const arter = katalog('nb').map((art, i) => ({
+      ...art,
+      primary_image_url:
+        i % 3 === 0 ? commons(500, `Art${art.id}.jpg`) : i % 3 === 1 ? commons(330, `Art${art.id}.jpg`) : `https://bilder.example.org/${art.id}.jpg`
+    }));
+    const bilder = (render(9, 'nb', arter).match(/<img[^>]*>/g) ?? []).map((img) => /src="([^"]+)"/.exec(img)?.[1] ?? '');
+    expect(bilder.length).toBeGreaterThan(70);
+    for (const src of bilder) {
+      if (src.includes('upload.wikimedia.org')) expect(src).toMatch(/\/330px-Art\d+\.jpg$/);
+      else expect(src).toMatch(/^https:\/\/bilder\.example\.org\/\d+\.jpg$/);
+    }
+    expect(bilder.some((src) => src.includes('upload.wikimedia.org'))).toBe(true);
   });
 
   it('en art uten bilde får ikke noe <img> i det hele tatt', () => {

@@ -2,7 +2,7 @@
 
 import type { ReactNode } from 'react';
 import Link from 'next/link';
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import { AlertTriangle } from 'lucide-react';
 import { AiEdibilityBadge } from '@/components/identify/AiEdibilityBadge';
 import { EdibilityBadge } from '@/components/ui/EdibilityBadge';
@@ -80,6 +80,7 @@ function PhotoCard({
 
 export function LookAlikeCheck({ suggestion }: { suggestion: IdentifySuggestion | undefined }) {
   const t = useTranslations('LookAlikeCheck');
+  const locale = useLocale();
   const lookAlike = suggestion?.dangerousLookAlikes?.[0];
   if (!suggestion || !lookAlike) return null;
 
@@ -93,6 +94,13 @@ export function LookAlikeCheck({ suggestion }: { suggestion: IdentifySuggestion 
   const chosenImageUrl = suggestion.imageUrl ?? suggestion.similarImages?.[0] ?? null;
   const chosenImageCredit = suggestion.imageUrl ? suggestion.imageCredit : null;
   const dangerEdibility = asEdibility(lookAlike.edibility);
+  // «Hvorfor de forveksles» og «Hvordan skille» kommer fra look_alikes og
+  // finnes bare på norsk. De vises på alle språk — skilleteksten er
+  // sikkerhetsteksten, og den skjules aldri — men merkes lang="nb", og en
+  // svensk leser får vite at teksten er norsk i stedet for å tro at appen
+  // skriver svensk slik.
+  const norskProsa = locale === 'nb' ? undefined : 'nb';
+  const harProsa = Boolean(lookAlike.whySimilar || lookAlike.howToTell);
 
   return (
     <section
@@ -133,14 +141,17 @@ export function LookAlikeCheck({ suggestion }: { suggestion: IdentifySuggestion 
 
       {lookAlike.whySimilar ? (
         <p className="mt-3 text-xs leading-relaxed text-gray-700">
-          <span className="font-semibold text-gray-900">{t('whyConfused')}</span> {lookAlike.whySimilar}
+          <span className="font-semibold text-gray-900">{t('whyConfused')}</span>{' '}
+          <span lang={norskProsa}>{lookAlike.whySimilar}</span>
         </p>
       ) : null}
       {lookAlike.howToTell ? (
         <p className={`mt-2 rounded-xl p-3 text-sm leading-relaxed ${critical ? 'bg-red-100 text-red-900' : 'bg-orange-100 text-orange-900'}`}>
-          <span className="font-bold">{t('howToTell')}</span> {lookAlike.howToTell}
+          <span className="font-bold">{t('howToTell')}</span>{' '}
+          <span lang={norskProsa}>{lookAlike.howToTell}</span>
         </p>
       ) : null}
+      {norskProsa && harProsa ? <p className="mt-2 text-xs text-gray-600">{t('norwegianTextNote')}</p> : null}
 
       <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
         {lookAlike.speciesId ? (

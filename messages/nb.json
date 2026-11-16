@@ -1124,6 +1124,8 @@
     "lookAlikesOwnNotRecorded": "Vi har ennå ikke ført inn hva denne arten selv kan forveksles med. Det som står under, er hentet fra {count, plural, =1 {en annen arts forvekslingsliste} other {andre arters forvekslingslister}}, så farlige forvekslingsarter kan mangle — at de ikke står her, betyr IKKE at arten er trygg å plukke. Få alltid soppen vurdert av soppkontroll eller en ekspert før du spiser.",
     "whyConfused": "Hvorfor de forveksles:",
     "howToTellApart": "Hvordan skille:",
+    "norwegianProseNote": "Artstekstene finnes foreløpig bare på norsk.",
+    "norwegianLookAlikeNote": "Forvekslingstekstene finnes foreløpig bare på norsk.",
     "lookAlikesUnavailable": "Vi klarte ikke å hente forvekslingsartene for denne arten akkurat nå. At det ikke står noen farlige forvekslinger her betyr derfor IKKE at det ikke finnes noen. Last siden på nytt, eller få soppen vurdert av soppkontroll før du spiser den.",
     "seasonNote": "Sesongvinduet viser når arten normalt er å finne i Norden — det sier ingenting om forholdene akkurat nå. Kartet vurderer dagens forhold der du er.",
     "lookAlikesNoneRecorded": "Vi har ikke ført inn forvekslingsarter for denne arten ennå. At det ikke står noen advarsel her, betyr IKKE at arten er trygg å plukke — det betyr at vi ikke har dekning å love. Få alltid soppen vurdert av soppkontroll eller en ekspert før du spiser."
@@ -1302,6 +1304,7 @@
     "dangerousLookAlike": "Farlig dobbeltgjenger",
     "whyConfused": "Hvorfor de forveksles:",
     "howToTell": "Slik skiller du dem:",
+    "norwegianTextNote": "Forvekslingsteksten finnes foreløpig bare på norsk.",
     "readMore": "Les alt om {name} →",
     "alsoConfusedWith": "Også lett å forveksle med: {names}"
   },

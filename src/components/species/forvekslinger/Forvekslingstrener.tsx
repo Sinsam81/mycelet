@@ -1,6 +1,6 @@
 'use client';
 
-import { Fragment, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import Link from 'next/link';
 import { useLocale, useTranslations } from 'next-intl';
 import { CheckCircle2, XCircle } from 'lucide-react';
@@ -25,6 +25,7 @@ import {
   type TrenerPar,
   type Trenerfremdrift
 } from '@/lib/species/forvekslingstrener';
+import { Artsnavn } from '@/components/species/Artsnavn';
 import { Sikkerhetslinje } from './Sikkerhetslinje';
 
 /**
@@ -70,43 +71,6 @@ const ingenLagret = () => null;
 
 const SIDER: readonly Side[] = ['venstre', 'hoyre'];
 
-/**
- * Artsnavnet på kortet — den ene teksten som aldri får bli kuttet, for det er
- * navnene øvelsen ber brukeren lese.
- *
- * Navnet er ofte ETT langt ord i en smal kolonne, og kortet har overflow-hidden.
- * Uten bryting ble «Snøballsjampinjong» (160 px i Fraunces 700) kuttet av
- * kortkanten på en 390 px bred skjerm, og flere navn jo smalere skjermen er.
- * Tre ting hindrer det:
- *
- *  · break-words: ordet deles heller enn å stikke ut. Virker i alle nettlesere.
- *  · hyphens-auto: delingen får bindestrek på en stavelsesgrense der
- *    nettleseren har orddeling for språket i <html lang> («Snøballsjam-pinjong»).
- *  · hvert ord er sin egen inline-blokk, aldri bredere enn linja: ordet flyttes
- *    helt ned på neste linje, og deles bare når det ikke får plass der alene.
- *    Med hyphens-auto på hele navnet deler Safari — og dermed appen, som er
- *    WKWebView — også ord som bare kunne flyttet seg: «Rødnende flue-sopp»,
- *    «Gulnende krem-le». Chrome gjør det samme med text-wrap: balance.
- *
- * Målt med den bygde skriften i Chrome og WebKit på 320–390 px. jsdom har
- * ingen layout, så testen kan bare låse klassene.
- */
-function Artsnavn({ navn }: { navn: string }) {
-  return (
-    <span className="block font-serif text-base font-bold leading-tight text-forest-900">
-      {navn
-        .trim()
-        .split(/\s+/)
-        .map((ord, i) => (
-          <Fragment key={i}>
-            {i > 0 ? ' ' : null}
-            <span className="inline-block max-w-full break-words hyphens-auto">{ord}</span>
-          </Fragment>
-        ))}
-    </span>
-  );
-}
-
 function ArtKort({
   art,
   besvart,
@@ -143,7 +107,10 @@ function ArtKort({
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={art.bildeUrl} alt="" className="aspect-[4/3] w-full bg-gray-100 object-cover" />
         <span className="block space-y-0.5 px-2.5 pt-2.5">
-          <Artsnavn navn={art.navn} />
+          <Artsnavn
+            navn={art.navn}
+            className="block font-serif text-base font-bold leading-tight text-forest-900"
+          />
           {art.latinskNavn ? (
             <span className="block break-words text-xs italic text-gray-600">{art.latinskNavn}</span>
           ) : null}

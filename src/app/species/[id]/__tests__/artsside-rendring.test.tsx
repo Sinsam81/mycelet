@@ -760,6 +760,42 @@ describe('på svensk', () => {
   });
 });
 
+describe('norsk brødtekst for svenske lesere', () => {
+  const OVERST = sv.SpeciesDetail.norwegianProseNote;
+  const FORVEKSLINGER = sv.SpeciesDetail.norwegianLookAlikeNote;
+
+  it('svensk: én linje over teksten og én ved forvekslingene, på svensk og ikke merket som norsk', async () => {
+    await rendrer(1, 'sv');
+    for (const linje of [OVERST, FORVEKSLINGER]) {
+      const element = screen.getByText(linje);
+      expect(element.closest('[lang="nb"]'), linje).toBeNull();
+    }
+    // Linja står over den første norske teksten, ikke langt under den.
+    const overst = screen.getByText(OVERST);
+    const beskrivelse = screen.getByText('Gyllen-gul sopp med falske skiver som går ned på stilken. Mild fruktaktig lukt.');
+    expect(overst.compareDocumentPosition(beskrivelse) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const skille = screen.getByText('Ekte kantarell har FALSKE skiver. Ved tvil — la den stå.');
+    expect(screen.getByText(FORVEKSLINGER).compareDocumentPosition(skille) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('svensk, dødelig art: gift- og symptomteksten vises fortsatt, merket som norsk', async () => {
+    await rendrer(52, 'sv');
+    expect(screen.getByText(OVERST)).toBeTruthy();
+    expect(screen.getByText('Amatoksiner').getAttribute('lang')).toBe('nb');
+    expect(screen.getByText('Oppkast og diaré etter 6–24 timer, deretter leversvikt.').getAttribute('lang')).toBe('nb');
+    expect(screen.getByText('Grav opp HELE stilken. Ved tvil — la stå.').getAttribute('lang')).toBe('nb');
+  });
+
+  it('norsk leser ser ingen endring: ingen linje, ingen lang-merking', async () => {
+    const { container } = await rendrer(1, 'nb');
+    expect(screen.queryByText(OVERST)).toBeNull();
+    expect(screen.queryByText(FORVEKSLINGER)).toBeNull();
+    expect(screen.queryByText(nb.SpeciesDetail.norwegianProseNote)).toBeNull();
+    expect(screen.queryByText(nb.SpeciesDetail.norwegianLookAlikeNote)).toBeNull();
+    expect(container.querySelector('[lang="nb"]')).toBeNull();
+  });
+});
+
 describe('metadata', () => {
   it('gir norsk ingress, og navnet på svensk når det er et annet', async () => {
     const kantarell = await generateMetadata({ params: Promise.resolve({ id: '1' }) });

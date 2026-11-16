@@ -6,13 +6,9 @@ import { useLocale } from 'next-intl';
 import { createClient } from '@/lib/supabase/client';
 import { sesongtilstand } from '@/lib/sesong/sesongtilstand';
 import { filtrerArtsliste, type ArtslisteFiltre } from '@/lib/species/artsliste';
-import type { Species } from '@/types/species';
+import { hentArtskatalog, type SpeciesListItem } from '@/lib/species/artskatalog';
 
-/** En rad i biblioteket: det kortet viser, pluss navnene søket leser. */
-export interface SpeciesListItem extends Species {
-  english_name: string | null;
-  synonyms_text: string | null;
-}
+export type { SpeciesListItem };
 
 /**
  * Hele katalogen under ÉN nøkkel — uten språk og uten filtre.
@@ -28,16 +24,6 @@ export interface SpeciesListItem extends Species {
  */
 export const ARTSLISTE_NOKKEL = ['species-all'] as const;
 
-const ARTSLISTE_FELTER =
-  'id,norwegian_name,swedish_name,latin_name,english_name,synonyms_text,description,habitat,season_start,season_end,edibility,primary_image_url';
-
-/**
- * PostgREST svarer med høyst 1000 rader uansett. Taket sto på 200, og siden
- * overskriften teller radene, ville en katalog over 200 arter oppgitt 200 som
- * sin egen størrelse.
- */
-const ARTSLISTE_TAK = 1000;
-
 /** Katalogen er statisk mellom migrasjoner; ti minutter sparer gjenbesøk et kall. */
 const ARTSLISTE_FERSK_MS = 10 * 60_000;
 
@@ -48,19 +34,29 @@ const ARTSLISTE_FERSK_MS = 10 * 60_000;
  */
 const ARTSLISTE_BEHOLD_MS = 30 * 60_000;
 
-async function hentArtsliste(): Promise<SpeciesListItem[]> {
-  const supabase = createClient();
-  const { data, error } = await supabase
-    .from('mushroom_species')
-    .select(ARTSLISTE_FELTER)
-    // Fast rekkefølge fra basen; visningsrekkefølgen settes i filtrerArtsliste.
-    .order('id')
-    .limit(ARTSLISTE_TAK);
-  if (error) throw error;
-  return (data ?? []) as SpeciesListItem[];
+function hentArtsliste(): Promise<SpeciesListItem[]> {
+  return hentArtskatalog(createClient());
 }
 
-export function useSpecies(filters: ArtslisteFiltre) {
+/**
+ * Det serveren allerede har gitt siden (src/app/species/page.tsx).
+ *
+ * `startliste` er hele katalogen slik serveren hentet den — ufiltrert, som
+ * alt annet under nøkkelen, så den kan gis til useQuery som initialData uten
+ * å bli «svaret» på et filter. Den regnes som fersk i ARTSLISTE_FERSK_MS fra
+ * siden ble åpnet, så nettleseren henter ikke lista én gang til ved lasting.
+ * Mangler den (serveren fikk ikke svar), henter kroken selv, som før.
+ *
+ * `maaned` er Oslo-måneden serveren rendret med. Uten den leste nettleseren
+ * klokka på nytt, og i minuttene rundt et månedsskifte kunne «kun i sesong nå»
+ * gi ulik HTML på server og klient.
+ */
+export interface ArtslisteStart {
+  startliste?: SpeciesListItem[];
+  maaned?: number;
+}
+
+export function useSpecies(filters: ArtslisteFiltre, { startliste, maaned: serverMaaned }: ArtslisteStart = {}) {
   const locale = useLocale();
   const {
     data: alle,
@@ -69,6 +65,7 @@ export function useSpecies(filters: ArtslisteFiltre) {
   } = useQuery({
     queryKey: ARTSLISTE_NOKKEL,
     queryFn: hentArtsliste,
+    initialData: startliste,
     staleTime: ARTSLISTE_FERSK_MS,
     gcTime: ARTSLISTE_BEHOLD_MS
   });
@@ -77,7 +74,8 @@ export function useSpecies(filters: ArtslisteFiltre) {
   // Oslo-måneden fra den ene sesonghjelperen — samme måned som kalenderen
   // rendrer på serveren. Enhetens egen tidssone kan stå i en annen måned ved et
   // månedsskifte, og da svarte «kun i sesong nå» ulikt her og i kalenderen.
-  const maaned = sesongtilstand().maaned;
+  // Serverens måned når siden fikk den, så første rendring blir lik.
+  const maaned = serverMaaned ?? sesongtilstand().maaned;
 
   const data = useMemo(
     () =>
