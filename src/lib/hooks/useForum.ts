@@ -492,7 +492,8 @@ export type ModerationFilter = 'pending' | 'all';
 
 export interface ModerationReportsResponse {
   reports: ModerationReportItem[];
-  pending: AapneRapporter;
+  /** null = tellingen feilet; konsollen sier «ikke målt», aldri «0 åpne». */
+  pending: AapneRapporter | null;
 }
 
 /**

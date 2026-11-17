@@ -6,6 +6,7 @@ import { checkRateLimit } from '@/lib/rate-limit';
 import { getClientKey, rateLimitResponse } from '@/lib/rate-limit/route';
 import { createRequestLogger } from '@/lib/log/request';
 import { apiFeil, loggFeil, type ApiFeilKode } from '@/lib/api/feil';
+import { hentAapneRapporter } from '@/lib/rapport/aapne-rapporter';
 import {
   AAPNE_RAPPORTSTATUSER,
   byggRapportvisning,
@@ -95,20 +96,12 @@ export async function GET(request: NextRequest) {
 
   // «Åpne» er pending OG reviewed — se AAPNE_RAPPORTSTATUSER. Lista og
   // tellingen under må bruke samme regel, ellers sier banneret noe annet enn
-  // lista rett under det.
-  const aapne = [...AAPNE_RAPPORTSTATUSER];
+  // lista rett under det. Tellingen er den samme som dagsrapporten, kveldsvar-
+  // selet og /admin leser (hentAapneRapporter), så de kan ikke vise ulike tall.
   let reportQuery = admin.from('reports').select(REPORT_COLUMNS).order('created_at', { ascending: false }).limit(MAKS_RAPPORTER);
-  if (!visAlle) reportQuery = reportQuery.in('status', aapne);
+  if (!visAlle) reportQuery = reportQuery.in('status', [...AAPNE_RAPPORTSTATUSER]);
 
-  const [reportsRes, eldsteRes] = await Promise.all([
-    reportQuery,
-    admin
-      .from('reports')
-      .select('created_at', { count: 'exact' })
-      .in('status', aapne)
-      .order('created_at', { ascending: true })
-      .limit(1)
-  ]);
+  const [reportsRes, aapneSvar] = await Promise.all([reportQuery, hentAapneRapporter(admin)]);
 
   if (reportsRes.error) {
     loggFeil(log, 'admin.moderation.list.db_error', reportsRes.error);
@@ -164,11 +157,13 @@ export async function GET(request: NextRequest) {
     if (res.error) log.warn('admin.moderation.list.enrich_failed', { table: navn, message: res.error.message });
   }
 
-  const pending = oppsummerAapneRapporter({
-    antall: eldsteRes.error ? 0 : eldsteRes.count ?? 0,
-    eldsteOpprettet: (eldsteRes.data?.[0] as { created_at?: string } | undefined)?.created_at ?? null,
-    naa: new Date()
-  });
+  // Feilet tellingen, er svaret `null` — konsollen sier «ikke målt». Den sa før
+  // «0 åpne», og da forsvant banneret og døgnfristvarselet akkurat når ingen
+  // visste om noe hadde ligget for lenge.
+  if (!aapneSvar.ok) {
+    log.warn('admin.moderation.list.count_failed', { message: aapneSvar.feil, missingTable: aapneSvar.mangler });
+  }
+  const pending = aapneSvar.ok ? oppsummerAapneRapporter({ ...aapneSvar.aapne, naa: new Date() }) : null;
 
   return NextResponse.json({
     reports: byggRapportvisning({ reports, posts, comments, findings, profiles }),

@@ -402,6 +402,7 @@
     "filterAll": "Alle",
     "openSummary": "{count, plural, one {# åpen rapport} other {# åpne rapporter}} – den eldste er {hours} t gammel.",
     "overdue": "Meldinger skal behandles innen ett døgn.",
+    "openNotMeasured": "Antall åpne rapporter: ikke målt – tellingen feilet. Se lista under.",
     "typePost": "Innlegg",
     "typeComment": "Kommentar",
     "typeFinding": "Funn",

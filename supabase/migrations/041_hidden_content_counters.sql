@@ -1,6 +1,17 @@
 -- 041: la tellerne slutte å telle innhold ingen får se.
 --
--- ⚠️ IKKE KJØRT. Lim inn i Supabase SQL Editor når du vil ha den ute.
+-- ⚠️ LIM INN 076 I STEDET FOR DENNE (lagt til 16. november 2026). Del 2 og 3
+-- — kommentartelleren og omregningen — er avløst av
+-- 076_forumtellere_teller_alle.sql. Den gjør det samme, og retter i tillegg
+-- det denne fila ikke så: tellerfunksjonene kjørte med rettighetene til den
+-- som kommenterte eller likte, og RLS lar bare forfatteren endre et innlegg.
+-- En kommentar eller like fra noen andre flyttet derfor aldri tallet. Når 076
+-- er kjørt, står raden 041 i hovedboka også som `true` — da er det ingenting
+-- igjen her å gjøre. Del 1 skal ikke limes inn uansett (se neste avsnitt).
+--
+-- Limes fila likevel inn etter 076, gjør del 2 ikke skade: funksjonen under
+-- er også SECURITY DEFINER nå. Det er del 1 som biter.
+--
 -- Idempotent: trygg å lime inn på nytt.
 --
 -- ⚠️ LES FØR DU LIMER INN (lagt til 10. november 2026). Del 1 kolliderer med
@@ -13,10 +24,13 @@
 -- Det som trengs, er en ny migrasjon ETTER 056 som setter get_user_stats med
 -- begge filtrene. Til den finnes: ikke lim inn del 1.
 --
--- HVORFOR DEN HASTER NÅ: moderasjonskonsollen (/api/admin/moderation) er den
--- første koden som setter is_hidden = true. Del 2 er det eneste som holder
--- comments_count riktig når en kommentar skjules eller vises igjen. Om den er
--- kjørt i produksjon, er ikke bekreftet — se spørringen helt nederst.
+-- MODERASJONSKONSOLLEN (/api/admin/moderation) er den første koden som setter
+-- is_hidden = true, så kommentartelleren må følge skjulingen. Det gjør del 2
+-- — men slik den først ble skrevet, kjørte den som brukeren som kommenterte,
+-- og talte bare forfatterens egne kommentarer. Moderatorens fratrekk gikk
+-- gjennom (tjenesterollen stoppes ikke av RLS) og kunne trekke fra et tall
+-- kommentaren aldri var lagt til i. Det er derfor 076 avløser del 2 og 3. Om
+-- 041 er kjørt i produksjon, er ikke bekreftet — se spørringen helt nederst.
 --
 -- BAKGRUNN
 -- To tellere teller ANNET enn listene rett under dem viser:
@@ -94,7 +108,7 @@ begin
   end if;
   return coalesce(new, old);
 end;
-$$ language plpgsql;
+$$ language plpgsql security definer set search_path = public, pg_temp;
 
 -- Triggeren fra 001 fanget bare INSERT og DELETE. Erstatt den.
 drop trigger if exists comments_count_trigger on comments;

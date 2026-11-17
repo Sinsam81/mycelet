@@ -402,6 +402,7 @@
     "filterAll": "Alla",
     "openSummary": "{count, plural, one {# öppen rapport} other {# öppna rapporter}} – den äldsta är {hours} tim gammal.",
     "overdue": "Anmälningar ska behandlas inom ett dygn.",
+    "openNotMeasured": "Antalet öppna rapporter kunde inte räknas. Se listan nedan.",
     "typePost": "Inlägg",
     "typeComment": "Kommentar",
     "typeFinding": "Fynd",

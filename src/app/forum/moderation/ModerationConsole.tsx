@@ -84,7 +84,14 @@ export function ModerationConsole() {
       <section className="space-y-3">
         <h1 className="text-xl font-semibold">{t('title')}</h1>
 
-        {pending && pending.antall > 0 ? (
+        {/* null = tellingen feilet. Da vet vi ikke om noe har ligget over
+            døgnfristen, så banneret sier det i stedet for å forsvinne som
+            ved «0 åpne». */}
+        {pending === null ? (
+          <p className="rounded bg-amber-50 px-3 py-2 text-sm text-amber-800">
+            {t('openNotMeasured')} {t('overdue')}
+          </p>
+        ) : pending && pending.antall > 0 ? (
           <p
             className={`rounded px-3 py-2 text-sm ${
               pending.over24t ? 'bg-red-50 font-medium text-red-800' : 'bg-amber-50 text-amber-800'

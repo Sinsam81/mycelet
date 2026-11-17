@@ -15,7 +15,12 @@ interface Kall {
   filters: Array<[string, string, unknown]>;
   sorter?: { kolonne: string; stigende: boolean };
   grense?: number;
+  /** `count`-valget til select, når spørringen ber om en telling. */
+  telling?: string;
 }
+
+/** Hvordan tellingen av åpne rapporter svarer: som vanlig, med en feil, eller uten tall. */
+let tellingSvar: 'ok' | 'feil' | 'uten-tall' = 'ok';
 
 let bruker: { id: string } | null = { id: 'mod-1' };
 let rolle: string | null = 'moderator';
@@ -35,8 +40,9 @@ function adminFrom(table: string) {
   adminKall.push(kall);
   const rader = () => (tabeller[table] ?? []).filter((rad) => passer(rad, kall.filters));
   const builder: Record<string, unknown> = {
-    select: (columns?: string) => {
+    select: (columns?: string, valg?: { count?: string }) => {
       kall.columns = columns;
+      kall.telling = valg?.count;
       return builder;
     },
     update: (values: Record<string, unknown>) => {
@@ -66,6 +72,13 @@ function adminFrom(table: string) {
         for (const rad of rader()) Object.assign(rad, kall.values);
         return Promise.resolve({ data: null, error: null }).then(resolve);
       }
+      if (kall.telling && tellingSvar === 'feil') {
+        return Promise.resolve({
+          data: null,
+          error: { message: 'canceling statement due to statement timeout', code: '57014' },
+          count: null
+        }).then(resolve);
+      }
       // Som PostgREST: `count` er alle treffene, `data` er sortert og kappet.
       const treff = rader();
       const sorter = kall.sorter;
@@ -73,7 +86,8 @@ function adminFrom(table: string) {
         ? [...treff].sort((a, b) => String(a[sorter.kolonne]).localeCompare(String(b[sorter.kolonne])) * (sorter.stigende ? 1 : -1))
         : treff;
       const data = kall.grense === undefined ? sortert : sortert.slice(0, kall.grense);
-      return Promise.resolve({ data, error: null, count: treff.length }).then(resolve);
+      const count = kall.telling && tellingSvar === 'uten-tall' ? null : treff.length;
+      return Promise.resolve({ data, error: null, count }).then(resolve);
     }
   };
   return builder;
@@ -127,6 +141,7 @@ afterEach(() => {
 
 beforeEach(() => {
   sprak = 'nb';
+  tellingSvar = 'ok';
   bruker = { id: 'mod-1' };
   rolle = 'moderator';
   rolleFeil = false;
@@ -232,6 +247,46 @@ describe('GET', () => {
     ];
     const json = await (await GET(new NextRequest('http://localhost/api/admin/moderation'))).json();
     expect(json.pending).toEqual({ antall: 2, eldsteTimer: 50, over24t: true });
+  });
+
+  it('teller med samme spørring som dagsrapporten, kveldsvarselet og /admin', async () => {
+    await GET(new NextRequest('http://localhost/api/admin/moderation'));
+    const telling = adminKall.filter((k) => k.table === 'reports' && k.telling);
+    expect(telling).toHaveLength(1);
+    expect(telling[0]).toMatchObject({
+      telling: 'exact',
+      columns: 'created_at',
+      filters: [['in', 'status', ['pending', 'reviewed']]],
+      sorter: { kolonne: 'created_at', stigende: true },
+      grense: 1
+    });
+  });
+
+  it('sier «ikke målt» (null) når tellingen feiler — aldri «0 åpne»', async () => {
+    // Før ble en feilet telling til antall 0. Da forsvant banneret, og med det
+    // døgnfristvarselet, akkurat når ingen visste om noe hadde ligget for lenge.
+    tellingSvar = 'feil';
+    const res = await GET(new NextRequest('http://localhost/api/admin/moderation'));
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.pending).toBeNull();
+    // Rapportene er det viktigste å få fram, og de kommer likevel.
+    expect(json.reports.map((r: { id: string }) => r.id).sort()).toEqual(['r-funn', 'r-kommentar', 'r-post', 'r-post-2']);
+  });
+
+  it('et svar uten tall er heller ikke 0', async () => {
+    // Med count: 'exact' har et vellykket svar alltid et tall. Mangler det,
+    // vet vi ikke — og da er svaret «ikke målt».
+    tellingSvar = 'uten-tall';
+    const json = await (await GET(new NextRequest('http://localhost/api/admin/moderation'))).json();
+    expect(json.pending).toBeNull();
+    expect(json.reports).toHaveLength(4);
+  });
+
+  it('ingen åpne rapporter er et målt 0 — ikke «ikke målt»', async () => {
+    for (const rapport of tabeller.reports) rapport.status = 'resolved';
+    const json = await (await GET(new NextRequest('http://localhost/api/admin/moderation'))).json();
+    expect(json.pending).toEqual({ antall: 0, eldsteTimer: null, over24t: false });
   });
 
   it('?status=all tar med de som ikke lenger er åpne', async () => {

@@ -5,7 +5,7 @@
 
 > ⚠️ **STATUS ER IKKE BEKREFTET — EIEREN MÅ BEKREFTE.**
 > Det eneste dette dokumentet vet sikkert, er at alle til og med **038** var
-> kjørt i produksjon 2. august 2026. For 039–075 står det under hva repoet
+> kjørt i produksjon 2. august 2026. For 039–076 står det under hva repoet
 > *tyder på*, ikke hva som er sant i databasen. Ingen rad skal leses som
 > «kjørt» før eieren har bekreftet den — bruk spørringen under
 > [«Én spørring som svarer for alle»](#én-spørring-som-svarer-for-alle) og
@@ -79,6 +79,27 @@ dataeksporten med en feil for alle brukere helt til utgivelsen er på plass.
 Skjer det likevel, er det ingenting å rette i databasen: fullfør deployen, så
 virker eksporten igjen.
 
+## 076 retter forumtellerne — lim inn den, ikke 041
+
+Tallene på foruminnleggene (kommentarer og likes) flyttet seg bare når det var
+innleggets egen forfatter som kommenterte eller likte. Tellerfunksjonene kjørte
+med rettighetene til den som skrev, og RLS lar bare forfatteren endre et
+innlegg. Et spørsmål andre har svart på, ble derfor stående under «Ubesvarte»,
+og en like fra noen andre forsvant igjen. Forklaringen står øverst i fila.
+
+076 er ikke avhengig av noen utgivelse av appen eller av de andre radene i
+lista, og kan limes inn når som helst:
+
+1. **Lim inn `076_forumtellere_teller_alle.sql`** i SQL Editor — hele fila,
+   uten å merke noe av teksten først — og kjør.
+2. **Kontroller.** Kjør spørringen under «Én spørring som svarer for alle» —
+   radene `076` og `041` skal begge stå som `true`.
+3. **Skriv datoen** i statuskolonnen for 076 i tabellen under. For 041: se
+   «Hva `true` betyr».
+
+**Lim ikke inn 041.** Del 2 og 3 av den er det 076 gjør, og del 1 kolliderer
+med 056 — se «Når en tidlig migrasjon kjøres sent».
+
 ## 039–044 (ventelista fra 2. august)
 
 Rekkefølgen er ikke vilkårlig: dataretting → opprydding → tellere → trigger →
@@ -91,12 +112,12 @@ forbehold: 041 og 043 oppfører seg annerledes når en senere migrasjon (056 og
 |---|---|---|---|---|
 | 039 | `039_fix_hvit_traktsopp_spelling.sql` | Retter «Hvit trakttsopp» → «Hvit traktsopp» på art 59 (giftig) | Ingen — én tekstretting | ukjent – må bekreftes |
 | 040 | `040_purge_orphan_findings.sql` | Sletter eierløse funn som overlevde en kontosletting | Sletter data, men bare rader uten eier | ukjent – må bekreftes |
-| 041 | `041_hidden_content_counters.sql` | Tellerne slutter å telle innhold ingen får se | Ingen — trigger + omregning | ukjent – må bekreftes |
+| 041 | `041_hidden_content_counters.sql` | Tellerne slutter å telle innhold ingen får se | Avløst av 076: lim inn 076 i stedet, ikke denne. Del 1 kolliderer med 056 | ukjent – må bekreftes |
 | 042 | `042_freeze_display_location_on_update.sql` | Låser grovkorningen ved første stempling | Avløst av 075: lim inn 075 i stedet, og **aldri** denne etter 075 | ukjent – må bekreftes |
 | 043 | `043_geo_index_and_definer_hardening.sql` | Geo-indeks + låser `search_path` på fire SECURITY DEFINER-funksjoner | Ingen — indeks + herding | ukjent – må bekreftes |
 | 044 | `044_drop_unused_profile_settings.sql` | Slipper to ubrukte kolonner på `profiles` | **Destruktiv** — se under | ukjent – må bekreftes |
 
-## 045–075
+## 045–076
 
 | # | Fil | Hva den gjør | Status |
 |---|---|---|---|
@@ -131,11 +152,12 @@ forbehold: 041 og 043 oppfører seg annerledes når en senere migrasjon (056 og
 | 073 | `073_ai_identifiseringsfeil.sql` | Tabellen `ai_identifiseringsfeil` | trolig kjørt – bekreft |
 | 074 | `074_verified_foragers_skjul_merknad.sql` | Kolonnerettigheter på `verified_foragers`: anon og innloggede roller får bare kolonnene forum-merket trenger | **ikke kjørt** — gjøres samme dag som utgivelsen, se øverst |
 | 075 | `075_sonerute_uten_breddegradslekkasje.sql` | Sone-ruta røper ikke lenger funnets eksakte breddegrad; eksisterende sone-funn stemples på nytt | **ikke kjørt** — haster, se øverst |
+| 076 | `076_forumtellere_teller_alle.sql` | Forumtellerne teller kommentarer og likes fra alle, ikke bare fra innleggets forfatter; tallene regnes om. Avløser del 2 og 3 av 041 | **ikke kjørt** — se øverst |
 
 ## Én spørring som svarer for alle
 
 Lim inn i SQL Editor. Den leser bare — ingenting i databasen endres — og gir
-én rad for hver migrasjon fra 039 til 075. `true` betyr at sporet etter
+én rad for hver migrasjon fra 039 til 076. `true` betyr at sporet etter
 migrasjonen finnes.
 
 Slik brukes den:
@@ -153,9 +175,13 @@ Lim aldri inn en fil når raden dens allerede står som `true`. Flere av filene
 tåler ikke å kjøres to ganger, og noen gjør skade når de kjøres etter en
 nyere — se «Når en tidlig migrasjon kjøres sent».
 
-Tre rader følger ikke steg 3: **075** haster og kan limes inn før alle de
-andre, **074** har sin egen rekkefølge (se øverst for begge), og **044** er
-frivillig — den kan stå som `false` (se «Om 044»).
+Fire rader følger ikke steg 3:
+
+- **075** haster og kan limes inn før alle de andre (se øverst).
+- **074** har sin egen rekkefølge (se øverst).
+- **041** limes ikke inn. Lim inn 076 i stedet; da blir begge `true` (se
+  øverst).
+- **044** er frivillig — den kan stå som `false` (se «Om 044»).
 
 ```sql
 SELECT * FROM (VALUES
@@ -195,7 +221,8 @@ SELECT * FROM (VALUES
   ('072', to_regclass('public.prove_paaminnelser') IS NOT NULL AND to_regclass('public.prove_svar') IS NOT NULL),
   ('073', to_regclass('public.ai_identifiseringsfeil') IS NOT NULL),
   ('074', NOT EXISTS (SELECT 1 FROM pg_attribute a WHERE a.attrelid = to_regclass('public.verified_foragers') AND a.attname = 'note' AND NOT a.attisdropped AND (has_column_privilege('anon', a.attrelid, a.attnum, 'SELECT') OR has_column_privilege('authenticated', a.attrelid, a.attnum, 'SELECT')))),
-  ('075', EXISTS (SELECT 1 FROM pg_proc WHERE oid = to_regproc('public.set_display_location') AND prosrc LIKE '%zone_grid_location%') AND NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgrelid = to_regclass('public.findings') AND tgname IN ('findings_set_display_location', 'findings_updated_at') AND tgenabled <> 'O'))
+  ('075', EXISTS (SELECT 1 FROM pg_proc WHERE oid = to_regproc('public.set_display_location') AND prosrc LIKE '%zone_grid_location%') AND NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgrelid = to_regclass('public.findings') AND tgname IN ('findings_set_display_location', 'findings_updated_at') AND tgenabled <> 'O')),
+  ('076', EXISTS (SELECT 1 FROM pg_proc WHERE oid = to_regproc('public.update_post_comment_count') AND prosecdef) AND EXISTS (SELECT 1 FROM pg_proc WHERE oid = to_regproc('public.update_post_likes_count') AND prosecdef) AND EXISTS (SELECT 1 FROM pg_trigger WHERE tgrelid = to_regclass('public.comments') AND tgname = 'comments_count_trigger' AND (tgtype & 16) <> 0) AND EXISTS (SELECT 1 FROM pg_trigger WHERE tgrelid = to_regclass('public.post_likes') AND tgname = 'post_likes_count_trigger') AND NOT EXISTS (SELECT 1 FROM forum_posts fp WHERE fp.comments_count IS DISTINCT FROM (SELECT count(*) FROM comments c WHERE c.post_id = fp.id AND c.is_hidden IS NOT TRUE) OR fp.likes_count IS DISTINCT FROM (SELECT count(*) FROM post_likes l WHERE l.post_id = fp.id)))
 ) AS t(migrasjon, kjort)
 ORDER BY migrasjon;
 ```
@@ -226,16 +253,27 @@ raden, men det er verdt å vite hva det betyr:
 - **075** sjekker to ting: at triggeren bruker den nye utregningen av
   sone-ruta, og at de to triggerne på `findings` står på. Blir den `false`
   igjen senere, er 042 limt inn etterpå — lim da inn 075 på nytt.
+- **041** blir `true` også når 076 er kjørt: 076 gjør del 2 og 3 av 041, og
+  raden ser bare etter kommentartriggeren. Da er det ingenting igjen for 041 å
+  gjøre, og den skal ikke limes inn. Skriv «avløst av 076» og datoen i
+  statuskolonnen for 041, ikke «kjørt»: del 1 (at profilen ikke teller skjulte
+  innlegg) er fortsatt ikke gjort, og trenger en ny migrasjon etter 056.
+- **076** sjekker tre ting: at begge tellerfunksjonene kjører som eier
+  (SECURITY DEFINER), at begge triggerne finnes, og at tallene på hvert
+  innlegg stemmer med kommentarene og likene som faktisk finnes. Det siste er
+  en tilstand, som 040: blir raden `false` igjen senere, er tallene endret for
+  hånd eller en eldre utgave av 041 limt inn. Lim da inn 076 på nytt — den er
+  idempotent og regner tallene om.
 
 `/api/health` (uten `?fast=1`) sier også fra under `checks.tabeller` når en av
 tabellene fra 007, 020, 064 og 070–073 mangler.
 
 ### Vil du se mer enn ja/nei
 
-Tolv av filene har en egen kontrollspørring som viser detaljene. De andre
+Tretten av filene har en egen kontrollspørring som viser detaljene. De andre
 25 har ingen — for dem er raden i spørringen over hele kontrollen.
 
-- **Nederst i fila:** 039, 041, 043, 045, 050, 056, 058, 074, 075
+- **Nederst i fila:** 039, 041, 043, 045, 050, 056, 058, 074, 075, 076
 - **I filhodet (før SQL-en):** 040, 042, 044
 
 Tre av dem bør du vite dette om:
@@ -258,7 +296,10 @@ etter en senere, er det fem steder som biter:
   slettede funn igjen. Spørringen fanger det: raden 056 blir `false`. Lim da
   inn 056 på nytt (den er idempotent). Etter 056 teller profilen til gjengjeld
   skjulte innlegg igjen, uansett rekkefølge. Det er en mangel i 056 som bare en
-  ny migrasjon kan rette, ikke en ny kjøring.
+  ny migrasjon kan rette, ikke en ny kjøring. 041 skal uansett ikke limes inn
+  lenger: 076 gjør resten av den. Mot 076 biter den ikke — kommentartelleren i
+  041 er også SECURITY DEFINER (fra 16. november 2026), så den gjør ikke
+  tellerne blinde for andres kommentarer igjen. Fella er del 1.
 - **042 etter 075.** Begge skriver funksjonen `set_display_location`, og den
   som kjøres sist, vinner. 075 inneholder alt 042 gjør, pluss rettingen av
   sone-ruta. Limes 042 inn etterpå, regnes ruta ut på den gamle måten igjen, og
