@@ -244,7 +244,7 @@ describe('offline-skallet: hvorfor vises det?', () => {
   it('beholder de to gamle overskriftene, uten forklaring', () => {
     expect(shellIntro('nb', 'offline')).toEqual({ heading: 'Du er uten nett', note: null });
     expect(shellIntro('nb', 'direct')).toEqual({ heading: 'Offline-kart', note: null });
-    expect(shellIntro('sv', 'offline')).toEqual({ heading: 'Du är utan nät', note: null });
+    expect(shellIntro('sv', 'offline')).toEqual({ heading: 'Du är offline', note: null });
     expect(shellIntro('sv', 'direct')).toEqual({ heading: 'Offlinekarta', note: null });
   });
 });

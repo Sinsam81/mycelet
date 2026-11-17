@@ -217,7 +217,7 @@ const COPY = {
     retrying: 'Venter på nettet …'
   },
   sv: {
-    headingOffline: 'Du är utan nät',
+    headingOffline: 'Du är offline',
     headingOnline: 'Offlinekarta',
     headingNoResponse: 'Nätet svarar inte',
     noResponseNote:
@@ -232,7 +232,7 @@ const COPY = {
       found === total
         ? `Alla ${total} kartrutor finns sparade på den här enheten.`
         : `${found} av ${total} kartrutor finns sparade. De tomma rutorna laddades aldrig ner.`,
-    noTiles: 'Ingen av kartrutorna för det här området finns sparade. Området måste sparas om när du har täckning.',
+    noTiles: 'Ingen av kartrutorna för det här området finns sparad. Området måste sparas om när du har täckning.',
     positionSearching: 'Hämtar din position …',
     positionInside: (accuracy) => `Din position är utmärkt på kartan (±${accuracy} m).`,
     positionOutside: 'Du står utanför det här kartområdet.',

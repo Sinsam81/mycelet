@@ -150,7 +150,7 @@ describe('offline-skallet i nettleseren', () => {
       nettleserHovedsprak: 'sv-SE'
     });
 
-    expect(overskrift.textContent).toBe('Du är utan nät');
+    expect(overskrift.textContent).toBe('Du är offline');
     expect(document.documentElement.lang).toBe('sv');
   });
 

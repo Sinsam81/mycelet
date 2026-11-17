@@ -320,7 +320,7 @@ describe('ProvGratisArk — vilkårene følger sesongen', () => {
 /**
  * ⭐ Lovende finner ofte ingenting fra november til juni — kartet sier selv at
  * forholdene er for svake. Arket som vises på forsiden og etter 30 sekunder i
- * kartet, skal ikke selge «Alle 12 lovende områder nær deg» de månedene.
+ * kartet, skal ikke selge «Opptil 12 lovende områder nær deg» de månedene.
  */
 describe('ProvGratisArk — brødteksten følger sesongen', () => {
   const iMaaned = (m: number) => new Date(`2027-${String(m).padStart(2, '0')}-15T10:00:00Z`);

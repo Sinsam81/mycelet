@@ -5,7 +5,7 @@ const NAA = 1_800_000_000_000;
 const fersk = { visninger: 0, sistVistMs: null };
 
 describe('skalViseProvetilbud', () => {
-  it('vises for gratisbruker ved «viser 3 av 12»', () => {
+  it('vises for gratisbruker ved «viser opptil 3 av 12»', () => {
     expect(skalViseProvetilbud({ betaler: false, betalingKjent: true, kanFaaProve: true, tilstand: fersk, utloser: 'begrenset', naaMs: NAA })).toBe(true);
   });
 

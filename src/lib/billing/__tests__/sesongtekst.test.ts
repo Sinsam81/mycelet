@@ -160,7 +160,7 @@ describe('lovendeLofte — løftet om lovende områder følger sesongen', () => 
       const pris = katalog.Pricing[prediksjonspunktPris(midtI(m))];
       for (const tekst of [ark, hjem, pris]) expect(tekst, `måned ${m}`).toBeTruthy();
       if (lovendeLofte(midtI(m)) === 'naa') {
-        expect(ark, `måned ${m}`).toMatch(/^(Alle|Alla) 12 /);
+        expect(ark, `måned ${m}`).toMatch(/^(Opptil|Upp till) 12 /);
       } else {
         expect(ark, `måned ${m}`).not.toMatch(/\b12\b/);
       }

@@ -35,7 +35,7 @@ describe('måned fra Oslo i rutene', () => {
   }
 
   it('prediksjonsrutene slår opp fenologien på Oslo-dagen', () => {
-    for (const rute of ['src/app/api/prediction/route.ts', 'src/app/api/prediction/species-spots/route.ts']) {
+    for (const rute of ['src/app/api/prediction/route.ts', 'src/app/api/prediction/species-spots/route.ts', 'src/app/api/prediction/grid/route.ts']) {
       const kilde = utenKommentarer(readFileSync(join(process.cwd(), rute), 'utf8'));
       expect(kilde).not.toMatch(/dayOfYearOf\(new Date\(\)\)/);
       expect(kilde).toContain('osloDagIAaret(');

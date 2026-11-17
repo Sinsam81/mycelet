@@ -36,7 +36,7 @@ interface Flush {
   title: string;
   message: string;
   /** Hvorfor status er 'dormant' (flush.ts). Mangler i svar cachet før feltet kom. */
-  reason?: 'offSeason' | 'cold' | 'speciesOffSeason';
+  reason?: 'offSeason' | 'cold' | 'warm' | 'speciesOffSeason';
   /** Ordene er sesongkvalifisert — tidlig eller sent i sesongen (flush.ts). */
   shoulder?: 'early' | 'late';
 }
