@@ -43,7 +43,7 @@ const mutateAsync = vi.fn(async (_foresporsel: unknown) => ({
   historyImagePath: null,
   originalImageDataUrl: 'data:image/jpeg;base64,QUJD',
   originalImageDataUrls: ['data:image/jpeg;base64,QUJD'],
-  location: { latitude: null, longitude: null },
+  location: { latitude: null as number | null, longitude: null as number | null },
   suggestions: [],
   isPlant: true,
   safetyDataIncomplete: false,
@@ -204,6 +204,71 @@ describe('«Identifiser» når GPS-pluginen tier', () => {
     });
     await flush();
     expect(mutateAsync).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * Posisjonen fra «Identifiser» skal inn i økta med tiden selve målingen bærer.
+ * Uten den regnet resultatsiden alderen fra da den selv leste resultatet, og en
+ * lagret iOS-posisjon fra en time siden gikk gjennom som «for under ett minutt
+ * siden» — funnet ble lagret uten spørsmål der telefonen sist hadde en
+ * posisjon. Klokka er den ekte her; tidene er regnet fra den.
+ */
+describe('posisjonen lagres med tiden den ble målt', () => {
+  const MIN = 60_000;
+
+  /** Kindwise-svaret, med posisjonen slik useIdentify bygger den fra forespørselen. */
+  function svarMedPosisjonFraForesporselen() {
+    mutateAsync.mockImplementationOnce(async (foresporsel: unknown) => {
+      const { latitude, longitude } = foresporsel as { latitude?: number; longitude?: number };
+      return {
+        identificationId: null,
+        historyImagePath: null,
+        originalImageDataUrl: 'data:image/jpeg;base64,QUJD',
+        originalImageDataUrls: ['data:image/jpeg;base64,QUJD'],
+        location: { latitude: latitude ?? null, longitude: longitude ?? null },
+        suggestions: [],
+        isPlant: true,
+        safetyDataIncomplete: false,
+        freeQuotaRemaining: null
+      };
+    });
+  }
+
+  async function identifiserMedPosisjon(posisjon: unknown) {
+    getCurrentPosition.mockImplementationOnce(() => Promise.resolve(posisjon));
+    svarMedPosisjonFraForesporselen();
+    tegn();
+    await flush();
+    fireEvent.click(await leggTilBilde());
+    await flush();
+    expect(push).toHaveBeenCalledWith('/identify/result');
+    return JSON.parse(sessionStorage.getItem('identifyResult')!);
+  }
+
+  it('en lagret iOS-posisjon fra en time siden får sin egen tid, ikke trykkets', async () => {
+    const enTimeSiden = Date.now() - 60 * MIN;
+    const iOkta = await identifiserMedPosisjon({
+      timestamp: enTimeSiden,
+      coords: { latitude: 59.9706, longitude: 10.7286, accuracy: 65 }
+    });
+    expect(mutateAsync.mock.calls[0][0]).toMatchObject({ latitude: 59.9706, longitude: 10.7286 });
+    expect(iOkta.location).toEqual({ latitude: 59.9706, longitude: 10.7286, timestamp: enTimeSiden });
+  });
+
+  it('et tidsstempel foran enhetens klokke lagres som tiden posisjonen kom fram', async () => {
+    const foer = Date.now();
+    const iOkta = await identifiserMedPosisjon({
+      timestamp: foer + 30 * MIN,
+      coords: { latitude: 59.9706, longitude: 10.7286, accuracy: 12 }
+    });
+    expect(iOkta.location.timestamp).toBeGreaterThanOrEqual(foer);
+    expect(iOkta.location.timestamp).toBeLessThanOrEqual(Date.now());
+  });
+
+  it('uten et brukbart tidsstempel: ingen tid i økta — resultatsiden sier da at alderen er omtrentlig', async () => {
+    const iOkta = await identifiserMedPosisjon({ coords: { latitude: 59.9706, longitude: 10.7286, accuracy: 12 } });
+    expect(iOkta.location).toEqual({ latitude: 59.9706, longitude: 10.7286 });
   });
 });
 

@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { AiEdibilityBadge } from '@/components/identify/AiEdibilityBadge';
+import { isDangerousEdibility } from '@/lib/utils/edibility';
 import { IdentifySuggestion } from '@/types/identify';
 
 interface IdentifyResultProps {
@@ -32,6 +33,11 @@ export function IdentifyResult({ suggestions, selectedIndex, onSelect }: Identif
         // liten flate for kildeetikett), men de samme bildene står merket
         // «AI-databasen» i sammenligningsseksjonen rett under.
         const thumbUrl = suggestion.imageUrl ?? suggestion.similarImages?.[0] ?? null;
+        // Giftig, dødelig eller ukjent: sesongpilla blir nøytral og sier aldri
+        // «Topp-sesong». Samme regel som kalenderen (SeasonNow, YearTable) —
+        // «topp» og grønt leses som en anbefaling, og en grønn «Topp-sesong
+        // nå» ved et dødelig forslag i august var nettopp det.
+        const farlig = isDangerousEdibility(suggestion.edibility);
         return (
           <article
             key={suggestion.name}
@@ -85,8 +91,12 @@ export function IdentifyResult({ suggestions, selectedIndex, onSelect }: Identif
                   AiEdibilityBadge. */}
               <AiEdibilityBadge edibility={suggestion.edibility} />
               {suggestion.inSeason === true ? (
-                <span className="rounded-full bg-forest-100 px-2 py-0.5 text-xs font-medium text-forest-900">
-                  {suggestion.peakSeason ? t('peakSeasonNow') : t('inSeasonNow')}
+                <span
+                  className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                    farlig ? 'bg-gray-100 text-gray-700' : 'bg-forest-100 text-forest-900'
+                  }`}
+                >
+                  {suggestion.peakSeason && !farlig ? t('peakSeasonNow') : t('inSeasonNow')}
                 </span>
               ) : suggestion.inSeason === false ? (
                 <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900">

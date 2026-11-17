@@ -445,6 +445,16 @@ function IdentifyResultView() {
   const usikkerPaaSopp = payload.isMushroom === false;
   const lavBildelikhet = !usikkerPaaSopp && erLavBildelikhet(visteForslag);
 
+  // Hvor alderen på identifiseringsposisjonen kommer fra, avgjør hva teksten
+  // kan si. Uten fixets egen tid (historikken, eldre økter, en plattform uten
+  // tidsstempel) er den tiden siden identifiseringen, og posisjonen kan være
+  // eldre: iOS kan ha gitt en lagret. Med den er alderen fixets, og en lagret
+  // posisjon kan være langt eldre enn trykket på «Identifiser». Da beskriver
+  // teksten målingen, aldri trykket: «der jeg var da jeg identifiserte (for 45
+  // minutter siden)» ville pekt på stedet brukeren står ved soppen, mens
+  // koordinatene er der telefonen var for 45 minutter siden. Se maaltTidspunkt.
+  const omtrentligMaaletid = erOmtrentligMaaletid(payload);
+
   return (
     <PageWrapper>
       <section className="space-y-4">
@@ -535,10 +545,10 @@ function IdentifyResultView() {
             </>
           ) : posisjonsvalg === null && posisjon.status === 'klar' ? (
             <p className="mt-1">
-              {/* Uten fixets egen tid er alderen bare tiden siden siden så
-                  resultatet: iOS kan ha gitt en lagret, eldre posisjon. Da
-                  lover ikke teksten en presis alder. Se maaltTidspunkt. */}
-              {t(payload && erOmtrentligMaaletid(payload) ? 'positionFromIdentifyApprox' : 'positionFromIdentify', {
+              {/* Uten fixets egen tid lover ikke teksten en presis alder; med
+                  den sier den når telefonen målte, ikke når brukeren trykket.
+                  Se omtrentligMaaletid over. */}
+              {t(omtrentligMaaletid ? 'positionFromIdentifyApprox' : 'positionFromIdentify', {
                 age: alderTekst(identifiseringsposisjon.maaltMs)
               })}{' '}
               <span className="text-gray-600">
@@ -557,7 +567,9 @@ function IdentifyResultView() {
                   onChange={velgIdentifiseringsposisjon}
                 />
                 <span>
-                  {t('positionChooseIdentify', { age: alderTekst(identifiseringsposisjon.maaltMs) })}{' '}
+                  {t(omtrentligMaaletid ? 'positionChooseIdentify' : 'positionChooseMeasured', {
+                    age: alderTekst(identifiseringsposisjon.maaltMs)
+                  })}{' '}
                   <span className="text-gray-600">
                     {identifiseringsposisjon.lat.toFixed(5)}, {identifiseringsposisjon.lng.toFixed(5)}
                   </span>

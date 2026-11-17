@@ -132,10 +132,10 @@ function fixTidspunkt(location: unknown): number | null {
  * Når ble posisjonen i et resultat målt?
  *
  *  · `location.timestamp`, når identifiseringssiden har tatt med tiden selve
- *    fixet bærer. Det er den eneste presise kilden: iOS-pluginen kan svare
- *    med en lagret posisjon som er langt eldre enn trykket på «Identifiser»
- *    (den overser maximumAge, se useGeolocation.ts). Identifiseringssiden
- *    sender den ikke ennå; lesingen er her så den virker den dagen den gjør.
+ *    fixet bærer (medPosisjonstid i src/lib/identifications/okt-resultat.ts,
+ *    når plattformen oppgir en). Det er den eneste presise kilden:
+ *    iOS-pluginen kan svare med en lagret posisjon som er langt eldre enn
+ *    trykket på «Identifiser» (den overser maximumAge, se useGeolocation.ts).
  *  · Fra en fersk identifisering: `posisjonSettMs`, satt av resultatsiden
  *    første gang den leste resultatet.
  *  · Fra historikken (?id=): `createdAt` på raden.
@@ -161,6 +161,10 @@ export function maaltTidspunkt(payload: Maaletidskilde): number | null {
  * resultatet, ikke tiden fixet ble målt? Da kan posisjonen være eldre enn
  * alderen siden regner ut (telefonen kan ha gitt en lagret posisjon), og
  * teksten må si det i stedet for å love «for under ett minutt siden».
+ *
+ * Er det IKKE omtrentlig, er alderen fixets egen, og den kan være langt eldre
+ * enn trykket på «Identifiser». Da beskriver teksten målingen («Posisjonen
+ * telefonen målte …»), aldri trykket eller «der jeg var da jeg identifiserte».
  */
 export function erOmtrentligMaaletid(payload: Maaletidskilde): boolean {
   return fixTidspunkt(payload.location) === null;

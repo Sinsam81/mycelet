@@ -70,6 +70,15 @@ describe('spiselighet i AI-resultatet', () => {
     expect(forveksling).toContain('<EdibilityBadge edibility={dangerEdibility} />');
   });
 
+  it('dobbeltgjengeren får det rå merket bare når den ikke er mat', () => {
+    // Speilrader fra den farlige siden peker på matsoppen. Uten sperren fikk
+    // et forslag om falsk kantarell «Farlig dobbeltgjenger: Kantarell» med et
+    // grønt «Spiselig». Rendringen er låst i LookAlikeCheck.test.tsx.
+    expect(forveksling).toMatch(
+      /dangerEdibility\s*&&\s*!isRecommendableSpecies\(dangerEdibility\)\s*\?\s*<EdibilityBadge edibility=\{dangerEdibility\} \/>/
+    );
+  });
+
   it('kaller treffet bildelikhet, ikke «treff»', () => {
     // Å sjekke at t('matchLabel') finnes ville vært tomt — nøkkelen fantes før
     // også. Det som endret seg er VERDIEN: «treff» leses som en vurdering av

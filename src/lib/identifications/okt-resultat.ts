@@ -1,6 +1,7 @@
 /**
  * AI-resultatet som ligger i sessionStorage mellom identify-siden og
- * resultatsiden — og hva som skal skje med det når funnet er lagret.
+ * resultatsiden — når posisjonen i det ble målt (medPosisjonstid, nederst), og
+ * hva som skal skje med det når funnet er lagret.
  *
  * Feilen dette retter: nøkkelen ble aldri ryddet etter en vellykket lagring.
  * Gikk brukeren tilbake fra kartet, leste resultatsiden den samme payloaden
@@ -68,4 +69,52 @@ export function merkOktresultatSomLagret(
     // sessionStorage kan være sperret (privat modus). Funnet ER lagret; dette
     // er bare opprydding og skal aldri kunne felle lagringsflyten.
   }
+}
+
+/**
+ * Når ble posisjonen i resultatet målt? Fixets eget tidsstempel — men aldri
+ * senere enn da appen fikk posisjonen.
+ *
+ * Resultatsiden regner posisjonens alder fra `location.timestamp`
+ * (maaltTidspunkt i src/lib/findings/resultatposisjon.ts) og bruker den uten
+ * å spørre bare de første ti minuttene. Uten tidsstempelet regnet den fra da
+ * den selv leste resultatet. Men i iOS-skallet ser GPS-pluginen bort fra
+ * maximumAge, og CoreLocation kan svare med en posisjon fra en time siden —
+ * den gikk da gjennom som «for under ett minutt siden», og funnet ble lagret
+ * der telefonen sist hadde en posisjon, ikke der soppen sto.
+ *
+ * Taket er mottakstiden fordi tidsstempelet og enhetens klokke ikke alltid er
+ * samme klokke: på Android kan en GPS-måling bære satellittenes tid (se
+ * src/lib/map/fersk-posisjon.ts). Går enhetens klokke for sakte, ville et
+ * tidsstempel «i framtiden» gjort posisjonen yngre enn den er, så lenge
+ * siden er åpen. Med taket blir alderen aldri kortere enn tiden siden appen
+ * fikk posisjonen. Går klokka for fort, blir alderen for lang og brukeren
+ * spurt — den veien er det trygt å ta feil.
+ *
+ * @param fixTidsstempel ms siden epoken, fra plattformen (MaaltFix.timestamp)
+ * @param mottattMs      enhetens klokke i det posisjonen kom fram
+ * @returns undefined når plattformen ikke ga et brukbart tidsstempel — da
+ *          faller resultatsiden tilbake på sin egen, omtrentlige tid
+ */
+export function posisjonstid(fixTidsstempel: number | null | undefined, mottattMs: number): number | undefined {
+  if (typeof fixTidsstempel !== 'number' || !Number.isFinite(fixTidsstempel) || fixTidsstempel <= 0) return undefined;
+  if (!Number.isFinite(mottattMs)) return undefined;
+  return Math.min(fixTidsstempel, mottattMs);
+}
+
+/**
+ * Resultatet slik identify-siden legger det i økta: med posisjonens måletid i
+ * `location.timestamp` når plattformen ga en (se posisjonstid). Uten posisjon,
+ * eller uten et brukbart tidsstempel, er resultatet uendret.
+ */
+export function medPosisjonstid<T extends { location: { latitude: number | null; longitude: number | null } }>(
+  resultat: T,
+  fix: { timestamp?: number | null } | null | undefined,
+  mottattMs: number
+): T {
+  const maaletid = posisjonstid(fix?.timestamp, mottattMs);
+  if (maaletid === undefined || resultat.location.latitude == null || resultat.location.longitude == null) {
+    return resultat;
+  }
+  return { ...resultat, location: { ...resultat.location, timestamp: maaletid } };
 }

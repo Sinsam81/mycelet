@@ -7,6 +7,7 @@ import { AlertTriangle } from 'lucide-react';
 import { AiEdibilityBadge } from '@/components/identify/AiEdibilityBadge';
 import { EdibilityBadge } from '@/components/ui/EdibilityBadge';
 import { PhotoCredit } from '@/components/ui/PhotoCredit';
+import { isRecommendableSpecies } from '@/lib/prediction/recommendable';
 import { IdentifySuggestion, PhotoCreditInfo } from '@/types/identify';
 import { Edibility } from '@/types/species';
 
@@ -42,7 +43,8 @@ function PhotoCard({
    * Merket under navnet. Et spor, ikke en spiselighetsverdi, med vilje: de to
    * kortene har ULIKE regler. «Ditt forslag» er et AI-forslag og får aldri et
    * grønt «spiselig» (AiEdibilityBadge); den farlige forvekslingsarten er
-   * kuratert look_alikes-data og en advarsel, og beholder det rå merket.
+   * kuratert look_alikes-data og en advarsel, og beholder det rå merket — men
+   * bare når den ikke er mat. Se kallstedet.
    */
   badge: ReactNode;
   tone: 'chosen' | 'danger';
@@ -93,7 +95,14 @@ export function LookAlikeCheck({ suggestion }: { suggestion: IdentifySuggestion 
   // på reservebildet, krediterer vi feil fotograf for et helt annet bilde.
   const chosenImageUrl = suggestion.imageUrl ?? suggestion.similarImages?.[0] ?? null;
   const chosenImageCredit = suggestion.imageUrl ? suggestion.imageCredit : null;
+  // Det rå merket står bare på en tvilling som IKKE er mat. Serveren sender
+  // aldri en matsopp som dobbeltgjenger for et forslag som ikke er mat
+  // (visesSomFarligForveksling i enrich.ts), men et grønt «Spiselig» under
+  // «Farlig dobbeltgjenger» skal ikke kunne komme fra noen kilde — heller ikke
+  // fra et resultat som ble lagt i økta før den regelen fantes.
   const dangerEdibility = asEdibility(lookAlike.edibility);
+  const twinBadge =
+    dangerEdibility && !isRecommendableSpecies(dangerEdibility) ? <EdibilityBadge edibility={dangerEdibility} /> : null;
   // «Hvorfor de forveksles» og «Hvordan skille» kommer fra look_alikes og
   // finnes bare på norsk. De vises på alle språk — skilleteksten er
   // sikkerhetsteksten, og den skjules aldri — men merkes lang="nb", og en
@@ -134,7 +143,7 @@ export function LookAlikeCheck({ suggestion }: { suggestion: IdentifySuggestion 
           name={lookAlike.name}
           imageUrl={lookAlike.imageUrl}
           imageCredit={lookAlike.imageCredit}
-          badge={dangerEdibility ? <EdibilityBadge edibility={dangerEdibility} /> : null}
+          badge={twinBadge}
           tone="danger"
         />
       </div>

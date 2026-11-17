@@ -29,7 +29,7 @@ const forveksling = (felter: Partial<IdentifyLookAlike> = {}): IdentifyLookAlike
   ...felter
 });
 
-const forslag = (lookAlike: IdentifyLookAlike): IdentifySuggestion => ({
+const forslag = (lookAlike: IdentifyLookAlike, felter: Partial<IdentifySuggestion> = {}): IdentifySuggestion => ({
   name: 'Agaricus arvensis',
   norwegianName: 'Snøballsjampinjong',
   commonNames: [],
@@ -38,13 +38,14 @@ const forslag = (lookAlike: IdentifyLookAlike): IdentifySuggestion => ({
   description: null,
   taxonomy: null,
   similarImages: [],
-  dangerousLookAlikes: [lookAlike]
+  dangerousLookAlikes: [lookAlike],
+  ...felter
 });
 
-function rendrer(locale: 'nb' | 'sv', lookAlike = forveksling()) {
+function rendrer(locale: 'nb' | 'sv', lookAlike = forveksling(), felter: Partial<IdentifySuggestion> = {}) {
   return render(
     <NextIntlClientProvider locale={locale} timeZone={timeZoneForLocale(locale)} messages={locale === 'sv' ? sv : nb}>
-      <LookAlikeCheck suggestion={forslag(lookAlike)} />
+      <LookAlikeCheck suggestion={forslag(lookAlike, felter)} />
     </NextIntlClientProvider>
   );
 }
@@ -81,5 +82,42 @@ describe('norsk forvekslingstekst', () => {
     expect(screen.getByText(SKILLE)).toBeTruthy();
     expect(screen.queryByText(nb.LookAlikeCheck.norwegianTextNote)).toBeNull();
     expect(container.querySelector('[lang]')).toBeNull();
+  });
+});
+
+/**
+ * Merket på dobbeltgjengeren. Den kuraterte forvekslingsarten beholder det
+ * rå merket når den ikke er mat — det ER advarselen. Et grønt «Spiselig» under
+ * «Farlig dobbeltgjenger» skal derimot aldri vises, uansett hvor resultatet
+ * kom fra (serveren sender ikke lenger speilrader mot en matsopp, men et
+ * resultat lagt i økta før den regelen kan fortsatt ha en).
+ */
+describe('merket på dobbeltgjengeren', () => {
+  it.each(['nb', 'sv'] as const)('%s: en dødelig dobbeltgjenger får sitt røde merke', (locale) => {
+    rendrer(locale);
+    const katalog = locale === 'sv' ? sv : nb;
+    expect(screen.getByText(katalog.EdibilityBadge.deadly)).toBeTruthy();
+  });
+
+  it.each(['nb', 'sv'] as const)(
+    '%s: en matsopp under «Farlig dobbeltgjenger» får ikke et grønt «Spiselig»',
+    (locale) => {
+      // Speilraden falsk kantarell → kantarell, slik den kom fra serveren før.
+      rendrer(
+        locale,
+        forveksling({ name: 'Kantarell', danger: 'high', speciesId: 1, edibility: 'edible' }),
+        { name: 'Hygrophoropsis aurantiaca', norwegianName: 'Falsk kantarell', edibility: 'inedible' }
+      );
+      const katalog = locale === 'sv' ? sv : nb;
+      expect(screen.getByText(katalog.LookAlikeCheck.dangerousLookAlike)).toBeTruthy();
+      expect(screen.queryByText(katalog.EdibilityBadge.edible)).toBeNull();
+      // Forslagets eget merke står fortsatt.
+      expect(screen.getByText(katalog.EdibilityBadge.inedible)).toBeTruthy();
+    }
+  );
+
+  it('heller ikke «Spiselig — giftig rå» på en dobbeltgjenger som er mat', () => {
+    rendrer('nb', forveksling({ name: 'Rødnende fluesopp', danger: 'high', speciesId: 55, edibility: 'conditionally_edible' }));
+    expect(screen.queryByText(nb.EdibilityBadge.conditionallyEdible)).toBeNull();
   });
 });

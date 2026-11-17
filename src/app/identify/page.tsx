@@ -22,6 +22,10 @@ import { MAX_TOTAL_BASE64_CHARS } from '@/lib/utils/identify-images';
 import { isNativePlatform } from '@/lib/native/platform';
 import { captureNativePhoto, kameraFeil, type KameraFeil } from '@/lib/native/camera';
 import { meldIdentifiseringsfeil } from '@/lib/identifications/meld-feil';
+import { medPosisjonstid } from '@/lib/identifications/okt-resultat';
+
+/** Klokka, lest i hendelser — aldri under rendring. */
+const klokke = () => Date.now();
 
 /**
  * Legger historikk-kopien av bilde 1 i den private bøtta.
@@ -224,6 +228,9 @@ export default function IdentifyPage() {
       // har oppslaget en frist (pluginens timeout + margin), og en frist som
       // går ut, betyr at pluginen tidde. Det meldes, så det ikke er usynlig.
       const { fix: coords, tidsavbrudd } = await getOptionalPosition();
+      // Enhetens klokke i det posisjonen kom fram — taket for når den kan være
+      // målt. Se medPosisjonstid.
+      const posisjonMottattMs = klokke();
       if (tidsavbrudd) {
         meldIdentifiseringsfeil({ steg: 'posisjon', feil: new PosisjonTidsavbrudd(POSISJON_TIMEOUT_MS + NATIV_FRIST_MARGIN_MS) });
       }
@@ -249,14 +256,20 @@ export default function IdentifyPage() {
         void lastOppHistorikkbilde(filled[0].base64, result.historyImagePath);
       }
 
+      // Tiden fixet selv bærer følger posisjonen inn i økta. Resultatsiden
+      // regner alderen fra den, så en lagret iOS-posisjon fra en time siden
+      // gir spørsmålet om hvor funnet skal lagres, i stedet for å gå gjennom
+      // som «for under ett minutt siden» (src/lib/findings/resultatposisjon.ts).
+      const iOkta = medPosisjonstid(result, coords, posisjonMottattMs);
+
       // Kvotefeil HER ville vært grusomt: Kindwise-kallet er alt betalt og
       // kvoteenheten brukt. Tre bilder kan presse sessionStorage-kvoten, så
       // faller full payload, prøver vi igjen med bare første bilde (resultatet
       // og lagringsflyten overlever; stripen med ekstra bilder ofres).
       try {
-        sessionStorage.setItem('identifyResult', JSON.stringify(result));
+        sessionStorage.setItem('identifyResult', JSON.stringify(iOkta));
       } catch {
-        const slank = { ...result, originalImageDataUrls: [result.originalImageDataUrl] };
+        const slank = { ...iOkta, originalImageDataUrls: [iOkta.originalImageDataUrl] };
         sessionStorage.setItem('identifyResult', JSON.stringify(slank));
       }
       // Knappen forblir sperret til siden er byttet: slippes vakta før

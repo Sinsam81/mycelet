@@ -36,6 +36,44 @@ export interface Fix {
 }
 
 /**
+ * En posisjon med tiden plattformen sier den ble målt. Bare getOptionalPosition
+ * gir den ut (identifiseringen trenger den, se medPosisjonstid i
+ * src/lib/identifications/okt-resultat.ts); de andre engangsoppslagene gir
+ * bare koordinatene, som før.
+ */
+export interface MaaltFix extends Fix {
+  /**
+   * Når målingen ble gjort, i millisekunder siden epoken — samme enhet på alle
+   * plattformer: GeolocationPosition.timestamp i nettleseren (EpochTimeStamp),
+   * og `timestamp` fra @capacitor/geolocation 8.2.0 i skallet, som iOS fyller
+   * fra CLLocation.timestamp (millisecondsSinceUnixEpoch) og Android fra
+   * Location.time. Mangler når plattformen ikke oppga et brukbart tall.
+   *
+   * I iOS-skallet ser pluginen bort fra maximumAge, og CoreLocation kan svare
+   * med sin sist kjente posisjon — da er dette langt eldre enn kallet. Det er
+   * grunnen til at feltet finnes.
+   */
+  timestamp?: number;
+}
+
+/** Plattformens tidsstempel, når det er et brukbart tall. */
+function brukbarMaaletid(timestamp: unknown): number | undefined {
+  return typeof timestamp === 'number' && Number.isFinite(timestamp) && timestamp > 0 ? timestamp : undefined;
+}
+
+function somMaaltFix(coords: { latitude: number; longitude: number }, timestamp: unknown): MaaltFix {
+  const fix: MaaltFix = { latitude: coords.latitude, longitude: coords.longitude };
+  const maaletid = brukbarMaaletid(timestamp);
+  if (maaletid !== undefined) fix.timestamp = maaletid;
+  return fix;
+}
+
+/** Bare koordinatene — det getCurrentPositionOnce og getCurrentPositionIfGranted alltid har gitt. */
+function koordinater({ latitude, longitude }: Fix): Fix {
+  return { latitude, longitude };
+}
+
+/**
  * Pluginen lastes én gang og gjenbrukes — men det er MODULEN som mellomlagres,
  * aldri selve tillegget i et løfte.
  *
@@ -188,12 +226,12 @@ async function nativtOppslag(Geolocation: NativPlugin, options: typeof POSITION_
 }
 
 /** Selve oppslaget, uten tillatelsesspørsmål — kalleren har avklart tillatelsen først. */
-async function readCurrentPosition(options: typeof POSITION_OPTIONS): Promise<Fix> {
+async function readCurrentPosition(options: typeof POSITION_OPTIONS): Promise<MaaltFix> {
   if (isNativePlatform()) {
     const { Geolocation } = await hentGeolocationModul();
     // Frist og samordnet nullstilling — se over.
     const position = await nativtOppslag(Geolocation, options);
-    return { latitude: position.coords.latitude, longitude: position.coords.longitude };
+    return somMaaltFix(position.coords, position.timestamp);
   }
 
   if (!navigator.geolocation) {
@@ -202,7 +240,7 @@ async function readCurrentPosition(options: typeof POSITION_OPTIONS): Promise<Fi
 
   return new Promise((resolve, reject) => {
     navigator.geolocation.getCurrentPosition(
-      (position) => resolve({ latitude: position.coords.latitude, longitude: position.coords.longitude }),
+      (position) => resolve(somMaaltFix(position.coords, position.timestamp)),
       (error) => reject(new Error(error.message)),
       options
     );
@@ -228,7 +266,7 @@ export async function getCurrentPositionOnce(): Promise<Fix> {
       throw new Error('Posisjonstilgang er avslått. Slå den på i Innstillinger for å bruke kartet.');
     }
   }
-  return readCurrentPosition(POSITION_OPTIONS);
+  return koordinater(await readCurrentPosition(POSITION_OPTIONS));
 }
 
 /** Hvor lenge et menneske kan bruke på en tillatelsesdialog før vi går videre uten. */
@@ -248,8 +286,12 @@ export const TILLATELSE_FRIST_MS = 60_000;
  * Tillatelsesdialogen (iOS eller nettleser) får TILLATELSE_FRIST_MS, så et
  * menneske rekker å lese den, men en dialog som aldri besvares (en lukket
  * dørhenger i Firefox) ikke kan holde knappen for alltid.
+ *
+ * Fixet bærer tiden plattformen sier det ble målt (`timestamp`, se MaaltFix).
+ * Identifiseringen legger den i resultatet, så resultatsiden kan se at en
+ * lagret iOS-posisjon er gammel i stedet for å tro at den er fra trykket.
  */
-export async function getOptionalPosition(): Promise<{ fix: Fix | null; tidsavbrudd: boolean }> {
+export async function getOptionalPosition(): Promise<{ fix: MaaltFix | null; tidsavbrudd: boolean }> {
   try {
     if (isNativePlatform()) {
       const { Geolocation } = await hentGeolocationModul();
@@ -300,7 +342,7 @@ export async function hasGeolocationPermission(): Promise<boolean> {
 export async function getCurrentPositionIfGranted(): Promise<Fix | null> {
   if (!(await hasGeolocationPermission())) return null;
   try {
-    return await readCurrentPosition(SILENT_POSITION_OPTIONS);
+    return koordinater(await readCurrentPosition(SILENT_POSITION_OPTIONS));
   } catch {
     return null;
   }

@@ -4,6 +4,7 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { NextIntlClientProvider } from 'next-intl';
 import type { ReactNode } from 'react';
 import nb from '../../../../../messages/nb.json';
+import sv from '../../../../../messages/sv.json';
 
 /**
  * Hvor et funn fra AI-resultatet lagres. Før ble posisjonen fra
@@ -88,10 +89,10 @@ async function flush() {
   }
 }
 
-async function tegn(payload: unknown) {
+async function tegn(payload: unknown, locale: 'nb' | 'sv' = 'nb') {
   sessionStorage.setItem('identifyResult', JSON.stringify(payload));
   render(
-    <NextIntlClientProvider locale="nb" messages={nb} timeZone="Europe/Oslo">
+    <NextIntlClientProvider locale={locale} messages={locale === 'sv' ? sv : nb} timeZone="Europe/Oslo">
       <ResultPage />
     </NextIntlClientProvider>
   );
@@ -152,15 +153,49 @@ describe('posisjonen et AI-funn lagres med', () => {
     expect(finnFerskPosisjon).not.toHaveBeenCalled();
   });
 
-  it('viser en presis alder når fixet bærer sin egen tid', async () => {
+  it('viser fixets presise alder og knytter den til målingen, ikke til trykket', async () => {
+    // Siden så resultatet nå, men fixet er to minutter gammelt. Alderen er
+    // fixets, så teksten kan ikke si at det var da brukeren trykket
+    // «Identifiser» — det trykket var nettopp.
     await tegn(resultat({ latitude: 60.1, longitude: 10.7, timestamp: NAA - 2 * MIN }, NAA));
-    expect(screen.getByText(/Der du var da du trykket «Identifiser» \(for 2 minutter siden\)/)).toBeTruthy();
+    expect(screen.getByText(/Posisjonen telefonen målte for 2 minutter siden\./)).toBeTruthy();
+    expect(document.body.textContent).not.toMatch(/trykket «Identifiser»/);
     expect(screen.queryByRole('radio')).toBeNull();
   });
 
   it('spør når telefonen ga en gammel lagret posisjon, selv om siden nettopp så resultatet', async () => {
     await tegn(resultat({ latitude: 60.1, longitude: 10.7, timestamp: NAA - 60 * MIN }));
     expect(screen.getAllByRole('radio')).toHaveLength(2);
+  });
+
+  it('kaller ikke en gammel lagret posisjon «der jeg var da jeg identifiserte»', async () => {
+    // Bildet tatt ved soppen og identifisert for 20 sekunder siden, men
+    // telefonen ga en posisjon målt for 45 minutter siden — parkeringsplassen,
+    // eller hjemme. «Da jeg identifiserte» ville pekt på stedet brukeren står,
+    // mens koordinatene er der telefonen var for 45 minutter siden.
+    await tegn(resultat({ latitude: 60.1, longitude: 10.7, timestamp: NAA - 45 * MIN }, NAA - 20_000));
+    expect(screen.getAllByRole('radio')).toHaveLength(2);
+    expect(screen.getByRole('radio', { name: /^Der telefonen målte posisjonen \(for 45 minutter siden\)/ })).toBeTruthy();
+    expect(document.body.textContent).not.toMatch(/da jeg identifiserte/);
+
+    // Valgt med vilje lagres den likevel der: brukeren har sett alderen.
+    fireEvent.click(screen.getByRole('checkbox'));
+    fireEvent.click(screen.getByRole('radio', { name: /^Der telefonen målte posisjonen/ }));
+    fireEvent.click(lagreKnapp());
+    await flush();
+    expect(lagret[0]).toMatchObject({ latitude: 60.1, longitude: 10.7 });
+  });
+
+  it('sier det samme på svensk', async () => {
+    await tegn(resultat({ latitude: 60.1, longitude: 10.7, timestamp: NAA - 2 * MIN }, NAA), 'sv');
+    expect(screen.getByText(/Positionen telefonen mätte för 2 minuter sedan\./)).toBeTruthy();
+    expect(document.body.textContent).not.toMatch(/tryckte på ”Identifiera”/);
+    cleanup();
+    sessionStorage.clear();
+
+    await tegn(resultat({ latitude: 60.1, longitude: 10.7, timestamp: NAA - 45 * MIN }, NAA - 20_000), 'sv');
+    expect(screen.getByRole('radio', { name: /^Där telefonen mätte positionen \(för 45 minuter sedan\)/ })).toBeTruthy();
+    expect(document.body.textContent).not.toMatch(/när jag identifierade/);
   });
 
   it('stempler tiden første gang et ferskt resultat leses, så en ny lasting ikke gjør det ferskt igjen', async () => {
