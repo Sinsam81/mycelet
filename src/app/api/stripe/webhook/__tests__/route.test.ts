@@ -480,9 +480,14 @@ describe('spøkelsesabonnement: bare et uttrykkelig «finnes ikke» sier opp', (
 
 /**
  * Ingen av kallene ut hadde en frist: Stripes SDK venter 80 s per forsøk (med
- * ett nytt forsøk), og Supabase Auth og Resend venter til plattformen dreper
+ * ett nytt forsøk), og Supabase Auth og Resend ventet til plattformen drepte
  * funksjonen — lenge etter at Stripe har gitt opp og lagt hendelsen i kø på
  * nytt. Signaturverifiseringen og hendelsesloggen er urørt.
+ *
+ * Resend har siden fått sin egen frist inne i sendEpost (RESEND_FRIST_MS, romslig
+ * med vilje). Ruta la en strammere frist på 8 s over den, og da ble en påminnelse
+ * som kom fram etter 9 s logget som mislykket. Nå venter ruta på sendEpost sitt
+ * eget svar.
  */
 describe('frister på kallene ut', () => {
   const OM_TRE_DAGER = () => Math.floor(Date.now() / 1000) + 3 * 86_400;
@@ -569,26 +574,41 @@ describe('frister på kallene ut', () => {
     expect(sisteHendelsesStatus()).toBe('processed');
   });
 
-  it('prøvepåminnelsen: Resend svarer aldri → mislykket sending etter fristen, hendelsen behandlet', async () => {
+  it('prøvepåminnelsen: ruta legger ingen strammere frist over sendEpost — et tregt, vellykket svar er sendt', async () => {
     vi.useFakeTimers();
-    epost.sendEpost.mockImplementation(() => aldri());
+    // Kommer fram etter 12 s: over de 8 s ruta før ga Resend, under fristen
+    // sendEpost selv har.
+    epost.sendEpost.mockImplementation(
+      () => new Promise((resolve) => setTimeout(() => resolve({ ok: true, detalj: 'sendt' }), 12_000))
+    );
 
     let ferdig = false;
     const lofte = postEvent(trialEvent()).then((res) => {
       ferdig = true;
       return res;
     });
-    await vi.advanceTimersByTimeAsync(7_999);
+    await vi.advanceTimersByTimeAsync(11_999);
     expect(ferdig).toBe(false);
     await vi.advanceTimersByTimeAsync(2);
 
     const res = await lofte;
     expect(res.status).toBe(200);
     expect(epost.sendEpost).toHaveBeenCalledTimes(1);
-    expect(warnings.find((w) => w.msg === 'stripe.prove_paaminnelse.sending_feilet')?.ctx).toMatchObject({
-      detalj: 'resend: ingen svar på 8000 ms'
-    });
+    expect(infos.map((i) => i.msg)).toContain('stripe.prove_paaminnelse.sendt');
+    expect(warnings.map((w) => w.msg)).not.toContain('stripe.prove_paaminnelse.sending_feilet');
     expect(sisteHendelsesStatus()).toBe('processed');
+  });
+
+  it('prøvepåminnelsen: fristene på veien får plass under taket for hele kjøringen', async () => {
+    // Verste fall for trial_will_end: rabatten hentes (Stripe, ett nytt forsøk),
+    // brukeren slås opp (OPPSLAG_FRIST_MS i ruta) og e-posten sendes
+    // (sendEpost sin egen frist). Blir summen større enn taket, drepes
+    // funksjonen før sendEpost rekker å svare, og hendelsen står som «received».
+    // Ti sekunder er margin til databasekallene, som ikke har egen frist.
+    const { RESEND_FRIST_MS } = await vi.importActual<typeof import('@/lib/email/send')>('@/lib/email/send');
+    const stripeVerstefall = STRIPE_KALL.timeout * (1 + STRIPE_KALL.maxNetworkRetries);
+    const oppslagsfrist = 8_000;
+    expect(maxDuration * 1000).toBeGreaterThanOrEqual(stripeVerstefall + oppslagsfrist + RESEND_FRIST_MS + 10_000);
   });
 });
 

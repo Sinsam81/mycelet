@@ -399,13 +399,18 @@ describe('bøyde former — flertall og bestemt form', () => {
     expect(rangerArt(art('Vanlig morkel'), 'morkler', 'nb')).toBeNull();
   });
 
-  it.each(['nb', 'sv'])('hver art står først på navnet sitt med en hvilken som helst endelse bak (%s)', (locale) => {
-    for (const rad of ARTSKATALOG) {
-      const visningsnavn = getSpeciesDisplayName(rad, locale);
-      for (const endelse of BOYNINGSENDELSER) {
+  // 80 arter × 18 endelser = 1 440 søk mot hele katalogen per språk. Som én
+  // test per språk tok det 0,6 s på en rolig maskin, men 7–10 s når andre
+  // testsuiter kjørte samtidig: over vitests frist på 5 s, og hele kjøringen
+  // ble rød uten at noe var galt. Én test per språk og endelse gjør de samme
+  // søkene, og hver av dem ligger langt under fristen.
+  describe.each(['nb', 'sv'])('hver art står først på navnet sitt med en hvilken som helst endelse bak (%s)', (locale) => {
+    it.each(BOYNINGSENDELSER)('«-%s»', (endelse) => {
+      for (const rad of ARTSKATALOG) {
+        const visningsnavn = getSpeciesDisplayName(rad, locale);
         expect(sokIArter(ARTSKATALOG, visningsnavn + endelse, locale)[0], `${visningsnavn} + ${endelse}`).toBe(rad);
       }
-    }
+    });
   });
 });
 

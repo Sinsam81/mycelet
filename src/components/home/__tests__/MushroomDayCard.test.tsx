@@ -624,16 +624,23 @@ describe('MushroomDayCard — prognosen huskes mellom åpninger', () => {
     expect(kallTil(BERGEN)).toBe(2);
   });
 
-  it('en ny dag er en ny prognose: gårsdagens svar tegnes aldri som dagens', async () => {
-    vi.setSystemTime(new Date('2026-09-15T23:55:00Z'));
+  // Ruta bytter dag ved midnatt i Oslo (osloIDag), og nøkkelen må bytte samtidig.
+  // Med UTC-datoen i nøkkelen var gårsdagens svar fortsatt «dagens» den første
+  // timen (vintertid) eller de to første (sommertid) av en ny dag. Begge
+  // tidspunktene i hvert par har samme UTC-dato.
+  it.each([
+    ['sommertid', '2026-09-15T21:55:00Z', '2026-09-15T22:05:00Z'],
+    ['vintertid', '2026-11-16T22:55:00Z', '2026-11-16T23:05:00Z']
+  ])('en ny dag er en ny prognose — midnatt i Oslo, %s: gårsdagens svar tegnes aldri som dagens', async (_tid, foer, etter) => {
+    vi.setSystemTime(new Date(foer)); // 23:55 i Oslo
     lagreHusketPosisjon(BERGEN.lat, BERGEN.lng);
     const klient = nyKlient();
     tegn({ klient });
     await ring(81);
     cleanup();
 
-    // Ti minutter senere — innenfor kvarteret, men over midnatt i rutas klokke (UTC).
-    vi.setSystemTime(new Date('2026-09-16T00:05:00Z'));
+    // Ti minutter senere — innenfor kvarteret, men over midnatt i rutas klokke (Oslo).
+    vi.setSystemTime(new Date(etter)); // 00:05 i Oslo
     const nytt = utsatt();
     svarPerRute[rute(BERGEN)] = () => nytt.løfte;
     tegn({ klient });
@@ -641,6 +648,23 @@ describe('MushroomDayCard — prognosen huskes mellom åpninger', () => {
     expect(venter()).toBe(true);
     await act(async () => nytt.slipp(ok(40)));
     await ring(40);
+  });
+
+  it('midnatt i UTC er ingen ny dag for ruta: et ferskt svar står, uten nytt kall', async () => {
+    // 01:55 og 02:05 norsk sommertid, begge 16. september.
+    vi.setSystemTime(new Date('2026-09-15T23:55:00Z'));
+    lagreHusketPosisjon(BERGEN.lat, BERGEN.lng);
+    const klient = nyKlient();
+    tegn({ klient });
+    await ring(81);
+    cleanup();
+
+    vi.setSystemTime(new Date('2026-09-16T00:05:00Z'));
+    tegn({ klient });
+    expect(harRing(81)).toBe(true);
+    expect(venter()).toBe(false);
+    await act(async () => {});
+    expect(kallTil(BERGEN)).toBe(1);
   });
 
   it('språket er en del av nøkkelen: et norsk svar tegnes aldri for en svensk leser', async () => {

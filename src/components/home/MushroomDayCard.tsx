@@ -16,6 +16,7 @@ import { lagreHusketPosisjon, lesHusketPosisjon, sammeRute } from '@/lib/map/hus
 import { posisjonsVisning } from '@/lib/map/posisjon-visning';
 import { standardPosisjon } from '@/lib/map/standard-posisjon';
 import { nearestRegion } from '@/lib/prediction/tile-regions';
+import { osloIDag } from '@/lib/api/oslo-dag';
 import type { HJEM_OMRADER } from '@/lib/bruk/bruksdag';
 
 interface DayPoint {
@@ -94,7 +95,7 @@ export const PROGNOSE_NYE_FORSOK = 1;
  *  · ruta — to desimaler, samme avrunding som adressen og rutas eget lager;
  *  · språket — dommen, banneret og ukedagene er tekst på leserens språk, og et
  *    lager uten språk i nøkkelen serverer første lesers språk til alle;
- *  · dagen — «i dag» i svaret er rutas UTC-dato. Et svar fra i går skal aldri
+ *  · dagen — «i dag» i svaret er rutas Oslo-dato. Et svar fra i går skal aldri
  *    kunne tegnes som dagens.
  * `kilde` («egen» / «standard») står IKKE her: den sier hvor posisjonen kom
  * fra, ikke hva prognosen er, og følger posisjonen i kortets egen tilstand.
@@ -102,8 +103,15 @@ export const PROGNOSE_NYE_FORSOK = 1;
 export const prognoseNokkel = (p: { lat: number; lng: number }, locale: string, dag: string) =>
   ['mushroom-forecast', p.lat.toFixed(2), p.lng.toFixed(2), locale, dag] as const;
 
-/** Rutas «i dag»: UTC-datoen (todayKey i /api/mushroom-forecast). */
-const utcDag = (naar: Date) => naar.toISOString().slice(0, 10);
+/**
+ * Rutas «i dag»: Oslo-datoen, samme kall som todayKey i /api/mushroom-forecast.
+ *
+ * Nøkkelen sto på UTC-datoen etter at ruta hadde gått over til Oslo. Da byttet
+ * nøkkelen dag ved UTC-midnatt, men ruta (og «I dag» i svaret) ved midnatt i
+ * Oslo, og den første timen (vinter) eller de to første (sommer) av en ny dag
+ * kunne gårsdagens stripe tegnes som «I dag» — fra minnet, uten nytt kall.
+ */
+const rutasDag = (naar: Date) => osloIDag(naar).dato;
 
 async function hentPrognose(p: { lat: number; lng: number }): Promise<Forecast> {
   // Grovkorn til ~1 km FØR posisjonen legges i en URL. Hjemskjermen lastes
@@ -204,8 +212,8 @@ export function MushroomDayCard({
   /** Frosset ved første data: én hjem-rad per montering, med kilden kortet viste. */
   const [registrert, setRegistrert] = useState<Kilde | null>(null);
   const klarSendt = useRef(false);
-  /** Dagen kortet ble åpnet. En ny åpning etter midnatt får ny nøkkel, og dermed nytt svar. */
-  const [dag] = useState(() => utcDag(new Date()));
+  /** Dagen kortet ble åpnet. En ny åpning etter midnatt i Oslo får ny nøkkel, og dermed nytt svar. */
+  const [dag] = useState(() => rutasDag(new Date()));
 
   // 1. Hvor? Se dokkommentaren over. Kjøres på nytt ved språkbytte, fordi
   // standardområdet følger språket — bruksdagen og hendelsen er alt frosset.

@@ -45,7 +45,13 @@ export const maxDuration = 60;
  */
 const STRIPE_KALL = { timeout: 10_000, maxNetworkRetries: 1 } as const satisfies Stripe.RequestOptions;
 
-/** Supabase Auth (getUserById) og Resend har ingen egen frist; de får denne. */
+/**
+ * Supabase Auth (getUserById) har ingen egen frist; oppslaget får denne.
+ * Resend får den IKKE: sendEpost har sin egen (RESEND_FRIST_MS i
+ * src/lib/email/send.ts), som er romslig med vilje — en treg, men vellykket
+ * utsending skal ikke regnes som feilet. Lå denne strammere fristen over, ble
+ * en påminnelse som kom fram etter 8–15 s logget som «sending_feilet».
+ */
 const OPPSLAG_FRIST_MS = 8_000;
 
 /** Løftet, eller en avvisning når fristen er ute. Tidtakeren ryddes uansett utfall. */
@@ -390,13 +396,11 @@ async function sendProvePaaminnelse(
   });
 
   try {
-    // sendEpost har ingen egen frist. Går denne ut, havner det i catch-en
-    // under som en mislykket sending — logget, og hendelsen behandlet.
-    const res = await medFrist(
-      sendEpost({ til: email, ...epost, idempotensNokkel: `stripe/prove-slutt/${subscription.id}` }),
-      OPPSLAG_FRIST_MS,
-      'resend'
-    );
+    // Ingen medFrist her: sendEpost har sin egen frist (RESEND_FRIST_MS) og
+    // svarer { ok: false } når den går ut — se OPPSLAG_FRIST_MS over. Den
+    // kaster ikke; catch-en under er bare et nett, og også der er utfallet en
+    // mislykket sending: logget, og hendelsen behandlet.
+    const res = await sendEpost({ til: email, ...epost, idempotensNokkel: `stripe/prove-slutt/${subscription.id}` });
     if (res.ok) {
       log.info('stripe.prove_paaminnelse.sendt', {
         userId,

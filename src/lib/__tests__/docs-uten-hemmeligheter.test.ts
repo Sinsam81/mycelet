@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { readFileSync, readdirSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { readFileSync } from 'node:fs';
+import { basename, join } from 'node:path';
+import { repoFiler } from './repo-filer';
 
 /**
- * Ingen hemmeligheter i klartekst under docs/.
+ * Ingen hemmeligheter i klartekst i noe som sjekkes inn.
  *
  * ═══════════════════════════════════════════════════════════════════════════
  * TRE LEKKASJER, SAMME ÅRSAK
@@ -26,16 +27,44 @@ import { join } from 'node:path';
  * REGELEN: en oppskrift skal si HVOR hemmeligheten ligger, aldri hva den er.
  *   ✅  «logg inn som qa-autotest@mycelet.com (passord i passordbehandleren)»
  *   ❌  «logg inn: qa-autotest@mycelet.com / Kantarell2026!»
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ * HVILKE FILER
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * Vakta leste før docs/ med de strengeste reglene og en fast liste kataloger
+ * med resten. Utenfor sto rotfilene (CLAUDE.md, README.md, AGENTS.md,
+ * .env.example), public/ utenom landing, ios/, android/ og .github/, og
+ * filtypene .plist, .xml, .gradle og .properties. CLAUDE.md er fila agentene
+ * skriver mest i, og den beskriver QA-kontoen: en linje i formatet til den
+ * tredje lekkasjen der hadde latt alle testene stå grønne. gitleaks er ikke
+ * noe nett for slikt — den slapp passordet til Apple-kontoen gjennom.
+ *
+ * Nå kommer fillista fra git (repo-filer.ts): alt som er sjekket inn, pluss nye
+ * filer som ikke er ignorert. Hver tekstfil leses; binærfiler kjennes på en
+ * NUL-byte tidlig i fila, samme kjennetegn som git bruker. Markdown-reglene
+ * gjelder hver .md, også i roten.
  */
 
-const DOCS = join(process.cwd(), 'docs');
+const ROT = process.cwd();
 
-function markdownfiler(katalog: string): string[] {
-  return readdirSync(katalog).flatMap((navn) => {
-    const sti = join(katalog, navn);
-    if (statSync(sti).isDirectory()) return markdownfiler(sti);
-    return navn.endsWith('.md') ? [sti] : [];
-  });
+/** Hver tekstfil git ville tatt med i neste commit, med innholdet. */
+const TEKSTER: ReadonlyMap<string, string> = new Map(
+  repoFiler(ROT).flatMap((sti) => {
+    const innhold = readFileSync(join(ROT, sti));
+    return innhold.subarray(0, 8000).includes(0) ? [] : [[sti, innhold.toString('utf8')] as const];
+  })
+);
+const tekstfiler = [...TEKSTER.keys()];
+
+/** Linjene i en fil, med linjenummer fra 1. */
+function linjer(sti: string): Array<[nr: number, linje: string]> {
+  return (TEKSTER.get(sti) ?? '').split('\n').map((linje, i) => [i + 1, linje]);
+}
+
+/** Verdien som traff, byttet ut — feilmeldingen havner i CI-logger, og repoet er offentlig. */
+function skjul(linje: string, verdi: string): string {
+  return linje.split(verdi).join('<skjult>').trim().slice(0, 100);
 }
 
 /**
@@ -69,30 +98,31 @@ const MØNSTRE: ReadonlyArray<{ navn: string; regex: RegExp; hvorfor: string }> 
   }
 ];
 
-describe('docs/ inneholder ingen hemmeligheter i klartekst', () => {
-  const filer = markdownfiler(DOCS);
+describe('markdown i repoet inneholder ingen hemmeligheter i klartekst', () => {
+  const filer = tekstfiler.filter((sti) => /\.mdx?$/.test(sti));
 
-  it('finner faktisk dokumentene — ellers tester vi ingenting', () => {
+  it('finner faktisk dokumentene, også dem i roten — ellers tester vi ingenting', () => {
     expect(filer.length).toBeGreaterThan(5);
+    expect(filer.some((sti) => sti.startsWith('docs/'))).toBe(true);
+    expect(filer).toContain('CLAUDE.md');
+    expect(filer).toContain('README.md');
   });
 
   it('har ingen passord, nøkler eller kontonummer skrevet ut', () => {
     const funn: string[] = [];
     for (const sti of filer) {
-      const linjer = readFileSync(sti, 'utf8').split('\n');
-      linjer.forEach((linje, i) => {
+      for (const [nr, linje] of linjer(sti)) {
         // Linjer som beskriver selve hendelsen skal ikke felle testen.
-        if (/kompromittert|lekket|byttet|sto i klartekst|aldri i en fil|BYTT DET/i.test(linje)) return;
+        if (/kompromittert|lekket|byttet|sto i klartekst|aldri i en fil|BYTT DET/i.test(linje)) continue;
         for (const { navn, regex, hvorfor } of MØNSTRE) {
           regex.lastIndex = 0;
           const m = regex.exec(linje);
           if (!m) continue;
           const verdi = m[1] ?? m[0];
           if (PEKER_VIDERE.test(verdi) || PEKER_VIDERE.test(linje)) continue;
-          const fil = sti.slice(process.cwd().length + 1);
-          funn.push(`${fil}:${i + 1} — ${navn}: ${hvorfor}\n    ${linje.trim().slice(0, 100)}`);
+          funn.push(`${sti}:${nr} — ${navn}: ${hvorfor}\n    ${skjul(linje, verdi)}`);
         }
-      });
+      }
     }
     expect(
       funn,
@@ -105,42 +135,22 @@ describe('docs/ inneholder ingen hemmeligheter i klartekst', () => {
 /**
  * Samme regel, bredere nett.
  *
- * Testen over leser bare markdown under docs/. Et skript med et passord i en
- * konstant, eller en privat e-postadresse i en kommentar, en testfil eller en
- * migrasjon, gikk derfor rett forbi. Denne delen leser tekstfilene i alle
- * katalogene som sjekkes inn.
+ * Testen over leser bare markdown. Et skript med et passord i en konstant,
+ * en privat e-postadresse i en kommentar, en testfil eller en migrasjon, eller
+ * en ekte nøkkel i .env.example gikk derfor rett forbi. Denne delen leser hver
+ * tekstfil.
  *
- * To regler:
- *   1. Ingen hemmelighet som strengkonstant i skript, tester og migrasjoner
- *      (`const PASSWORD = '…'`). Les verdien fra miljøet.
+ * Tre regler:
+ *   1. Ingen hemmelighet som strengkonstant (`const PASSWORD = '…'`). Les
+ *      verdien fra miljøet. Gjelder ikke src/ og messages/, der «passord» og
+ *      «token» er UI-tekst og navn i koden.
  *   2. Ingen adresser hos private e-postleverandører. Eksempler og testdata
  *      skal bruke example.com / example.org — private e-postadresser hører
  *      ikke hjemme i et offentlig repo, uansett hvem de tilhører.
+ *   3. I en .env-fil står en nøkkel, en hemmelighet eller et passord tomt
+ *      eller som plassholder (`sk_test_xxxxx`, `your-api-key-here`, `eyJ…...`)
+ *      — også på kommenterte linjer.
  */
-
-const ROT = process.cwd();
-const TEKSTFIL = /\.(md|mdx|mjs|cjs|js|jsx|ts|tsx|sql|json|html|txt|ya?ml)$/;
-const HOPP_OVER = new Set(['node_modules', '.next', 'worktrees', '.auth', '.temp', '.vercel']);
-
-function tekstfiler(katalog: string): string[] {
-  let navnene: string[];
-  try {
-    navnene = readdirSync(katalog);
-  } catch {
-    return [];
-  }
-  return navnene.flatMap((navn) => {
-    if (HOPP_OVER.has(navn)) return [];
-    const sti = join(katalog, navn);
-    if (statSync(sti).isDirectory()) return tekstfiler(sti);
-    return TEKSTFIL.test(navn) ? [sti] : [];
-  });
-}
-
-/** Skript, tester og migrasjoner — ikke src/ og messages/, der «passord» er UI-tekst. */
-const KODEKATALOGER = ['docs', 'scripts', '.claude', 'e2e', 'supabase', 'content'];
-/** E-postregelen gjelder også kildekoden. */
-const ALLE_KATALOGER = [...KODEKATALOGER, 'src', 'messages', 'public/landing'];
 
 const HEMMELIG_KONSTANT =
   /(?:PASSWORD|PASSORD|PASSWD|SECRET|TOKEN)\w*\s*[:=]\s*['"`]([^'"`\s]{8,})['"`]/i;
@@ -157,17 +167,49 @@ const PRIVAT_ADRESSE = new RegExp(
   'i'
 );
 
-function relativ(sti: string): string {
-  return sti.slice(ROT.length + 1);
+/** «NAVN=verdi» i en .env-fil, også bak #. */
+const ENV_LINJE = /^\s*#?\s*([A-Z][A-Z0-9_]*)\s*=(.*)$/;
+/** Navn som peker på noe hemmelig. En DSN er det ikke — den ligger i klientkoden. */
+const ENV_HEMMELIG_NAVN = /(?:KEY|SECRET|TOKEN|PASSWORD|PASSORD|PASSWD|AUTH|CLIENT_ID)$/;
+/** Tom, eller tydelig en plassholder. */
+const ENV_PLASSHOLDER = /^$|x{3,}|\.\.\.|…|<[^>]+>|^your-/i;
+
+/** Verdien i en .env-linje uten anførselstegn og halekommentar — eller null når den er lov. */
+function ekteEnvVerdi(linje: string): string | null {
+  const m = ENV_LINJE.exec(linje);
+  if (!m || !ENV_HEMMELIG_NAVN.test(m[1])) return null;
+  const verdi = m[2]
+    .replace(/\s+#.*$/, '')
+    .trim()
+    .replace(/^(['"])(.*)\1$/, '$2');
+  return ENV_PLASSHOLDER.test(verdi) ? null : verdi;
 }
 
 describe('innsjekkede filer inneholder verken hemmeligheter eller private e-postadresser', () => {
-  const kodefiler = KODEKATALOGER.flatMap((k) => tekstfiler(join(ROT, k)));
-  const allefiler = ALLE_KATALOGER.flatMap((k) => tekstfiler(join(ROT, k)));
+  /** Alt utenom src/ og messages/, der «passord» og «token» er UI-tekst og navn i koden. */
+  const kodefiler = tekstfiler.filter((sti) => !/^(?:src|messages)\//.test(sti));
+  const envfiler = tekstfiler.filter((sti) => basename(sti).startsWith('.env'));
 
   it('finner faktisk filene — ellers tester vi ingenting', () => {
     expect(kodefiler.length).toBeGreaterThan(50);
-    expect(allefiler.length).toBeGreaterThan(kodefiler.length);
+    expect(tekstfiler.length).toBeGreaterThan(kodefiler.length);
+    expect(envfiler).toContain('.env.example');
+  });
+
+  it('leser også det den gamle kataloglista gikk forbi', () => {
+    const forbigatt: ReadonlyArray<[hva: string, sti: RegExp]> = [
+      ['rotfilene', /^[^/]+\.md$/],
+      ['public/ utenom landing', /^public\/(?!landing\/)/],
+      ['ios/', /^ios\//],
+      ['.github/', /^\.github\//],
+      ['.plist', /\.plist$/],
+      ['.xml', /\.xml$/],
+      ['.gradle', /\.gradle$/],
+      ['.properties', /\.properties$/]
+    ];
+    // Er en av dem borte fra repoet med vilje, fjernes linja her.
+    const mangler = forbigatt.filter(([, sti]) => !kodefiler.some((f) => sti.test(f))).map(([hva]) => hva);
+    expect(mangler).toEqual([]);
   });
 
   it('mønstrene treffer det de skal, og ikke det de ikke skal', () => {
@@ -186,19 +228,31 @@ describe('innsjekkede filer inneholder verken hemmeligheter eller private e-post
     expect(PRIVAT_ADRESSE.test('post@mycelet.com')).toBe(false);
     // Et håndtak uten lokaldel er ikke en adresse.
     expect(PRIVAT_ADRESSE.test(['', 'gmail.com'].join('@'))).toBe(false);
+
+    // .env: en ekte verdi feller, også bak # og i anførselstegn …
+    const ekte = ['re_', 'Eksempel', 'verdi99'].join('');
+    expect(ekteEnvVerdi(`RESEND_API_KEY=${ekte}`)).toBe(ekte);
+    expect(ekteEnvVerdi(`# CRON_SECRET="${ekte}"`)).toBe(ekte);
+    expect(ekteEnvVerdi(`QA_TEST_PASSWORD=${ekte} # bare for nå`)).toBe(ekte);
+    // … men ikke en tom linje, en plassholder eller et navn som ikke er hemmelig.
+    expect(ekteEnvVerdi('RESEND_API_KEY=')).toBe(null);
+    expect(ekteEnvVerdi('STRIPE_SECRET_KEY=sk_test_xxxxx')).toBe(null);
+    expect(ekteEnvVerdi('PLANTID_API_KEY=your-api-key-here')).toBe(null);
+    expect(ekteEnvVerdi('SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJI...')).toBe(null);
+    expect(ekteEnvVerdi('# REVENUECAT_WEBHOOK_AUTH=<lim inn her>')).toBe(null);
+    expect(ekteEnvVerdi('NEXT_PUBLIC_APP_URL=http://localhost:3000')).toBe(null);
+    expect(ekteEnvVerdi('# Tom: alle cron-ruter svarer 401.')).toBe(null);
   });
 
   it('har ingen hemmelighet som strengkonstant', () => {
     const funn: string[] = [];
     for (const sti of kodefiler) {
-      readFileSync(sti, 'utf8')
-        .split('\n')
-        .forEach((linje, i) => {
-          const m = HEMMELIG_KONSTANT.exec(linje);
-          if (!m || IKKE_EN_VERDI.test(m[1])) return;
-          // Verdien skrives ikke ut — feilmeldingen havner i CI-logger.
-          funn.push(`${relativ(sti)}:${i + 1}`);
-        });
+      for (const [nr, linje] of linjer(sti)) {
+        const m = HEMMELIG_KONSTANT.exec(linje);
+        if (!m || IKKE_EN_VERDI.test(m[1])) continue;
+        // Verdien skrives ikke ut — feilmeldingen havner i CI-logger.
+        funn.push(`${sti}:${nr}`);
+      }
     }
     expect(
       funn,
@@ -209,19 +263,32 @@ describe('innsjekkede filer inneholder verken hemmeligheter eller private e-post
 
   it('har ingen adresser hos private e-postleverandører', () => {
     const funn: string[] = [];
-    for (const sti of allefiler) {
-      readFileSync(sti, 'utf8')
-        .split('\n')
-        .forEach((linje, i) => {
-          // Ingen unntak for «hendelseslinjer» her: en adresse er like synlig
-          // uansett hva resten av linja sier.
-          if (PRIVAT_ADRESSE.test(linje)) funn.push(`${relativ(sti)}:${i + 1}`);
-        });
+    for (const sti of tekstfiler) {
+      for (const [nr, linje] of linjer(sti)) {
+        // Ingen unntak for «hendelseslinjer» her: en adresse er like synlig
+        // uansett hva resten av linja sier.
+        if (PRIVAT_ADRESSE.test(linje)) funn.push(`${sti}:${nr}`);
+      }
     }
     expect(
       funn,
       `\nPrivat e-postadresse i et OFFENTLIG repo:\n\n${funn.join('\n')}\n\n` +
         `Bruk en oppdiktet adresse på example.com / example.org, eller si hvor adressen står.\n`
+    ).toEqual([]);
+  });
+
+  it('har ingen ekte nøkkel, hemmelighet eller passord i en .env-fil', () => {
+    const funn: string[] = [];
+    for (const sti of envfiler) {
+      for (const [nr, linje] of linjer(sti)) {
+        // Bare navnet skrives ut, aldri verdien.
+        if (ekteEnvVerdi(linje) !== null) funn.push(`${sti}:${nr} (${ENV_LINJE.exec(linje)?.[1]})`);
+      }
+    }
+    expect(
+      funn,
+      `\nEkte verdi i en .env-fil i et OFFENTLIG repo:\n\n${funn.join('\n')}\n\n` +
+        `La den stå tom eller som plassholder (xxxxx, your-api-key-here). Den ekte hører hjemme i .env.local.\n`
     ).toEqual([]);
   });
 });
