@@ -1,8 +1,52 @@
-import { describe, expect, it, beforeEach, vi } from 'vitest';
+import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
+import { PostgrestError } from '@supabase/postgrest-js';
+import Stripe from 'stripe';
 import { _createTestLogger } from '../index';
+import { MAX_STRING_LENGTH } from '../pii';
 
 interface CapturedLine {
   line: string;
+}
+
+type StripeSignatureError = Error & { type?: unknown; header?: unknown; payload?: unknown };
+
+/**
+ * The error the webhook route catches when a signature does not match, made
+ * by the installed stripe package exactly as the route meets it. The secret
+ * and the header are made up; any pair that does not match gives the same
+ * error, whatever the date.
+ */
+function stripeSignatureError(body: string): StripeSignatureError {
+  try {
+    new Stripe('sk_test_x').webhooks.constructEvent(body, 't=1,v1=00', 'whsec_x');
+  } catch (e) {
+    return e as StripeSignatureError;
+  }
+  throw new Error('constructEvent accepted a signature made up for the test');
+}
+
+/**
+ * Run `fn` and return the length of the longest string any regex was asked to
+ * search. Once RegExp.prototype.exec is patched, every replace/test/match goes
+ * through it (ECMAScript's RegExpExec), so nothing slips past. It throws past
+ * `limit`: a regression then fails here at once instead of spending seconds
+ * backtracking in EMAIL_REGEX.
+ */
+function longestRegexInput(limit: number, fn: () => void): number {
+  const original = RegExp.prototype.exec;
+  let longest = 0;
+  RegExp.prototype.exec = function (this: RegExp, input: string) {
+    const length = String(input).length;
+    longest = Math.max(longest, length);
+    if (length > limit) throw new Error(`a regex was handed ${length} characters`);
+    return original.call(this, input);
+  };
+  try {
+    fn();
+  } finally {
+    RegExp.prototype.exec = original;
+  }
+  return longest;
 }
 
 function makeWriter(): { writer: { write: (line: string) => void }; lines: CapturedLine[] } {
@@ -125,5 +169,193 @@ describe('Logger', () => {
     } finally {
       vi.unstubAllEnvs();
     }
+  });
+
+  describe('log.error with something other than an Error second', () => {
+    // Real logger, both output formats: the point is what reaches the line.
+    for (const format of ['dev', 'prod'] as const) {
+      describe(format, () => {
+        beforeEach(() => {
+          if (format === 'prod') vi.stubEnv('NODE_ENV', 'production');
+          else vi.stubEnv('NODE_ENV', 'development');
+        });
+        afterEach(() => {
+          vi.unstubAllEnvs();
+        });
+
+        function linje(): string {
+          return captured.lines[0].line;
+        }
+        function felter(): Record<string, unknown> {
+          const l = linje();
+          if (format === 'prod') return JSON.parse(l);
+          const start = l.indexOf('{');
+          return start >= 0 ? JSON.parse(l.slice(start)) : {};
+        }
+
+        it('writes the fields of a plain PostgREST error object, never [object Object]', () => {
+          const log = _createTestLogger({ level: 'error', writer: captured.writer });
+          log.error('db.failed', {
+            message: 'new row violates row-level security policy',
+            code: '42501',
+            details: null,
+            hint: 'check the policy'
+          });
+          expect(linje()).not.toContain('[object Object]');
+          const err = felter().err as Record<string, unknown>;
+          expect(err.code).toBe('42501');
+          expect(err.message).toBe('new row violates row-level security policy');
+          expect(err.hint).toBe('check the policy');
+          expect(err.name).toBe('NonError');
+        });
+
+        it('keeps code/details/hint of a real PostgrestError (it extends Error)', () => {
+          const log = _createTestLogger({ level: 'error', writer: captured.writer });
+          const feil = new PostgrestError({
+            message: 'relation does not exist',
+            details: 'det@x.no asked',
+            hint: 'run the migration',
+            code: 'PGRST205'
+          });
+          log.error('db.failed', feil, { table: 'bruksdager' });
+          const f = felter();
+          const err = f.err as Record<string, unknown>;
+          expect(err.code).toBe('PGRST205');
+          expect(err.hint).toBe('run the migration');
+          expect(err.message).toBe('relation does not exist');
+          expect(err.details).toBe('d***@x.no asked');
+          expect(f.table).toBe('bruksdager');
+        });
+
+        it('treats a plain context object passed second as context', () => {
+          const log = _createTestLogger({ level: 'error', writer: captured.writer });
+          log.error('home.user_findings_failed', {
+            userId: '8e23c7b6-6d4c-4357-a118-3f3554c41caf',
+            message: 'timeout',
+            email: 'ola@x.no',
+            token: 'hemmelig-123'
+          });
+          const l = linje();
+          expect(l).not.toContain('[object Object]');
+          expect(l).not.toContain('NonError');
+          expect(l).not.toContain('ola@x.no');
+          expect(l).not.toContain('hemmelig-123');
+          expect(l).toContain('o***@x.no');
+          expect(l).toContain('timeout');
+          if (format === 'prod') {
+            const f = felter();
+            expect(f.userId).toBe('8e23c7b6-6d4c-4357-a118-3f3554c41caf');
+            expect(f.message).toBe('timeout');
+            expect(f.err).toBeUndefined();
+          } else {
+            expect(l).toContain('user=8e23c7b6');
+          }
+        });
+
+        it('writes an error object with context given third, redacted', () => {
+          const log = _createTestLogger({ level: 'error', writer: captured.writer });
+          log.error('xpost.failed', { message: 'Bearer abcdefghijklmnop failed for kari@y.se', code: 401 }, { type: 'flip' });
+          const l = linje();
+          expect(l).not.toContain('abcdefghijklmnop');
+          expect(l).not.toContain('kari@y.se');
+          const f = felter();
+          expect(f.type).toBe('flip');
+          expect((f.err as Record<string, unknown>).code).toBe(401);
+        });
+
+        it('keeps the raw body and the signature header of a Stripe signature error out of the line', () => {
+          // The webhook route logs what constructEvent throws, and the real
+          // error keeps the whole request body (`payload`) and the
+          // Stripe-Signature value (`header`) as own fields. A customer's
+          // name and address are in that body.
+          const body = JSON.stringify({
+            type: 'checkout.session.completed',
+            data: { object: { customer_details: { name: 'Kari Nordmann', address: { line1: 'Storgata 1' } } } }
+          });
+          const feil = stripeSignatureError(body);
+          // The fixture really carries what must not leak — or the test proves nothing.
+          expect(feil.payload).toBe(body);
+          expect(feil.header).toBe('t=1,v1=00');
+
+          const log = _createTestLogger({ level: 'error', writer: captured.writer });
+          log.error('stripe.webhook.failed', feil, { eventType: null });
+          const l = linje();
+          for (const lekkasje of ['Kari Nordmann', 'Storgata', 'customer_details', 't=1,v1=00', '"payload"', '"header"', '"raw"']) {
+            expect(l).not.toContain(lekkasje);
+          }
+          const err = felter().err as Record<string, unknown>;
+          expect(err.type).toBe('StripeSignatureVerificationError');
+          expect(err.message).toMatch(/^No signatures found matching the expected signature/);
+        });
+
+        it('keeps the cause of a wrapped Error', () => {
+          const log = _createTestLogger({ level: 'error', writer: captured.writer });
+          const indre = Object.assign(new Error('socket hang up'), { code: 'ECONNRESET' });
+          log.error('fetch.failed', new Error('fetch failed', { cause: indre }));
+          const err = felter().err as Record<string, unknown>;
+          expect(err.message).toBe('fetch failed');
+          expect((err.cause as Record<string, unknown>).code).toBe('ECONNRESET');
+        });
+
+        it('survives an Error whose cause points back at itself', () => {
+          const log = _createTestLogger({ level: 'error', writer: captured.writer });
+          const e = new Error('loop') as Error & { cause?: unknown };
+          e.cause = e;
+          log.error('loop.failed', e);
+          // The err field, not the line: the event name 'loop.failed' contains 'loop' too.
+          expect((felter().err as Record<string, unknown>).message).toBe('loop');
+        });
+
+        it('still writes null and numbers as NonError', () => {
+          const log = _createTestLogger({ level: 'error', writer: captured.writer });
+          // The err field, not the whole line: the line also carries the real
+          // timestamp, which contains '42' about one run in twenty, and a
+          // dropped payload would still leave 'null' in it as "err":null.
+          log.error('weird', null);
+          expect(felter().err).toMatchObject({ name: 'NonError', message: 'null' });
+          captured.lines.length = 0; // felter() reads the first line
+          log.error('weird', 42);
+          expect(felter().err).toMatchObject({ name: 'NonError', message: '42' });
+        });
+
+        it('keeps context alone when no error is given', () => {
+          const log = _createTestLogger({ level: 'error', writer: captured.writer });
+          log.error('plain', undefined, { region: 'oslo' });
+          const l = linje();
+          expect(l).toContain('oslo');
+          expect(l).not.toContain('NonError');
+        });
+      });
+    }
+  });
+
+  describe('a body of any length', () => {
+    it('never hands a regex more than MAX_STRING_LENGTH characters — not even a 200 000-character webhook body', () => {
+      // EMAIL_REGEX backtracks quadratically on a long run without «@»: a
+      // 100 kB body held the event loop for 12 s, and anyone can post one to
+      // the webhook with a made-up signature. Measured by what the regexes
+      // are handed, not by a stopwatch, so the answer does not depend on how
+      // fast or busy the machine is.
+      const body = 'a'.repeat(200_000);
+      const feil = stripeSignatureError(body);
+      expect(feil.payload).toBe(body);
+
+      const log = _createTestLogger({ level: 'info', writer: captured.writer });
+      const longest = longestRegexInput(MAX_STRING_LENGTH, () => {
+        log.error('stripe.webhook.failed', feil);
+        log.info('webhook.body', { body });
+        log.info('webhook.prose', { body: 'a '.repeat(100_000) });
+      });
+      // The patch saw the regexes run (the prose is cut at the cap) …
+      expect(longest).toBeGreaterThan(0);
+      // … and none of them was handed more than the cap.
+      expect(longest).toBeLessThanOrEqual(MAX_STRING_LENGTH);
+
+      expect(captured.lines).toHaveLength(3);
+      expect(captured.lines[0].line).not.toContain('a'.repeat(100));
+      expect(captured.lines[1].line).not.toContain('a'.repeat(100));
+      expect(captured.lines[1].line).toContain('<truncated: 200000 chars>');
+      expect(captured.lines[2].line).toContain('<truncated: 200000 chars>');
+    });
   });
 });

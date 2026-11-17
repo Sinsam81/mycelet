@@ -5,9 +5,11 @@ import { useLocale, useTranslations } from 'next-intl';
 import { PageWrapper } from '@/components/layout/PageWrapper';
 import { useMyReports } from '@/lib/hooks/useForum';
 import { intlLocale } from '@/lib/utils/intl-locale';
+import { reportReasonLabelKey } from '@/lib/moderation/report-reasons';
 
 export default function ForumReportsPage() {
   const t = useTranslations('ForumReports');
+  const tReason = useTranslations('ReportButton');
   const locale = useLocale();
   const { data, isLoading, error } = useMyReports();
 
@@ -16,6 +18,12 @@ export default function ForumReportsPage() {
     reviewed: t('statusReviewed'),
     resolved: t('statusResolved'),
     dismissed: t('statusDismissed')
+  };
+
+  // Viste tidligere den rå databaseverdien («dangerous_advice»).
+  const reasonLabel = (reason: string) => {
+    const key = reportReasonLabelKey(reason);
+    return key ? tReason(key) : reason;
   };
 
   return (
@@ -29,7 +37,7 @@ export default function ForumReportsPage() {
         <div className="space-y-2">
           {(data ?? []).map((report) => (
             <article key={report.id} className="rounded-lg border border-gray-200 bg-white p-3">
-              <p className="text-sm font-medium text-gray-900">{t('reason')} {report.reason}</p>
+              <p className="text-sm font-medium text-gray-900">{t('reason')} {reasonLabel(report.reason)}</p>
               <p className="mt-1 text-sm text-gray-700">{t('status')} {statusLabel[report.status] ?? report.status}</p>
               {report.description ? <p className="mt-1 text-sm text-gray-700">{t('note')} {report.description}</p> : null}
               <p className="mt-1 text-xs text-gray-500">{new Date(report.created_at).toLocaleString(intlLocale(locale))}</p>

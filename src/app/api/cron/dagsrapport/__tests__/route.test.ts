@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { byggDagsrapport, type BrukerRad, type RapportInn } from '@/lib/rapport/dagsrapport';
 import { REGISTRERING_FORBEHOLD, type SoppregistreringRad } from '@/lib/rapport/soppregistreringer';
 
@@ -240,5 +240,132 @@ describe('ukjent plan — varsellinja', () => {
     const uten = lag([rad('premium')]);
     for (const variant of [med.html, med.tekst]) expect(variant).toMatch(/uten kjent plan/);
     for (const variant of [uten.html, uten.tekst]) expect(variant).not.toMatch(/uten kjent plan/);
+  });
+});
+
+/**
+ * Meldt innhold som venter på en moderator. Før sto ikke rapportene i
+ * dagsrapporten i det hele tatt: en melding om et farlig råd ble sett når en
+ * moderator tilfeldigvis åpnet konsollen. Linja er det eneste i e-posten med en
+ * frist, så den skal synes uten at e-posten åpnes (emnet), uten å lete
+ * (banneret øverst) og med veien dit (lenka).
+ *
+ * Og den skal si NÅR fristen går ut. Første utgave sa bare hvor lenge
+ * meldingen hadde ventet, og «Behandle den i dag» — også når det sto ti
+ * minutter igjen. NAA er 15. september kl. 06:00 norsk tid.
+ */
+describe('åpne rapporter i forumet', () => {
+  const lag = (over: Partial<RapportInn>) =>
+    byggRapportEpost(byggDagsrapport({ brukere: [], abonnement: [], varselabonnement: 0, regionerIDag: [], regionerIGar: [], naa: NAA, ...over }), NAA);
+  const timerSiden = (t: number) => new Date(NAA.getTime() - t * 3_600_000).toISOString();
+  const LENKE = 'https://www.mycelet.com/forum/moderation';
+  // Samme formatering som e-posten bruker, så testen ikke avhenger av maskinens tidssone.
+  const DATO = NAA.toLocaleDateString('nb-NO', { day: 'numeric', month: 'long' });
+
+  beforeEach(() => {
+    // Lenka bygges fra samme variabel som de andre e-postene; låst her så
+    // testen ikke leser utviklerens eget miljø.
+    process.env.NEXT_PUBLIC_APP_URL = 'https://www.mycelet.com';
+  });
+
+  it('ingen åpne: én rolig rad, ikke noe varsel, emnet som før', () => {
+    const { emne, html, tekst } = lag({ aapneRapporter: { antall: 0, eldsteOpprettet: null } });
+    expect(html).toMatch(/Åpne rapporter i forumet<\/td><td[^>]*>0<\/td>/);
+    expect(tekst).toMatch(/åpne rapporter i forumet \.+ 0\n/);
+    for (const variant of [emne, html, tekst]) {
+      expect(variant).not.toContain('⚠️');
+      expect(variant).not.toContain('/forum/moderation');
+    }
+    expect(emne).toBe(`Mycelet ${DATO}: ingen nye brukere i går`);
+  });
+
+  it('åpne innenfor fristen: emne, banner og rad sier fra, med klokkeslettet og lenke til moderasjonssiden', () => {
+    const { emne, html, tekst } = lag({ aapneRapporter: { antall: 2, eldsteOpprettet: timerSiden(5) } });
+    expect(emne).toBe(`Mycelet ${DATO}: ⚠️ 2 åpne rapporter — frist i morgen kl. 01:00 · ingen nye brukere i går`);
+    for (const variant of [html, tekst]) {
+      expect(variant).toContain('⚠️ 2 åpne rapporter i forumet — den eldste har ventet 5 t, fristen på 24 t går ut i morgen kl. 01:00.');
+      // 19 timer igjen, og kveldsvarselet kommer før fristen: ikke «nå».
+      expect(variant).toContain('Behandle dem før det: ');
+      expect(variant).toContain(LENKE);
+      expect(variant).toContain('2 · eldste 5 t');
+      expect(variant).not.toContain('gikk ut');
+    }
+    // Banneret står FØR tallene, ikke nederst i en tabell.
+    expect(html.indexOf('åpne rapporter i forumet —')).toBeLessThan(html.indexOf('Nye brukere siste døgn'));
+    expect(tekst.indexOf('åpne rapporter i forumet —')).toBeLessThan(tekst.indexOf('BRUKERE'));
+    expect(html).toContain(`<a href="${LENKE}"`);
+    // Gult innenfor fristen — rødt er forbeholdt det som er over.
+    expect(html).toContain('background:#fffbeb');
+    expect(html).not.toContain('background:#fef2f2');
+  });
+
+  it('fristen går ut før neste varsel: «nå» og klokkeslettet — ikke «i dag» med ti minutter igjen', () => {
+    // Meldt 23 t 50 min før rapporten. Dette var første e-post som nevnte
+    // meldingen, og den sa «Behandle den i dag».
+    const { emne, html, tekst } = lag({ aapneRapporter: { antall: 1, eldsteOpprettet: new Date(NAA.getTime() - (23 * 60 + 50) * 60_000).toISOString() } });
+    expect(emne).toBe(`Mycelet ${DATO}: ⚠️ 1 åpen rapport — frist i dag kl. 06:10 · ingen nye brukere i går`);
+    for (const variant of [html, tekst]) {
+      expect(variant).toContain('⚠️ 1 åpen rapport i forumet — den har ventet 23 t, fristen på 24 t går ut i dag kl. 06:10.');
+      expect(variant).toContain('Behandle den nå: ');
+      expect(variant).not.toContain('Behandle den før det');
+      expect(variant).not.toContain('Behandle den i dag');
+    }
+    // Ikke over ennå, så fortsatt gult.
+    expect(html).toContain('background:#fffbeb');
+  });
+
+  it('over døgnfristen: sterkere ord i emnet og rødt banner', () => {
+    const { emne, html, tekst } = lag({ aapneRapporter: { antall: 1, eldsteOpprettet: timerSiden(30) } });
+    expect(emne).toBe(`Mycelet ${DATO}: ⚠️ 1 åpen rapport over døgnfristen · ingen nye brukere i går`);
+    for (const variant of [html, tekst]) {
+      expect(variant).toContain('⚠️ 1 åpen rapport i forumet — den har ventet 30 t, fristen på 24 t gikk ut i dag kl. 00:00.');
+      expect(variant).toContain('Behandle den nå: ');
+      expect(variant).toContain(LENKE);
+      expect(variant).toContain('1 · eldste 30 t');
+    }
+    expect(html).toContain('background:#fef2f2');
+    expect(html).not.toContain('background:#fffbeb');
+  });
+
+  it('alderen lot seg ikke lese: «nå», uten et klokkeslett vi ikke har', () => {
+    const { emne, html, tekst } = lag({ aapneRapporter: { antall: 2, eldsteOpprettet: 'tull' } });
+    expect(emne).toBe(`Mycelet ${DATO}: ⚠️ 2 åpne rapporter å behandle · ingen nye brukere i går`);
+    for (const variant of [html, tekst]) {
+      expect(variant).toContain('⚠️ 2 åpne rapporter i forumet — fristen er 24 t.');
+      expect(variant).toContain('Behandle dem nå: ');
+      expect(variant).not.toContain('kl.');
+    }
+  });
+
+  it('sier fra når tabellen ikke svarte — «ikke målt», aldri 0', () => {
+    const { emne, html, tekst } = lag({});
+    for (const variant of [html, tekst]) {
+      expect(variant).toContain('ikke målt — tabellen reports svarte ikke');
+    }
+    expect(emne).not.toContain('⚠️');
+  });
+
+  it('fotnoten forklarer tellingen og fristen, i begge varianter', () => {
+    const { html, tekst } = lag({ aapneRapporter: { antall: 0, eldsteOpprettet: null } });
+    for (const variant of [html, tekst]) {
+      expect(variant).toMatch(/«Åpne rapporter»\s+er\s+meldt\s+innhold\s+som\s+venter\s+på\s+en\s+avgjørelse/);
+      expect(variant).toMatch(/samme\s+frist\s+på\s+24\s+t\s+som\s+moderasjonssiden/);
+      // Klokkeslettet er norsk tid, og rapporten er ikke det eneste varselet.
+      expect(variant).toMatch(/Fristen\s+står\s+i\s+norsk\s+tid/);
+      expect(variant).toMatch(/er\s+noe\s+åpent\s+om\s+kvelden,\s+kommer\s+det\s+en\s+egen\s+kort\s+e-post/);
+    }
+  });
+
+  it('blokka har bare tall og klokkeslett — ingenting om hva som er meldt eller av hvem kan følge med', () => {
+    const r = byggDagsrapport({
+      brukere: [],
+      abonnement: [],
+      varselabonnement: 0,
+      regionerIDag: [],
+      regionerIGar: [],
+      naa: NAA,
+      aapneRapporter: { antall: 1, eldsteOpprettet: timerSiden(2) }
+    });
+    expect(Object.keys(r.moderering).sort()).toEqual(['antall', 'eldsteTimer', 'fristTekst', 'fristUtloper', 'haster', 'maalt', 'overFrist', 'varsel']);
   });
 });

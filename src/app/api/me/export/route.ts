@@ -6,6 +6,8 @@ import { getClientKey, rateLimitResponse } from '@/lib/rate-limit/route';
 import { createRequestLogger } from '@/lib/log/request';
 import { LEGAL_ENTITY } from '@/lib/legal/entity';
 import { IDENTIFY_HISTORY_BUCKET } from '@/lib/identifications/config';
+import { apiFeil } from '@/lib/api/feil';
+import { filterVerdi } from '@/lib/api/postgrest-filter';
 
 /**
  * GDPR Article 15 — right of access.
@@ -21,6 +23,8 @@ import { IDENTIFY_HISTORY_BUCKET } from '@/lib/identifications/config';
  * like an answer. That table is read with the admin client, filtered
  * explicitly on the caller's user_id. `prove_paaminnelser` and `prove_svar`
  * (migration 072, service-role only for the same reason) follow the same rule.
+ * `verified_foragers` is read the same way since migration 074 withdrew the
+ * moderators' internal `note` column from the anon and authenticated roles.
  *
  * FAIL CLOSED. Every query is checked, and a single failure aborts the whole
  * export with a 500. Earlier this endpoint did `findings.data ?? []` on each
@@ -31,6 +35,12 @@ import { IDENTIFY_HISTORY_BUCKET } from '@/lib/identifications/config';
  *
  * Note the distinction: an RLS policy that legitimately returns zero rows is
  * NOT an error, and still exports as []. Only a failed query aborts.
+ *
+ * `forum_posts` and `comments` are also read with the admin client, filtered
+ * on the caller's id. Their SELECT policy requires `is_hidden = false` even
+ * for the author, so a post or comment a moderator has hidden — still stored,
+ * still personal data — would otherwise drop out of a file that calls itself
+ * complete.
  *
  * Out of scope (intentionally not in the export):
  *   - Public reference data (mushroom species, look-alikes, prediction tiles)
@@ -56,7 +66,7 @@ export async function GET(request: NextRequest) {
 
   if (!user) {
     log.info('account.export.unauthenticated');
-    return NextResponse.json({ error: 'Ikke autentisert' }, { status: 401 });
+    return apiFeil('unauthenticated', 401);
   }
 
   const userLog = log.child({ userId: user.id });
@@ -83,16 +93,9 @@ export async function GET(request: NextRequest) {
     admin = createAdminClient();
   } catch {
     userLog.error('account.export.no_service_role_key');
-    return NextResponse.json(
-      {
-        error: 'Kunne ikke hente ut alle dataene dine',
-        details:
-          'Eksporten ble avbrutt på grunn av en serverfeil. Du har IKKE fått en ufullstendig fil. Prøv igjen om litt — vedvarer feilen, kontakt ' +
-          LEGAL_ENTITY.privacyEmail +
-          '.'
-      },
-      { status: 500 }
-    );
+    // Tekstene bor i src/lib/api/feil.ts, på norsk og svensk. `details` sier
+    // det som betyr noe: brukeren sitter IKKE med en ufullstendig fil.
+    return apiFeil('export_incomplete', 500, { detaljer: 'export_server_error_details' });
   }
 
   // All queries scoped to the authenticated user_id. RLS would also enforce
@@ -134,15 +137,25 @@ export async function GET(request: NextRequest) {
     // til (migrasjon 056 + /api/cron/purge-deleted-findings), og da skal det
     // stå i uttrekket — med `deleted_at` synlig, så du ser at det er slettet.
     findings: { shape: 'many', query: mange('findings', 'user_id', user.id, 'id') },
-    forumPosts: { shape: 'many', query: mange('forum_posts', 'user_id', user.id, 'id') },
-    comments: { shape: 'many', query: mange('comments', 'user_id', user.id, 'id') },
+    // Tjenesterollen, filtrert på brukerens egen id: SELECT-policyen på
+    // forum_posts og comments krever is_hidden = false, også for forfatteren
+    // (migrasjon 058). Innhold en moderator har skjult ligger fortsatt hos oss,
+    // men øktklienten ville latt det falle ut av en fil merket komplett.
+    // `is_hidden` følger med i raden, så du ser hva som er skjult.
+    forumPosts: { shape: 'many', query: mange('forum_posts', 'user_id', user.id, 'id', admin) },
+    comments: { shape: 'many', query: mange('comments', 'user_id', user.id, 'id', admin) },
     postLikes: { shape: 'many', query: mange('post_likes', 'user_id', user.id, 'post_id') },
     commentLikes: { shape: 'many', query: mange('comment_likes', 'user_id', user.id, 'comment_id') },
     savedPosts: { shape: 'many', query: mange('saved_posts', 'user_id', user.id, 'post_id') },
     reportsFiled: { shape: 'many', query: mange('reports', 'reporter_id', user.id, 'id') },
     billing: { shape: 'one', query: supabase.from('billing_subscriptions').select('*').eq('user_id', user.id).maybeSingle() },
     moderatorRole: { shape: 'one', query: supabase.from('moderator_roles').select('*').eq('user_id', user.id).maybeSingle() },
-    verifiedForager: { shape: 'one', query: supabase.from('verified_foragers').select('*').eq('user_id', user.id).maybeSingle() },
+    // Leses med tjenesterollen, filtrert på brukerens egen id: migrasjon 074
+    // tar `note` (moderatorenes interne merknad) ut av det anon og innloggede
+    // roller får lese, så `select('*')` med øktklienten ville gitt 42501 og
+    // stoppet hele eksporten. Merknaden handler om brukeren selv og hører med
+    // i en art. 15-eksport. Lesingen virker likt før og etter migrasjonen.
+    verifiedForager: { shape: 'one', query: admin.from('verified_foragers').select('*').eq('user_id', user.id).maybeSingle() },
     // Tilbakemeldingene på «Var du her? Fant du sopp?». Dette er det datasettet
     // med de mest presise koordinatene vi lagrer om en bruker: latitude og
     // longitude med fem desimaler (~1 m), utenfor visibility-modellen og
@@ -165,13 +178,19 @@ export async function GET(request: NextRequest) {
     // på med samme e-post via /soppvarsel — de har user_id null og finnes
     // bare via adressen, derfor tjenesterollen. Tokenene (bekreftelse,
     // avmelding) er nøkler, ikke opplysninger om brukeren, og utelates.
+    //
+    // filterVerdi, ikke anførselstegn skrevet for hånd: `.or()` tar filteret
+    // som tekst, og en adresse med `"` i seg ville lukket verdien og latt
+    // resten bli lest som et vilkår til — i en spørring med tjenesterollen,
+    // mot en tabell full av andres adresser. Supabase slipper ikke en slik
+    // adresse inn i dag; vernet skal ikke hvile på det.
     alertSubscriptions: {
       shape: 'many',
       query: hentAlle((fra, til) =>
         admin
           .from('alert_subscriptions')
           .select('id,user_id,email,region,locale,active,confirmed_at,last_notified_at,last_notified_score,created_at,kilde,forste_apnet_at,sist_apnet_at')
-          .or(epost ? `user_id.eq.${user.id},email.eq."${epost}"` : `user_id.eq.${user.id}`)
+          .or(epost ? `user_id.eq.${user.id},email.eq.${filterVerdi(epost)}` : `user_id.eq.${user.id}`)
           .order('id')
           .range(fra, til)
       )
@@ -226,16 +245,7 @@ export async function GET(request: NextRequest) {
       // never in the response body.
       firstError: results[failed[0]].error?.message
     });
-    return NextResponse.json(
-      {
-        error: 'Kunne ikke hente ut alle dataene dine',
-        details:
-          'Eksporten ble avbrutt fordi minst ett datasett ikke kunne leses. Du har IKKE fått en ufullstendig fil. Prøv igjen om litt — vedvarer feilen, kontakt ' +
-          LEGAL_ENTITY.privacyEmail +
-          '.'
-      },
-      { status: 500 }
-    );
+    return apiFeil('export_incomplete', 500, { detaljer: 'export_dataset_failed_details' });
   }
 
   // Bildene i identifiseringshistorikken ligger i en PRIVAT bøtte. En bar

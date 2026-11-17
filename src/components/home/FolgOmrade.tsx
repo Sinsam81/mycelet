@@ -13,6 +13,7 @@ import {
 } from '@/lib/alerts/folg-omrade';
 import { TILBUDSARK_ENDRET_EVENT, erTilbudsarkApent } from '@/lib/billing/tilbudsark-apent';
 import { readLocal, writeLocal } from '@/lib/utils/safe-storage';
+import { meldFolgerOmrade } from '@/components/home/folger-omrade-hendelse';
 
 /**
  * «Følg området ditt» — stripa inne i forsidekortet, under dommen.
@@ -136,8 +137,13 @@ export function FolgOmrade({
       .then((r) => (r.ok ? r.json() : null))
       .then((d: { abonnement: { region: string } | null; regioner: Region[] } | null) => {
         if (!levende.current || !d) return;
-        // Følger alt et område (også en nettopp adoptert rad): ikke spør.
-        if (d.abonnement) return;
+        // Følger alt et område (også en nettopp adoptert rad): ikke spør — og
+        // si fra til resten av forsiden. Serveren så ingen kontorad da siden
+        // ble tegnet, så «Slå på soppvarsel» står fortsatt lenger ned.
+        if (d.abonnement) {
+          meldFolgerOmrade();
+          return;
+        }
         setRegioner(d.regioner ?? []);
         setKlar(true);
       })
@@ -164,6 +170,9 @@ export function FolgOmrade({
       });
       if (!res.ok) throw new Error('lagring feilet');
       setBekreftet(region);
+      // Resten av forsiden ble tegnet før trykket: uten dette ba den om
+      // varselet én gang til, rett under bekreftelsen (folger-omrade-hendelse.ts).
+      meldFolgerOmrade();
     } catch {
       // Aldri en stille suksess: stripa blir stående, og brukeren kan prøve på nytt.
       setFeilet(true);

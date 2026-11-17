@@ -14,11 +14,15 @@ import { alleRegionSlugs, regionFromSlug } from '@/lib/prediction/region-slug';
 import { computeRegionWeek, type RegionWeek } from '@/lib/prediction/region-week';
 import { fetchWeatherSummary } from '@/lib/weather';
 import { fetchDailyForecast } from '@/lib/weather/forecast';
+import { sesongtilstand } from '@/lib/sesong/sesongtilstand';
+import { omradeSvar } from '@/app/soppvarsel/tekst';
 import {
   SOPPFORHOLD_BASE,
   datoTekst,
   farge,
   hentRegioner,
+  omradeTilstand,
+  visArtslinje,
   type SoppforholdRegion
 } from '../hent-regioner';
 
@@ -49,6 +53,7 @@ const COPY = {
     metaBeskrivelse: (navn: string) =>
       `Er det sopp i skogen rundt ${navn} nå? Daglig oppdatert vurdering regnet ut fra nedbør, jordfuktighet, temperatur og sesong.`,
     ogTittel: (navn: string) => `Soppforhold i ${navn} i dag`,
+    ogBildeAlt: (navn: string) => `Soppforhold i ${navn} i dag, som tall fra 0 til 100`,
     oppdatert: (dato: string) => `Oppdatert ${dato}`,
     oppdateresDaglig: 'Oppdateres daglig',
     h1: (navn: string) => `Soppforhold i ${navn} i dag`,
@@ -60,6 +65,10 @@ const COPY = {
       </>
     ),
     plassering: (nr: number, av: number) => `Nummer ${nr} av ${av} områder i Norge i dag.`,
+    // Når ingen av landets områder er over laveste bånd, er en rangering støy.
+    stille: 'Det er stille i alle områdene i Norge nå.',
+    utenomSesong:
+      'Det er utenom hovedsesongen, og det er stille i alle områdene i Norge nå. Tallet regnes fortsatt ut på nytt hver natt.',
     heleOversikten: 'Se hele oversikten',
     oversiktenLenke: 'hele oversikten',
     ikkeKlar: 'Beregningen for i dag er ikke klar ennå. Prøv igjen om en liten stund — eller se',
@@ -70,7 +79,7 @@ const COPY = {
     alleOmradene: 'Alle områdene',
     pameldtTittel: (navn: string) => `Du er påmeldt soppvarselet for ${navn}`,
     pameldtTekst:
-      'Under ser du dagens forhold og uka fremover. Neste e-post kommer den dagen forholdene krysser fra under til over terskelen etter en reell bedring — aldri oftere enn én gang i uka. Er det stille, er det fordi det ikke har snudd.',
+      'Under ser du dagens forhold og uka fremover. Neste e-post kommer den dagen forholdene krysser fra under til over terskelen etter en reell bedring — aldri oftere enn én gang i uka. Er det stille, er det fordi det ikke har snudd. Utenom sesongen kan det gå måneder mellom hver e-post — påmeldingen står til det snur.',
     kilder:
       'Datagrunnlag: MET Norway og SMHI (vær), NIBIO og CORINE (skog), GBIF og Artsdatabanken (funn). Se',
     kilderLenke: 'datakilder',
@@ -81,6 +90,7 @@ const COPY = {
     metaBeskrivelse: (navn: string) =>
       `Är det svamp i skogen kring ${navn} nu? Daglig bedömning beräknad från nederbörd, markfuktighet, temperatur och säsong.`,
     ogTittel: (navn: string) => `Svampläget i ${navn} idag`,
+    ogBildeAlt: (navn: string) => `Svampläget i ${navn} idag, som tal från 0 till 100`,
     oppdatert: (dato: string) => `Uppdaterad ${dato}`,
     oppdateresDaglig: 'Uppdateras varje dag',
     h1: (navn: string) => `Svampläget i ${navn} idag`,
@@ -92,6 +102,9 @@ const COPY = {
       </>
     ),
     plassering: (nr: number, av: number) => `Nummer ${nr} av ${av} områden i Sverige idag.`,
+    stille: 'Det är stilla i alla områden i Sverige nu.',
+    utenomSesong:
+      'Det är utanför högsäsongen, och det är stilla i alla områden i Sverige nu. Siffran räknas fortfarande om varje natt.',
     heleOversikten: 'Se hela översikten',
     oversiktenLenke: 'hela översikten',
     ikkeKlar: 'Dagens beräkning är inte klar ännu. Försök igen om en liten stund, eller se',
@@ -102,7 +115,7 @@ const COPY = {
     alleOmradene: 'Alla områden',
     pameldtTittel: (navn: string) => `Du är anmäld till svampvarningen för ${navn}`,
     pameldtTekst:
-      'Nedan ser du dagens läge och veckan framöver. Nästa mejl kommer den dag förhållandena korsar tröskeln efter en verklig förbättring — aldrig oftare än en gång i veckan. Är det tyst är det för att det inte har vänt.',
+      'Nedan ser du dagens läge och veckan framöver. Nästa mejl kommer den dag förhållandena korsar tröskeln efter en verklig förbättring — aldrig oftare än en gång i veckan. Är det tyst är det för att det inte har vänt. Utanför säsongen kan det gå månader mellan mejlen — anmälan står kvar tills det vänder.',
     kilder:
       'Dataunderlag: MET Norway och SMHI (väder), NIBIO och CORINE (skog), GBIF och Artdatabanken (fynd). Se',
     kilderLenke: 'datakällor',
@@ -116,7 +129,11 @@ export function generateStaticParams() {
 
 interface SideProps {
   params: Promise<{ omrade: string }>;
-  /** ?status=bekreftet fra /api/soppvarsel/bekreft — kvitteringen vises her. */
+  /**
+   * ?status=bekreftet fra /api/soppvarsel/bekreft — kvitteringen vises her —
+   * og svaret på påmeldingsskjemaet i VarselCta (sendt, ugyldig, for-mange,
+   * feil) fra /api/soppvarsel/pamelding.
+   */
   searchParams: Promise<{ status?: string }>;
 }
 
@@ -140,12 +157,19 @@ export async function generateMetadata({ params }: SideProps): Promise<Metadata>
     title: t.metaTittel(region.name),
     description: t.metaBeskrivelse(region.name),
     alternates: { canonical: url },
+    // Next erstatter rot-layoutens openGraph-objekt i sin helhet, så siteName
+    // og locale må stå her også. Språket følger LANDET, som resten av siden:
+    // rot-layouten ville gitt en crawler uten cookie nb_NO for Göteborg.
     openGraph: {
       title: t.ogTittel(region.name),
       description: t.metaBeskrivelse(region.name),
       url,
       type: 'website',
-      images: [{ url: ogBilde, width: 1200, height: 630 }]
+      siteName: 'Mycelet',
+      locale: region.country === 'SE' ? 'sv_SE' : 'nb_NO',
+      // alt MÅ stå her: bildefilas egen `alt`-eksport sendes ikke ut når
+      // bildene settes eksplisitt (som de må, for versjoneringen over).
+      images: [{ url: ogBilde, width: 1200, height: 630, alt: t.ogBildeAlt(region.name) }]
     }
   };
 }
@@ -240,10 +264,18 @@ export default async function OmradePage({ params, searchParams }: SideProps) {
 
   const land = regionDef.country;
   const t = COPY[land];
+  // Svaret på skjemaet i VarselCta, på sidens eget språk (landets). Samme
+  // tekster som /soppvarsel viser — se omradeSvar i soppvarsel/tekst.ts.
+  const varselSvar = omradeSvar(status, land === 'SE' ? 'sv' : 'nb');
 
   // Bare regiontallene ventes på her. Ukestripen strømmes (UkeStripeSeksjon).
   const { tileDate, regions } = await hentRegioner(land === 'SE' ? 'sv' : 'nb');
   const region = regions.find((r) => r.name === regionDef.name) ?? null;
+  // Stille i hele landet → ingen rangering; i tillegg desember–mai → ingen
+  // ukestripe med «ser best ut på torsdag». Se omradeTilstand i hent-regioner.ts.
+  const { landStille, utenomSesong } = region
+    ? omradeTilstand(region, regions, sesongtilstand(new Date()).iHovedsesong)
+    : { landStille: false, utenomSesong: false };
 
   // Strukturerte data: dateModified = rasterdatoen gjør ferskheten maskin-
   // lesbar for søkemotorer og AI-crawlere — «i dag»-påstanden får en dato.
@@ -261,7 +293,13 @@ export default async function OmradePage({ params, searchParams }: SideProps) {
   return (
     <PageWrapper>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
-      <article className="space-y-8 py-6">
+      {/* lang på artikkelen, i BEGGE retninger: <html lang> følger den
+          besøkende (cookie → Accept-Language → nb), mens innholdet her følger
+          landet. Uten dette fikk en crawler eller skjermleser lang="nb" rundt
+          svensk tekst på /soppforhold/goteborg — og en svensk leser lang="sv"
+          rundt norsk tekst på /soppforhold/oslo. <html lang> står urørt:
+          toppmeny og bunnmeny er på leserens språk. */}
+      <article lang={land === 'SE' ? 'sv' : 'nb'} className="space-y-8 py-6">
         {/* Innloggede: «så området i dag» (migrasjon 064). Klientkomponent: siden henter prognosen anonymt. */}
         <RegistrerBruksdag flate="omrade" omrade={omrade} />
         <header className="space-y-3">
@@ -305,14 +343,16 @@ export default async function OmradePage({ params, searchParams }: SideProps) {
               <div className={`h-full rounded-full ${farge(region.score)}`} style={{ width: `${region.score}%` }} />
             </div>
             {region.verdict ? <p className="mt-3 text-gray-700">{region.verdict}</p> : null}
-            {region.leadingSpecies ? (
+            {/* «er i sesong her nå» bare når det er sant: området over laveste
+                bånd og arten innenfor sin egen sesong (visArtslinje). */}
+            {visArtslinje(region) && region.leadingSpecies ? (
               <p className="mt-1 text-sm text-gray-700">{t.artslinje(region.leadingSpecies.toLowerCase())}</p>
             ) : null}
             {(() => {
               const { nr, av } = plassering(region, regions);
               return (
                 <p className="mt-3 text-sm text-gray-500">
-                  {t.plassering(nr, av)}{' '}
+                  {utenomSesong ? t.utenomSesong : landStille ? t.stille : t.plassering(nr, av)}{' '}
                   <Link href="/soppforhold" className="underline">
                     {t.heleOversikten}
                   </Link>
@@ -334,13 +374,42 @@ export default async function OmradePage({ params, searchParams }: SideProps) {
         {/* Strømmes: resten av siden vises straks, stripen skyves inn i samme
             svar når været er hentet. Ingen skjelett-plassholder — en stripe
             som uteblir skal ikke etterlate et hull. */}
-        <Suspense fallback={null}>
-          <UkeStripeSeksjon regionDef={regionDef} land={land} />
-        </Suspense>
+        {/* Utenom sesongen rangerer stripen sju dager som alle er nær null, og
+            navngir likevel en «beste dag». Da utelates den — på sidens egen
+            tilstand (tall + kalender), ikke ved å porte computeRegionWeek på
+            måned, som også ville blanket en god maiuke. */}
+        {utenomSesong ? null : (
+          <Suspense fallback={null}>
+            <UkeStripeSeksjon regionDef={regionDef} land={land} />
+          </Suspense>
+        )}
 
         {/* Ikke «meld deg på» rett under «du er påmeldt» — og en ny innsending
-            av samme adresse ville svart «sjekk innboksen» uten å sende noe. */}
-        {pameldt ? null : <VarselCta regionNavn={regionDef.name} land={land} />}
+            av samme adresse ville svart «sjekk innboksen» uten å sende noe.
+
+            id="varsel" + #varsel-fragmentet i redirecten fra påmeldingsruta:
+            svaret må lande der øyet er, uten JS — samme grep som #status på
+            /soppvarsel. Etter «sendt» skjules skjemaet: neste steg er
+            innboksen, ikke en innsending til. */}
+        {pameldt ? null : (
+          <div id="varsel" className="scroll-mt-24 space-y-3">
+            {varselSvar.linje ? (
+              <p role="status" className={`rounded-xl border px-4 py-3 text-sm font-medium ${varselSvar.linje.farge}`}>
+                {varselSvar.linje.tekst}
+              </p>
+            ) : null}
+            {varselSvar.visSkjema ? (
+              <VarselCta regionNavn={regionDef.name} land={land} />
+            ) : (
+              // Samme side uten ?status= — da står skjemaet der igjen.
+              <p className="text-sm text-gray-600">
+                <Link href={`/soppforhold/${omrade}#varsel`} className="underline">
+                  {varselSvar.nyttForsok}
+                </Link>
+              </p>
+            )}
+          </div>
+        )}
 
         <SoppforholdForbehold land={land} />
 

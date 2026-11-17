@@ -3,10 +3,11 @@
  * (migrasjon 001, 005, 015), og navnet vises på funn, i forumet og på profiler.
  *
  * To brukere skrev hele e-postadressen sin i brukernavn-feltet ved
- * registrering — «Trinesavoi@yahoo.com», «Moyfridovea@gmail.com» — og
- * registreringen tok imot det uten et ord. Begge hadde samtidig fylt inn et
- * fornuftig visningsnavn («Trinemor1980», «Frida»), så de mente åpenbart ikke
- * at adressen skulle bli det offentlige navnet deres.
+ * registrering — av formen «Kari.Nordmann@example.com» og
+ * «Olasopp@example.org» (oppdiktede eksempler) — og registreringen tok imot
+ * det uten et ord. Begge hadde samtidig fylt inn et fornuftig visningsnavn
+ * («Kari», «Ola»), så de mente åpenbart ikke at adressen skulle bli det
+ * offentlige navnet deres.
  *
  * De rakk aldri å bli synlige, fordi de manglet profilrad og derfor ikke kunne
  * poste noe i det hele tatt (funn H9/H20). Bakfyllingen i migrasjon 037 ga dem

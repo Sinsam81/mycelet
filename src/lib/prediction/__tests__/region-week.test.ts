@@ -1,7 +1,18 @@
-import { describe, expect, it } from 'vitest';
-import { beskrivToppdag, computeRegionWeek } from '../region-week';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { WeatherSummary } from '@/lib/weather';
 import type { DailyForecast } from '@/lib/weather/forecast';
+
+// Den ekte ukeberegningen, pakket inn så testene kan se HVILKEN dag den ble
+// bedt om å regne for (dato, måned og dag i måneden) — se «I dag er dagen i
+// Oslo» nederst.
+const byggUke = vi.hoisted(() => vi.fn());
+vi.mock('../week-scores', async () => {
+  const ekte = await vi.importActual<typeof import('../week-scores')>('../week-scores');
+  byggUke.mockImplementation(ekte.buildWeek);
+  return { ...ekte, buildWeek: byggUke };
+});
+
+import { beskrivToppdag, computeRegionWeek } from '../region-week';
 
 /**
  * «Uka framover»-stripen for områdesidene. Testene låser tre ting:
@@ -233,5 +244,109 @@ describe('beskrivToppdag', () => {
       'Fredag, lördag och söndag delar toppen den här veckan.'
     );
     expect(beskrivToppdag(DAGER, [80, 80, 80, 80, 80, 80, 80], 'SE').line).toContain('ingen tydlig toppdag');
+  });
+});
+
+/**
+ * Datoen for dag 0 ble lest i UTC. Mellom midnatt og kl. 01 norsk tid (kl. 02
+ * om sommeren) er UTC-datoen fortsatt gårsdagens — da sto «I dag» over
+ * gårsdagens dato, og dagen leseren faktisk var i sto som NESTE søyle, med
+ * ukedagsnavnet sitt.
+ */
+describe('«I dag» er dagen i Oslo, ikke i UTC', () => {
+  beforeEach(() => {
+    byggUke.mockClear();
+  });
+
+  /** Prognose slik MET gir den: UTC-døgn, fra og med `fra`, `antall` dager. */
+  function prognoseFra(fra: string, antall: number): DailyForecast[] {
+    const start = Date.parse(`${fra}T00:00:00Z`);
+    return Array.from({ length: antall }, (_, i) => ({
+      date: new Date(start + i * 86_400_000).toISOString().slice(0, 10),
+      tempC: 14,
+      precipMm: 3,
+      humidityPct: 80
+    }));
+  }
+
+  const sistKalt = () => byggUke.mock.calls.at(-1)?.[2] as { todayKey: string; month: number; dayOfMonth: number };
+
+  it('sommertid, kl. 00:30 torsdag i Oslo (22:30 UTC onsdag): «I dag» er torsdag', () => {
+    const now = new Date('2026-08-12T22:30:00Z');
+    // MET har fortsatt en rest av UTC-onsdagen først i svaret.
+    const uke = computeRegionWeek(vær(), prognoseFra('2026-08-12', 9), { land: 'NO', now });
+    expect(uke).not.toBeNull();
+    expect(uke!.days[0]).toMatchObject({ date: '2026-08-13', label: 'I dag', isToday: true });
+    // Neste søyle er fredag — ikke torsdag en gang til under ukedagsnavnet.
+    expect(uke!.days[1]).toMatchObject({ date: '2026-08-14', label: 'fre', isToday: false });
+    expect(uke!.days.map((d) => d.date)).toEqual([
+      '2026-08-13',
+      '2026-08-14',
+      '2026-08-15',
+      '2026-08-16',
+      '2026-08-17',
+      '2026-08-18',
+      '2026-08-19'
+    ]);
+    expect(uke!.days.filter((d) => d.isToday)).toHaveLength(1);
+  });
+
+  it('vintertid, kl. 00:30 i Oslo (23:30 UTC dagen før): samme regel med én times forskyvning', () => {
+    const now = new Date('2026-11-18T23:30:00Z'); // torsdag 19. november i Oslo
+    const uke = computeRegionWeek(vær(), prognoseFra('2026-11-18', 9), { land: 'SE', now });
+    expect(uke).not.toBeNull();
+    expect(uke!.days[0]).toMatchObject({ date: '2026-11-19', label: 'Idag', isToday: true });
+    expect(uke!.days[1]).toMatchObject({ date: '2026-11-20', label: 'fre' });
+  });
+
+  it('et minutt før midnatt i Oslo er det fortsatt dagen før', () => {
+    const now = new Date('2026-08-12T21:59:00Z'); // onsdag 23:59 i Oslo
+    const uke = computeRegionWeek(vær(), prognoseFra('2026-08-12', 9), { land: 'NO', now });
+    expect(uke!.days[0]).toMatchObject({ date: '2026-08-12', isToday: true });
+    expect(uke!.days[1]).toMatchObject({ date: '2026-08-13', label: 'tor' });
+  });
+
+  it('midt på dagen er Oslo og UTC enige — ingenting er endret', () => {
+    const uke = computeRegionWeek(vær(), prognose([{}, {}, {}, {}, {}, {}]), { land: 'NO', now: NOW });
+    expect(uke!.days[0]).toMatchObject({ date: TODAY, isToday: true });
+    expect(sistKalt()).toEqual(expect.objectContaining({ todayKey: TODAY, month: 8, dayOfMonth: 13 }));
+  });
+
+  it('sesongleddet regnes for SAMME dag som «I dag» — også over et månedsskifte', () => {
+    // 31. juli 22:30 UTC er 1. august 00:30 i Oslo. Måneden og dagen i måneden
+    // ble lest i serverens lokale tid og datoen i UTC: tre avlesninger av «nå».
+    computeRegionWeek(vær(), prognoseFra('2026-07-31', 9), { land: 'NO', now: new Date('2026-07-31T22:30:00Z') });
+    expect(sistKalt()).toEqual(expect.objectContaining({ todayKey: '2026-08-01', month: 8, dayOfMonth: 1 }));
+
+    // Og over et årsskifte: nyttårsaften 23:30 UTC er 1. januar i Oslo.
+    computeRegionWeek(vær(), prognoseFra('2026-12-31', 9), { land: 'NO', now: new Date('2026-12-31T23:30:00Z') });
+    expect(sistKalt()).toEqual(expect.objectContaining({ todayKey: '2027-01-01', month: 1, dayOfMonth: 1 }));
+  });
+
+  it('prognoseraden for dagen leseren er i brukes aldri som en «kommende» dag', () => {
+    // Kl. 00:30 torsdag har MET en hel rad for torsdag (UTC-døgnet). Dag 0
+    // kommer fra observert vær; raden skal verken bli «i dag» en gang til
+    // eller første kommende dag.
+    const now = new Date('2026-08-12T22:30:00Z');
+    const medRegnITorsdag = prognoseFra('2026-08-12', 9).map((d) => (d.date === '2026-08-13' ? { ...d, precipMm: 99 } : d));
+    computeRegionWeek(vær(), medRegnITorsdag, { land: 'NO', now });
+    const kommende = byggUke.mock.calls.at(-1)?.[1] as DailyForecast[];
+    expect(kommende.map((d) => d.date)).toEqual([
+      '2026-08-14',
+      '2026-08-15',
+      '2026-08-16',
+      '2026-08-17',
+      '2026-08-18',
+      '2026-08-19'
+    ]);
+    expect(kommende.some((d) => d.precipMm === 99)).toBe(false);
+  });
+
+  it('gir fortsatt null når det ikke er nok kommende dager regnet fra Oslo-datoen', () => {
+    // Regnet fra UTC-datoen (12.) var det tre kommende dager; fra Oslo-datoen
+    // (13.) bare to. Under fire søyler er ingen uke.
+    const now = new Date('2026-08-12T22:30:00Z');
+    expect(computeRegionWeek(vær(), prognoseFra('2026-08-13', 3), { land: 'NO', now })).toBeNull();
+    expect(computeRegionWeek(vær(), prognoseFra('2026-08-13', 4), { land: 'NO', now })).not.toBeNull();
   });
 });

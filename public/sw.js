@@ -57,7 +57,64 @@ const STATIC_CACHE_MAX_ENTRIES = 80;
 //     TILE_CACHE. Ingen artsdata, ingen sikkerhetstekst som kan bli utdatert.
 //   • Navigasjoner går fortsatt til NETTET FØRST. Skallet brukes kun når
 //     fetch() faktisk feiler, så en påkoblet bruker får aldri en gammel side.
+//     (v6 legger til ett tilfelle til: nettet svarer ikke i det hele tatt.)
 const OFFLINE_SHELL = '/offline';
+
+// v6 (2026-11-10): navigasjoner har en frist.
+//
+// v4 viste skallet bare når fetch() KASTET — altså i flymodus. I skogen er det
+// vanlige tilfellet et annet: telefonen har én strek, forbindelsen er «oppe»,
+// og fetch() verken svarer eller feiler før WebViewens egen frist (rundt et
+// minutt). Imens sto brukeren med hvit skjerm, og det lagrede kartet hen har
+// betalt for kom aldri fram.
+//
+// Nå løper navigasjonen mot en klokke. Kommer det ikke så mye som svarhoder på
+// NAVIGATION_TIMEOUT_MS, vises skallet — hvis det ligger i cachen. Gjør det
+// ikke det, venter vi videre på nettet akkurat som før.
+// Et svar som rekker fram i tide vinner alltid, så en påkoblet bruker merker
+// ingenting, og freskhetsregelen fra v3 står: skallet er statisk og har verken
+// artsdata eller sikkerhetstekst. URL-en står stille, så «Prøv igjen» i
+// skallet går til siden brukeren ba om.
+//
+// IKKE fjern fristen som «unødvendig» fordi catch-grenen finnes: de to dekker
+// hvert sitt tilfelle (kastet / svarte aldri).
+//
+// Unntak: /auth/ og /api/. En treg innloggingsretur (/auth/callback?code=…)
+// fullføres på serveren selv om vi viser skallet, og bruker da opp
+// engangskoden — «Prøv igjen» ville feilet. Slike navigasjoner får vente.
+const NAVIGATION_TIMEOUT_MS = 10000;
+
+// v7 (2026-11-10): fristen gjelder bare FØRSTE forsøk.
+//
+// v6 hadde et hull. Skallet precaches for alle, ikke bare for dem som har
+// lagret et kart, så fristen traff enhver besøkende på tregt nett: kom første
+// byte etter 14 s, ble siden byttet ut med skallet etter 10, svaret som var på
+// vei ble kastet — og «Prøv å laste appen på nytt» startet en ny forespørsel
+// som ble kuttet på nøyaktig samme måte. Så lenge nettet var tregere enn
+// fristen kunne siden ikke lastes i det hele tatt, der v5 leverte den etter
+// ventetiden.
+//
+// Nå huskes adressen som fikk skallet (networkWaits), og NESTE navigasjon dit
+// går til nettet uten frist. Unntaket brukes opp av det ene forsøket.
+//
+// Det foreldes dessuten etter WAIT_FOR_NETWORK_MS, og det er kort med vilje.
+// Workeren kan ikke se forskjell på en bruker som laster på nytt og en WebView
+// som laster på nytt av seg selv — iOS kan kaste innholdsprosessen mens appen
+// ligger i bakgrunnen (en tur i kameraet), og siden lastes da på nytt når
+// brukeren kommer tilbake. Uten dekning ville et unntak som lå igjen gitt hvit
+// skjerm til WebViewens egen frist, altså nøyaktig det v6 skulle fjerne. Et
+// halvt minutt dekker den som laster på nytt med en gang; det er også omtrent
+// så lenge Chrome lar en ledig worker leve.
+//
+// For alt som kommer senere sier skallets knapp fra selv, med en melding rett
+// før den laster på nytt — se message-lytteren under respondToNavigation og
+// retryWithNetworkWait i public/offline/offline-map.js. Meldingsnavnet må være
+// likt i de to filene.
+const WAIT_FOR_NETWORK_MS = 30 * 1000;
+const WAIT_FOR_NETWORK_MESSAGE = 'mycelet:wait-for-network';
+/** Adresse (uten fragment) → tidspunktet i ms da unntaket fra fristen foreldes. */
+const networkWaits = new Map();
+
 // '/icons/icon-maskable.svg' er fjernet herfra: den er ikke referert noe sted i
 // appen (manifestene bruker icon-512.png som maskable), så den var en
 // installasjonsnedlasting ingen kunne be om — og med beskjæringen under ville
@@ -157,6 +214,125 @@ function isCacheableStaticRequest(url) {
   );
 }
 
+/** Offline-skallet fra precachen, eller undefined. Kaster aldri. */
+function offlineShell() {
+  return caches
+    .open(STATIC_CACHE)
+    .then((cache) => cache.match(OFFLINE_SHELL))
+    .catch(() => undefined);
+}
+
+/** Navigasjoner som ikke tåler å bli byttet ut med skallet mens serveren jobber. */
+function isOneShotNavigation(url) {
+  return url.pathname.startsWith('/auth/') || url.pathname.startsWith('/api/');
+}
+
+/** To navigasjoner til samme side skal treffe samme oppføring, med eller uten #fragment. */
+function navigationKey(url) {
+  return url.origin + url.pathname + url.search;
+}
+
+/** Neste navigasjon til adressen får vente på nettet uten frist. */
+function allowNetworkWait(key) {
+  const now = Date.now();
+  // Rydd her, ikke på en klokke: oppføringer kommer bare til etter en frist
+  // eller et trykk i skallet, så kartet holder seg på en håndfull adresser.
+  for (const [other, expires] of networkWaits) {
+    if (expires <= now) networkWaits.delete(other);
+  }
+  networkWaits.set(key, now + WAIT_FOR_NETWORK_MS);
+}
+
+/** Bruker opp unntaket for adressen. true hvis det fantes og ikke var foreldet. */
+function takeNetworkWait(key) {
+  const expires = networkWaits.get(key);
+  if (expires === undefined) return false;
+  networkWaits.delete(key);
+  return expires > Date.now();
+}
+
+/**
+ * Svaret kom etter at skallet var vist, og ingen skal ha det. Avbryt
+ * nedlastingen av kroppen, så den ikke deler en tynn linje med neste forsøk.
+ */
+function discardLateResponse(response) {
+  try {
+    if (response && response.body) response.body.cancel().catch(() => undefined);
+  } catch (error) {
+    // Kroppen var låst eller allerede lest: ingenting å rydde.
+  }
+}
+
+/**
+ * Nettet først; skallet når nettet kaster, eller ikke har svart innen fristen.
+ * Løftet som returneres løses ALLTID med en Response og avvises aldri — et
+ * respondWith() som avvises gir brukeren en død side.
+ *
+ * ⚠️ fetch(request) skal stå UTEN init-objekt. Det er fristende å avbryte den
+ * foreldreløse forespørselen med fetch(request, { signal }), men ethvert
+ * init-objekt gjør en navigasjon om til en vanlig forespørsel (Fetch-standarden,
+ * Request-konstruktøren): mode blir 'same-origin' og referrer blir workeren
+ * selv. Serveren ser da ikke lenger en navigasjon — /api/prove/svar skriver for
+ * eksempel bare når Sec-Fetch-Mode er 'navigate'. Vi nøyer oss med å avbryte
+ * NEDLASTINGEN av svaret som kommer for sent (discardLateResponse).
+ */
+function respondToNavigation(request, url) {
+  // Kastet fetch (ingen dekning): skallet, ellers en vanlig nettverksfeil.
+  const network = fetch(request).catch(() => offlineShell().then((shell) => shell || Response.error()));
+
+  if (isOneShotNavigation(url)) return network;
+
+  // Forrige forsøk på denne adressen endte i skallet. Dette er brukeren som
+  // prøver igjen: da venter vi på nettet, slik v5 gjorde (se v7 øverst).
+  const key = navigationKey(url);
+  if (takeNetworkWait(key)) return network;
+
+  return new Promise((resolve) => {
+    let networkAnswered = false;
+    let shellServed = false;
+
+    const timer = setTimeout(() => {
+      offlineShell().then((shell) => {
+        // Nettet rakk fram mens vi slo opp skallet: siden er levert, og da
+        // skal adressen heller ikke huskes som «svarte ikke».
+        if (networkAnswered) return;
+        // Uten skall har vi ikke noe bedre å by på enn å vente videre på nettet.
+        if (!shell) return;
+
+        shellServed = true;
+        allowNetworkWait(key);
+        resolve(shell);
+      });
+    }, NAVIGATION_TIMEOUT_MS);
+
+    network.then((response) => {
+      clearTimeout(timer);
+      if (shellServed) {
+        discardLateResponse(response);
+        return;
+      }
+      networkAnswered = true;
+      resolve(response);
+    });
+  });
+}
+
+// Skallets «Prøv å laste appen på nytt» sender denne rett før den laster på
+// nytt. Uten den gjelder unntaket fra fristen bare det første halve minuttet,
+// og bare så lenge workeren har levd siden fristen gikk ut — leser brukeren
+// skallet litt først, ville forsøket blitt kuttet en gang til.
+self.addEventListener('message', (event) => {
+  const data = event.data;
+  if (!data || data.type !== WAIT_FOR_NETWORK_MESSAGE || typeof data.url !== 'string') return;
+
+  try {
+    const url = new URL(data.url, self.location.origin);
+    if (url.origin === self.location.origin) allowNetworkWait(navigationKey(url));
+  } catch (error) {
+    // Ugyldig adresse: da finnes det heller ingen navigasjon å gi fri.
+  }
+});
+
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
 
@@ -185,17 +361,12 @@ self.addEventListener('fetch', (event) => {
   if (requestUrl.origin === self.location.origin) {
     // Nettet først, alltid. Har brukeren dekning, får hen den ferske siden —
     // en sopp-app skal aldri servere en gammel artsside fra cache. Bare når
-    // fetch() faktisk feiler (ingen dekning) svarer vi med offline-skallet, som
-    // viser de lagrede kartområdene. URL-en i adressefeltet står stille, så
-    // brukeren kommer tilbake til siden hen ba om ved neste forsøk.
+    // fetch() feiler (ingen dekning) eller ikke svarer innen fristen (én strek,
+    // se v6 øverst) svarer vi med offline-skallet, som viser de lagrede
+    // kartområdene. URL-en i adressefeltet står stille, så brukeren kommer
+    // tilbake til siden hen ba om ved neste forsøk.
     if (event.request.mode === 'navigate') {
-      event.respondWith(
-        fetch(event.request).catch(async () => {
-          const cache = await caches.open(STATIC_CACHE);
-          const shell = await cache.match(OFFLINE_SHELL);
-          return shell || Response.error();
-        })
-      );
+      event.respondWith(respondToNavigation(event.request, requestUrl));
       return;
     }
 

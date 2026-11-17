@@ -31,7 +31,7 @@
  * Run:  node --env-file=.env.local scripts/backtest-spatial.mjs
  */
 import { readFileSync } from 'node:fs';
-import { latBand, weekIndexFromISO, dayOfYearFromISO } from './phenology-core.mjs';
+import { latBand, weekIndexFromISO } from './phenology-core.mjs';
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -107,7 +107,6 @@ async function main() {
   const rng = makeRng(987654321);
 
   let from = 0;
-  let total = 0;
   let trainN = 0;
   for (;;) {
     const rows = await rest(
@@ -139,7 +138,6 @@ async function main() {
         // candidate test presence — reservoir-ish cap via deterministic sampling
         testPresences.push({ sid: r.species_id, lat, lng, iso });
       }
-      total++;
     }
     from += rows.length;
     if (rows.length < PAGE) break;
@@ -149,7 +147,7 @@ async function main() {
   // Subsample test presences if over the cap (deterministic shuffle).
   let tests = testPresences;
   if (tests.length > MAX_TEST) {
-    tests = [...testPresences].sort((a, b) => rng() - 0.5).slice(0, MAX_TEST);
+    tests = [...testPresences].sort(() => rng() - 0.5).slice(0, MAX_TEST);
   }
 
   // Neighbour-cell scan helpers over the training index.
@@ -240,7 +238,6 @@ async function main() {
 
   const aucTG = Object.fromEntries(variants.map((v) => [v, winsTG[v] / comparisons]));
   const aucUni = Object.fromEntries(variants.map((v) => [v, winsUni[v] / comparisons]));
-  const auc = aucTG; // headline = the honest one
   const bgFull = bgFullTG;
 
   // Continuous Boyce Index on the full model (presence vs background), windowed.

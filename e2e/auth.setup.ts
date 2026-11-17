@@ -25,8 +25,8 @@ setup('authenticate', async ({ page }) => {
   await page.getByRole('button', { name: 'Logg inn' }).click();
 
   // On success the app routes away from /auth/login. A wrong password keeps us
-  // here and surfaces "Kunne ikke logge inn".
-  await expect(page.getByText(/Kunne ikke logge inn|Invalid login/i)).toHaveCount(0);
+  // here and surfaces "Feil e-post eller passord" (or the generic fallback).
+  await expect(page.getByText(/Feil e-post eller passord|Kunne ikke logge inn|Invalid login/i)).toHaveCount(0);
   await page.waitForURL((url) => !url.pathname.startsWith('/auth/login'), { timeout: 20_000 });
 
   await page.context().storageState({ path: AUTH_FILE });

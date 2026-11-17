@@ -59,12 +59,19 @@ function omraadeNavn(region: string): string {
 
 const UKEDAG = ['søndag', 'mandag', 'tirsdag', 'onsdag', 'torsdag', 'fredag', 'lørdag'];
 
+/*
+ * «snudde i natt» står i pitchen bare når omslaget er målt mot gårsdagen. Et
+ * omslag som er brobygd over en natt uten måling (Omslag.brobygd) vet vi AT
+ * skjedde, men ikke hvilken natt — og en journalist skal ikke få en datering
+ * vi ikke kan stå inne for. Da sier pitchen «har snudd». Tallene og «i dag» i
+ * emnefeltet er dagens egne og gjelder uansett.
+ */
 function pitchNb(o: Omslag, url: string): { emne: string; tekst: string } {
   return {
     emne: `Soppforholdene i ${o.region} er ${o.til} av 100 i dag — gratis varsel med offentlig fasit`,
     tekst: `Hei redaksjonen,
 
-Kort tips i soppsesongen: forholdene i ${omraadeNavn(o.region)} snudde i natt — fra ${o.fra} til ${o.til} av 100 den siste uka, ifølge Mycelets daglige beregning. Tallet er vær, jordfuktighet, temperatur og sesong for området, og det ligger åpent her, uten innlogging:
+Kort tips i soppsesongen: forholdene i ${omraadeNavn(o.region)} ${o.brobygd ? 'har snudd' : 'snudde i natt'} — fra ${o.fra} til ${o.til} av 100 den siste uka, ifølge Mycelets daglige beregning. Tallet er vær, jordfuktighet, temperatur og sesong for området, og det ligger åpent her, uten innlogging:
 
 ${url}
 
@@ -85,7 +92,7 @@ function pitchSv(o: Omslag, url: string): { emne: string; tekst: string } {
     emne: `Svampförhållandena i ${o.region} är ${o.til} av 100 i dag — gratis varning med offentligt facit`,
     tekst: `Hej redaktionen,
 
-Ett kort tips mitt i svampsäsongen: förhållandena i ${omraadeNavn(o.region)} vände i natt — från ${o.fra} till ${o.til} av 100 den senaste veckan, enligt Mycelets dagliga beräkning. Siffran bygger på väder, markfuktighet, temperatur och säsong för området, och ligger öppet här utan inloggning:
+Ett kort tips mitt i svampsäsongen: förhållandena i ${omraadeNavn(o.region)} ${o.brobygd ? 'har vänt' : 'vände i natt'} — från ${o.fra} till ${o.til} av 100 den senaste veckan, enligt Mycelets dagliga beräkning. Siffran bygger på väder, markfuktighet, temperatur och säsong för området, och ligger öppet här utan inloggning:
 
 ${url}
 
@@ -125,10 +132,14 @@ export function byggPresseVarsel(omslag: Omslag[], datoIso: string, appUrl = 'ht
 
   const emne = `Omslag i dag: ${omslag.map((o) => o.region).join(', ')} — send pitchen`;
 
+  // Samme regel som X-posten (byggOmslagsPost): «i natt» bare når hvert omslag
+  // er målt mot gårsdagen. Varselet gikk ut i dag uansett — det sier emnet.
+  const overskrift = `Soppvarselet slo ut${omslag.some((o) => o.brobygd) ? '' : ' i natt'} — presse-vinduet er åpent`;
+
   const html = `<!doctype html>
 <html lang="nb">
   <body style="font-family: -apple-system, system-ui, sans-serif; color: #1f2937; max-width: 640px; margin: 24px auto; padding: 0 16px;">
-    <h1 style="font-size: 20px; color: #1A3409;">🍄 Soppvarselet slo ut i natt — presse-vinduet er åpent</h1>
+    <h1 style="font-size: 20px; color: #1A3409;">🍄 ${overskrift}</h1>
     <p style="font-size: 14px;">${escapeHtml(timing)}</p>
     <p style="font-size: 13px; color: #4b5563;">Sjekk e-postadressen på redaksjonens nettside før du sender. Én e-post per redaksjon. Hele oppskriften: docs/presse-pitch-soppvarsel.md.</p>
 ${blokker
@@ -146,7 +157,7 @@ ${blokker
   </body>
 </html>`;
 
-  const tekst = `Soppvarselet slo ut i natt — presse-vinduet er åpent
+  const tekst = `${overskrift}
 
 ${timing}
 Sjekk e-postadressen på redaksjonens nettside før du sender. Én e-post per redaksjon.

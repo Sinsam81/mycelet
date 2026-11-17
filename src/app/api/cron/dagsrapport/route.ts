@@ -16,7 +16,11 @@ import {
 } from '@/lib/rapport/dagsrapport';
 import { REGISTRERING_FORBEHOLD, fraTabellrad, kortDato, kortPeriode, prosentTekst, type SoppregistreringRad } from '@/lib/rapport/soppregistreringer';
 import { erInternKonto } from '@/lib/rapport/abonnement';
+import { hentAapneRapporter } from '@/lib/rapport/aapne-rapporter';
+import { RAPPORTMOTTAKER, byggModereringsvarsel } from '@/lib/rapport/modereringsvarsel';
+import { BEHANDLINGSFRIST_TIMER } from '@/lib/moderation/moderering';
 import { MAKS_SIDER as MAKS_BRUKERSIDER, hentAlleBrukere } from '@/lib/supabase/alle-brukere';
+import { tellRader } from '@/lib/supabase/tabell-finnes';
 import { osloDag } from '@/lib/bruk/bruksdag';
 import { type TellingRad } from '@/lib/bruk/tell';
 import { WEB_DIREKTE_KILDE, normaliserKilde, vaskTidssone } from '@/lib/analytics/kilde';
@@ -61,8 +65,11 @@ import { erAiNokkelSatt, hentKindwiseStatus } from '@/lib/identifications/kindwi
 
 export const maxDuration = 60;
 
-/** Rapporten går hit. Ingen andre skal ha den — den inneholder forretningstall. */
-const MOTTAKER = 'post@mycelet.com';
+/**
+ * Rapporten går hit. Ingen andre skal ha den — den inneholder forretningstall.
+ * Samme postkasse som kveldsvarselet om åpne rapporter (modereringsvarsel.ts).
+ */
+const MOTTAKER = RAPPORTMOTTAKER;
 
 export async function GET(request: NextRequest) {
   const log = createRequestLogger(request);
@@ -217,21 +224,31 @@ export async function GET(request: NextRequest) {
   }
 
   // ── AI-identifiseringen: kall, feil og Kindwise sin status ────────────────
-  // Vellykkede kall skrives ved suksess (migrasjon 020), feilede ved avvist
-  // Kindwise-svar (migrasjon 073). Uten begge er «ingen bruker AI-en» og
-  // «AI-en er død» samme tall — det var sommerens feil. Mangler en tabell,
-  // står raden som «ikke målt». usage_info koster ingen kreditter.
+  // ai_identifications (migrasjon 020) har én rad per kall som brukte en
+  // kreditt: gratiskontoer reserverer raden FØR kallet og får den tilbake når
+  // Kindwise avviste eller aldri svarte, betalte kontoer får raden når
+  // Kindwise har svart OK. ai_identifiseringsfeil (migrasjon 073) har én rad
+  // per kall som feilet — HTTP-statusen Kindwise svarte med, eller 0 når det
+  // aldri kom noe svar. Uten begge er «ingen bruker AI-en» og «AI-en er død»
+  // samme tall — det var sommerens feil. Mangler en tabell, står raden som
+  // «ikke målt». usage_info koster ingen kreditter.
   const tellKall = async (tabell: string, kolonne: string): Promise<AiKallTall | undefined> => {
     const grense = (timer: number) => new Date(naa.getTime() - timer * 3600_000).toISOString();
+    // HEAD mot en tabell som ikke finnes gir verken feil eller tall — se
+    // tabell-finnes.ts. `count ?? 0` ville gjort det til «0 kall».
     const [d1, d7] = await Promise.all([
-      db.from(tabell).select('*', { count: 'exact', head: true }).gte(kolonne, grense(24)),
-      db.from(tabell).select('*', { count: 'exact', head: true }).gte(kolonne, grense(24 * 7))
+      tellRader(db.from(tabell).select('*', { count: 'exact', head: true }).gte(kolonne, grense(24))),
+      tellRader(db.from(tabell).select('*', { count: 'exact', head: true }).gte(kolonne, grense(24 * 7)))
     ]);
-    if (d1.error || d7.error) {
-      log.warn('dagsrapport.ai_telling_feilet', { tabell, message: (d1.error ?? d7.error)?.message });
+    if (d1.antall === undefined || d7.antall === undefined) {
+      log.warn('dagsrapport.ai_telling_feilet', {
+        tabell,
+        mangler: Boolean(d1.mangler || d7.mangler),
+        message: d1.feil ?? d7.feil
+      });
       return undefined;
     }
-    return { siste24t: d1.count ?? 0, siste7d: d7.count ?? 0 };
+    return { siste24t: d1.antall, siste7d: d7.antall };
   };
   const [aiKall, aiFeil] = await Promise.all([
     tellKall('ai_identifications', 'created_at'),
@@ -245,6 +262,20 @@ export async function GET(request: NextRequest) {
   } else {
     log.warn('dagsrapport.kindwise_nokkel_mangler');
   }
+
+  // ── Åpne rapporter i forumet ──────────────────────────────────────────────
+  // Meldt innhold som venter på en moderator. Før denne linja sa en ny melding
+  // ikke fra til noen: den ble sett når en moderator tilfeldigvis åpnet
+  // /forum/moderation, og Apple (retningslinje 1.2) venter svar innen ett
+  // døgn. Bare antall og alder leses — aldri hva som er meldt eller av hvem.
+  // Svarer ikke tabellen, sier rapporten «ikke målt» i stedet for «0 åpne».
+  // Tolv timer etter denne går kveldsvarselet (/api/cron/aapne-rapporter),
+  // som leser det samme og bare sender noe når noe venter.
+  const rapporterSvar = await hentAapneRapporter(db);
+  if (!rapporterSvar.ok) {
+    log.warn('dagsrapport.aapne_rapporter_feilet', { message: rapporterSvar.feil, mangler: rapporterSvar.mangler });
+  }
+  const aapneRapporter = rapporterSvar.ok ? rapporterSvar.aapne : undefined;
 
   // ── Regionscorer, i dag og i går ──────────────────────────────────────────
   const { data: scorer } = await db
@@ -273,10 +304,21 @@ export async function GET(request: NextRequest) {
     aiKall,
     aiFeil,
     kindwise,
+    aapneRapporter,
     regionerIDag: velg(iDagDato),
     regionerIGar: velg(iGarDato),
     naa
   });
+
+  // Over døgnfristen: også i loggen, så det finnes et spor selv om e-posten
+  // ikke skulle komme fram.
+  if (rapport.moderering.overFrist) {
+    log.warn('dagsrapport.rapporter_over_frist', {
+      antall: rapport.moderering.antall,
+      eldsteTimer: rapport.moderering.eldsteTimer,
+      fristTimer: BEHANDLINGSFRIST_TIMER
+    });
+  }
 
   const { emne, html, tekst } = byggRapportEpost(rapport, naa);
   const res = await sendEpost({ til: MOTTAKER, emne, html, tekst });
@@ -287,6 +329,7 @@ export async function GET(request: NextRequest) {
     betalende: rapport.betalende.totalt,
     gratisTildelt: rapport.gratisTildelt,
     ukjentPlan: rapport.ukjentPlan,
+    aapneRapporter: rapport.moderering.maalt ? rapport.moderering.antall : null,
     flanker: rapport.flanker.length
   });
 
@@ -398,11 +441,27 @@ export function byggRapportEpost(r: Dagsrapport, naa: Date) {
       ]
     : [['Før konto i appen', 'ikke målt — tabellen flatetellinger svarte ikke']];
 
+  // Meldt innhold som venter på en moderator. Det eneste i rapporten med en
+  // frist, så det står tre steder når noe venter: i emnelinja (det er den
+  // telefonen viser), i et banner over tallene, og på egen rad. Ordene —
+  // klokkeslettet fristen går ut, «nå» når neste varsel ville kommet for
+  // sent, rødt når den er ute — er de samme som i kveldsvarselet
+  // (modereringsvarsel.ts).
+  const mod = r.moderering;
+  const modVarsel = byggModereringsvarsel(mod);
+  const modVerdi = !mod.maalt
+    ? 'ikke målt — tabellen reports svarte ikke'
+    : mod.antall === 0 || mod.eldsteTimer === null
+      ? String(mod.antall)
+      : `${mod.antall} · eldste ${mod.eldsteTimer} t`;
+  const modEmne = modVarsel ? `${modVarsel.emne} · ` : '';
+  const modBanner = modVarsel ? modVarsel.html : '';
+
   const html = `<!doctype html>
 <html lang="nb"><body style="font-family:-apple-system,system-ui,sans-serif;color:#1f2937;max-width:520px;margin:24px auto;padding:0 16px">
   <p style="font-size:12px;color:#6b7280;margin:0">Mycelet · ${dato}</p>
   <h1 style="font-size:19px;color:#1A3409;margin:4px 0 18px">${overskrift}</h1>
-
+  ${modBanner}
   <table style="width:100%;border-collapse:collapse;font-size:14px">
     ${rad('Nye brukere siste døgn', String(r.nyeBrukere.siste24t))}
     ${rad('Nye siste 7 dager', String(r.nyeBrukere.siste7d))}
@@ -439,6 +498,11 @@ export function byggRapportEpost(r: Dagsrapport, naa: Date) {
   <h2 style="font-size:14px;color:#1A3409;margin:22px 0 6px">AI-identifisering</h2>
   <table style="width:100%;border-collapse:collapse;font-size:14px">
     ${aiRader.map(([n, v]) => rad(n, v)).join('\n    ')}
+  </table>
+
+  <h2 style="font-size:14px;color:#1A3409;margin:22px 0 6px">Moderering</h2>
+  <table style="width:100%;border-collapse:collapse;font-size:14px">
+    ${rad(`${mod.varsel ? '⚠️ ' : ''}Åpne rapporter i forumet`, modVerdi)}
   </table>
 
   <h2 style="font-size:14px;color:#1A3409;margin:22px 0 6px">I skogen</h2>
@@ -488,13 +552,17 @@ export function byggRapportEpost(r: Dagsrapport, naa: Date) {
     som /admin), og «til første belastning» leses av prøvemerkene webhookene
     skriver fra
     14. september 2026. «Før konto i appen» er anonyme tellinger uten noen
-    ID. Se kommentaren i <code>api/cron/dagsrapport</code>.
+    ID. «Åpne rapporter» er meldt innhold som venter på en avgjørelse (status
+    pending eller reviewed) — samme telling og samme frist på
+    ${BEHANDLINGSFRIST_TIMER} t som moderasjonssiden. Fristen står i norsk
+    tid, og er noe åpent om kvelden, kommer det en egen kort e-post da.
+    Se kommentaren i <code>api/cron/dagsrapport</code>.
   </p>
 </body></html>`;
 
   const tekst = `Mycelet · ${dato}
 ${overskrift}
-
+${modVarsel ? `\n${modVarsel.tekst}\n` : ''}
 BRUKERE
   siste døgn ................ ${r.nyeBrukere.siste24t}
   siste 7 dager ............. ${r.nyeBrukere.siste7d}
@@ -521,6 +589,9 @@ ${tellingRader.map(([n, v]) => `  ${n.padEnd(42, '.')} ${v}`).join('\n')}
 
 AI-IDENTIFISERING
 ${aiRader.map(([n, v]) => `  ${n.padEnd(38, '.')} ${v}`).join('\n')}
+
+MODERERING
+  ${mod.varsel ? '⚠️ ' : ''}åpne rapporter i forumet ... ${modVerdi}
 
 I SKOGEN
   best i dag ................ ${r.toppRegioner.map((t) => `${t.region} ${t.score}`).join(', ') || '—'}
@@ -552,7 +623,10 @@ Bruk måles fra 6. september 2026. «Betalende» er
 kjøp via Stripe eller App Store med status active og løpende periode; prøver
 og gratis tildelte pass (gavepass, testkontoer) står for seg, og «til første
 belastning» leses av prøvemerkene fra 14. september 2026. «Før konto i appen»
-er anonyme tellinger uten noen ID.`;
+er anonyme tellinger uten noen ID. «Åpne rapporter» er meldt innhold som
+venter på en avgjørelse (status pending eller reviewed) — samme telling og
+samme frist på ${BEHANDLINGSFRIST_TIMER} t som moderasjonssiden. Fristen står
+i norsk tid, og er noe åpent om kvelden, kommer det en egen kort e-post da.`;
 
-  return { emne: `Mycelet ${dato}: ${overskrift.toLowerCase()}`, html, tekst };
+  return { emne: `Mycelet ${dato}: ${modEmne}${overskrift.toLowerCase()}`, html, tekst };
 }

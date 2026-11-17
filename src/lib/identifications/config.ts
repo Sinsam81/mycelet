@@ -54,3 +54,36 @@ export const HISTORY_IMAGE_QUALITY = 0.72;
 export function buildHistoryImagePath(userId: string, identificationId: string): string {
   return `${userId}/${identificationId}.jpg`;
 }
+
+/**
+ * Fristen for ETT kall til Kindwise fra /api/identify (og for å lese svaret).
+ * Et normalt svar tar noen sekunder, også med tre bilder. Går fristen ut, får
+ * brukeren en forklaring og kan prøve igjen — bildene ligger fortsatt i
+ * skjemaet. Må være godt under rutens maxDuration (60 s): etter Kindwise
+ * gjenstår berikelsen og historikkraden.
+ *
+ * Bor her og ikke i rutefila fordi en Next-rute bare kan eksportere
+ * HTTP-metodene og rutekonfigurasjonen.
+ */
+export const KINDWISE_TIMEOUT_MS = 25_000;
+
+/**
+ * Under denne bildelikheten (prosent) sier resultatsiden fra om at forslagene
+ * er usikre. En UI-terskel for et hint, ikke en kalibrert grense: et forslag
+ * på 4 % ble før vist nøyaktig likt som et på 96 %.
+ */
+export const LOW_SIMILARITY_MAX = 20;
+
+/**
+ * Er ALLE de viste forslagene under terskelen?
+ *
+ * Maks over de viste, ikke første i lista: rankOrder i /api/identify sorterer
+ * om etter sesong og funn i nærheten, så forslag nummer én har ikke
+ * nødvendigvis høyest bildelikhet. En tom liste er ikke «lav likhet» — den har
+ * sin egen tilstand («ingen artsforslag»).
+ */
+export function erLavBildelikhet(viste: ReadonlyArray<{ probability?: number | null }>): boolean {
+  const tall = viste.map((s) => s.probability).filter((p): p is number => typeof p === 'number' && Number.isFinite(p));
+  if (tall.length === 0) return false;
+  return Math.max(...tall) < LOW_SIMILARITY_MAX;
+}

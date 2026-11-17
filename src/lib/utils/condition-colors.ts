@@ -34,8 +34,6 @@ export function colorForScore(score: number) {
 const MIN_FILL_OPACITY = 0.12;
 /** Dekkevnen den best scorende ruta i utsnittet tegnes med. */
 const MAX_FILL_OPACITY = 0.55;
-/** Brukes når alle rutene i utsnittet har samme score, og det ikke finnes noe å gradere. */
-const FLAT_FILL_OPACITY = 0.22;
 
 /**
  * FARGEN ER ABSOLUTT, DEKKEVNEN ER RELATIV TIL UTSNITTET.

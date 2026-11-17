@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Share2 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
+import { erAvbruttDeling } from '@/lib/moderation/forum-errors';
 
 interface SharePostButtonProps {
   postId: string;
@@ -56,7 +57,9 @@ export function SharePostButton({ postId, title, findingName, zoneLabel }: Share
       }
 
       setFeedback(shareData.url);
-    } catch {
+    } catch (error) {
+      // Brukeren lukket delingsarket. Det er et valg, ikke en feil.
+      if (erAvbruttDeling(error)) return;
       setFeedback(t('shareFailed'));
     }
   };

@@ -13,6 +13,20 @@ test.describe('Web — Stripe + Google synlig', () => {
     await expect(page.getByRole('button', { name: /Velg Sesongpass/i })).toBeVisible();
   });
 
+  // Uinnlogget: ingen «Din plan», ingen avkrysning, og kjøpsknappen går til
+  // registrering med planen i `next` — ikke til en checkout som svarer 401.
+  test('uinnlogget kjøpsknapp går til registrering, ikke til en feilmelding', async ({ page }) => {
+    await page.goto('/pricing');
+    // Innenfor <main>: toppen har fått sin egen «Logg inn» for utloggede, og
+    // uten avgrensningen ville den alene fått denne sjekken til å bestå.
+    await expect(page.locator('main').getByRole('link', { name: 'Logg inn' }).first()).toBeVisible();
+    await expect(page.getByText('Din plan', { exact: true })).toHaveCount(0);
+    await expect(page.getByRole('checkbox')).toHaveCount(0);
+    await page.getByRole('button', { name: /Velg Sesongpass/i }).click();
+    await expect(page).toHaveURL(/\/auth\/register\?next=%2Fpricing%3Fplan%3Dseason_pass/);
+    await expect(page.getByText(/Ikke autentisert/i)).toHaveCount(0);
+  });
+
   test('login viser «Fortsett med Google»', async ({ page }) => {
     await page.goto('/auth/login');
     await expect(page.getByRole('button', { name: /Fortsett med Google/i })).toBeVisible();

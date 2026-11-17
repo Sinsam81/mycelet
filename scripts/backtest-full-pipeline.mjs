@@ -274,7 +274,7 @@ function kernelDensity(index, sid, lat, lng) {
   return sum;
 }
 
-function occurrenceBoost(density) {
+function occurrenceBoost(_density) {
   // Production keeps occurrence density informational until it demonstrates
   // positive lift under matched target-group validation.
   return 1;

@@ -1,6 +1,7 @@
 import type { WeekDayScore } from '@/lib/prediction/week-scores';
 import type { Locale } from '@/i18n/config';
 import { getSpeciesDisplayName } from '@/lib/utils/species-name';
+import { isFlatWeek } from '@/lib/utils/forecast-bars';
 import { pickBestForecastDay } from '@/lib/utils/forecast-best-day';
 
 /**
@@ -14,38 +15,50 @@ import { pickBestForecastDay } from '@/lib/utils/forecast-best-day';
  */
 
 export interface Toppdag {
-  /** Ukedagsetiketten slik uke-stripa selv viser den («tor», «I dag», …). Ved likhet: den tidligste. */
-  dag: string;
-  score: number;
+  /** Datoen (ÅÅÅÅ-MM-DD) for beste dag. Ved likhet: den tidligste. */
+  dato: string;
   erIDag: boolean;
-  /** Alle dagene som deler toppscoren (tidligste først) — tom når én dag vinner alene. */
-  delteDager: string[];
-  /** true når HELE uka har samme score — da finnes ingen «beste dag» å nevne. */
+  /** Datoene som deler toppen (tidligste først) — tom når én dag vinner alene. */
+  delteDatoer: string[];
+  /** true når uka er jevn — da finnes ingen «beste dag» å nevne. */
   jevn: boolean;
 }
 
+/** Under fire dager finnes ingen «uke» å rangere — samme grense som stripen på områdesiden (region-week.ts). */
+const MIN_DAGER_FOR_TOPPDAG = 4;
+
 /**
- * Beste dag i uka som kommer — samme tall og samme regler som 7-dagersstripa
- * (pickBestForecastDay), så e-posten og appen aldri motsier hverandre.
+ * Beste dag i uka som kommer, etter SAMME regler som stripen på områdesiden
+ * e-posten lenker til (beskrivToppdag i region-week.ts) — så e-posten og siden
+ * aldri motsier hverandre:
  *
- * Ved likhet peker `dag` fortsatt på den TIDLIGSTE («best torsdag» når lørdag
- * også har 91 ville sendt folk senere ut enn nødvendig), men e-posten skal
- * si at dagene er like gode. Og en helt jevn uke er ikke «i dag er ukas beste
- * dag» — 63 % av sesongukene har delt toppscore (forecast-bars.ts), så det
- * ville stått i de fleste varslene. Områdesiden unngår den artefakten alt.
+ *   · færre enn fire dager (prognosen mangler) → ingen linje. «I dag ser ut til
+ *     å bli ukas beste dag» ut fra én dag er ikke en påstand om uka.
+ *   · jevn uke (isFlatWeek, spenn under seks poeng) → «jevnt hele uka». En dag
+ *     som er to poeng bedre enn resten er ikke dagen å dra ut.
+ *   · ellers dagen med høyest score. Ved likhet peker `dato` på den TIDLIGSTE
+ *     («best torsdag» når lørdag er like god ville sendt folk senere ut enn
+ *     nødvendig), og e-posten sier at dagene er like gode.
+ *
+ * ⚠️ BÆRER DATOER, ALDRI SCOREN. Scoren her er punkt-dagscoren fra
+ * mushroom-day (vær + sesong i regionens sentrum), mens tallet e-posten ellers
+ * viser er regionens p90 over rasterrutene. To modeller ga to ulike «av
+ * 100»-tall for samme dag i samme e-post — nøyaktig selvmotsigelsen
+ * region-week.ts ble skrevet for å fjerne fra områdesiden. Dagene kan RANGERES
+ * mot hverandre (det er det den temporale modellen er validert for); tallene
+ * kan ikke settes ved siden av regionens. Derfor finnes ikke scoren i typen,
+ * så den ikke kan skrives ut ved et uhell. Datoer og ikke stripens korte
+ * etiketter («tor», «tors»), så e-posten kan skrive ukedagen fullt ut.
  */
 export function velgToppdag(days: WeekDayScore[]): Toppdag | null {
-  if (days.length === 0) return null;
+  if (days.length < MIN_DAGER_FOR_TOPPDAG) return null;
   const valg = pickBestForecastDay(days);
-  const forsteIndeks = valg.tiedIndexes[0] ?? 0;
-  const beste = days[forsteIndeks];
-  const jevn = days.length > 1 && valg.tiedIndexes.length === days.length;
+  const beste = days[valg.tiedIndexes[0] ?? 0];
   return {
-    dag: beste.label,
-    score: beste.score,
+    dato: beste.date,
     erIDag: beste.isToday,
-    delteDager: valg.tiedIndexes.length > 1 ? valg.tiedIndexes.map((i) => days[i].label) : [],
-    jevn
+    delteDatoer: valg.tiedIndexes.length > 1 ? valg.tiedIndexes.map((i) => days[i].date) : [],
+    jevn: isFlatWeek(days.map((d) => d.score))
   };
 }
 

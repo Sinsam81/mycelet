@@ -26,6 +26,9 @@ const I_DAG = '2026-09-15'; // september — midt i sesongen, så månedsgatet e
 
 let observed: WeatherSummary | null = null;
 let forecast: DailyForecast[] = [];
+/** Punktene de to eksterne oppslagene faktisk fikk. */
+type Punkt = { lat: number; lon: number };
+const sett: { vaer: Punkt[]; prognose: Punkt[] } = { vaer: [], prognose: [] };
 
 vi.mock('@/i18n/locale', () => ({ getUserLocale: async () => 'nb' }));
 
@@ -34,8 +37,18 @@ vi.mock('@/lib/log/request', () => {
   return { createRequestLogger: () => logger };
 });
 
-vi.mock('@/lib/weather', () => ({ fetchWeatherSummary: async () => observed }));
-vi.mock('@/lib/weather/forecast', () => ({ fetchDailyForecast: async () => forecast }));
+vi.mock('@/lib/weather', () => ({
+  fetchWeatherSummary: async (punkt: Punkt) => {
+    sett.vaer.push(punkt);
+    return observed;
+  }
+}));
+vi.mock('@/lib/weather/forecast', () => ({
+  fetchDailyForecast: async (punkt: Punkt) => {
+    sett.prognose.push(punkt);
+    return forecast;
+  }
+}));
 
 const { GET } = await import('../route');
 
@@ -215,5 +228,32 @@ describe('når regnet kommer midt i uka', () => {
 
   it('ingen søyle i stripen motsier tallet sitt', async () => {
     expect(motsigelse(await værskifte())).toBeNull();
+  });
+});
+
+/**
+ * Punktet er leserens posisjon, og ruta sender det ut av huset to ganger:
+ * til observert vær og til METs prognose. Klientene runder til to desimaler i
+ * dag, men ruta håndhevet det ikke — søskenet til /api/prediction, som alt
+ * runder av (src/lib/privacy/provider-precision.ts).
+ */
+describe('eksterne oppslag får områdepresisjon', () => {
+  it('sender aldri mer enn tre desimaler til vær og prognose', async () => {
+    observed = observert(Array(14).fill(6), 12, 85);
+    forecast = prognose(Array.from({ length: 6 }, () => ({ precipMm: 6, tempC: 12, humidityPct: 85 })));
+    sett.vaer = [];
+    sett.prognose = [];
+    klient += 1;
+
+    const res = await GET(
+      new NextRequest('https://mycelet.com/api/mushroom-forecast?lat=58.123456789&lon=7.987654321', {
+        headers: { 'x-forwarded-for': `10.3.0.${klient}` }
+      })
+    );
+    expect(res.status).toBe(200);
+
+    // Begge må faktisk ha blitt kalt — ellers tester vi ingenting.
+    expect(sett.vaer).toEqual([{ lat: 58.123, lon: 7.988 }]);
+    expect(sett.prognose).toEqual([{ lat: 58.123, lon: 7.988 }]);
   });
 });

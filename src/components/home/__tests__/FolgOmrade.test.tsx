@@ -7,6 +7,7 @@ import nb from '../../../../messages/nb.json';
 import sv from '../../../../messages/sv.json';
 import { FOLG_OMRADE_KILDE, FOLG_OMRADE_NOKKEL, avvisningsVerdi } from '@/lib/alerts/folg-omrade';
 import { meldTilbudsarkApent, nullstillTilbudsark } from '@/lib/billing/tilbudsark-apent';
+import { FOLGER_OMRADE_EVENT } from '../folger-omrade-hendelse';
 
 /**
  * Trykket testes HER og ikke i nettleseren: et ekte trykk i en innlogget økt
@@ -59,17 +60,23 @@ const kroppen = () => {
   return kall ? JSON.parse(kall[1].body as string) : null;
 };
 
+/** Lytter slik resten av forsiden gjør («Slå på soppvarsel» og lenka i regionkortet). */
+const meldtFolger = vi.fn();
+
 beforeEach(() => {
   window.localStorage.clear();
   nullstillTilbudsark();
   fetchMock.mockReset();
   svarUtenAbonnement();
   vi.stubGlobal('fetch', fetchMock);
+  meldtFolger.mockReset();
+  window.addEventListener(FOLGER_OMRADE_EVENT, meldtFolger);
 });
 
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+  window.removeEventListener(FOLGER_OMRADE_EVENT, meldtFolger);
 });
 
 describe('FolgOmrade', () => {
@@ -108,6 +115,49 @@ describe('FolgOmrade', () => {
     expect(await screen.findByRole('alert')).toBeTruthy();
     expect(screen.queryByText(/Du følger/)).toBe(null);
     expect(screen.getByRole('button', { name: 'Følg Oslo' })).toBeTruthy();
+  });
+
+  /**
+   * Resten av forsiden er tegnet på serveren før trykket. Uten beskjeden sto
+   * «Slå på soppvarsel» og «Få varsel på e-post» igjen rett under den grønne
+   * bekreftelsen — som om trykket ikke hadde virket.
+   */
+  it('sier fra til resten av forsiden når påmeldingen er lagret — én gang', async () => {
+    rendrer();
+    expect(await screen.findByRole('button', { name: 'Følg Oslo' })).toBeTruthy();
+    // Bare det at stripa vises, er ingen påmelding.
+    expect(meldtFolger).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Følg Oslo' }));
+    await screen.findByText(/Du følger Oslo/);
+    expect(meldtFolger).toHaveBeenCalledTimes(1);
+  });
+
+  it('sier IKKE fra når lagringen feiler — da følger brukeren ingenting', async () => {
+    fetchMock.mockImplementation((url: string, init?: { method?: string }) => {
+      if (!init?.method || init.method === 'GET') {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ abonnement: null, regioner: REGIONER }) });
+      }
+      return Promise.resolve({ ok: false, json: () => Promise.resolve({ error: 'nei' }) });
+    });
+    rendrer();
+    fireEvent.click(await screen.findByRole('button', { name: 'Følg Oslo' }));
+    expect(await screen.findByRole('alert')).toBeTruthy();
+    expect(meldtFolger).not.toHaveBeenCalled();
+  });
+
+  it('sier fra når oppslaget viser at brukeren ALT følger et område serveren ikke så (adoptert påmelding)', async () => {
+    fetchMock.mockImplementation(() =>
+      Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({ abonnement: { region: 'Bergen', active: true }, regioner: REGIONER })
+      })
+    );
+    rendrer();
+    await waitFor(() => expect(meldtFolger).toHaveBeenCalled());
+    // Dobbel montering (StrictMode) skal ikke gi to beskjeder.
+    expect(meldtFolger).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('button', { name: /Følg/ })).toBe(null);
   });
 
   it('«Ikke nå» skjuler stripa og lagrer pausen', async () => {

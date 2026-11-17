@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { rettArtsfilter } from '../artsfilter-navn';
 import {
   HUSKET_UTSNITT_LEVETID_MS,
   tolkHusketUtsnitt,
@@ -41,6 +42,28 @@ describe('tolkHusketUtsnitt', () => {
       tolkHusketUtsnitt(JSON.stringify({ ...gyldig, zoom: 'høyt' }), NAA),
     ).toBeNull();
     expect(tolkHusketUtsnitt(null, NAA)).toBeNull();
+  });
+
+  it('art uten navn beholdes — og får navnet sitt tilbake når artslista er lastet', () => {
+    // Filterarket hadde et eget artssøk som lagret id uten navn. Slike utsnitt
+    // ligger igjen på brukernes enheter i opptil et døgn. Forkastes id-en her,
+    // mister brukeren filteret sitt uten forklaring; kartet retter navnet i
+    // stedet (artsfilter-navn.ts), og neste lagring har begge deler.
+    const husket = tolkHusketUtsnitt(JSON.stringify({ ...gyldig, speciesName: null }), NAA);
+    expect(husket).toMatchObject({ speciesId: 3, speciesName: null });
+
+    const retting = rettArtsfilter({
+      speciesId: husket?.speciesId ?? null,
+      speciesName: husket?.speciesName ?? null,
+      navn: new Map([[3, 'Kantarell']]),
+    });
+    expect(retting).toEqual({ type: 'sett_navn', navn: 'Kantarell' });
+
+    const lagretPaaNytt = tolkHusketUtsnitt(
+      JSON.stringify({ ...gyldig, speciesName: 'Kantarell' }),
+      NAA,
+    );
+    expect(lagretPaaNytt).toMatchObject({ speciesId: 3, speciesName: 'Kantarell' });
   });
 
   it('art uten id gir ingen art; ugyldig sted gir intet sted, men utsnittet beholdes', () => {

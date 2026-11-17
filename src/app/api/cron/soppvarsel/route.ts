@@ -2,8 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createRequestLogger } from '@/lib/log/request';
 import { bearerSecretMatches } from '@/lib/security/secret-compare';
-import { skalVarsle, VARSEL_KARANTENE_DAGER, VARSEL_MIN_SCORE } from '@/lib/alerts/decision';
+import { skalVarsle, VARSEL_KARANTENE_DAGER } from '@/lib/alerts/decision';
+import { HISTORIKK_DAGER, lesRegionHistorikk, type RegionHistorikk } from '@/lib/alerts/historikk';
 import { byggVarselEpost } from '@/lib/alerts/email';
+import { avmeldingslenker } from '@/lib/alerts/lenkeside';
 import { arterISesong, velgToppdag, type SesongArt, type Toppdag } from '@/lib/alerts/ekstra';
 import { beregnFasit, FASIT_MODEN_ETTER_VARSEL_DAGER, type FasitTall } from '@/lib/alerts/fasit';
 import { PREDICTION_TILE_REGIONS } from '@/lib/prediction/tile-regions';
@@ -25,7 +27,8 @@ import { regionSlug } from '@/lib/prediction/region-slug';
  *
  * Jobben gjør tre ting, i denne rekkefølgen:
  *   1. regner ut dagens score per region og LAGRER den (region_daily_scores)
- *   2. leser gårsdagen og ukas bunn fra den samme tabellen
+ *   2. leser gårsdagen og ukas bunn fra den samme tabellen — med hull på
+ *      inntil to dager brobygd, se src/lib/alerts/historikk.ts
  *   3. lar src/lib/alerts/decision.ts avgjøre hvem som skal ha e-post
  *
  * Steg 1 skjer uansett om noen abonnerer. Historikken er verdt å ha for seg
@@ -36,14 +39,6 @@ import { regionSlug } from '@/lib/prediction/region-slug';
  */
 
 export const maxDuration = 300;
-
-/**
- * Vinduet for ukas bunn: så mange DATOER, i dag medregnet. Samme definisjon
- * som decision.ts («de siste sju dagene (i dag medregnet)») og sesongtesten
- * (`scorer.slice(d - 6, d + 1)`). Trekk derfor fra HISTORIKK_DAGER − 1 når
- * startdatoen regnes ut — å trekke fra 7 gir et vindu på åtte datoer.
- */
-const HISTORIKK_DAGER = 7;
 
 interface TileRow {
   score: number;
@@ -199,7 +194,10 @@ export async function GET(request: NextRequest) {
   // uansett, og den er grunnlaget for /soppforhold.
   const manglerEpost = manglendeEpostKonfig();
   if (manglerEpost.length > 0) {
-    log.error('soppvarsel.epost_ikke_konfigurert', { mangler: manglerEpost });
+    // log.error tar FEILEN som andre argument og konteksten som tredje. Alle
+    // feillinjene her sendte konteksten som andre — og sa da bare
+    // «[object Object]» i loggen. Se src/lib/alerts/__tests__/feillogg.test.ts.
+    log.error('soppvarsel.epost_ikke_konfigurert', undefined, { mangler: manglerEpost });
     Sentry.captureMessage(
       `Soppvarselet kan ikke sende e-post — mangler ${manglerEpost.join(', ')}`,
       'error'
@@ -221,7 +219,7 @@ export async function GET(request: NextRequest) {
     .limit(1)
     .maybeSingle();
   if (datoErr) {
-    log.error('soppvarsel.dato_feilet', { message: datoErr.message });
+    log.error('soppvarsel.dato_feilet', undefined, { message: datoErr.message });
     return NextResponse.json({ error: 'Kunne ikke hente rasterdato' }, { status: 500 });
   }
   const tileDate = datoRad?.tile_date as string | undefined;
@@ -251,7 +249,7 @@ export async function GET(request: NextRequest) {
       .order('id', { ascending: true })
       .range(fra, fra + 999);
     if (error) {
-      log.error('soppvarsel.fliser_feilet', { message: error.message });
+      log.error('soppvarsel.fliser_feilet', undefined, { message: error.message });
       return NextResponse.json({ error: 'Kunne ikke hente fliser' }, { status: 500 });
     }
     rader.push(...((data ?? []) as TileRow[]));
@@ -287,15 +285,19 @@ export async function GET(request: NextRequest) {
       [...scoreIDag].map(([region, score]) => ({ region, tile_date: tileDate, score })),
       { onConflict: 'region,tile_date' }
     );
-    if (error) log.warn('soppvarsel.lagring_feilet', { message: error.message });
+    if (error) {
+      // Ikke bare en advarsel: en dag som ikke blir lagret er nettopp det som
+      // lager hullet i morgendagens historikk. Ett slikt hull brobygges
+      // (historikk.ts), men flere på rad koster et omslag — så det skal ses.
+      log.error('soppvarsel.lagring_feilet', undefined, { message: error.message });
+      Sentry.captureMessage(`Soppvarselet fikk ikke lagret dagens regionscorer (${tileDate}): ${error.message}`, 'error');
+      await Sentry.flush(2000);
+    }
   }
 
   // ── 3. Historikk ──────────────────────────────────────────────────────────
   const fraDato = new Date(`${tileDate}T00:00:00Z`);
   fraDato.setUTCDate(fraDato.getUTCDate() - (HISTORIKK_DAGER - 1));
-  const igaar = new Date(`${tileDate}T00:00:00Z`);
-  igaar.setUTCDate(igaar.getUTCDate() - 1);
-  const igaarIso = igaar.toISOString().slice(0, 10);
 
   const { data: historikk, error: histErr } = await db
     .from('region_daily_scores')
@@ -303,38 +305,37 @@ export async function GET(request: NextRequest) {
     .gte('tile_date', fraDato.toISOString().slice(0, 10))
     .lte('tile_date', tileDate);
   if (histErr) {
-    log.error('soppvarsel.historikk_feilet', { message: histErr.message });
+    log.error('soppvarsel.historikk_feilet', undefined, { message: histErr.message });
     return NextResponse.json({ error: 'Kunne ikke hente historikk' }, { status: 500 });
   }
 
-  const scoreIGar = new Map<string, number>();
-  const lavesteUke = new Map<string, number>();
   const scorePerDato = new Map<string, Map<string, number>>();
   for (const rad of (historikk ?? []) as Array<{ region: string; tile_date: string; score: number }>) {
-    if (rad.tile_date === igaarIso) scoreIGar.set(rad.region, rad.score);
-    const naa = lavesteUke.get(rad.region);
-    if (naa === undefined || rad.score < naa) lavesteUke.set(rad.region, rad.score);
     const datoer = scorePerDato.get(rad.region) ?? new Map<string, number>();
     datoer.set(rad.tile_date, rad.score);
     scorePerDato.set(rad.region, datoer);
   }
+  // Dagens tall legges inn fra minnet også: feilet lagringen i steg 2, skal
+  // dagens vurdering likevel regnes på dagens tall.
+  for (const [region, score] of scoreIDag) {
+    const datoer = scorePerDato.get(region) ?? new Map<string, number>();
+    datoer.set(tileDate, score);
+    scorePerDato.set(region, datoer);
+  }
 
-  // Siste omslag under→over terskelen per region. decision.ts bruker datoen til
-  // å hente inn igjen varsler som feilet på selve omslagsdagen. Bare nabodager
-  // teller — et hull i historikken er manglende data, ikke et omslag.
-  const sisteOmslag = new Map<string, string>();
+  // «I går», ukas bunn og siste omslag per region. Mangler gårsdagen (en natt
+  // uten fliser, en feilet lagring), brukes nyeste målte dag inntil tre dager
+  // tilbake, og et omslag regnes også over et slikt hull — ellers svelget én
+  // manglende dag hele omslaget. Reglene og begrunnelsen bor i historikk.ts.
+  const historikkPerRegion = new Map<string, RegionHistorikk>();
+  const brobygdeRegioner: string[] = [];
   for (const [region, datoer] of scorePerDato) {
-    const sortert = [...datoer.keys()].sort();
-    for (let i = 1; i < sortert.length; i += 1) {
-      const erNabodager =
-        Date.parse(`${sortert[i]}T00:00:00Z`) - Date.parse(`${sortert[i - 1]}T00:00:00Z`) === 86_400_000;
-      if (!erNabodager) continue;
-      const forrige = datoer.get(sortert[i - 1]);
-      const denne = datoer.get(sortert[i]);
-      if (forrige !== undefined && denne !== undefined && forrige < VARSEL_MIN_SCORE && denne >= VARSEL_MIN_SCORE) {
-        sisteOmslag.set(region, sortert[i]);
-      }
-    }
+    const lest = lesRegionHistorikk(datoer, tileDate);
+    historikkPerRegion.set(region, lest);
+    if (lest.hullDager > 0) brobygdeRegioner.push(region);
+  }
+  if (brobygdeRegioner.length > 0) {
+    log.warn('soppvarsel.hull_i_historikk', { tileDate, regioner: brobygdeRegioner.length });
   }
 
   // ── 4. Abonnementene ──────────────────────────────────────────────────────
@@ -351,7 +352,7 @@ export async function GET(request: NextRequest) {
       .order('id', { ascending: true })
       .range(fra, fra + 999);
     if (abErr) {
-      log.error('soppvarsel.abonnement_feilet', { message: abErr.message });
+      log.error('soppvarsel.abonnement_feilet', undefined, { message: abErr.message });
       return NextResponse.json({ error: 'Kunne ikke hente abonnementer' }, { status: 500 });
     }
     abonnenter.push(...((data ?? []) as Abonnement[]));
@@ -382,13 +383,14 @@ export async function GET(request: NextRequest) {
       continue;
     }
 
+    const hist = historikkPerRegion.get(ab.region);
     const beslutning = skalVarsle({
       scoreIDag: iDag,
-      scoreIGar: scoreIGar.get(ab.region) ?? null,
-      lavesteSisteUke: lavesteUke.get(ab.region) ?? iDag,
+      scoreIGar: hist?.scoreIGar ?? null,
+      lavesteSisteUke: hist?.lavesteSisteUke ?? iDag,
       sistVarsletIso: ab.last_notified_at,
       naa,
-      sisteOmslagIso: sisteOmslag.get(ab.region) ?? null
+      sisteOmslagIso: hist?.sisteOmslagIso ?? null
     });
 
     if (!beslutning.send) {
@@ -411,10 +413,6 @@ export async function GET(request: NextRequest) {
       continue;
     }
 
-    // ⚠️ API-ruta, ikke kvitteringssiden. /soppvarsel/av (uten /api) er bare en
-    // passiv bekreftelse — en lenke dit ville vist «du er avmeldt» uten å melde
-    // av noen. API-ruta gjør jobben og sender mennesket videre til siden selv.
-    const avmeldingsUrl = `${appUrl}/api/soppvarsel/av?t=${ab.unsubscribe_token}`;
     const spraak = (ab.locale === 'sv' ? 'sv' : 'nb') as Locale;
     const ekstra = await hentEkstra(db, ab.region, spraak, naa);
     const fasit = await hentFasit(db, ab.region, naa);
@@ -434,13 +432,21 @@ export async function GET(request: NextRequest) {
       if (loggErr) log.warn('soppvarsel.hendelseslogg_feilet', { region: ab.region, message: loggErr.message });
     }
 
+    // To utgaver av avmeldingslenka: den rene til List-Unsubscribe-hodet
+    // (RFC 8058-POST), og én til brødteksten som bærer utsendingstid og språk.
+    // Hvorfor står i avmeldingslenker() og i /api/soppvarsel/av. Tiden tas
+    // HER, idet e-posten bygges — etter vær- og fasitoppslagene over.
+    const sendtSek = Math.floor(Date.now() / 1000);
+    const avmelding = avmeldingslenker({ appUrl, token: ab.unsubscribe_token, sendtSek, locale: spraak });
+
     const { emne, html, tekst } = byggVarselEpost({
       region: ab.region,
       fra: beslutning.fra,
       til: beslutning.til,
       locale: spraak,
       appUrl,
-      avmeldingsUrl,
+      // Brødtekstlenka — hodet får den rene adressen i sendEpost under.
+      avmeldingsUrl: avmelding.brodtekst,
       toppdag: ekstra.toppdag,
       arter: ekstra.arter,
       fasit: fasit ? { dato: fasit.dato, ukenEtter: fasit.ukenEtter, ukenFor: fasit.ukenFor } : null,
@@ -448,7 +454,7 @@ export async function GET(request: NextRequest) {
       // sender leseren videre til områdesiden. Det er «aktivering» i rapporten.
       // &s= er utsendingstidspunktet klikk-ruta måler skanner/menneske mot —
       // skrevet her, idet e-posten bygges, og aldri rullet tilbake.
-      lenkeUrl: `${appUrl}/api/soppvarsel/klikk?t=${ab.unsubscribe_token}&r=${regionSlug(ab.region)}&s=${Math.floor(Date.now() / 1000)}`
+      lenkeUrl: `${appUrl}/api/soppvarsel/klikk?t=${ab.unsubscribe_token}&r=${regionSlug(ab.region)}&s=${sendtSek}`
     });
 
     // STEMPLE FØR SENDING — samme husregel som purre-cronen og X-posteren.
@@ -464,7 +470,7 @@ export async function GET(request: NextRequest) {
       .or(`last_notified_at.is.null,last_notified_at.lt.${karanteneGrenseIso}`)
       .select('id');
     if (kravErr) {
-      log.error('soppvarsel.krav_feilet', { abonnement: ab.id, message: kravErr.message });
+      log.error('soppvarsel.krav_feilet', undefined, { abonnement: ab.id, message: kravErr.message });
       feilet += 1;
       continue;
     }
@@ -490,7 +496,8 @@ export async function GET(request: NextRequest) {
       emne,
       html,
       tekst,
-      avmeldingsUrl,
+      // List-Unsubscribe: den rene adressen, uten &s= — se der lenkene bygges.
+      avmeldingsUrl: avmelding.hode,
       // Hendelsen, ikke klokka: en gjentatt kjøring samme dag får samme nøkkel.
       idempotensNokkel: `soppvarsel/${ab.id}/${tileDate}`
     });
@@ -512,7 +519,7 @@ export async function GET(request: NextRequest) {
       if (tilbakeErr) {
         // Raden står stemplet uten at e-posten gikk: én tapt e-post for denne
         // syklusen. Det motsatte (dobbel e-post) er verre — men logg høyt.
-        log.error('soppvarsel.krav_ikke_tilbakestilt', { abonnement: ab.id, message: tilbakeErr.message });
+        log.error('soppvarsel.krav_ikke_tilbakestilt', undefined, { abonnement: ab.id, message: tilbakeErr.message });
       }
       feilet += 1;
       continue;
@@ -528,7 +535,8 @@ export async function GET(request: NextRequest) {
     abonnenter: abonnenter.length,
     sendt,
     feilet,
-    avslag
+    avslag,
+    brobygdeRegioner: brobygdeRegioner.length
   });
 
   return NextResponse.json({
@@ -539,6 +547,7 @@ export async function GET(request: NextRequest) {
     sendt,
     feilet,
     avslag,
+    brobygdeRegioner: brobygdeRegioner.length,
     karanteneDager: VARSEL_KARANTENE_DAGER
   });
 }

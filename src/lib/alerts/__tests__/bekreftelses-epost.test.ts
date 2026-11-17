@@ -26,4 +26,17 @@ describe('byggBekreftelsesEpost', () => {
     const { html } = byggBekreftelsesEpost({ region: 'Oslo', locale: 'nb', bekreftUrl: url });
     expect(html).toContain('uten bekreftelse sendes ingenting');
   });
+
+  // Varselet fyrer bare når et område krysser terskelen, og det skjer i praksis
+  // ikke om vinteren. Setningen er alltid sann (ingen datologikk i e-posten) og
+  // lover ingenting om NÅR det snur.
+  it.each([
+    ['nb', 'Utenom sesongen kan det gå måneder mellom e-postene'],
+    ['sv', 'Utanför säsongen kan det gå månader mellan mejlen']
+  ] as const)('%s: sier at det kan gå måneder mellom e-postene utenom sesongen', (locale, setning) => {
+    const { html, tekst } = byggBekreftelsesEpost({ region: 'Oslo', locale, bekreftUrl: url });
+    expect(html).toContain(setning);
+    expect(tekst).toContain(setning);
+    expect(`${html} ${tekst}`).not.toMatch(/til sommeren|till sommaren|finner du|hittar du/i);
+  });
 });

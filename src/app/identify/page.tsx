@@ -5,13 +5,13 @@ import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useLocale, useTranslations } from 'next-intl';
-import { AiFiksetBanner } from '@/components/identify/AiFiksetBanner';
+import { PoisonHotlineLinksClient } from '@/components/safety/PoisonHotlineLinksClient';
 import { PageWrapper } from '@/components/layout/PageWrapper';
 import { Button } from '@/components/ui/Button';
 import { getOptionalPosition, NATIV_FRIST_MARGIN_MS, POSISJON_TIMEOUT_MS, PosisjonTidsavbrudd } from '@/lib/hooks/useGeolocation';
 import { useErMontert } from '@/lib/hooks/useErMontert';
 import { IdentifyError, useIdentify } from '@/lib/hooks/useIdentify';
-import { base64ToBlob, optimizeImageForIdentification, reencodeBase64ForHistory } from '@/lib/utils/image';
+import { base64ToBlob, bildeFeilKode, optimizeImageForIdentification, reencodeBase64ForHistory } from '@/lib/utils/image';
 import { createClient } from '@/lib/supabase/client';
 import {
   HISTORY_IMAGE_MAX_DIM,
@@ -22,6 +22,10 @@ import { MAX_TOTAL_BASE64_CHARS } from '@/lib/utils/identify-images';
 import { isNativePlatform } from '@/lib/native/platform';
 import { captureNativePhoto, kameraFeil, type KameraFeil } from '@/lib/native/camera';
 import { meldIdentifiseringsfeil } from '@/lib/identifications/meld-feil';
+import { medPosisjonstid } from '@/lib/identifications/okt-resultat';
+
+/** Klokka, lest i hendelser — aldri under rendring. */
+const klokke = () => Date.now();
 
 /**
  * Legger historikk-kopien av bilde 1 i den private bøtta.
@@ -65,7 +69,14 @@ export default function IdentifyPage() {
   // videre når svaret kommer, skal de ikke dras tilbake til resultatsiden.
   const montert = useErMontert();
 
-  const [error, setError] = useState<string | null>(null);
+  // Feilteksten under knappene. `sjekkHistorikk` følger MED teksten, ikke i en
+  // egen tilstand: klienten ga opp etter at bildene var sendt, svaret kan
+  // ligge i historikken, og lenka dit vises under teksten (se handleIdentify).
+  // Som ett objekt kan lenka aldri bli stående igjen under en annen feil.
+  const [feil, setFeil] = useState<{ tekst: string; sjekkHistorikk: boolean } | null>(null);
+  const error = feil?.tekst ?? null;
+  const setError = (tekst: string | null, sjekkHistorikk = false) =>
+    setFeil(tekst == null ? null : { tekst, sjekkHistorikk });
   const [aiDisabled, setAiDisabled] = useState(false);
   // Kvoteveggen får sin egen tilstand fordi den er det motsatte av en feil:
   // brukeren har gjort alt riktig og skal videre et sted. Som rød tekstlinje
@@ -180,7 +191,11 @@ export default function IdentifyPage() {
       });
     } catch (err) {
       meldIdentifiseringsfeil({ steg: 'bilde', feil: err });
-      setError(err instanceof Error ? err.message : t('couldNotGetImage'));
+      // Aldri err.message rått: image.ts kaster norske setninger, og alt annet
+      // som kan ryke her er nettleserens egen engelske tekst. Koden velger
+      // oversettelsen — et bilde nettleseren ikke kan lese får sin egen tekst,
+      // fordi brukeren kan gjøre noe med det.
+      setError(bildeFeilKode(err) === 'ulesbart' ? t('imageUnreadable') : t('couldNotGetImage'));
     } finally {
       setOptimizing(false);
     }
@@ -213,6 +228,9 @@ export default function IdentifyPage() {
       // har oppslaget en frist (pluginens timeout + margin), og en frist som
       // går ut, betyr at pluginen tidde. Det meldes, så det ikke er usynlig.
       const { fix: coords, tidsavbrudd } = await getOptionalPosition();
+      // Enhetens klokke i det posisjonen kom fram — taket for når den kan være
+      // målt. Se medPosisjonstid.
+      const posisjonMottattMs = klokke();
       if (tidsavbrudd) {
         meldIdentifiseringsfeil({ steg: 'posisjon', feil: new PosisjonTidsavbrudd(POSISJON_TIMEOUT_MS + NATIV_FRIST_MARGIN_MS) });
       }
@@ -238,14 +256,20 @@ export default function IdentifyPage() {
         void lastOppHistorikkbilde(filled[0].base64, result.historyImagePath);
       }
 
+      // Tiden fixet selv bærer følger posisjonen inn i økta. Resultatsiden
+      // regner alderen fra den, så en lagret iOS-posisjon fra en time siden
+      // gir spørsmålet om hvor funnet skal lagres, i stedet for å gå gjennom
+      // som «for under ett minutt siden» (src/lib/findings/resultatposisjon.ts).
+      const iOkta = medPosisjonstid(result, coords, posisjonMottattMs);
+
       // Kvotefeil HER ville vært grusomt: Kindwise-kallet er alt betalt og
       // kvoteenheten brukt. Tre bilder kan presse sessionStorage-kvoten, så
       // faller full payload, prøver vi igjen med bare første bilde (resultatet
       // og lagringsflyten overlever; stripen med ekstra bilder ofres).
       try {
-        sessionStorage.setItem('identifyResult', JSON.stringify(result));
+        sessionStorage.setItem('identifyResult', JSON.stringify(iOkta));
       } catch {
-        const slank = { ...result, originalImageDataUrls: [result.originalImageDataUrl] };
+        const slank = { ...iOkta, originalImageDataUrls: [iOkta.originalImageDataUrl] };
         sessionStorage.setItem('identifyResult', JSON.stringify(slank));
       }
       // Knappen forblir sperret til siden er byttet: slippes vakta før
@@ -265,14 +289,38 @@ export default function IdentifyPage() {
         feil: err,
         bildetegn: filled.map((p) => p.base64.length)
       });
-      // fetch rejects with a TypeError whose message is browser-English
-      // («Load failed» in WebKit) — translate instead of surfacing it raw.
+      // En brutt forbindelse er en TypeError med nettleser-engelsk tekst
+      // («Load failed» i WebKit) — oversett i stedet for å vise den rå.
+      //
+      // Klientens egne utfall (useIdentify.ts) har heller ingen brukbar tekst
+      // i selve feilen, og de to gruppene skal IKKE ha samme råd:
+      //   • 'upload_stalled' — bildene kom aldri fram. Ingenting er brukt, og
+      //     de ligger fortsatt i feltene: et nytt forsøk er ett trykk.
+      //   • 'timeout' / 'response_lost' — hele kroppen var sendt før klienten
+      //     ga opp. Serveren kan ha gjort jobben: kvoteenheten er brukt og
+      //     svaret ligger i historikken. Et blindt nytt forsøk ville kostet én
+      //     enhet til for samme sopp, så teksten sender brukeren til «Mine
+      //     identifiseringer» først, og lenka dit vises under den.
+      // Alt annet som ikke er rutens JSON (Vercels 413/504 er HTML) får
+      // katalogens tekst. Teksten i selve feilen er da hardkodet norsk og ment
+      // for Sentry — vist rått fikk svenske brukere norsk. Det samme gjelder
+      // feil som ikke kommer fra kallet i det hele tatt (en full
+      // sessionStorage): der er teksten nettleserens egen, på engelsk. Bare
+      // rutens JSON-svar (IdentifyError med json) er på leserens språk.
+      const svarKanLigge =
+        err instanceof IdentifyError && (err.code === 'timeout' || err.code === 'response_lost');
       const message =
         err instanceof TypeError
           ? t('networkError')
-          : err instanceof Error
-            ? err.message
-            : t('identifyFailed');
+          : svarKanLigge
+            ? t('timeoutError')
+            : err instanceof IdentifyError && err.code === 'upload_stalled'
+              ? t('uploadStalledError')
+              : err instanceof IdentifyError && err.json !== true
+                ? t('identifyFailed')
+                : err instanceof IdentifyError
+                  ? err.message
+                  : t('identifyFailed');
       // Forgrener på kode, ikke på tekst. Den forrige varianten leste
       // `message.toLowerCase().includes('ikke aktivert')` — den virket bare så
       // lenge serveren alltid svarte norsk, og ville stille sluttet å virke i
@@ -284,7 +332,7 @@ export default function IdentifyPage() {
         // inneholder det faktiske tallet fra FREE_DAILY_AI_LIMIT.
         setQuotaMessage(message);
       } else {
-        setError(message);
+        setError(message, svarKanLigge);
       }
     }
   };
@@ -309,7 +357,9 @@ export default function IdentifyPage() {
       const kjent = kameraFeil(err);
       // Pluginens avvisninger heter alle «Error»; koden skiller dem i Sentry.
       meldIdentifiseringsfeil({ steg: 'kamera', kode: kjent ?? undefined, feil: err });
-      setError(kjent ? t(KAMERA_FEIL_TEKST[kjent]) : err instanceof Error ? err.message : t('couldNotGetImage'));
+      // En avvisning vi ikke kjenner igjen er pluginens engelske streng. Den
+      // står i Sentry (linja over); brukeren får katalogens tekst.
+      setError(kjent ? t(KAMERA_FEIL_TEKST[kjent]) : t('couldNotGetImage'));
     } finally {
       henterBildeRef.current = false;
       setOptimizing(false);
@@ -331,9 +381,6 @@ export default function IdentifyPage() {
             {t('historyLink')} →
           </Link>
         </header>
-
-        {/* Bare når AI-en faktisk virker — ellers ville «fikset» vært løgn. */}
-        {aiDisabled ? null : <AiFiksetBanner />}
 
         {aiDisabled ? (
           <div className="rounded-xl border border-amber-300 bg-amber-50 p-4">
@@ -404,7 +451,10 @@ export default function IdentifyPage() {
             <a href={s('controlUrl')} target="_blank" rel="noreferrer" className="underline">
               {t('soppkontrollen')}
             </a>
-            {t('safetyPhonePrefix')} <strong>{s('poisonNumber')}</strong>.
+            {/* Ringelenker (én for norsk, to for svensk) — ikke ren tekst.
+                safetyPhonePrefix navngir allerede giftinformasjonen. */}
+            {t('safetyPhonePrefix')}{' '}
+            <PoisonHotlineLinksClient className="font-bold underline" />.
           </p>
         </div>
 
@@ -416,11 +466,16 @@ export default function IdentifyPage() {
             <p className="mt-1 text-xs font-medium text-amber-800">{t('sameMushroomHint')}</p>
           </div>
 
+          {/* Ingen capture-attributt, med vilje. Med den åpner mobil-Safari og
+              Chrome på Android kameraet direkte og hopper over velgeren — da
+              var «velg bilde» i knappeteksten usann, og bilder tatt tidligere
+              (i en skog uten dekning) kunne ikke identifiseres på nett. Uten
+              den tilbyr systemet både kamera og bildebibliotek, som de andre
+              filfeltene i appen. Ikke `multiple`: ett bilde per felt. */}
           <input
             ref={fileInputRef}
             type="file"
             accept="image/*"
-            capture="environment"
             className="hidden"
             onChange={(event) => {
               const file = event.target.files?.[0];
@@ -518,6 +573,13 @@ export default function IdentifyPage() {
           </div>
 
           {error ? <p className="mt-3 text-sm text-red-600">{error}</p> : null}
+          {/* Samme etikett som lenka i sidehodet, men HER: feilen står nederst
+              på en lang side, og teksten over ber brukeren se der først. */}
+          {feil?.sjekkHistorikk ? (
+            <Link href="/identifiseringer" className="mt-2 inline-block text-sm font-semibold text-forest-800 underline">
+              {t('historyLink')} →
+            </Link>
+          ) : null}
           {sender === 'posisjon' ? (
             <p className="mt-3 text-sm text-gray-700">{t('locating')}</p>
           ) : sender === 'analyse' || identify.isPending ? (

@@ -7,6 +7,7 @@ import { fetchWeatherSummary } from '@/lib/weather';
 import { getForestProperties } from '@/lib/forest';
 import { bestEffortFieldContext } from '@/lib/findings/field-context';
 import { roundForProviderLookup } from '@/lib/privacy/provider-precision';
+import { apiFeil, loggFeil } from '@/lib/api/feil';
 
 /**
  * "Etter at du besøkte stedet: fant du sopp?" — one tap of ground truth per
@@ -33,7 +34,7 @@ export async function POST(request: NextRequest) {
       data: { user }
     } = await supabase.auth.getUser();
     if (!user) {
-      return NextResponse.json({ error: 'Ikke autentisert' }, { status: 401 });
+      return apiFeil('unauthenticated', 401);
     }
 
     const rl = checkRateLimit(`spot-feedback:${getClientKey(request, user.id)}`, 30, 60);
@@ -61,7 +62,7 @@ export async function POST(request: NextRequest) {
       visitedRaw > Date.now() + 24 * 60 * 60 * 1000 ||
       visitedRaw < Date.now() - 90 * 24 * 60 * 60 * 1000
     ) {
-      return NextResponse.json({ error: 'Ugyldig tilbakemelding' }, { status: 400 });
+      return apiFeil('feedback_invalid', 400);
     }
 
     const capturedAt = new Date().toISOString();
@@ -95,9 +96,12 @@ export async function POST(request: NextRequest) {
     });
 
     if (error) {
-      // 42P01 = table missing (migration 021 not applied yet) — degrade politely.
-      log.error('spot_feedback.insert_failed', { code: error.code, message: error.message });
-      return NextResponse.json({ error: 'Kunne ikke lagre tilbakemeldingen' }, { status: 500 });
+      // A missing table (migration 021 not applied) arrives as PGRST205 from
+      // PostgREST, not 42P01. loggFeil puts code and message in the log
+      // context — log.error(event, error) printed the plain error object as
+      // «[object Object]», so neither was ever logged.
+      loggFeil(log, 'spot_feedback.insert_failed', error);
+      return apiFeil('feedback_save_failed', 500);
     }
 
     log.info('spot_feedback.saved', {
@@ -108,7 +112,7 @@ export async function POST(request: NextRequest) {
     });
     return NextResponse.json({ ok: true });
   } catch (error) {
-    log.error('spot_feedback.failed', error);
-    return NextResponse.json({ error: 'Kunne ikke lagre tilbakemeldingen' }, { status: 500 });
+    loggFeil(log, 'spot_feedback.failed', error);
+    return apiFeil('feedback_save_failed', 500);
   }
 }

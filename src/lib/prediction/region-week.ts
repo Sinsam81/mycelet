@@ -3,6 +3,7 @@ import type { DailyForecast } from '@/lib/weather/forecast';
 import { buildWeek, filterUpcomingDays } from './week-scores';
 import { forecastBarHeights, isFlatWeek } from '@/lib/utils/forecast-bars';
 import { pickBestForecastDay } from '@/lib/utils/forecast-best-day';
+import { osloDag } from '@/lib/bruk/bruksdag';
 
 /**
  * «Uka framover» for områdesidene under /soppforhold: sju søyler og en
@@ -27,6 +28,23 @@ import { pickBestForecastDay } from '@/lib/utils/forecast-best-day';
  * se forecast-best-day.ts): da pekes det ikke på en tilfeldig vinner.
  *
  * Språket følger landet, som resten av områdesidene.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ * «I DAG» ER DAGEN I OSLO, IKKE I UTC
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * Datoen for dag 0 ble lest med now.toISOString() — UTC. Mellom midnatt og
+ * kl. 01 norsk tid (kl. 02 om sommeren) er UTC-datoen fortsatt gårsdagens: da
+ * sto «I dag» over gårsdagens dato, og dagen leseren faktisk var i, sto som
+ * NESTE søyle med ukedagsnavnet sitt. Setningen under kunne si «Ser best ut på
+ * torsdag» til en som leste den på torsdag. Måneden og dagen i måneden (som
+ * styrer sesongleddet) ble samtidig lest i serverens lokale tid — tre
+ * avlesninger av «nå» som ikke trengte å være enige.
+ *
+ * Nå kommer alle tre fra samme Oslo-dato (osloDag, samme hjelper som
+ * bruksdagene og sesongtilstanden). Norge og Sverige deler tidssone.
+ * Prognosedagene er fortsatt UTC-døgn fra MET — de forskyver seg en time eller
+ * to mot lokale døgn, og det er uten betydning for en rangering av dager.
  */
 
 export interface RegionWeekDay {
@@ -160,7 +178,10 @@ export function computeRegionWeek(
   opts: { land: 'NO' | 'SE'; now: Date }
 ): RegionWeek | null {
   const { land, now } = opts;
-  const todayKey = now.toISOString().slice(0, 10);
+  // Dagen i Oslo — se «I DAG ER DAGEN I OSLO» i filhodet. Måned og dag leses
+  // av SAMME dato, så sesongleddet aldri regnes for en annen dag enn «I dag».
+  const todayKey = osloDag(now);
+  const [, maaned, dagIManeden] = todayKey.split('-').map(Number);
   const future = filterUpcomingDays(forecast, todayKey);
   if (future.length < 3) return null; // under fire søyler er ingen «uke»
 
@@ -168,8 +189,8 @@ export function computeRegionWeek(
   const locale = land === 'SE' ? 'sv' : 'nb';
   const { days } = buildWeek(observed, future, {
     todayKey,
-    month: now.getMonth() + 1,
-    dayOfMonth: now.getDate(),
+    month: maaned,
+    dayOfMonth: dagIManeden,
     locale
   });
 

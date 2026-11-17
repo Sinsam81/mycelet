@@ -40,6 +40,10 @@ mottakere, riktig språk (`src/lib/alerts/presse.ts`; teksten der SKAL være
 identisk med pitchen under). Ingenting sendes til noen redaksjon automatisk.
 Du kopierer, sjekker adressen, og sender selv.
 
+Ett unntak fra «identisk»: mangler beregningen for natta før (en natt jobben
+ikke gikk), vet vi at det har snudd, men ikke hvilken natt. Da står det «har
+snudd» i den ferdige pitchen i stedet for «snudde i natt» — la det stå slik.
+
 **På en omslagsdag.** Pitchen er sterkest den morgenen soppvarselet faktisk
 slår ut i journalistens region — da er «det snudde i natt» selve saken, og
 tallet i emnefeltet er ferskt. Cron-jobben kjører 07:00; sjekk

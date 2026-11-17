@@ -1,11 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { useTranslations } from 'next-intl';
 import { AlertCircle, Copy, Download, Loader2, Trash2, X } from 'lucide-react';
 import { useIsNative } from '@/lib/hooks/useIsNative';
+import { LUKKEKNAPP_KLASSER, useDialogFokus } from '@/components/ui/useDialogFokus';
 
 /**
  * GDPR-rights UI on the profile page.
@@ -138,6 +139,13 @@ export function AccountDataActions({
     setErrorMsg(null);
   }
 
+  // Escape følger samme regel som krysset og bakteppet: slettedialogen kan
+  // ikke lukkes mens slettingen pågår.
+  const deletePanelRef = useRef<HTMLDivElement>(null);
+  useDialogFokus(deletePanelRef, { aapen: showDeleteModal, onLukk: closeModal, kanLukkes: !deleting });
+  const exportPanelRef = useRef<HTMLDivElement>(null);
+  useDialogFokus(exportPanelRef, { aapen: exportJson !== null, onLukk: () => setExportJson(null) });
+
   return (
     <>
       <article className="space-y-3 rounded-xl border border-gray-200 bg-white p-4">
@@ -183,7 +191,9 @@ export function AccountDataActions({
           onClick={closeModal}
         >
           <div
-            className="w-full max-w-md space-y-4 rounded-xl bg-white p-6 shadow-2xl"
+            ref={deletePanelRef}
+            tabIndex={-1}
+            className="w-full max-w-md space-y-4 rounded-xl bg-white p-6 shadow-2xl outline-none"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-start justify-between gap-2">
@@ -195,9 +205,9 @@ export function AccountDataActions({
                 onClick={closeModal}
                 disabled={deleting}
                 aria-label={t('closeLabel')}
-                className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                className={LUKKEKNAPP_KLASSER}
               >
-                <X className="h-5 w-5" />
+                <X className="h-5 w-5" aria-hidden />
               </button>
             </div>
 
@@ -208,6 +218,7 @@ export function AccountDataActions({
                 <li>{t('deletedFindings')}</li>
                 <li>{t('deletedForum')}</li>
                 <li>{t('deletedInteractions')}</li>
+                <li>{t('deletedEmailAlerts')}</li>
                 <li>{abonnementKanal === 'stripe' ? t('deletedSubscription') : t('deletedSubscriptionNative')}</li>
               </ul>
               <p className="pt-1 text-xs">
@@ -295,7 +306,9 @@ export function AccountDataActions({
           onClick={() => setExportJson(null)}
         >
           <div
-            className="flex max-h-[80vh] w-full max-w-md flex-col gap-3 rounded-xl bg-white p-5 shadow-2xl"
+            ref={exportPanelRef}
+            tabIndex={-1}
+            className="flex max-h-[80vh] w-full max-w-md flex-col gap-3 rounded-xl bg-white p-5 shadow-2xl outline-none"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-start justify-between gap-2">
@@ -306,9 +319,9 @@ export function AccountDataActions({
                 type="button"
                 onClick={() => setExportJson(null)}
                 aria-label={t('closeLabel')}
-                className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                className={LUKKEKNAPP_KLASSER}
               >
-                <X className="h-5 w-5" />
+                <X className="h-5 w-5" aria-hidden />
               </button>
             </div>
             <p className="text-sm text-gray-700">{t('exportModalBody')}</p>

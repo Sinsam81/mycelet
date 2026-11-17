@@ -8,12 +8,18 @@ import { intlLocale } from '@/lib/utils/intl-locale';
  * Sesongpasset fornyes om ett år, Premium om en måned, regnet fra dagen
  * BETALINGEN starter. Med en gratis prøveperiode er det ikke kjøpsdagen:
  * Stripe fakturerer ved `trial_end` (kjøpsdag + prøvedager), og det betalte
- * året løper derfra; Apple gjør det samme, og butikkens egen «Administrer
- * abonnement» viser den datoen. Arket og prissiden sier begge datoene rett ut
+ * året løper derfra. Hos Apple løper det betalte året også fra prøveslutt
+ * (butikkens «Administrer abonnement» viser den datoen), men trekket
+ * forsøkes i løpet av det siste døgnet FØR prøveslutt. Datoen her er derfor
+ * ingen frist for å avslutte i appen: der sier arket og prissiden «senest 24
+ * timer før» (kanal.ts / avslutningsfrist).
+ *
+ * Arket og prissiden sier begge datoene rett ut
  * — «gratis i 7 dager, fra ca. 29. september 2026 koster passet 249 kr per år,
  * gjelder da til ca. 29. september 2027» — fordi datoen ER argumentet for
- * passet: 99 kr dekker resten av denne høsten, passet dekker neste sesong
- * fram til da. Første utgave av arket regnet passet fra kjøpsdagen og nevnte
+ * passet: måneden dekker én måned, passet dekker et helt år fram til da.
+ * (HVA det året rommer — «resten av høsten nå» eller «hele neste sesong» —
+ * følger kjøpsmåneden og avgjøres i sesongtekst.ts, ikke her.) Første utgave av arket regnet passet fra kjøpsdagen og nevnte
  * aldri når de 249 kronene ble trukket; det leste som «gratis til september
  * 2027», og en kunde belastet på dag åtte er en refusjon og en anmeldelse.
  *

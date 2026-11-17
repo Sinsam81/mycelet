@@ -36,6 +36,44 @@ export interface Fix {
 }
 
 /**
+ * En posisjon med tiden plattformen sier den ble målt. Bare getOptionalPosition
+ * gir den ut (identifiseringen trenger den, se medPosisjonstid i
+ * src/lib/identifications/okt-resultat.ts); de andre engangsoppslagene gir
+ * bare koordinatene, som før.
+ */
+export interface MaaltFix extends Fix {
+  /**
+   * Når målingen ble gjort, i millisekunder siden epoken — samme enhet på alle
+   * plattformer: GeolocationPosition.timestamp i nettleseren (EpochTimeStamp),
+   * og `timestamp` fra @capacitor/geolocation 8.2.0 i skallet, som iOS fyller
+   * fra CLLocation.timestamp (millisecondsSinceUnixEpoch) og Android fra
+   * Location.time. Mangler når plattformen ikke oppga et brukbart tall.
+   *
+   * I iOS-skallet ser pluginen bort fra maximumAge, og CoreLocation kan svare
+   * med sin sist kjente posisjon — da er dette langt eldre enn kallet. Det er
+   * grunnen til at feltet finnes.
+   */
+  timestamp?: number;
+}
+
+/** Plattformens tidsstempel, når det er et brukbart tall. */
+function brukbarMaaletid(timestamp: unknown): number | undefined {
+  return typeof timestamp === 'number' && Number.isFinite(timestamp) && timestamp > 0 ? timestamp : undefined;
+}
+
+function somMaaltFix(coords: { latitude: number; longitude: number }, timestamp: unknown): MaaltFix {
+  const fix: MaaltFix = { latitude: coords.latitude, longitude: coords.longitude };
+  const maaletid = brukbarMaaletid(timestamp);
+  if (maaletid !== undefined) fix.timestamp = maaletid;
+  return fix;
+}
+
+/** Bare koordinatene — det getCurrentPositionOnce og getCurrentPositionIfGranted alltid har gitt. */
+function koordinater({ latitude, longitude }: Fix): Fix {
+  return { latitude, longitude };
+}
+
+/**
  * Pluginen lastes én gang og gjenbrukes — men det er MODULEN som mellomlagres,
  * aldri selve tillegget i et løfte.
  *
@@ -188,12 +226,12 @@ async function nativtOppslag(Geolocation: NativPlugin, options: typeof POSITION_
 }
 
 /** Selve oppslaget, uten tillatelsesspørsmål — kalleren har avklart tillatelsen først. */
-async function readCurrentPosition(options: typeof POSITION_OPTIONS): Promise<Fix> {
+async function readCurrentPosition(options: typeof POSITION_OPTIONS): Promise<MaaltFix> {
   if (isNativePlatform()) {
     const { Geolocation } = await hentGeolocationModul();
     // Frist og samordnet nullstilling — se over.
     const position = await nativtOppslag(Geolocation, options);
-    return { latitude: position.coords.latitude, longitude: position.coords.longitude };
+    return somMaaltFix(position.coords, position.timestamp);
   }
 
   if (!navigator.geolocation) {
@@ -202,7 +240,7 @@ async function readCurrentPosition(options: typeof POSITION_OPTIONS): Promise<Fi
 
   return new Promise((resolve, reject) => {
     navigator.geolocation.getCurrentPosition(
-      (position) => resolve({ latitude: position.coords.latitude, longitude: position.coords.longitude }),
+      (position) => resolve(somMaaltFix(position.coords, position.timestamp)),
       (error) => reject(new Error(error.message)),
       options
     );
@@ -228,7 +266,7 @@ export async function getCurrentPositionOnce(): Promise<Fix> {
       throw new Error('Posisjonstilgang er avslått. Slå den på i Innstillinger for å bruke kartet.');
     }
   }
-  return readCurrentPosition(POSITION_OPTIONS);
+  return koordinater(await readCurrentPosition(POSITION_OPTIONS));
 }
 
 /** Hvor lenge et menneske kan bruke på en tillatelsesdialog før vi går videre uten. */
@@ -248,8 +286,12 @@ export const TILLATELSE_FRIST_MS = 60_000;
  * Tillatelsesdialogen (iOS eller nettleser) får TILLATELSE_FRIST_MS, så et
  * menneske rekker å lese den, men en dialog som aldri besvares (en lukket
  * dørhenger i Firefox) ikke kan holde knappen for alltid.
+ *
+ * Fixet bærer tiden plattformen sier det ble målt (`timestamp`, se MaaltFix).
+ * Identifiseringen legger den i resultatet, så resultatsiden kan se at en
+ * lagret iOS-posisjon er gammel i stedet for å tro at den er fra trykket.
  */
-export async function getOptionalPosition(): Promise<{ fix: Fix | null; tidsavbrudd: boolean }> {
+export async function getOptionalPosition(): Promise<{ fix: MaaltFix | null; tidsavbrudd: boolean }> {
   try {
     if (isNativePlatform()) {
       const { Geolocation } = await hentGeolocationModul();
@@ -300,7 +342,7 @@ export async function hasGeolocationPermission(): Promise<boolean> {
 export async function getCurrentPositionIfGranted(): Promise<Fix | null> {
   if (!(await hasGeolocationPermission())) return null;
   try {
-    return await readCurrentPosition(SILENT_POSITION_OPTIONS);
+    return koordinater(await readCurrentPosition(SILENT_POSITION_OPTIONS));
   } catch {
     return null;
   }
@@ -311,6 +353,16 @@ export interface AccurateFix {
   longitude: number;
   /** Reported horizontal accuracy in meters (smaller is better). */
   accuracy: number;
+  /**
+   * Når plattformen sier målingen ble gjort (ms siden epoke).
+   *
+   * Finnes fordi `maximumAge: 0` under IKKE holder i iOS-skallet: pluginen
+   * leser bare enableHighAccuracy og timeout der, og CoreLocation leverer
+   * gjerne sin sist kjente posisjon først — den kan være mange minutter
+   * gammel og ha god nøyaktighet. Den som trenger «der jeg står NÅ» (lagring
+   * av funn, «Finn meg»), må se på denne. Se src/lib/map/fersk-posisjon.ts.
+   */
+  timestamp?: number;
 }
 
 interface WatchRefineOptions {
@@ -320,7 +372,19 @@ interface WatchRefineOptions {
   timeoutMs?: number;
   /** Called for every intermediate fix so the UI can live-recenter + shrink the circle. */
   onUpdate?: (fix: AccurateFix) => void;
-  /** Abort the watch early (e.g. on unmount or a fresh locate tap). */
+  /**
+   * Called once, when the watch itself starts — `timeoutMs` counts from here.
+   * In the native shell that is AFTER the plugin has loaded and the permission
+   * question is answered, and a person can take a long time over that dialog
+   * (iOS asks again after «Allow Once»). A caller that keeps its own deadline
+   * on the search must start it here, not when it calls.
+   */
+  onStart?: () => void;
+  /**
+   * Abort the search (e.g. on unmount or a fresh locate tap). Honoured in
+   * every phase: an abort while the plugin loads or the permission dialog is
+   * open rejects as soon as that step is over, and no watch is started.
+   */
   signal?: AbortSignal;
 }
 
@@ -330,25 +394,39 @@ interface WatchRefineOptions {
  * native), keeps the BEST (lowest-accuracy-meters) fix as the GPS sharpens, and
  * resolves early once accuracy <= target or when the timeout fires (with the best
  * fix seen). Rejects only if no fix arrived (or it was aborted) before resolving.
- * Always tears the watch down (clearWatch). `maximumAge: 0` → always a fresh fix,
- * never the stale cache `getCurrentPositionOnce` accepts.
+ * Always tears the watch down (clearWatch). `maximumAge: 0` → a fresh fix in
+ * the browser and on Android, never the stale cache `getCurrentPositionOnce`
+ * accepts. ⚠️ NOT on iOS: the plugin ignores maximumAge there, so the first fix
+ * can be CoreLocation's cached last-known position. Every fix therefore carries
+ * its `timestamp`; callers that need «here and now» go through
+ * `finnFerskPosisjon` (src/lib/map/fersk-posisjon.ts), which filters on it.
  *
  * Capacitor API verified against @capacitor/geolocation@8.2.0:
  *   watchPosition(options, (position: Position | null, err?) => void): Promise<string>
  *   clearWatch({ id }): Promise<void>
  */
 export async function watchPositionUntilAccurate(opts: WatchRefineOptions = {}): Promise<AccurateFix> {
-  const { targetAccuracyM = 25, timeoutMs = 12_000, onUpdate, signal } = opts;
+  const { targetAccuracyM = 25, timeoutMs = 12_000, onUpdate, onStart, signal } = opts;
   const options = { enableHighAccuracy: true, timeout: timeoutMs, maximumAge: 0 };
 
   if (signal?.aborted) throw new Error('Posisjonssøk avbrutt.');
 
   if (isNativePlatform()) {
     const { Geolocation } = await hentGeolocationModul();
+    // Aborted while the module loaded: do not put a permission dialog in front
+    // of someone who has already closed what asked for it.
+    if (signal?.aborted) throw new Error('Posisjonssøk avbrutt.');
     const permission = await Geolocation.requestPermissions();
+    // The abort listener is registered further down, with the watch. An abort
+    // that fired during the awaits above dispatched its event to nobody —
+    // `signal.aborted` at the top was the only check, so the watch started
+    // anyway and ran to its timeout for a caller that was gone (and
+    // `finnFerskPosisjon`, which had aborted, dropped every fix it delivered).
+    if (signal?.aborted) throw new Error('Posisjonssøk avbrutt.');
     if (permission.location === 'denied') {
       throw new Error('Posisjonstilgang er avslått. Slå den på i Innstillinger for å bruke kartet.');
     }
+    onStart?.();
     return new Promise<AccurateFix>((resolve, reject) => {
       // Declare ALL state up-front so an early callback can't hit a `let` in its
       // temporal dead zone (the bug the review caught).
@@ -382,8 +460,8 @@ export async function watchPositionUntilAccurate(opts: WatchRefineOptions = {}):
         timeoutMs
       );
 
-      const consider = (lat: number, lng: number, accuracy: number) => {
-        const fix: AccurateFix = { latitude: lat, longitude: lng, accuracy };
+      const consider = (lat: number, lng: number, accuracy: number, timestamp?: number) => {
+        const fix: AccurateFix = { latitude: lat, longitude: lng, accuracy, timestamp };
         if (!best || accuracy < best.accuracy) best = fix;
         onUpdate?.(fix);
         if (accuracy <= targetAccuracyM) finish(() => resolve(fix));
@@ -392,7 +470,7 @@ export async function watchPositionUntilAccurate(opts: WatchRefineOptions = {}):
       Geolocation.watchPosition(options, (position, err) => {
         if (settled) return;
         if (err || !position) return; // transient watch error — keep waiting for the timeout
-        consider(position.coords.latitude, position.coords.longitude, position.coords.accuracy);
+        consider(position.coords.latitude, position.coords.longitude, position.coords.accuracy, position.timestamp);
       })
         .then((id) => {
           watchId = id;
@@ -407,6 +485,9 @@ export async function watchPositionUntilAccurate(opts: WatchRefineOptions = {}):
 
   if (!navigator.geolocation) throw new Error('Geolocation støttes ikke i nettleseren.');
 
+  // No separate phase before the watch here: the browser asks for permission
+  // as part of watchPosition itself.
+  onStart?.();
   return new Promise<AccurateFix>((resolve, reject) => {
     // All state declared BEFORE starting the watch (TDZ-safe).
     let settled = false;
@@ -426,8 +507,8 @@ export async function watchPositionUntilAccurate(opts: WatchRefineOptions = {}):
     const onAbort = () => finish(() => reject(new Error('Posisjonssøk avbrutt.')));
     signal?.addEventListener('abort', onAbort);
 
-    const consider = (lat: number, lng: number, accuracy: number) => {
-      const fix: AccurateFix = { latitude: lat, longitude: lng, accuracy };
+    const consider = (lat: number, lng: number, accuracy: number, timestamp?: number) => {
+      const fix: AccurateFix = { latitude: lat, longitude: lng, accuracy, timestamp };
       if (!best || accuracy < best.accuracy) best = fix;
       onUpdate?.(fix);
       if (accuracy <= targetAccuracyM) finish(() => resolve(fix));
@@ -441,7 +522,7 @@ export async function watchPositionUntilAccurate(opts: WatchRefineOptions = {}):
     watchId = navigator.geolocation.watchPosition(
       (position) => {
         if (settled) return;
-        consider(position.coords.latitude, position.coords.longitude, position.coords.accuracy);
+        consider(position.coords.latitude, position.coords.longitude, position.coords.accuracy, position.timestamp);
       },
       (error) => {
         lastErr = error;

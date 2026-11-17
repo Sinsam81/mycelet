@@ -10,8 +10,13 @@ import { BillingStatus, BillingTier, guessTierFromProductId, hasPaidAccess, isPa
  *
  * Event semantics (docs.revenuecat.com/docs/integrations/webhooks):
  * - CANCELLATION means "auto-renew turned off" — access CONTINUES until the
- *   period ends. EXPIRATION is the event that actually removes access. The one
- *   exception: cancel_reason CUSTOMER_SUPPORT is a refund → revoke immediately.
+ *   period ends. EXPIRATION is the event that actually removes access. Two
+ *   exceptions, both by cancel_reason: CUSTOMER_SUPPORT is a refund → revoke
+ *   immediately, and BILLING_ERROR is not a cancellation at all (next point).
+ * - A failed renewal fires TWO events at once: BILLING_ISSUE and a
+ *   CANCELLATION with cancel_reason BILLING_ERROR. Only BILLING_ISSUE carries
+ *   the grace period, so it alone is applied and the CANCELLATION is ACKed —
+ *   see BILLING_ERROR_CANCELLATION_ACK for what went wrong when both wrote.
  * - RevenueCat retries deliveries (at-least-once); `event.id` is the official
  *   dedup key, and deliveries can arrive OUT OF ORDER — the route enforces
  *   ordering via the stored rc_event_timestamp_ms.
@@ -126,6 +131,41 @@ const GRANT_TYPES = new Set([
 const HANDLED_TYPES = new Set([...GRANT_TYPES, 'CANCELLATION', 'EXPIRATION', 'BILLING_ISSUE']);
 
 /**
+ * ACK-grunnen for en CANCELLATION med cancel_reason BILLING_ERROR.
+ *
+ * Når en fornyelse feiler, sender RevenueCat to hendelser samtidig:
+ * BILLING_ISSUE og en CANCELLATION med cancel_reason BILLING_ERROR
+ * (dokumentert under «Billing Issue Flow»; rekkefølgen er normalt
+ * BILLING_ISSUE først, men ikke garantert). De er to meldinger om det samme —
+ * RevenueCat skriver selv at BILLING_ISSUE kan utelates av den som lytter på
+ * den andre. Vi gjør det motsatte, for bare BILLING_ISSUE bærer fristen
+ * (`grace_period_expiration_at_ms`). CANCELLATION-hendelsen har bare
+ * `expiration_at_ms`: den perioden som nettopp gikk ut.
+ *
+ * Fram til november 2026 ble den behandlet som en frivillig oppsigelse
+ * («auto-fornyelse av, tilgang ut perioden»). Med en frist hos Apple gikk det
+ * galt i BEGGE rekkefølger:
+ *
+ *   · BILLING_ISSUE → CANCELLATION: fristen ble skrevet, og så overskrevet med
+ *     en utløpsdato som alt var passert. Kunden mistet Premium i det fristen
+ *     begynte — akkurat de dagene Apple sier tilgangen skal stå.
+ *   · CANCELLATION → BILLING_ISSUE: CANCELLATION flyttet rekkefølgemerket
+ *     (rc_event_timestamp_ms) forbi BILLING_ISSUE, som er laget et øyeblikk
+ *     tidligere. Ruta forkastet den som utdatert, og fristen ble aldri skrevet.
+ *
+ * I tillegg sto `rc_event_type = CANCELLATION` igjen på raden, og plankortet
+ * (erFrivilligOppsagt i kanal.ts) leser det som kundens egen oppsigelse:
+ * «du belastes ikke igjen» til en kunde Apple fortsatt forsøker å belaste.
+ *
+ * Nå skrives den aldri. BILLING_ISSUE eier tilstanden ved et betalingsproblem
+ * (frist → tilgang til fristen; ingen frist → past_due), og RENEWAL eller
+ * EXPIRATION avslutter den. Kommer BILLING_ISSUE aldri fram, står raden som
+ * før med en utløpsdato som er passert — ingen tilgang utover det butikken
+ * ga, og «utløpt, men merket aktiv» i dagsrapporten.
+ */
+export const BILLING_ERROR_CANCELLATION_ACK = 'billing_error_cancellation';
+
+/**
  * Map one webhook event to a billing decision. Everything unknown or
  * informational is ACKed (RevenueCat retries non-200s up to 5 times — an
  * unhandled-but-harmless event must never turn into a retry storm).
@@ -161,6 +201,11 @@ export function mapRevenueCatEvent(event: RevenueCatEvent): RevenueCatDecision {
   }
 
   if (type === 'CANCELLATION') {
+    if (event.cancel_reason === 'BILLING_ERROR') {
+      // Et betalingsproblem, ikke en oppsigelse. BILLING_ISSUE, som kommer
+      // samtidig, er den som skrives — se BILLING_ERROR_CANCELLATION_ACK.
+      return { action: 'ack', reason: BILLING_ERROR_CANCELLATION_ACK };
+    }
     if (event.cancel_reason === 'CUSTOMER_SUPPORT') {
       // Refund → access off now (an EXPIRATION usually follows; this is the
       // belt-and-braces path so a refunded user never keeps premium).
@@ -212,12 +257,19 @@ export function mapRevenueCatEvent(event: RevenueCatEvent): RevenueCatDecision {
   if (graceEnd) {
     // Store grace period keeps access alive; extend to its end. RENEWAL
     // (recovered) or EXPIRATION (lost) arrives later and settles it.
+    //
+    // Feiler det FØRSTE trekket etter en prøve, er transaksjonen fortsatt
+    // prøven (period_type TRIAL), og ingen penger har flyttet seg. Da holdes
+    // trialing, av samme grunn som for en oppsagt prøve over: `active` med
+    // løpende periode er «betalende» i dagsrapporten. Før endte raden som
+    // trialing bare når CANCELLATION-hendelsen (BILLING_ERROR) skrev sist; nå
+    // som den ikke skrives, må regelen stå her.
     return {
       action: 'apply',
       kind: 'modify',
       update: {
         tier,
-        status: 'active',
+        status: event.period_type === 'TRIAL' ? 'trialing' : 'active',
         currentPeriodStart: periodStart,
         currentPeriodEnd: graceEnd,
         cancelAtPeriodEnd: true

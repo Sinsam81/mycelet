@@ -2,25 +2,25 @@ import { describe, it, expect } from 'vitest';
 import { looksLikeEmail, stripEmailDomain, toPublicUsername } from '../username';
 
 /**
- * De to strengene under er hentet ordrett fra signup-metadata i produksjon
- * 2. august 2026. De er ikke oppdiktet — det er nøyaktig det to brukere skrev
- * i brukernavn-feltet, og det migrasjon 037 var i ferd med å gjøre offentlig.
+ * Formen speiler en ekte hendelse: to brukere skrev hele e-postadressen sin i
+ * brukernavn-feltet, med store bokstaver i lokaldelen. Verdiene under er
+ * oppdiktet — ekte adresser hører ikke hjemme i et offentlig repo.
  */
-const EKTE = {
-  trine: 'Trinesavoi@yahoo.com',
-  moyfrid: 'Moyfridovea@gmail.com'
+const EKSEMPEL = {
+  kari: 'Kari.Nordmann@example.com',
+  ola: 'Olasopp@example.org'
 };
 
 describe('feilen dette ble skrevet for', () => {
   it('en e-postadresse blir aldri et offentlig brukernavn', () => {
-    expect(toPublicUsername(EKTE.trine)).toBe('Trinesavoi');
-    expect(toPublicUsername(EKTE.moyfrid)).toBe('Moyfridovea');
+    expect(toPublicUsername(EKSEMPEL.kari)).toBe('Kari.Nordmann');
+    expect(toPublicUsername(EKSEMPEL.ola)).toBe('Olasopp');
   });
 
   it('domenedelen forsvinner helt — den er det som identifiserer personen', () => {
-    for (const v of Object.values(EKTE)) {
+    for (const v of Object.values(EKSEMPEL)) {
       expect(toPublicUsername(v)).not.toContain('@');
-      expect(toPublicUsername(v)).not.toContain('.com');
+      expect(toPublicUsername(v)).not.toContain('example');
     }
   });
 });
@@ -58,7 +58,7 @@ describe('toPublicUsername', () => {
 
 describe('looksLikeEmail', () => {
   it('kjenner igjen ekte adresser', () => {
-    expect(looksLikeEmail(EKTE.trine)).toBe(true);
+    expect(looksLikeEmail(EKSEMPEL.kari)).toBe(true);
     expect(looksLikeEmail('a@b.no')).toBe(true);
   });
 

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createRequestLogger } from '@/lib/log/request';
+import { erManglendeTabell } from '@/lib/supabase/tabell-finnes';
 import { bearerSecretMatches } from '@/lib/security/secret-compare';
 import { IDENTIFICATION_RETENTION_DAYS, IDENTIFY_HISTORY_BUCKET } from '@/lib/identifications/config';
 
@@ -110,14 +111,14 @@ export async function GET(request: NextRequest) {
 
   // Feilede Kindwise-kall (migrasjon 073): bare tall for dagsrapporten, og
   // den leser høyst 7 dager tilbake. 30 dager er romslig. Mangler tabellen
-  // (42P01), er det ikke en feil i ryddingen — migrasjonen er bare ikke
+  // (PGRST205 fra PostgREST, 42P01 fra Postgres), er det ikke en feil i ryddingen — migrasjonen er bare ikke
   // påført ennå, og cronen skal ikke stå rød hver natt for det.
   const feilCutoff = new Date(Date.now() - FEIL_RETENTION_DAYS * 24 * 60 * 60 * 1000).toISOString();
   const { error: feilRaderError, count: feilRaderSlettet } = await admin
     .from('ai_identifiseringsfeil')
     .delete({ count: 'exact' })
     .lt('opprettet', feilCutoff);
-  if (feilRaderError && feilRaderError.code !== '42P01') feil.push(`feilteller: ${feilRaderError.message}`);
+  if (feilRaderError && !erManglendeTabell(feilRaderError)) feil.push(`feilteller: ${feilRaderError.message}`);
 
   const resultat = {
     cutoff,

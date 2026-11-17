@@ -62,7 +62,7 @@ export default function RouteError({
             {t('goHome')}
           </Link>
         </div>
-        {error.digest ? <p className="pt-2 text-xs text-gray-400">{t('reference', { digest: error.digest })}</p> : null}
+        {error.digest ? <p className="pt-2 text-xs text-gray-600">{t('reference', { digest: error.digest })}</p> : null}
       </section>
     </PageWrapper>
   );

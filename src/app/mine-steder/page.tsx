@@ -1,104 +1,70 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
-import { getJoinedSpeciesName } from '@/lib/utils/species-name';
 import { Camera, ExternalLink, Lock, Map as MapIcon, MapPin } from 'lucide-react';
 import { PageWrapper } from '@/components/layout/PageWrapper';
 import { createClient } from '@/lib/supabase/server';
 import { intlLocale } from '@/lib/utils/intl-locale';
 import { MyPlacesFilter } from '@/components/places/MyPlacesFilter';
 import { GpxEksportKnapp } from '@/components/places/GpxEksportKnapp';
+import { StedetsFunn } from '@/components/places/StedetsFunn';
+import { NyligSlettet, type SlettetFunn } from '@/components/places/NyligSlettet';
 import { RegistrerBruksdag } from '@/components/bruk/RegistrerBruksdag';
+import { dagerTilRydding } from '@/lib/findings/mine-funn';
+import { groupFindings, speciesName, type FindingRow, type JoinedSpecies } from '@/lib/findings/steder';
+import { timeZoneForLocale } from '@/i18n/config';
+// Angrefristen har ÉN kilde: ryddejobben som faktisk fjerner funnene. Lista
+// under regner dagene som står igjen av samme tall, så de to ikke kan drive.
+import { PURGE_AFTER_DAYS } from '@/app/api/cron/purge-deleted-findings/route';
+import { isUuid } from '@/app/api/findings/[id]/soft-delete';
+import { privatSide } from '@/lib/seo/side-titler';
 
 export async function generateMetadata() {
   const t = await getTranslations('MineSteder');
-  return {
-    title: t('metaTitle')
-  };
+  return privatSide(t('metaTitle'));
 }
 
 /**
  * "Mine steder" — the user's own finds grouped by place. This is the secret-
  * spots vault: it reads the user's OWN findings (all visibilities) via RLS,
  * so nothing here is ever visible to anyone else. Groups by location_name
- * when present, else by a ~1 km coordinate bucket.
+ * when present, else by a ~1 km coordinate bucket (src/lib/findings/steder.ts).
+ *
+ * Each place card opens into the finds behind it, where the owner can change
+ * the sharing level, edit the note or delete the find (PATCH/DELETE
+ * /api/findings/:id). Deleted finds stay listed at the bottom for the whole
+ * undo window. The page itself only reads — every write goes through those
+ * routes, on a click.
  */
 
-interface FindingRow {
+interface DeletedRow {
   id: string;
   location_name: string | null;
-  latitude: number;
-  longitude: number;
   found_at: string;
-  image_url: string | null;
-  visibility: string;
+  deleted_at: string;
   species_name_override: string | null;
-  mushroom_species:
-    | { norwegian_name: string | null; swedish_name: string | null }
-    | { norwegian_name: string | null; swedish_name: string | null }[]
-    | null;
+  mushroom_species: JoinedSpecies;
 }
 
-interface Spot {
-  label: string;
-  unnamed: boolean;
-  count: number;
-  species: Map<string, number>;
-  lastVisit: string;
-  years: Set<number>;
-  allPrivate: boolean;
-  thumb: string | null;
-  lat: number;
-  lng: number;
-}
+/**
+ * Så mange slettede funn vises. Nok for de aller fleste; den som har ryddet
+ * bort flere i løpet av angrefristen, får vite at lista er kortet ned.
+ */
+const DELETED_LIMIT = 100;
 
-function speciesName(row: FindingRow, unknownLabel: string, locale: string): string {
-  return getJoinedSpeciesName(row.mushroom_species, locale) || row.species_name_override || unknownLabel;
-}
-
-function groupFindings(
-  rows: FindingRow[],
-  labels: { unknownSpecies: string; nearPlace: (lat: string, lng: string) => string },
-  locale: string
-): Spot[] {
-  const groups = new Map<string, Spot>();
-  for (const row of rows) {
-    const named = !!row.location_name?.trim();
-    const key = named
-      ? `name:${row.location_name!.trim().toLowerCase()}`
-      : `geo:${row.latitude.toFixed(2)},${row.longitude.toFixed(2)}`;
-    let spot = groups.get(key);
-    if (!spot) {
-      spot = {
-        label: named ? row.location_name!.trim() : labels.nearPlace(row.latitude.toFixed(3), row.longitude.toFixed(3)),
-        unnamed: !named,
-        count: 0,
-        species: new Map(),
-        lastVisit: row.found_at,
-        years: new Set(),
-        allPrivate: true,
-        thumb: null,
-        lat: 0,
-        lng: 0
-      };
-      groups.set(key, spot);
-    }
-    spot.count += 1;
-    const name = speciesName(row, labels.unknownSpecies, locale);
-    spot.species.set(name, (spot.species.get(name) ?? 0) + 1);
-    if (row.found_at > spot.lastVisit) spot.lastVisit = row.found_at;
-    spot.years.add(new Date(row.found_at).getFullYear());
-    if (row.visibility !== 'private') spot.allPrivate = false;
-    if (!spot.thumb && row.image_url) spot.thumb = row.image_url;
-    // Running average keeps the pin centred on the actual finds.
-    spot.lat += (row.latitude - spot.lat) / spot.count;
-    spot.lng += (row.longitude - spot.lng) / spot.count;
-  }
-  return [...groups.values()].sort((a, b) => b.count - a.count || (a.lastVisit < b.lastVisit ? 1 : -1));
-}
-
-export default async function MineStederPage() {
+export default async function MineStederPage({
+  searchParams
+}: {
+  /**
+   * `?funn=<id>`: kartets popup sender eieren hit for å endre deling eller
+   * notat. Stedet med funnet åpnes, og funnet markeres. Bare en id — aldri en
+   * posisjon — og den brukes bare til å velge blant radene RLS alt har gitt.
+   */
+  searchParams: Promise<{ funn?: string | string[] }>;
+}) {
   const t = await getTranslations('MineSteder');
+  const { funn: funnParam } = await searchParams;
+  const apneFunnId = typeof funnParam === 'string' && isUuid(funnParam) ? funnParam.toLowerCase() : null;
   const locale = await getLocale();
   const supabase = createClient();
   const {
@@ -106,24 +72,59 @@ export default async function MineStederPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect('/auth/login?redirect=/mine-steder');
 
-  const { data, error } = await supabase
-    .from('findings')
-    .select(
-      'id, location_name, latitude, longitude, found_at, image_url, visibility, species_name_override, mushroom_species(norwegian_name,swedish_name)'
-    )
-    .eq('user_id', user.id)
-    .eq('is_negative_observation', false)
-    // Funn brukeren har slettet (migrasjon 056). De ligger i 30 dager til for
-    // angrefristens skyld, men skal ikke telles eller vises noe sted.
-    .is('deleted_at', null)
-    .order('found_at', { ascending: false })
-    .limit(1000);
+  const [{ data, error }, { data: deletedData, error: deletedError }] = await Promise.all([
+    supabase
+      .from('findings')
+      .select(
+        'id, location_name, latitude, longitude, found_at, image_url, visibility, is_zone_finding, zone_label, zone_precision_km, notes, created_at, updated_at, species_name_override, mushroom_species(norwegian_name,swedish_name)'
+      )
+      .eq('user_id', user.id)
+      .eq('is_negative_observation', false)
+      // Funn brukeren har slettet (migrasjon 056) skal ikke telles eller stå
+      // blant stedene. De hentes for seg under, til «Nylig slettet».
+      .is('deleted_at', null)
+      .order('found_at', { ascending: false })
+      .limit(1000),
+    // Slettede funn ligger i PURGE_AFTER_DAYS dager før ryddejobben fjerner
+    // dem. Eier-RLS («Brukere kan lese egne funn») ser ikke på deleted_at, så
+    // samme sesjonsklient leser dem. Ingen koordinater: lista trenger dem ikke.
+    supabase
+      .from('findings')
+      .select('id, location_name, found_at, deleted_at, species_name_override, mushroom_species(norwegian_name,swedish_name)')
+      .eq('user_id', user.id)
+      .eq('is_negative_observation', false)
+      .not('deleted_at', 'is', null)
+      .order('deleted_at', { ascending: false })
+      // Én rad for mye: slik vet vi om lista er kortet ned, uten et eget tellekall.
+      .limit(DELETED_LIMIT + 1)
+  ]);
+
+  // Serveren står i UTC. Et funn gjort 00:30 norsk tid skal ikke få gårsdagens dato.
+  const foundDate = (iso: string) =>
+    new Date(iso).toLocaleDateString(intlLocale(locale), {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+      timeZone: timeZoneForLocale(locale)
+    });
+  const nowMs = new Date().getTime();
 
   const spots = groupFindings((data ?? []) as unknown as FindingRow[], {
     unknownSpecies: t('unknownSpecies'),
-    nearPlace: (lat, lng) => t('nearPlace', { lat, lng })
-  }, locale);
+    nearPlace: (lat, lng) => t('nearPlace', { lat, lng }),
+    foundDate
+  }, locale, nowMs);
   const totalFinds = spots.reduce((sum, s) => sum + s.count, 0);
+
+  const deletedRows = (deletedData ?? []) as unknown as DeletedRow[];
+  const recentlyDeleted: SlettetFunn[] = deletedRows.slice(0, DELETED_LIMIT).map((row) => ({
+    id: row.id,
+    artsnavn: speciesName(row, t('unknownSpecies'), locale),
+    sted: row.location_name?.trim() || null,
+    funnetTekst: foundDate(row.found_at),
+    slettetTid: row.deleted_at,
+    dagerIgjen: dagerTilRydding(row.deleted_at, nowMs, PURGE_AFTER_DAYS)
+  }));
 
   return (
     <PageWrapper>
@@ -186,20 +187,22 @@ export default async function MineStederPage() {
         ) : (
           <MyPlacesFilter
             places={spots.map((s) => ({
-              key: `${s.label}-${s.lat}`,
+              key: s.key,
               label: s.label,
               species: [...s.species.keys()],
               count: s.count,
               lastVisit: s.lastVisit
             }))}
           >
-            {spots.map((spot) => {
+            {spots.map((spot, index) => {
+              // Knytter «Vis funnene» til stedsnavnet for skjermlesere.
+              const headingId = `sted-${index}`;
               const topSpecies = [...spot.species.entries()].sort((a, b) => b[1] - a[1]);
               const shown = topSpecies.slice(0, 4);
               const more = topSpecies.length - shown.length;
               const years = [...spot.years].sort((a, b) => b - a);
               return (
-                <li key={`${spot.label}-${spot.lat}`} className="overflow-hidden rounded-2xl bg-white shadow-card">
+                <li key={spot.key} className="overflow-hidden rounded-2xl bg-white shadow-card">
                   <div className="flex">
                     {spot.thumb ? (
                       // eslint-disable-next-line @next/next/no-img-element
@@ -207,7 +210,10 @@ export default async function MineStederPage() {
                     ) : null}
                     <div className="min-w-0 flex-1 p-4">
                       <div className="flex items-start justify-between gap-2">
-                        <h2 className="flex min-w-0 items-center gap-1.5 font-serif text-lg font-semibold leading-tight text-forest-950">
+                        <h2
+                          id={headingId}
+                          className="flex min-w-0 items-center gap-1.5 font-serif text-lg font-semibold leading-tight text-forest-950"
+                        >
                           <MapPin className="h-4 w-4 shrink-0 text-forest-700" />
                           <span className="truncate">{spot.label}</span>
                         </h2>
@@ -219,7 +225,7 @@ export default async function MineStederPage() {
                       </div>
                       <p className="mt-0.5 text-xs text-gray-600">
                         {t('cardStats', { finds: spot.count, species: spot.species.size })}{' '}
-                        {new Date(spot.lastVisit).toLocaleDateString(intlLocale(locale), { day: 'numeric', month: 'short', year: 'numeric' })}
+                        {foundDate(spot.lastVisit)}
                         {years.length > 1 ? t('cardSeasons', { seasons: years.length, first: years[years.length - 1], last: years[0] }) : ''}
                       </p>
                       <div className="mt-2 flex flex-wrap gap-1">
@@ -252,11 +258,32 @@ export default async function MineStederPage() {
                       </div>
                     </div>
                   </div>
+                  {/* Funnene bak kortet: endre deling, endre notat, slett.
+                      Rendres først når kortet åpnes. */}
+                  <StedetsFunn
+                    funn={spot.finds}
+                    angrefristDager={PURGE_AFTER_DAYS}
+                    stedId={headingId}
+                    apneFunnId={apneFunnId}
+                  />
                 </li>
               );
             })}
           </MyPlacesFilter>
         )}
+
+        {/* Hele angrefristen, synlig. Står også når lista over er tom — den
+            som slettet sitt eneste funn ved et feilklikk, skal finne det her.
+            Feilet hovedspørringen, sier kortet over allerede fra. */}
+        {recentlyDeleted.length > 0 ? (
+          <NyligSlettet
+            funn={recentlyDeleted}
+            angrefristDager={PURGE_AFTER_DAYS}
+            avkortet={deletedRows.length > DELETED_LIMIT}
+          />
+        ) : deletedError && !error ? (
+          <p className="rounded-2xl bg-white p-4 text-sm text-gray-700 shadow-card">{t('recentlyDeletedLoadError')}</p>
+        ) : null}
 
         <p className="text-xs text-gray-500">
           🔒 {t('privacyNote')}

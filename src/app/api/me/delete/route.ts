@@ -5,6 +5,9 @@ import { logAdminAction } from '@/lib/audit/log';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { getClientKey, rateLimitResponse } from '@/lib/rate-limit/route';
 import { createRequestLogger } from '@/lib/log/request';
+import { apiFeil, loggFeil } from '@/lib/api/feil';
+import { vaskEpost } from '@/lib/alerts/adopsjon';
+import { erManglendeTabell } from '@/lib/supabase/tabell-finnes';
 import { deleteUserStorageObjects, type StorageApi } from '@/lib/storage/delete-user-objects';
 import { avsluttStripeVedSletting } from '@/lib/billing/avslutt-ved-sletting';
 import { getStripeServerClient } from '@/lib/stripe/server';
@@ -35,6 +38,10 @@ import {
  *         only approximate-level observations survive)
  *       - the survivors get latitude/longitude overwritten with the
  *         jittered display_* pair, so the exact GPS point is gone
+ *       - account-less mushroom-alert sign-ups on the user's own e-mail
+ *         address (alert_subscriptions rows with user_id NULL, migration
+ *         057) — nothing cascades to those, and they kept sending alerts
+ *         to a person whose account was gone
  *
  *   STEP 2 (Supabase auth.admin.deleteUser): cascade to profiles, which
  *     SET NULLs the user_id on:
@@ -66,9 +73,25 @@ import {
  * opprydding. Derfor sier feilmeldingene eksplisitt at det er trygt å gjenta.
  */
 
-/** Samme beskjed uansett hvilket steg som røk: hva er tilstanden, hva gjør du nå. */
-const RETRY_IS_SAFE =
-  'Kontoen din er IKKE slettet, men noe av innholdet ditt kan være fjernet. Prøv igjen — det er trygt å gjenta, og andre forsøk rydder resten. Vedvarer feilen, kontakt oss.';
+/**
+ * Samme beskjed uansett hvilket steg som røk: hva er tilstanden, hva gjør du nå.
+ *
+ * Teksten bor i src/lib/api/feil.ts (`delete_retry_safe`), på norsk og svensk:
+ * slettedialogen viser `details` FØR `error`, så det er denne setningen en
+ * svensk bruker faktisk leser når slettingen stopper halvveis.
+ */
+const RETRY_IS_SAFE = 'delete_retry_safe' as const;
+
+/**
+ * Feil som betyr at det ikke KAN finnes kontoløse varselrader: tabellen
+ * mangler (migrasjon 051), eller e-postkolonnen gjør det (057 — Postgres'
+ * 42703 når kolonnen står i et filter, PGRST204 fra skjemacachen). Da er det
+ * ingenting å slette, og en glemt migrasjon skal ikke stå i veien for retten
+ * til å bli slettet.
+ */
+function utenKontoloseVarsler(error: { code?: string | null }): boolean {
+  return erManglendeTabell(error) || error.code === '42703' || error.code === 'PGRST204';
+}
 
 export async function POST(request: NextRequest) {
   const log = createRequestLogger(request);
@@ -83,7 +106,7 @@ export async function POST(request: NextRequest) {
 
   if (!user) {
     log.info('account.self_delete.unauthenticated');
-    return NextResponse.json({ error: 'Ikke autentisert' }, { status: 401 });
+    return apiFeil('unauthenticated', 401);
   }
 
   const userLog = log.child({ userId: user.id });
@@ -100,13 +123,10 @@ export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => ({}));
   if (body?.confirm !== 'DELETE-MY-ACCOUNT') {
     userLog.info('account.self_delete.confirm_missing');
-    return NextResponse.json(
-      {
-        error: 'Bekreftelse mangler eller er feil',
-        hint: 'POST body må være { "confirm": "DELETE-MY-ACCOUNT" }.'
-      },
-      { status: 400 }
-    );
+    return apiFeil('delete_bad_confirm', 400, {
+      // Utviklertekst, ikke oversatt: ingen klient viser den.
+      hint: 'POST body må være { "confirm": "DELETE-MY-ACCOUNT" }.'
+    });
   }
 
   // Pre-deletion counts so we can return a receipt of what was wiped.
@@ -161,13 +181,9 @@ export async function POST(request: NextRequest) {
     admin = createAdminClient();
   } catch {
     userLog.error('account.self_delete.no_service_role_key');
-    return NextResponse.json(
-      {
-        error: 'Server-konfigurasjonsfeil',
-        details: 'SUPABASE_SERVICE_ROLE_KEY mangler. Kontoen din ble IKKE slettet. Kontakt support.'
-      },
-      { status: 500 }
-    );
+    // Navnet på miljøvariabelen sto i svaret, og dialogen viste det. Det er
+    // vår sak, ikke brukerens — de trenger å vite at ingenting er slettet.
+    return apiFeil('delete_unavailable', 500, { detaljer: 'delete_unavailable_details' });
   }
 
   // STEP 1 — explicitly delete findings that should NOT be anonymized
@@ -180,16 +196,10 @@ export async function POST(request: NextRequest) {
     .eq('user_id', user.id)
     .eq('is_negative_observation', false);
   if (positiveDeleteError) {
-    userLog.error('account.self_delete.positive_findings_delete_failed', positiveDeleteError);
-    return NextResponse.json(
-      {
-        error: 'Kunne ikke fjerne dine personlige funn før kontosletting',
-        // Leverandørens feilmelding blir i loggen. Brukeren trenger å vite hva
-        // tilstanden er og hva de skal gjøre, ikke hva Postgres het.
-        details: RETRY_IS_SAFE
-      },
-      { status: 500 }
-    );
+    // Leverandørens feilmelding blir i loggen. Brukeren trenger å vite hva
+    // tilstanden er og hva de skal gjøre, ikke hva Postgres het.
+    loggFeil(userLog, 'account.self_delete.positive_findings_delete_failed', positiveDeleteError);
+    return apiFeil('delete_findings_failed', 500, { detaljer: RETRY_IS_SAFE });
   }
 
   // STEP 1a — funn brukeren ALLEREDE har slettet selv.
@@ -209,14 +219,8 @@ export async function POST(request: NextRequest) {
     .eq('user_id', user.id)
     .not('deleted_at', 'is', null);
   if (softDeletedError) {
-    userLog.error('account.self_delete.soft_deleted_purge_failed', softDeletedError);
-    return NextResponse.json(
-      {
-        error: 'Kunne ikke fjerne funn du allerede hadde slettet',
-        details: RETRY_IS_SAFE
-      },
-      { status: 500 }
-    );
+    loggFeil(userLog, 'account.self_delete.soft_deleted_purge_failed', softDeletedError);
+    return apiFeil('delete_removed_findings_failed', 500, { detaljer: RETRY_IS_SAFE });
   }
 
   // STEP 1b — negative observasjoner som IKKE skal overleve.
@@ -234,14 +238,8 @@ export async function POST(request: NextRequest) {
     .eq('is_negative_observation', true)
     .neq('visibility', RETAINED_VISIBILITY);
   if (privateDeleteError) {
-    userLog.error('account.self_delete.private_findings_delete_failed', privateDeleteError);
-    return NextResponse.json(
-      {
-        error: 'Kunne ikke fjerne private observasjoner før kontosletting',
-        details: RETRY_IS_SAFE
-      },
-      { status: 500 }
-    );
+    loggFeil(userLog, 'account.self_delete.private_findings_delete_failed', privateDeleteError);
+    return apiFeil('delete_observations_failed', 500, { detaljer: RETRY_IS_SAFE });
   }
 
   // STEP 1b2 — grovkorn posisjonen på det som faktisk blir liggende igjen.
@@ -260,13 +258,7 @@ export async function POST(request: NextRequest) {
   );
   if (coarsenError) {
     userLog.error('account.self_delete.coarsen_failed', undefined, { detail: coarsenError });
-    return NextResponse.json(
-      {
-        error: 'Kunne ikke anonymisere posisjonen på observasjonene dine',
-        details: RETRY_IS_SAFE
-      },
-      { status: 500 }
-    );
+    return apiFeil('delete_coarsen_failed', 500, { detaljer: RETRY_IS_SAFE });
   }
 
   // STEP 1c — brukerens opplastede bilder.
@@ -285,13 +277,46 @@ export async function POST(request: NextRequest) {
     userLog.error('account.self_delete.storage_cleanup_failed', undefined, {
       failures: storageResult.failures
     });
-    return NextResponse.json(
-      {
-        error: 'Kunne ikke fjerne bildene dine',
-        details: RETRY_IS_SAFE
-      },
-      { status: 500 }
-    );
+    return apiFeil('delete_images_failed', 500, { detaljer: RETRY_IS_SAFE });
+  }
+
+  // STEP 1c2 — kontoløse soppvarsel-påmeldinger på brukerens egen adresse.
+  //
+  // Varselet kan slås på uten konto (migrasjon 057): en rad med user_id NULL
+  // og en e-postadresse. Kontoens egne rader (user_id) tar cascaden i steg 2,
+  // men de kontoløse henger ikke på noe. De ble stående — og den som hadde
+  // slettet kontoen sin, fikk fortsatt soppvarsel på e-post. /api/me/export
+  // regner de samme radene som brukerens egne data; da må slettingen også
+  // gjøre det.
+  //
+  // Adressen kommer fra auth, aldri fra forespørselen, og sammenlignes
+  // NØYAKTIG (trimmet, med små bokstaver — slik påmeldingsruta skriver den):
+  // ingen ilike, ingen delmatch. `user_id IS NULL` står i filteret, så en
+  // annen kontos rad kan aldri bli med. Alt på adressen går, også ubekreftede
+  // og avmeldte rader: adressen er personopplysningen, uansett status.
+  //
+  // Uten adresse på kontoen kjøres ingenting — et tomt filter skal aldri
+  // kunne treffe noe.
+  //
+  // Før Stripe med vilje: oppsigelsen er det ene steget som ikke kan gjøres
+  // om, og skal være det siste før selve kontoslettingen.
+  const epost = vaskEpost(user.email);
+  let emailAlertSubscriptions = 0;
+  if (epost) {
+    const { data: varselRader, error: varselError } = await admin
+      .from('alert_subscriptions')
+      .delete()
+      .is('user_id', null)
+      .eq('email', epost)
+      .select('id');
+    if (varselError && utenKontoloseVarsler(varselError)) {
+      userLog.warn('account.self_delete.email_alerts_unavailable', { code: varselError.code });
+    } else if (varselError) {
+      loggFeil(userLog, 'account.self_delete.email_alerts_delete_failed', varselError);
+      return apiFeil('delete_alerts_failed', 500, { detaljer: RETRY_IS_SAFE });
+    } else {
+      emailAlertSubscriptions = Array.isArray(varselRader) ? varselRader.length : 0;
+    }
   }
 
   // STEP 1d — løpende Stripe-abonnement.
@@ -308,13 +333,7 @@ export async function POST(request: NextRequest) {
   });
   if (!stripeResultat.ok) {
     userLog.error('account.self_delete.stripe_cancel_failed', undefined, { detail: stripeResultat.detalj });
-    return NextResponse.json(
-      {
-        error: 'Kunne ikke si opp abonnementet ditt hos Stripe',
-        details: RETRY_IS_SAFE
-      },
-      { status: 500 }
-    );
+    return apiFeil('delete_subscription_failed', 500, { detaljer: RETRY_IS_SAFE });
   }
 
   // STEP 2 — delete the auth.users row. Cascades to profiles which
@@ -322,14 +341,8 @@ export async function POST(request: NextRequest) {
   // remain), forum_posts, and comments.
   const { error: deleteError } = await admin.auth.admin.deleteUser(user.id);
   if (deleteError) {
-    userLog.error('account.self_delete.failed', deleteError);
-    return NextResponse.json(
-      {
-        error: 'Kunne ikke slette konto',
-        details: RETRY_IS_SAFE
-      },
-      { status: 500 }
-    );
+    loggFeil(userLog, 'account.self_delete.failed', deleteError);
+    return apiFeil('delete_account_failed', 500, { detaljer: RETRY_IS_SAFE });
   }
 
   // Audit log the self-deletion. Done after the auth.users row is gone —
@@ -353,6 +366,9 @@ export async function POST(request: NextRequest) {
     // Bildene er nå med i kvitteringen. Uten dette kunne brukeren ikke se at
     // de i det hele tatt ble fjernet — og før denne endringen ble de ikke det.
     uploadedImages: storageResult.removed,
+    // Kontoløse soppvarsel-påmeldinger på brukerens adresse (steg 1c2). Et
+    // tall, aldri adressen: kvitteringen går også i revisjonsloggen.
+    emailAlertSubscriptions,
     // Kvitteringen sier om et Stripe-abonnement faktisk ble sagt opp her.
     stripeSubscriptionCanceled: stripeResultat.avsluttet
   };

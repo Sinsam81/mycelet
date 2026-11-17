@@ -7,6 +7,8 @@ import { intlLocale } from '@/lib/utils/intl-locale';
 import { timeZoneForLocale } from '@/i18n/config';
 import { getJoinedSpeciesName } from '@/lib/utils/species-name';
 import { lagGpx, type GpxVeipunkt } from '@/lib/gpx/lag-gpx';
+import { createRequestLogger } from '@/lib/log/request';
+import { apiFeil, loggFeil } from '@/lib/api/feil';
 
 /**
  * GET /api/me/gpx — brukerens egne funn som GPX 1.1-veipunkter.
@@ -45,7 +47,7 @@ export async function GET(request: NextRequest) {
     data: { user }
   } = await supabase.auth.getUser();
   if (!user) {
-    return NextResponse.json({ error: 'Ikke autentisert' }, { status: 401 });
+    return apiFeil('unauthenticated', 401);
   }
 
   const rl = checkRateLimit(`gpx:${getClientKey(request, user.id)}`, 10, 60);
@@ -67,7 +69,10 @@ export async function GET(request: NextRequest) {
       .order('found_at', { ascending: false })
       .range(fra, fra + SIDE - 1);
     if (error) {
-      return NextResponse.json({ error: 'Kunne ikke hente funnene' }, { status: 500 });
+      // Feilen ble ikke logget noe sted: en eksport som feilet for en bruker
+      // var usynlig for oss.
+      loggFeil(createRequestLogger(request).child({ userId: user.id }), 'gpx.findings_query_failed', error, { fra });
+      return apiFeil('gpx_failed', 500, { locale });
     }
     const side = (data ?? []) as unknown as Rad[];
     rader.push(...side);

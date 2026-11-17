@@ -33,6 +33,8 @@
  *   - All ctx and error payloads pass through `redactPII` before output.
  *   - Object keys matching password/secret/token/apikey/etc. → '<redacted>'
  *   - Email-shaped strings anywhere → 's***@domain.tld'
+ *   - Strings longer than MAX_STRING_LENGTH (4096) are cut before any of
+ *     this runs, never inside an address or a token (see pii.ts)
  *   - Internal IDs (UUIDs, numeric DB IDs) are NOT redacted — meaningless
  *     in isolation, useful for cross-referencing.
  */
@@ -69,7 +71,6 @@ const consoleWriter: LoggerWriter = {
     // We always go through console.log so Next/Vercel ingest the line via
     // the same path. Level is in the structured payload, not via
     // console.warn/error which can have different formatting.
-    // eslint-disable-next-line no-console
     console.log(line);
   }
 };
@@ -106,6 +107,71 @@ function formatJson(level: LogLevel, msg: string, ctx: LogContext, ts: string): 
     msg,
     ...ctx
   });
+}
+
+/** Keys an error object carries. A plain object with only these is an error, not context. */
+const FEILNOKLER = new Set([
+  'name',
+  'message',
+  'code',
+  'details',
+  'hint',
+  'stack',
+  'status',
+  'statusCode',
+  'statusText',
+  'cause',
+  'error',
+  'error_description',
+  'errno',
+  'syscall'
+]);
+
+/** At least one of these must be present for a plain object to count as an error. */
+const FEILSIGNAL = ['message', 'code', 'details', 'hint', 'stack', 'error'];
+
+function erVanligObjekt(value: unknown): value is Record<string, unknown> {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return false;
+  const proto = Object.getPrototypeOf(value);
+  return proto === Object.prototype || proto === null;
+}
+
+function erFeilformet(value: Record<string, unknown>): boolean {
+  const nokler = Object.keys(value);
+  return (
+    nokler.length > 0 &&
+    nokler.every((n) => FEILNOKLER.has(n)) &&
+    FEILSIGNAL.some((n) => value[n] !== undefined && value[n] !== null)
+  );
+}
+
+/** A plain object passed in the error position that is really context. */
+function erKontekstobjekt(value: unknown): value is LogContext {
+  return erVanligObjekt(value) && !erFeilformet(value);
+}
+
+/**
+ * The `err` field for anything that is not undefined. Errors are kept as
+ * they are (redactPII serialises them); other objects keep their own
+ * fields so code/details/hint reach the log instead of `[object Object]`.
+ */
+function feilnyttelast(err: unknown): unknown {
+  if (err instanceof Error) return err;
+  if (err === null || typeof err !== 'object') {
+    return { name: 'NonError', message: String(err) };
+  }
+  if (Array.isArray(err)) return { name: 'NonError', value: err };
+
+  const felt: Record<string, unknown> = {};
+  for (const [nokkel, verdi] of Object.entries(err as Record<string, unknown>)) {
+    felt[nokkel] = verdi;
+  }
+  if (typeof felt.name !== 'string') felt.name = 'NonError';
+  if (felt.message === undefined) {
+    const tekst = String(err);
+    if (tekst !== '[object Object]') felt.message = tekst;
+  }
+  return felt;
 }
 
 interface LoggerOptions {
@@ -157,13 +223,37 @@ export class Logger {
   }
 
   /**
-   * Log an error event. The error object (or unknown thrown value) is
-   * serialized into the `err` field with name + message + stack, also
-   * passed through PII redaction.
+   * Log an error event.
+   *
+   * The second argument is the error (an `Error`, a thrown value or a
+   * Supabase/PostgREST error object) and the third is context. Many call
+   * sites pass something else second, so it is normalised here instead of
+   * at every call site — before this, anything that was not an `Error`
+   * went through `String()` and the line said `[object Object]`:
+   *
+   *   • `Error` (also `PostgrestError`, which extends it) → `err` with
+   *     name, message, stack, `cause` and the own fields pii.ts allows
+   *     (ERROR_FIELDS: code/details/hint and the like). Never the rest:
+   *     Stripe's signature error carries the raw webhook body.
+   *   • A plain object that only carries error fields (message, code,
+   *     details, hint…) → `err` with those fields, `name: 'NonError'`.
+   *   • Any other plain object, with no third argument → treated as the
+   *     context it is (`log.error('x', { userId, message })`).
+   *   • Any other non-Error object → `err` with its own fields.
+   *   • A primitive → `err: { name: 'NonError', message: String(value) }`.
+   *
+   * Everything still passes through PII redaction in `emit`.
    */
   error(msg: string, err?: unknown, ctx?: LogContext): void {
-    const errPayload = err instanceof Error ? err : err !== undefined ? { name: 'NonError', message: String(err) } : undefined;
-    this.emit('error', msg, { ...(ctx ?? {}), err: errPayload });
+    if (err === undefined) {
+      this.emit('error', msg, ctx);
+      return;
+    }
+    if (ctx === undefined && erKontekstobjekt(err)) {
+      this.emit('error', msg, err);
+      return;
+    }
+    this.emit('error', msg, { ...(ctx ?? {}), err: feilnyttelast(err) });
   }
 
   /**

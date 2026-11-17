@@ -42,6 +42,102 @@
   - Betalt plan: full hotspot-detalj.
   - Gratis/utlogget: begrenset hotspot-sett (coarse visning + upsell-message).
 
+## App Store (RevenueCat)
+
+Kjøp i iOS-appen går gjennom Apple og RevenueCat, og `POST /api/revenuecat/webhook`
+skriver den **samme** raden i `billing_subscriptions` som Stripe-webhooken. Tilgangen
+avgjøres derfor ett sted (`hasPaidAccess`), uansett hvor kunden kjøpte.
+`metadata.provider` sier hvem som skrev raden sist; en Apple-hendelse kan aldri
+overstyre et aktivt Stripe-abonnement, og omvendt. Selve reglene ligger i
+`src/lib/billing/revenuecat.ts` (ren logikk, testet).
+
+| Hendelse fra RevenueCat | Hva som skjer med raden |
+| --- | --- |
+| `INITIAL_PURCHASE`, `RENEWAL`, `UNCANCELLATION` m.fl. | Tilgang til `expiration_at_ms`. `trialing` når `period_type` er `TRIAL`, ellers `active`. |
+| `CANCELLATION` (fornyelsen er slått av, vanligvis av kunden) | Tilgangen står ut perioden, `cancel_at_period_end` settes. En oppsagt **prøve** forblir `trialing`. |
+| `CANCELLATION` med `cancel_reason = CUSTOMER_SUPPORT` | Refusjon: tilgangen tas med én gang. |
+| `CANCELLATION` med `cancel_reason = BILLING_ERROR` | **Skrives ikke.** Se under. |
+| `BILLING_ISSUE` | Med frist hos Apple: tilgang til fristen (`trialing` hvis det var første trekk etter en prøve). Uten frist: `past_due`. |
+| `EXPIRATION` | Tilgangen tas. |
+
+**Betalingsproblem = to hendelser.** Når en fornyelse feiler, sender RevenueCat
+`BILLING_ISSUE` og en `CANCELLATION` med `cancel_reason = BILLING_ERROR` samtidig,
+og rekkefølgen de kommer fram i er ikke garantert. Bare `BILLING_ISSUE` bærer
+fristen Apple gir kunden. Fram til november 2026 skrev begge, og fristen gikk
+tapt uansett rekkefølge: kom `BILLING_ISSUE` først, ble fristen overskrevet med
+en utløpsdato som alt var passert; kom `CANCELLATION` først, ble `BILLING_ISSUE`
+forkastet som utdatert. Nå skriver bare `BILLING_ISSUE`, og `RENEWAL` (betalingen
+gikk i orden) eller `EXPIRATION` (fristen ute) avslutter.
+
+**Manuelt tildelt tilgang** (`metadata.source = 'manual_grant'`: founder-passet,
+App Review-demokontoen, kundeservice) er et gulv ingen butikkhendelse kan senke.
+
+**Fristen for å avslutte en prøve er ikke prøveslutt hos Apple.** Apple
+forsøker trekket i løpet av det siste døgnet før prøven er over, så den som
+avslutter kvelden før, kan alt være belastet. I appen sier derfor både
+prøvearket og kortet på prissiden før kjøpet, og statuskortet og
+påminnelsen etter, at man må avslutte senest 24 timer før prøveperioden er
+over — aldri prøveslutt som frist. Før kjøpet står det uten klokkeslett:
+RevenueCat oppgir en månedsprøve som 30 dager, så et utregnet tidspunkt kunne
+ligget etter Apples. På nett er prøveslutt fristen, fordi Stripe belaster ved
+`trial_end`.
+
+**Frister.** Kallene ut fra betalingsrutene har en frist, så et tregt svar hos
+Stripe eller Supabase ikke holder en hendelse, et kjøp eller en sidevisning
+hengende:
+
+- **Hvert kall til Stripes API: 10 s og ett nytt forsøk.** Satt på selve
+  klienten (`getStripeServerClient` i `src/lib/stripe/server.ts`), så det
+  gjelder alle som bruker den — Stripe-webhooken, `/api/billing/checkout`,
+  `/api/billing/portal` og oppsigelsen i `/api/me/delete` — og det neste
+  kallet noen legger til. SDK-ens egen standard er 80 s per forsøk.
+- **Oppslaget «har e-posten hatt et abonnement før?»: 4 s per kall, 5 s
+  samlet.** Fristen er en del av regelen selv (`harHattTilgangFor` i
+  `src/lib/billing/tidligere-abonnent.ts`), som `/api/billing/status`
+  (`kanFaaProve`) og checkout begge kaller.
+- **Samme oppslag fra forsiden for innloggede: 2,5 s samlet.** Forsiden
+  avgjør ingenting, så den bruker visningsutgaven (`provesvarForVisning` i
+  `src/lib/billing/tidligere-abonnent-visning.ts`): samme regel, kortere
+  frist, og «vet ikke» som eget svar.
+- **Supabase Auth i Stripe-webhooken (`getUserById`): 8 s** (`OPPSLAG_FRIST_MS`).
+- **Prøvepåminnelsen fra Stripe-webhooken: `sendEpost` sin egen frist, 15 s**
+  (`RESEND_FRIST_MS` i `src/lib/email/send.ts`), romslig med vilje. Den sto
+  før også under de 8 sekundene over, og en påminnelse som kom fram etter
+  8–15 s, ble logget som mislykket. `sendEpost` skal aldri ligge under en
+  strammere frist enn sin egen.
+
+Går en frist ut, skjer nøyaktig det samme som når kallet feiler: webhooken
+svarer ikke-2xx og Stripe leverer hendelsen på nytt (for prøvepåminnelsen:
+sendingen logges som mislykket og hendelsen regnes som behandlet, som før),
+checkout, portalen og kontoslettingen svarer med den vanlige feilmeldingen, og
+oppslaget svarer som om Stripe ikke svarte — gratisuka som standard.
+
+Oppslaget har **én** frist med vilje. Den sto først bare i statusruta: da
+lovet headeren, arket og prissiden gratisuka etter 5 s, mens checkout ventet
+på det ekte svaret, fant det gamle abonnementet og lot Stripe trekke samme dag.
+Nå gir en treg dag hos Stripe samme svar i headeren, arket, prissiden og
+kjøpet. Forsiden er strengere: svarer ikke Stripe innen 2,5 s, eller feiler
+oppslaget, lover premiumkortet der ingenting om gratisuka denne gangen
+(nøytral knapp) i stedet for å gjette.
+
+Én feil ble rettet i samme omgang, fordi den avgjorde hva «ikke noe svar»
+betyr: spørsmålet «finnes brukeren fortsatt?» i Stripe-webhooken svarte «nei»
+på enhver feil, og «nei» sier opp abonnementet hos Stripe (det er nettet for
+kontoer som er slettet mens Stripe fakturerer videre). Nå er det bare et
+uttrykkelig «finnes ikke» (404) som gjør det. Et kort utfall hos Supabase Auth
+midt i en fornyelse kan ikke lenger si opp abonnementet til en betalende kunde.
+
+**Gjenstår.** Ingen kaller lenger Stripe med SDK-ens standardfrist. To ting
+står igjen:
+
+- Flatene og kjøpet gjør hvert sitt oppslag, til hver sin tid. Svarer Stripe
+  for sent på det ene og i tide på det andre, kan de fortsatt være uenige —
+  i verste fall er en tidligere kunde lovet en uke kjøpet ikke gir. Stripes
+  betalingsside viser beløpet som trekkes i dag før kunden bekrefter.
+- Databasekallene mot Supabase har ingen frist per kall; `maxDuration` på
+  rutene er nettet under dem. En frist hører hjemme ett sted, i
+  `createAdminClient` (`src/lib/supabase/admin.ts`), ikke i hvert kall.
+
 ## Prisendring 2026-08-31: Premium månedlig 79 → 99 kr
 
 Besluttet av eier sammen med innføring av 7 dagers gratis prøveperiode.

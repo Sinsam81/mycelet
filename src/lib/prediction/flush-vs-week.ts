@@ -27,6 +27,7 @@
  * en ny bølge om et par uker».
  */
 import type { FlushAssessment } from '@/lib/prediction/flush';
+import { isInMushroomSeason } from '@/lib/prediction/mushroom-day';
 import { DEFAULT_LOCALE, type Locale } from '@/i18n/config';
 
 /**
@@ -39,12 +40,17 @@ const MEANINGFUL_LIFT = 10;
 interface WeekCopy {
   title: (dag: string) => string;
   message: (loft: number, dager: number) => string;
-  /** Tillegget når forholdene alt ER modne, men én dag stikker seg ut. */
+  /** Tillegget når forholdene alt ER modne — eller banneret er sent i sesongen — og én dag stikker seg ut. */
   peakSuffix: (dag: string, loft: number) => string;
   /** Når flere dager deler toppen — vi peker ikke ut én, men tier ikke heller. */
   tiedTitle: string;
   tiedMessage: (loft: number, dager: number) => string;
   tiedSuffix: (loft: number) => string;
+  /**
+   * Delt topp under et sent «regn på vei». Uten «enda bedre»: forholdene er
+   * ikke modne i dag. Samme setning som innledningen i tiedMessage.
+   */
+  tiedLateSuffix: (loft: number) => string;
 }
 
 const COPY: Record<Locale, WeekCopy> = {
@@ -56,7 +62,8 @@ const COPY: Record<Locale, WeekCopy> = {
     tiedTitle: 'Bedre forhold senere denne uka',
     tiedMessage: (loft, dager) =>
       `Flere dager senere i uka ligger merkbart bedre an enn i dag (+${loft} poeng). Det er meldt regn som kan gi en ny bølge om ~${dager} dager, men du trenger ikke vente på den.`,
-    tiedSuffix: (loft) => ` Det blir enda bedre senere i uka (+${loft} poeng).`
+    tiedSuffix: (loft) => ` Det blir enda bedre senere i uka (+${loft} poeng).`,
+    tiedLateSuffix: (loft) => ` Flere dager senere i uka ligger merkbart bedre an enn i dag (+${loft} poeng).`
   },
   sv: {
     title: (dag) => `Bästa dagen den här veckan: ${dag}`,
@@ -66,7 +73,8 @@ const COPY: Record<Locale, WeekCopy> = {
     tiedTitle: 'Bättre förhållanden senare i veckan',
     tiedMessage: (loft, dagar) =>
       `Flera dagar senare i veckan ligger märkbart bättre till än i dag (+${loft} poäng). Det är aviserat regn som kan ge en ny våg om ~${dagar} dagar, men du behöver inte vänta på den.`,
-    tiedSuffix: (loft) => ` Det blir ännu bättre senare i veckan (+${loft} poäng).`
+    tiedSuffix: (loft) => ` Det blir ännu bättre senare i veckan (+${loft} poäng).`,
+    tiedLateSuffix: (loft) => ` Flera dagar senare i veckan ligger märkbart bättre till än i dag (+${loft} poäng).`
   }
 };
 
@@ -74,12 +82,17 @@ export interface WeekDay {
   label: string;
   score: number;
   isToday: boolean;
+  /** ÅÅÅÅ-MM-DD. Sent i sesongen navngir banneret ingen dag etter at sesongen er over. */
+  date?: string;
 }
 
 /**
  * Erstatter banneret når stripen har et tydelig bedre svar innenfor sitt eget
  * vindu. Returnerer vurderingen uendret i alle andre tilfeller — også når
  * statusen ikke er 'soon', for da peker ikke banneret utenfor uka.
+ *
+ * Sent i sesongen (`shoulder: 'late'`, november) erstattes ikke ordene: ukas
+ * beste dag legges til, og bare når den dagen fortsatt er i sesongen.
  */
 export function reconcileFlushWithWeek(
   flush: FlushAssessment,
@@ -99,6 +112,15 @@ export function reconcileFlushWithWeek(
   const best = senere.reduce((a, b) => (b.score > a.score ? b : a));
   const loft = best.score - today.score;
   if (loft < MEANINGFUL_LIFT) return flush;
+
+  // Sent i sesongen peker banneret ikke på en dag etter 30. november, der
+  // dommen sier «Utenom soppsesongen». Er ukas beste dag der, står bannerets
+  // egne ord alene — de sier alt at det er usikkert om soppen rekker det.
+  // `best` er den første dagen med toppverdien, så ved delt topp er alle de
+  // andre senere og like utenfor.
+  if (flush.shoulder === 'late' && best.date && !isInMushroomSeason(Number(best.date.slice(5, 7)))) {
+    return flush;
+  }
 
   // Uavgjort mellom flere dager er ikke ÉN vinner å peke på — samme regel som
   // «Best {dag}» ellers i appen. Men å tie helt er en overkorreksjon: målt live
@@ -134,6 +156,14 @@ export function reconcileFlushWithWeek(
   // dag som er best, i stedet for at fuktmodellen skrus på.
   if (flush.status === 'fruiting') {
     const tillegg = delerToppen ? copy.tiedSuffix(loft) : copy.peakSuffix(best.label, loft);
+    return { ...flush, message: `${flush.message}${tillegg}` };
+  }
+
+  // Et sent «regn på vei» (flush.ts) beholder sine egne ord. Erstatningen
+  // under lover «en ny bølge om ~N dager», og fra rundt 22. november lander
+  // den i desember. Ukas beste dag legges til, som for modne forhold over.
+  if (flush.shoulder === 'late') {
+    const tillegg = delerToppen ? copy.tiedLateSuffix(loft) : copy.peakSuffix(best.label, loft);
     return { ...flush, message: `${flush.message}${tillegg}` };
   }
 

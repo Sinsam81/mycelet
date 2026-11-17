@@ -1,7 +1,8 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   buildExplanation,
   buildSpotSummary,
+  etterToppen,
   scoreVerdict,
   sisteRegnvaer,
   type ExplanationWeather,
@@ -498,7 +499,7 @@ describe('scoreVerdict — kalibrert mot den faktiske fordelingen', () => {
     // dommen uoppnåelig, og 43 leste som «brukbare forhold».
     expect(scoreVerdict(43, 'nb', KANTARELL_NAVN)).toBe('Lite kantarell i skogen nå');
     expect(scoreVerdict(49, 'nb', KANTARELL_NAVN)).toBe('Lite kantarell i skogen nå');
-    expect(scoreVerdict(43, 'sv', KANTARELL_NAVN)).toBe('Lite kantarell i skogen nu');
+    expect(scoreVerdict(43, 'sv', KANTARELL_NAVN)).toBe('Inte mycket kantarell i skogen nu');
   });
 
   it('rammer toppen innenfor spennet, ikke over det', () => {
@@ -542,7 +543,159 @@ describe('scoreVerdict — kalibrert mot den faktiske fordelingen', () => {
   it('faller tilbake på sopp generelt uten artsnavn', () => {
     expect(scoreVerdict(45, 'nb')).toBe('Lite sopp i skogen nå');
     expect(scoreVerdict(80, 'nb')).toBe('Nå er det sopp i skogen 🍄');
-    expect(scoreVerdict(45, 'sv')).toBe('Lite svamp i skogen nu');
+    expect(scoreVerdict(45, 'sv')).toBe('Inte mycket svamp i skogen nu');
+  });
+
+  it('det laveste trinnet er et utvetydig nei på svensk — norsk er uendret', () => {
+    // Norsk «lite» betyr «ikke mye». Svensk «lite» leses som «litt»: «Lite svamp
+    // i skogen nu» kunne lese som en forsiktig god nyhet, på det laveste trinnet.
+    for (const [locale, navn] of [
+      ['sv', undefined],
+      ['sv', 'Trattkantarell'],
+      ['nb', undefined],
+      ['nb', 'Traktkantarell']
+    ] as const) {
+      const dom = scoreVerdict(10, locale, navn);
+      if (locale === 'sv') {
+        expect(dom).toMatch(/^Inte mycket /);
+        expect(dom).not.toMatch(/\blite\b/i);
+      } else {
+        expect(dom).toMatch(/^Lite /);
+      }
+    }
+    expect(scoreVerdict(10, 'sv', 'Trattkantarell')).toBe('Inte mycket trattkantarell i skogen nu');
+    // Regionstigen og kartets popup får det samme ordet.
+    expect(scoreVerdict(55, 'sv', undefined, { excellent: 81, good: 70, moderate: 61 })).toBe(
+      'Inte mycket svamp i skogen nu'
+    );
+    expect(
+      buildSpotSummary({ species: { ...KANTARELL, swedishName: 'Kantarell' }, month: 8, weather: PERFECT_KANTARELL_WEATHER, score: 45, locale: 'sv' })
+        .verdict
+    ).toBe('Inte mycket kantarell i skogen nu');
+  });
+});
+
+/**
+ * Det midterste trinnet i november. Målt: områdekortet på forsiden kunne si
+ * «Soppen er så vidt i gang» rett under «Fuktig nok — men sesongen er på hell»
+ * og «Fuktig og mildt — men sent i sesongen». «Så vidt i gang» sier at noe
+ * nettopp har begynt; i oktober og november går sesongen mot slutten.
+ */
+describe('scoreVerdict — det midterste trinnet følger sesongen', () => {
+  // Regionstigen (REGION_CONDITION_THRESHOLDS), skrevet ut så testen ikke låner
+  // fra koden den sjekker: 81 / 70 / 61.
+  const REGIONSTIGE = { excellent: 81, good: 70, moderate: 61 };
+
+  it('«så vidt i gang» når sesongen stiger eller står på topp, «fortsatt i gang» etter toppen', () => {
+    const ventet: Record<number, 'tidlig' | 'sent'> = {
+      1: 'sent',
+      2: 'sent',
+      3: 'sent',
+      4: 'tidlig',
+      5: 'tidlig',
+      6: 'tidlig',
+      7: 'tidlig',
+      8: 'tidlig',
+      9: 'tidlig',
+      10: 'sent',
+      11: 'sent',
+      12: 'sent'
+    };
+    for (let maaned = 1; maaned <= 12; maaned++) {
+      const sent = ventet[maaned] === 'sent';
+      expect(scoreVerdict(65, 'nb', undefined, REGIONSTIGE, maaned), `måned ${maaned}`).toBe(
+        sent ? 'Soppen er fortsatt i gang' : 'Soppen er så vidt i gang'
+      );
+      expect(scoreVerdict(65, 'sv', undefined, REGIONSTIGE, maaned), `måned ${maaned}`).toBe(
+        sent ? 'Svampen är fortfarande i gång' : 'Svampen är precis i gång'
+      );
+      expect(scoreVerdict(65, 'nb', 'Piggsopp', REGIONSTIGE, maaned), `måned ${maaned}`).toBe(
+        sent ? 'Piggsopp er fortsatt i gang' : 'Piggsopp er så vidt i gang'
+      );
+      expect(scoreVerdict(65, 'sv', 'Blek taggsvamp', REGIONSTIGE, maaned), `måned ${maaned}`).toBe(
+        sent ? 'Blek taggsvamp är fortfarande i gång' : 'Blek taggsvamp är precis i gång'
+      );
+    }
+  });
+
+  it('stigen er den samme hele året — bare ordene på det midterste trinnet skifter', () => {
+    for (let maaned = 1; maaned <= 12; maaned++) {
+      for (let score = 0; score <= 100; score++) {
+        const aug = scoreVerdict(score, 'nb', undefined, REGIONSTIGE, 8);
+        const her = scoreVerdict(score, 'nb', undefined, REGIONSTIGE, maaned);
+        const midten = score >= 61 && score < 70;
+        if (!midten) expect(her, `måned ${maaned}, score ${score}`).toBe(aug);
+        else expect(['Soppen er så vidt i gang', 'Soppen er fortsatt i gang']).toContain(her);
+      }
+    }
+  });
+
+  it('uten måned: måneden i Oslo akkurat nå', () => {
+    try {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(new Date('2026-11-16T09:00:00Z'));
+      expect(scoreVerdict(65, 'nb', undefined, REGIONSTIGE)).toBe('Soppen er fortsatt i gang');
+      vi.setSystemTime(new Date('2026-08-15T09:00:00Z'));
+      expect(scoreVerdict(65, 'nb', undefined, REGIONSTIGE)).toBe('Soppen er så vidt i gang');
+      // 30. september kl. 23.30 UTC er 1. oktober i Oslo.
+      vi.setSystemTime(new Date('2026-09-30T21:30:00Z'));
+      expect(scoreVerdict(65, 'sv', undefined, REGIONSTIGE)).toBe('Svampen är precis i gång');
+      vi.setSystemTime(new Date('2026-09-30T22:30:00Z'));
+      expect(scoreVerdict(65, 'sv', undefined, REGIONSTIGE)).toBe('Svampen är fortfarande i gång');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('kartets popup bruker måneden den får, ikke klokka', () => {
+    try {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(new Date('2026-08-15T09:00:00Z'));
+      const oktober = buildSpotSummary({ species: PIGGSOPP, month: 10, weather: PERFECT_KANTARELL_WEATHER, score: 54 });
+      expect(oktober.verdict).toBe('Piggsopp er fortsatt i gang');
+      const juli = buildSpotSummary({ species: KANTARELL, month: 7, weather: PERFECT_KANTARELL_WEATHER, score: 54 });
+      expect(juli.verdict).toBe('Kantarell er så vidt i gang');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('lover ingenting og er svensk på svensk', () => {
+    const sv = scoreVerdict(65, 'sv', undefined, REGIONSTIGE, 11);
+    expect(sv).not.toMatch(/[æøÆØ]/);
+    for (const tekst of [sv, scoreVerdict(65, 'nb', undefined, REGIONSTIGE, 11)]) {
+      expect(tekst).not.toContain('🍄');
+      expect(tekst).not.toMatch(/finner du|hittar du|garanter/i);
+    }
+  });
+
+  it('etterToppen er regelen alle flater spør — også kartpanelets korte etikett', () => {
+    // Kartpanelet (HotspotPanel) har sin egen etikett for trinnet og spør
+    // etterToppen. Sier den noe annet enn dommen, sier panelet og rutene hver
+    // sin ting igjen.
+    for (let maaned = 1; maaned <= 12; maaned++) {
+      expect(etterToppen(maaned), `måned ${maaned}`).toBe(
+        scoreVerdict(65, 'nb', undefined, REGIONSTIGE, maaned) === 'Soppen er fortsatt i gang'
+      );
+    }
+    try {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      // Uten måned: måneden i Oslo nå, som scoreVerdict uten måned.
+      for (const [iso, sent] of [
+        ['2026-11-17T09:00:00Z', true],
+        ['2026-08-15T09:00:00Z', false],
+        ['2026-09-30T21:30:00Z', false], // 23.30 i Oslo, fortsatt september
+        ['2026-09-30T22:30:00Z', true] // 00.30 i Oslo, 1. oktober
+      ] as const) {
+        vi.setSystemTime(new Date(iso));
+        expect(etterToppen(), iso).toBe(sent);
+        expect(scoreVerdict(65, 'nb', undefined, REGIONSTIGE), iso).toBe(
+          sent ? 'Soppen er fortsatt i gang' : 'Soppen er så vidt i gang'
+        );
+      }
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 
@@ -635,18 +788,23 @@ describe('fuktighet som ikke er målt', () => {
  * gul for «moderat». Denne testen fanger det hvis noen flytter den ene.
  */
 describe('dommene og fargene deler stige', () => {
-  it('bytter dom nøyaktig der fargen bytter', () => {
+  it('bytter dom nøyaktig der fargen bytter — i august og i oktober', () => {
     const heleSpennet = Array.from({ length: 85 - 43 + 1 }, (_, i) => 43 + i);
-    for (const score of heleSpennet) {
-      const dom = scoreVerdict(score, 'nb', 'Kantarell');
-      const farge = scoreToCondition(score);
-      const forventet = {
-        excellent: 'Nå er det kantarell 🍄',
-        good: 'Gode dager for kantarell nå',
-        moderate: 'Kantarell er så vidt i gang',
-        poor: 'Lite kantarell i skogen nå'
-      }[farge];
-      expect(dom, `score ${score} har farge «${farge}»`).toBe(forventet);
+    for (const [maaned, midten] of [
+      [8, 'Kantarell er så vidt i gang'],
+      [10, 'Kantarell er fortsatt i gang']
+    ] as const) {
+      for (const score of heleSpennet) {
+        const dom = scoreVerdict(score, 'nb', 'Kantarell', undefined, maaned);
+        const farge = scoreToCondition(score);
+        const forventet = {
+          excellent: 'Nå er det kantarell 🍄',
+          good: 'Gode dager for kantarell nå',
+          moderate: midten,
+          poor: 'Lite kantarell i skogen nå'
+        }[farge];
+        expect(dom, `måned ${maaned}, score ${score} har farge «${farge}»`).toBe(forventet);
+      }
     }
   });
 

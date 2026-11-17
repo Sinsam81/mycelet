@@ -21,14 +21,26 @@ import { HOPP_COOKIE, HOPP_COOKIE_MAX_AGE } from '@/lib/analytics/kilde';
  */
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+/** Områdesiden lenka peker på — oversikten når området er ukjent. */
+function malFor(request: NextRequest) {
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? request.nextUrl.origin;
+  const region = regionFromSlug(request.nextUrl.searchParams.get('r') ?? '');
+  return { region, mal: region ? `${appUrl}/soppforhold/${regionSlug(region.name)}` : `${appUrl}/soppforhold` };
+}
+
+/**
+ * Lenkesjekkere spør ofte HEAD først. Next svarer ellers HEAD med
+ * GET-handleren, og da ville en lenkesjekk ti minutter etter utsendingen
+ * stått som «aktivert» i rapporten. Samme videresending, ingen notat.
+ */
+export async function HEAD(request: NextRequest) {
+  return NextResponse.redirect(malFor(request).mal, 303);
+}
+
 export async function GET(request: NextRequest) {
   const log = createRequestLogger(request);
   const token = request.nextUrl.searchParams.get('t') ?? '';
-  const slug = request.nextUrl.searchParams.get('r') ?? '';
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? request.nextUrl.origin;
-
-  const region = regionFromSlug(slug);
-  const mal = region ? `${appUrl}/soppforhold/${regionSlug(region.name)}` : `${appUrl}/soppforhold`;
+  const { region, mal } = malFor(request);
 
   // Samme tak som avmeldingsruta: anonym GET som skriver til databasen skal
   // ikke kunne kjøres i tusentall. Over taket: bare videresend.

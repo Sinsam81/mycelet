@@ -139,6 +139,6 @@ export function buildTopSpotPopupHtml(input: {
           ${explainerHtml}
           <a href="https://www.google.com/maps/search/?api=1&query=${spot.lat},${spot.lng}" target="_blank" rel="noreferrer" style="display:block;margin-top:7px;color:#15803d;font-weight:600;font-size:12px;text-decoration:underline">${t('openInMapNavigate')}</a>
           ${feedbackHtml}
-          <div style="color:#9ca3af;font-size:10px;margin-top:6px">${t('sourcesCredit')}</div>
+          <div style="color:#4b5563;font-size:10px;margin-top:6px">${t('sourcesCredit')}</div>
         </div>`;
 }

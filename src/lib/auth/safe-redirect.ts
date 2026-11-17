@@ -26,7 +26,6 @@
 const INTERNAL_BASE = 'https://internal.invalid';
 
 /** Tegn URL-parseren stryker bort før tolkning, og som derfor kan skjule et `//`. */
-// eslint-disable-next-line no-control-regex
 const CONTROL_CHARS = /[\u0000-\u001F\u007F]/;
 
 /**

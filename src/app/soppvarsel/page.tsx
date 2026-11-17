@@ -1,7 +1,10 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { getUserLocale } from '@/i18n/locale';
 import { PageWrapper } from '@/components/layout/PageWrapper';
 import { PREDICTION_TILE_REGIONS } from '@/lib/prediction/tile-regions';
+import { sesongtilstand } from '@/lib/sesong/sesongtilstand';
+import { COPY, soppvarselMetadata, statuslinje } from './tekst';
 
 /**
  * Offentlig påmeldingsside for soppvarselet — UTEN konto og UTEN klient-JS.
@@ -13,79 +16,28 @@ import { PREDICTION_TILE_REGIONS } from '@/lib/prediction/tile-regions';
  * servertegnes og caches.
  *
  * Teksten holder samme ærlighetslinje som selve varselet (se alerts/email.ts):
- * vi lover flanken («vi sier fra når det snur»), aldri funn. COPY-tabell i
- * stedet for next-intl fordi siden er en ren serverkomponent — samme
- * dokumenterte mønster som prediksjonstekstene.
+ * vi lover flanken («vi sier fra når det snur»), aldri funn. Tekstene og
+ * statuslinja bor i ./tekst.ts (COPY-tabell i stedet for next-intl fordi siden
+ * er en ren serverkomponent — samme dokumenterte mønster som
+ * prediksjonstekstene).
+ *
+ * FORVENTNINGEN UTENOM SESONGEN. Varselet fyrer bare når et område krysser
+ * terskelen, og det skjer i praksis ikke om vinteren. Den som melder seg på i
+ * januar fikk likevel bare «neste gang forholdene snur, hører du fra oss» — og
+ * så stillhet i månedsvis. Nå står det én alltid-sann setning i «Slik virker
+ * det» (ingen datologikk), og kvitteringen etter bekreftelse får i tillegg en
+ * setning når kalenderen sier desember–mai (sesongtilstand). Ingen ny e-post
+ * sendes, og ingenting loves om NÅR det snur.
  */
 
-const COPY = {
-  nb: {
-    tittel: 'Soppvarselet',
-    ingress:
-      'Én e-post når forholdene snur i ditt område — aldri mer enn én i uka, og ingen støy imellom. Vi følger vær, sesong og skogtype hver natt, og sier fra den dagen det faktisk er nytt.',
-    slikVirker: 'Slik virker det',
-    punkt1: 'Hver natt regner vi ut soppforholdene (0–100) for 22 områder i Norge og Sverige.',
-    punkt2: 'Du får e-post når området ditt krysser fra dårlige til gode forhold — selve omslaget, ikke en daglig rapport.',
-    punkt3: 'Maks én e-post i uka. Avmeldingslenke i hver eneste e-post.',
-    forbehold:
-      'Tallet gjelder et område, ikke skogen der du står — og vi lover aldri funn, bare at forholdene ligger til rette.',
-    skjemaTittel: 'Meld deg på',
-    epost: 'E-postadressen din',
-    omrade: 'Område',
-    norge: 'Norge',
-    sverige: 'Sverige',
-    knapp: 'Få soppvarsel',
-    samtykke:
-      'Du bekrefter påmeldingen med en lenke vi sender deg på e-post, og kan melde deg av når som helst. Adressen brukes kun til soppvarselet.',
-    statusSendt: '📬 Sjekk innboksen! Vi har sendt deg en bekreftelseslenke — trykk på den, så er du påmeldt.',
-    statusBekreftet: '✅ Da er du påmeldt! Neste gang forholdene snur i området ditt, hører du fra oss.',
-    statusUgyldig: 'Noe manglet — sjekk at e-postadressen er riktig og at du har valgt et område.',
-    statusUgyldigLenke: 'Lenken er ugyldig eller allerede brukt. Meld deg på på nytt, så sender vi en fersk.',
-    statusFeil: 'Noe gikk galt hos oss. Prøv igjen om et øyeblikk.',
-    harKonto: 'Har du konto i appen? Da kan du også skru på varselet under',
-    profilen: 'profilen din',
-    personvern: 'personvernerklæringen',
-    folgX: 'Omslagene og fasiten publiseres også åpent på X —',
-    folgXLenke: 'følg @mycelet'
-  },
-  sv: {
-    tittel: 'Svampvarningen',
-    ingress:
-      'Ett mejl när förhållandena vänder i ditt område — aldrig mer än ett i veckan, och inget brus däremellan. Vi följer väder, säsong och skogstyp varje natt, och säger till den dag det faktiskt är nytt.',
-    slikVirker: 'Så fungerar det',
-    punkt1: 'Varje natt räknar vi ut svampförhållandena (0–100) för 22 områden i Norge och Sverige.',
-    punkt2: 'Du får mejl när ditt område korsar från dåliga till goda förhållanden — själva omslaget, inte en daglig rapport.',
-    punkt3: 'Max ett mejl i veckan. Avregistreringslänk i varje mejl.',
-    forbehold:
-      'Talet gäller ett område, inte skogen där du står — och vi lovar aldrig fynd, bara att förhållandena ligger rätt.',
-    skjemaTittel: 'Anmäl dig',
-    epost: 'Din e-postadress',
-    omrade: 'Område',
-    norge: 'Norge',
-    sverige: 'Sverige',
-    knapp: 'Få svampvarning',
-    samtykke:
-      'Du bekräftar anmälan med en länk vi mejlar dig, och kan avregistrera dig när som helst. Adressen används bara till svampvarningen.',
-    statusSendt: '📬 Kolla inkorgen! Vi har mejlat dig en bekräftelselänk — tryck på den, så är du anmäld.',
-    statusBekreftet: '✅ Då är du anmäld! Nästa gång förhållandena vänder i ditt område hör du från oss.',
-    statusUgyldig: 'Något saknades — kolla att e-postadressen stämmer och att du valt ett område.',
-    statusUgyldigLenke: 'Länken är ogiltig eller redan använd. Anmäl dig igen så skickar vi en färsk.',
-    statusFeil: 'Något gick fel hos oss. Försök igen om en stund.',
-    harKonto: 'Har du konto i appen? Då kan du också slå på varningen under',
-    profilen: 'din profil',
-    personvern: 'integritetspolicyn',
-    folgX: 'Omslagen och facit publiceras också öppet på X —',
-    folgXLenke: 'följ @mycelet'
-  }
-} as const;
-
-const STATUSFARGE: Record<string, string> = {
-  sendt: 'border-forest-300 bg-forest-50 text-forest-900',
-  bekreftet: 'border-forest-300 bg-forest-50 text-forest-900',
-  ugyldig: 'border-amber-300 bg-amber-50 text-amber-900',
-  'ugyldig-lenke': 'border-amber-300 bg-amber-50 text-amber-900',
-  feil: 'border-red-300 bg-red-50 text-red-900'
-};
+/**
+ * Tittel, beskrivelse, canonical og delingskort på leserens språk — se
+ * soppvarselMetadata i ./tekst.ts. Leser ikke searchParams: metadataene er de
+ * samme for /soppvarsel?status=sendt som for siden selv.
+ */
+export async function generateMetadata(): Promise<Metadata> {
+  return soppvarselMetadata(await getUserLocale());
+}
 
 export default async function SoppvarselSide({
   searchParams
@@ -99,18 +51,8 @@ export default async function SoppvarselSide({
   // Ukjent verdi → tomt valg, som før.
   const forhandsvalgt = region && PREDICTION_TILE_REGIONS.some((r) => r.name === region) ? region : '';
 
-  const statusTekst =
-    status === 'sendt'
-      ? t.statusSendt
-      : status === 'bekreftet'
-        ? t.statusBekreftet
-        : status === 'ugyldig'
-          ? t.statusUgyldig
-          : status === 'ugyldig-lenke'
-            ? t.statusUgyldigLenke
-            : status === 'feil'
-              ? t.statusFeil
-              : null;
+  // Siden er dynamisk (leser searchParams), så datoen er alltid dagens.
+  const linje = statuslinje(status, locale, sesongtilstand(new Date()).iHovedsesong);
 
   const norske = PREDICTION_TILE_REGIONS.filter((r) => r.country === 'NO');
   const svenske = PREDICTION_TILE_REGIONS.filter((r) => r.country === 'SE');
@@ -125,12 +67,13 @@ export default async function SoppvarselSide({
             skjemaet, ble redirectet til toppen av siden — og sto igjen nede
             ved et tomt skjema som «ikke virket». Meldingen må lande der øyet
             er, og fragmentet lar nettleseren scrolle dit selv, uten JS. */}
-        {statusTekst ? (
+        {linje ? (
           <p
             id="status"
-            className={`scroll-mt-24 rounded-xl border px-4 py-3 text-sm font-medium ${STATUSFARGE[status ?? ''] ?? ''}`}
+            role="status"
+            className={`scroll-mt-24 rounded-xl border px-4 py-3 text-sm font-medium ${linje.farge}`}
           >
-            {statusTekst}
+            {linje.tekst}
           </p>
         ) : null}
 
@@ -155,18 +98,24 @@ export default async function SoppvarselSide({
               required
               autoComplete="email"
               className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-              placeholder="deg@example.com"
+              placeholder={t.epostEksempel}
             />
           </label>
           <label className="mt-3 block text-sm font-medium text-gray-700">
             {t.omrade}
+            {/* Første valg er en synlig ledetekst: uten tekst sto feltet tomt,
+                og så ut som om noe manglet. Det er fortsatt `disabled` og
+                feltet `required`: et tomt valg er nettleserens «placeholder
+                label option», så skjemaet kan ikke sendes uten et område. */}
             <select
               name="region"
               required
               className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
               defaultValue={forhandsvalgt}
             >
-              <option value="" disabled />
+              <option value="" disabled>
+                {t.velgOmrade}
+              </option>
               <optgroup label={t.norge}>
                 {norske.map((r) => (
                   <option key={r.name} value={r.name}>

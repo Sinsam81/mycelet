@@ -3,9 +3,9 @@
 import Link from 'next/link';
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { EdibilityBadge } from '@/components/ui/EdibilityBadge';
-import { normalizeEdibility } from '@/lib/utils/edibility';
+import { AiEdibilityBadge } from '@/components/identify/AiEdibilityBadge';
 import { isRecommendableSpecies } from '@/lib/prediction/recommendable';
+import { isDangerousEdibility } from '@/lib/utils/edibility';
 import { IdentifySuggestion } from '@/types/identify';
 
 interface IdentifyResultProps {
@@ -34,6 +34,15 @@ export function IdentifyResult({ suggestions, selectedIndex, onSelect }: Identif
         // liten flate for kildeetikett), men de samme bildene står merket
         // «AI-databasen» i sammenligningsseksjonen rett under.
         const thumbUrl = suggestion.imageUrl ?? suggestion.similarImages?.[0] ?? null;
+        // Giftig, dødelig eller ukjent: sesongpilla blir nøytral og sier aldri
+        // «Topp-sesong». Samme regel som kalenderen (SeasonNow, YearTable) —
+        // «topp» og grønt leses som en anbefaling, og en grønn «Topp-sesong
+        // nå» ved et dødelig forslag i august var nettopp det.
+        const farlig = isDangerousEdibility(suggestion.edibility);
+        // Mat etter katalogen (spiselig eller betinget spiselig) — samme
+        // predikat som AiEdibilityBadge. Avgjør hvilke forvekslingsnotater
+        // kortet har lov til å vise; se under.
+        const mat = isRecommendableSpecies(suggestion.edibility);
         return (
           <article
             key={suggestion.name}
@@ -82,40 +91,17 @@ export function IdentifyResult({ suggestions, selectedIndex, onSelect }: Identif
             </div>
 
             <div className="mt-2 flex flex-wrap items-center gap-2">
-              {/*
-                Bevisst asymmetri, og kjernen i hele denne komponenten:
-
-                Et AI-forslag sier «bildet ligner på denne arten», ikke «dette
-                ER denne arten». Da er de to utfallene ikke likeverdige:
-
-                  • En ADVARSEL er nyttig selv når arts-ID-en er feil. Får du
-                    vite at noe i dette landskapet av forslag er dødelig,
-                    skjerper du deg — det er riktig respons uansett.
-                  • Et GRØNT «spiselig» er skadelig når arts-ID-en er feil.
-                    Det er nettopp da folk blir forgiftet.
-
-                Derfor: alt som IKKE er en invitasjon til å spise beholder det
-                tydelige merket — giftig, dødelig, uspiselig og ukjent. (Ukjent
-                må være med: normalizeEdibility gjør alt ukjent om til 'unknown',
-                og SafetyWarning behandler det allerede som farlig.) Bare de to
-                spiselige klassene mister stempelet sitt her; de får en nøytral
-                «ikke matvurdert»-merking, og spiselighet leses på artssiden,
-                der dataene er kuraterte og arten er valgt av et menneske.
-
-                Merk at predikatet er isRecommendableSpecies, ikke
-                isHazardSpecies: sistnevnte dekker bare giftig/dødelig, og ville
-                gitt «ikke matvurdert» til ukjente arter — for mykt.
-              */}
-              {!isRecommendableSpecies(suggestion.edibility) ? (
-                <EdibilityBadge edibility={normalizeEdibility(suggestion.edibility)} />
-              ) : (
-                <span className="inline-flex rounded-full bg-gray-100 px-2.5 py-1 text-xs font-semibold text-gray-700 ring-1 ring-inset ring-gray-300">
-                  {t('notFoodAssessed')}
-                </span>
-              )}
+              {/* Aldri et rått EdibilityBadge her: et AI-forslag får aldri et
+                  grønt «spiselig»-stempel. Regelen og begrunnelsen bor i
+                  AiEdibilityBadge. */}
+              <AiEdibilityBadge edibility={suggestion.edibility} />
               {suggestion.inSeason === true ? (
-                <span className="rounded-full bg-forest-100 px-2 py-0.5 text-xs font-medium text-forest-900">
-                  {suggestion.peakSeason ? t('peakSeasonNow') : t('inSeasonNow')}
+                <span
+                  className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                    farlig ? 'bg-gray-100 text-gray-700' : 'bg-forest-100 text-forest-900'
+                  }`}
+                >
+                  {suggestion.peakSeason && !farlig ? t('peakSeasonNow') : t('inSeasonNow')}
                 </span>
               ) : suggestion.inSeason === false ? (
                 <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900">
@@ -133,12 +119,34 @@ export function IdentifyResult({ suggestions, selectedIndex, onSelect }: Identif
                 forvekslingsarter rendret før nøyaktig likt som et vi har
                 sjekket — og 24 av 45 spiselige arter i katalogen har ingen
                 rader. Fravær av advarsel må aldri kunne leses som en
-                trygghetserklæring. */}
+                trygghetserklæring.
+
+                «Ikke ført inn ennå» står bare under et forslag som er mat.
+                Under et forslag som ikke er mat var setningen usann: enrich.ts
+                filtrerer bort speilradene som peker på en matsopp, og hvit
+                fluesopp, spiss giftslørsopp, karbol-sjampinjong og falsk
+                kantarell sto da uten rader og fikk «ikke ført inn» — mens
+                artssiden ett trykk unna lister paret. Der er forslagets eget
+                merke (Uspiselig, Giftig, Dødelig, Ukjent) advarselen, samme
+                regel som artssiden. Matsoppens navn skal ikke tilbake ved
+                siden av et dødelig forslag.
+
+                Den røde linja følger også forslagets egen klasse. «Sjekk nøye
+                før du spiser» under et forslag katalogen kaller giftig eller
+                uspiselig (svovelsopp ↔ honningsopp, honningsopp →
+                flatklokkehatt) leses som «spiselig om du er nøye» — det
+                migrasjon 047 tok bort for honningsopp. Der står «ikke spis
+                den», som bare sier noe om forslaget: et resultat lagt i økta
+                før speilregelen kan fortsatt liste en matsopp, og den skal
+                ikke kalles uspiselig. */}
             {suggestion.dangerousLookAlikes && suggestion.dangerousLookAlikes.length > 0 ? (
               <p className="mt-2 rounded-lg border border-red-300 bg-red-50 px-2 py-1.5 text-xs font-medium text-red-900">
-                ⚠️ {t('lookAlikeWarning', { names: suggestion.dangerousLookAlikes.map((d) => d.name).join(', ') })}
+                ⚠️{' '}
+                {t(mat ? 'lookAlikeWarning' : 'lookAlikeWarningNotFood', {
+                  names: suggestion.dangerousLookAlikes.map((d) => d.name).join(', ')
+                })}
               </p>
-            ) : suggestion.lookAlikeData === 'none_recorded' ? (
+            ) : suggestion.lookAlikeData === 'none_recorded' && mat ? (
               <p className="mt-2 rounded-lg border border-amber-300 bg-amber-50 px-2 py-1.5 text-xs text-amber-900">
                 {t('lookAlikeNoneRecorded')}
               </p>

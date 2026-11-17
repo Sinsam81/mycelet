@@ -3,7 +3,8 @@
 import { FormEvent, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Button } from '@/components/ui/Button';
-import { checkContent, isProhibitedContentError } from '@/lib/moderation/content-filter';
+import { checkContent } from '@/lib/moderation/content-filter';
+import { useForumErrorMessage } from '@/components/forum/useForumErrorMessage';
 
 interface CommentInputProps {
   onSubmit: (content: string) => Promise<void>;
@@ -13,6 +14,7 @@ interface CommentInputProps {
 export function CommentInput({ onSubmit, loading }: CommentInputProps) {
   const t = useTranslations('CommentInput');
   const tFilter = useTranslations('ContentFilter');
+  const forumError = useForumErrorMessage();
   const [content, setContent] = useState('');
   const [error, setError] = useState<string | null>(null);
 
@@ -37,11 +39,7 @@ export function CommentInput({ onSubmit, loading }: CommentInputProps) {
       await onSubmit(content.trim());
       setContent('');
     } catch (err) {
-      if (isProhibitedContentError(err)) {
-        setError(tFilter('controlledSubstanceTrade'));
-        return;
-      }
-      setError(err instanceof Error ? err.message : t('submitError'));
+      setError(forumError(err, t('submitError')));
     }
   };
 

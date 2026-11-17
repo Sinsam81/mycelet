@@ -1,0 +1,147 @@
+'use client';
+
+import { useMemo, useState } from 'react';
+import { useLocale, useTranslations } from 'next-intl';
+import { SpeciesCard } from '@/components/species/SpeciesCard';
+import { TrenerInngang } from '@/components/species/forvekslinger/TrenerInngang';
+import { SpeciesSearch } from '@/components/species/SpeciesSearch';
+import { SafetyNote } from '@/components/safety/SafetyNote';
+import { useDebouncedValue } from '@/lib/hooks/useDebouncedValue';
+import { useSpecies, type SpeciesListItem } from '@/lib/hooks/useSpecies';
+import { habitatSuggestions } from '@/lib/species/habitat-filter';
+import type { Edibility } from '@/types/species';
+
+interface SpeciesLibraryProps {
+  /**
+   * Hele katalogen slik serveren hentet den, eller undefined når serveren ikke
+   * fikk svar — da henter biblioteket selv i nettleseren, som før.
+   */
+  startliste?: SpeciesListItem[];
+  /** Oslo-måneden serveren rendret med (sesongtilstand), til «kun i sesong nå». */
+  maaned: number;
+}
+
+/**
+ * Artsbiblioteket: søk, filtre og rutenettet av artskort.
+ *
+ * Klientdelen av /species. Siden selv (src/app/species/page.tsx) er en
+ * serverkomponent som henter katalogen og gir den hit, så kortene og lenkene
+ * står i den første HTML-en; søk og filtre virker i nettleseren på samme liste.
+ */
+
+export function SpeciesLibrary({ startliste, maaned }: SpeciesLibraryProps) {
+  const t = useTranslations('Species');
+  const locale = useLocale();
+  // Basen har seks spiselighetsverdier, filteret dekket fire. De 7 betinget
+  // spiselige artene (morkler, riskere, rødnende fluesopp …) er nettopp de som
+  // gjør folk syke ved feil tilberedning — og de kunne ikke isoleres i det hele
+  // tatt. Filterlogikken i useSpecies håndterer vilkårlige verdier allerede.
+  const EDIBILITY_OPTIONS: Array<{ label: string; value: 'all' | Edibility }> = [
+    { label: t('edibilityAll'), value: 'all' },
+    { label: t('edibilityEdible'), value: 'edible' },
+    { label: t('edibilityConditional'), value: 'conditionally_edible' },
+    { label: t('edibilityInedible'), value: 'inedible' },
+    { label: t('edibilityToxic'), value: 'toxic' },
+    { label: t('edibilityDeadly'), value: 'deadly' }
+  ];
+  const [query, setQuery] = useState('');
+  // Søket går ikke lenger til databasen (useSpecies filtrerer lista i minnet),
+  // så forsinkelsen er bare der for å slippe å tegne rutenettet om for hver
+  // bokstav i et raskt skrevet ord.
+  const debouncedQuery = useDebouncedValue(query, 150);
+  const [edibility, setEdibility] = useState<'all' | Edibility>('all');
+  const [inSeasonNow, setInSeasonNow] = useState(false);
+  const [habitat, setHabitat] = useState('');
+
+  const filters = useMemo(
+    () => ({
+      query: debouncedQuery,
+      edibility,
+      inSeasonNow,
+      habitat
+    }),
+    [debouncedQuery, edibility, inSeasonNow, habitat]
+  );
+
+  const habitatOptions = useMemo(() => habitatSuggestions(locale), [locale]);
+
+  const { data, isLoading, error } = useSpecies(filters, { startliste, maaned });
+
+  const count = data?.length ?? 0;
+
+  return (
+    <section className="space-y-5">
+      <header className="space-y-1">
+        <p className="text-xs font-medium uppercase tracking-widest text-forest-700">{t('eyebrow')}</p>
+        <h1 className="font-serif text-3xl font-bold text-forest-900">{t('title')}</h1>
+        {!isLoading && count > 0 ? (
+          <p className="text-sm text-gray-700">{t('countSummary', { count })}</p>
+        ) : null}
+      </header>
+      <TrenerInngang />
+
+      <SpeciesSearch value={query} onChange={setQuery} />
+
+      <div className="grid gap-3 rounded-xl bg-white p-3 shadow-sm sm:grid-cols-2">
+        <label className="text-sm font-medium text-gray-800">
+          {t('edibilityLabel')}
+          <select
+            className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2"
+            value={edibility}
+            onChange={(event) => setEdibility(event.target.value as 'all' | Edibility)}
+          >
+            {EDIBILITY_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="text-sm font-medium text-gray-800">
+          {t('habitatLabel')}
+          <input
+            className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2"
+            placeholder={t('habitatPlaceholder')}
+            list="habitat-suggestions"
+            value={habitat}
+            onChange={(event) => setHabitat(event.target.value)}
+          />
+          {/* Forslagene gjør at brukeren ser hvilke habitat som faktisk
+              finnes, i stedet for å gjette staving. Fritekst virker
+              fortsatt — lista er forslag, ikke en lukket meny. */}
+          <datalist id="habitat-suggestions">
+            {habitatOptions.map((option) => (
+              <option key={option} value={option} />
+            ))}
+          </datalist>
+        </label>
+
+        <label className="inline-flex items-center gap-2 text-sm font-medium text-gray-800">
+          <input type="checkbox" checked={inSeasonNow} onChange={(event) => setInSeasonNow(event.target.checked)} />
+          {t('inSeasonOnly')}
+        </label>
+      </div>
+
+      {/* Kortene under bærer hvert sitt spiselighetsmerke. Uten denne noten
+          var biblioteket en av to flater i appen som viste «Spiselig» for
+          dusinvis av arter uten noe forbehold og uten vei til /sikkerhet. */}
+      <SafetyNote />
+
+      {isLoading ? <p className="text-sm text-gray-700">{t('loading')}</p> : null}
+      {error ? <p className="text-sm text-red-600">{t('loadError')}</p> : null}
+
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+        {(data ?? []).map((species) => (
+          <SpeciesCard key={species.id} species={species} imageUrl={species.primary_image_url} />
+        ))}
+      </div>
+
+      {/* Ikke ved feil: da er lista tom fordi den aldri kom, ikke fordi
+          filtrene er for strenge — og feilmeldingen står allerede over. */}
+      {!isLoading && !error && count === 0 ? (
+        <p className="text-sm text-gray-700">{t('noMatches')}</p>
+      ) : null}
+    </section>
+  );
+}

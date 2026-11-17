@@ -8,6 +8,7 @@ import { checkRateLimit } from '@/lib/rate-limit';
 import { getClientKey, rateLimitResponse } from '@/lib/rate-limit/route';
 import { PREDICTION_TILE_REGIONS } from '@/lib/prediction/tile-regions';
 import { getUserLocale } from '@/i18n/locale';
+import { apiFeil, loggFeil } from '@/lib/api/feil';
 
 /**
  * Brukerens eget soppvarsel: les, slå på, slå av.
@@ -35,7 +36,7 @@ export async function GET(request: NextRequest) {
   const {
     data: { user }
   } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: 'Ikke innlogget' }, { status: 401 });
+  if (!user) return apiFeil('unauthenticated', 401);
 
   // Kontoløse påmeldinger på brukerens egen adresse overtas her, FØR lesingen —
   // ellers svarer ruta «følger ingenting» til noen som har vært abonnent siden
@@ -56,8 +57,8 @@ export async function GET(request: NextRequest) {
     .maybeSingle();
 
   if (error) {
-    log.error('soppvarsel.les_feilet', { message: error.message });
-    return NextResponse.json({ error: 'Kunne ikke hente varselet' }, { status: 500 });
+    loggFeil(log, 'soppvarsel.les_feilet', error);
+    return apiFeil('alert_load_failed', 500);
   }
 
   return NextResponse.json({
@@ -72,7 +73,7 @@ export async function PUT(request: NextRequest) {
   const {
     data: { user }
   } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: 'Ikke innlogget' }, { status: 401 });
+  if (!user) return apiFeil('unauthenticated', 401);
 
   const rl = checkRateLimit(`soppvarsel:${getClientKey(request, user.id)}`, 20, 60);
   if (!rl.allowed) return rateLimitResponse(rl);
@@ -86,7 +87,7 @@ export async function PUT(request: NextRequest) {
   const flateKilde = typeof body?.kilde === 'string' && GYLDIGE_KILDER.has(body.kilde) ? body.kilde : null;
 
   if (!region || !GYLDIGE_REGIONER.has(region)) {
-    return NextResponse.json({ error: 'Ukjent område' }, { status: 400 });
+    return apiFeil('alert_unknown_area', 400);
   }
 
   // Samme adopsjon som ved lesing, og den må skje FØR avslåingen under: en
@@ -119,8 +120,8 @@ export async function PUT(request: NextRequest) {
     .eq('user_id', user.id)
     .neq('region', region);
   if (avErr) {
-    log.error('soppvarsel.deaktivering_feilet', { message: avErr.message });
-    return NextResponse.json({ error: 'Kunne ikke lagre varselet' }, { status: 500 });
+    loggFeil(log, 'soppvarsel.deaktivering_feilet', avErr);
+    return apiFeil('alert_save_failed', 500, { locale });
   }
 
   const { error } = await supabase
@@ -135,8 +136,8 @@ export async function PUT(request: NextRequest) {
     );
 
   if (error) {
-    log.error('soppvarsel.lagring_feilet', { message: error.message });
-    return NextResponse.json({ error: 'Kunne ikke lagre varselet' }, { status: 500 });
+    loggFeil(log, 'soppvarsel.lagring_feilet', error);
+    return apiFeil('alert_save_failed', 500, { locale });
   }
 
   log.info('soppvarsel.lagret', { region, active });

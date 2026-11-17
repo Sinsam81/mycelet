@@ -82,7 +82,7 @@ vi.mock('@/lib/supabase/server', () => {
 
 const { POST } = await import('../route');
 
-type Kall = { url: URL; body: Record<string, unknown> };
+type Kall = { url: URL; body: Record<string, unknown>; signal: AbortSignal | null | undefined };
 let kall: Kall[] = [];
 let svar: Array<() => Response> = [];
 
@@ -121,7 +121,7 @@ beforeEach(() => {
   svar = [OK_SVAR];
   vi.stubEnv('PLANTID_API_KEY', 'test-key-lang-nok-til-a-passere');
   vi.stubGlobal('fetch', async (url: string, init?: RequestInit) => {
-    kall.push({ url: new URL(String(url)), body: JSON.parse(String(init?.body ?? '{}')) });
+    kall.push({ url: new URL(String(url)), body: JSON.parse(String(init?.body ?? '{}')), signal: init?.signal });
     const neste = svar.shift() ?? OK_SVAR;
     return neste();
   });
@@ -184,8 +184,105 @@ describe('forespørselen til Kindwise', () => {
     expect(adminInserts.map((i) => i.tabell)).toEqual(['ai_identifications']);
   });
 
+  it('hvert kall har sin egen frist — også språk-omforsøket', async () => {
+    // Uten signal holdt en Kindwise som hang forespørselen til plattformen
+    // drepte funksjonen. Og de to kallene må ha HVERT sitt signal: delte de
+    // ett, ville omforsøket arvet en frist som alt var brukt opp.
+    svar = [SPRAK_AVVIST, OK_SVAR];
+    await POST(makeRequest());
+    expect(kall).toHaveLength(2);
+    expect(kall[0].signal).toBeInstanceOf(AbortSignal);
+    expect(kall[1].signal).toBeInstanceOf(AbortSignal);
+    expect(kall[1].signal).not.toBe(kall[0].signal);
+  });
+
+  it('Kindwise svarer aldri → 504 provider_timeout og én feilrad med status 0', async () => {
+    // Et kastet fetch (tidsavbrudd, DNS, brutt forbindelse) gikk før rett til
+    // den generelle catch-blokken: ingen rad i ai_identifiseringsfeil, så
+    // dagsrapporten viste null feil mens ingen fikk svar. Kvoteraden skal
+    // IKKE skrives — brukeren fikk ikke noe.
+    vi.stubGlobal('fetch', async () => {
+      throw new DOMException('The operation was aborted due to timeout', 'TimeoutError');
+    });
+    const res = await POST(makeRequest());
+    expect(res.status).toBe(504);
+    expect((await res.json()).code).toBe('provider_timeout');
+    expect(adminInserts).toEqual([{ tabell: 'ai_identifiseringsfeil', rad: { status: 0 } }]);
+  });
+
+  it('svaret stopper midt i kroppen → samme 504, ikke en rå 500', async () => {
+    vi.stubGlobal('fetch', async () => ({
+      ok: true,
+      status: 200,
+      headers: new Headers(),
+      json: async () => {
+        throw new DOMException('The operation was aborted due to timeout', 'TimeoutError');
+      }
+    }));
+    const res = await POST(makeRequest());
+    expect(res.status).toBe(504);
+    expect((await res.json()).code).toBe('provider_timeout');
+    expect(adminInserts.filter((i) => i.tabell === 'ai_identifiseringsfeil')).toEqual([
+      { tabell: 'ai_identifiseringsfeil', rad: { status: 0 } }
+    ]);
+  });
+
+  it('en uventet feil lekker ikke den rå feilteksten til klienten', async () => {
+    const res = await POST(
+      new NextRequest('https://mycelet.com/api/identify', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: '{ikke json'
+      })
+    );
+    expect(res.status).toBe(500);
+    const body = await res.json();
+    expect(body.code).toBe('unexpected');
+    expect(body).not.toHaveProperty('details');
+  });
+
   it('is_mushroom fra Mushroom.id leses som isPlant', async () => {
     const res = await POST(makeRequest());
     expect((await res.json()).isPlant).toBe(true);
+  });
+
+  describe('isMushroom har tre tilstander', () => {
+    const medErSopp = (isMushroom: unknown) => () =>
+      new Response(
+        JSON.stringify({
+          result: {
+            ...(isMushroom === undefined ? {} : { is_mushroom: isMushroom }),
+            classification: {
+              suggestions: [
+                { name: 'Cantharellus cibarius', probability: 0.92, details: { common_names: [], edibility: 'edible' } }
+              ]
+            }
+          }
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } }
+      );
+
+    it('true når Kindwise sier sopp', async () => {
+      svar = [medErSopp({ binary: true })];
+      expect((await (await POST(makeRequest())).json()).isMushroom).toBe(true);
+    });
+
+    it('false når Kindwise sier at det ikke er en sopp', async () => {
+      svar = [medErSopp({ binary: false })];
+      expect((await (await POST(makeRequest())).json()).isMushroom).toBe(false);
+    });
+
+    it('null når feltet mangler — ALDRI false, ellers sto beskjeden på hvert resultat', async () => {
+      svar = [medErSopp(undefined)];
+      const body = await (await POST(makeRequest())).json();
+      expect(body.isMushroom).toBeNull();
+      // isPlant har fortsatt den gamle reserven; derfor må ingen bygge på den.
+      expect(body.isPlant).toBe(false);
+    });
+
+    it('null når feltet har en annen form enn et boolsk svar', async () => {
+      svar = [medErSopp({ probability: 0.2 })];
+      expect((await (await POST(makeRequest())).json()).isMushroom).toBeNull();
+    });
   });
 });

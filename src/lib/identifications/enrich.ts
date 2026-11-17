@@ -1,4 +1,5 @@
 import type { Logger } from '@/lib/log';
+import { isRecommendableSpecies } from '@/lib/prediction/recommendable';
 import { seasonFitForSpecies } from '@/lib/utils/identify-ranking';
 import { getSpeciesDisplayName } from '@/lib/utils/species-name';
 import type { IdentifySuggestion } from '@/types/identify';
@@ -69,6 +70,45 @@ export interface EnrichResult {
    * klienten MÅ si fra — stillhet skal aldri kunne bety «ingen fare».
    */
   safetyDataIncomplete: boolean;
+}
+
+/**
+ * Skal en look_alikes-rad vises som en FARLIG forveksling for forslaget?
+ *
+ * `look_alikes` er rettet (species_id → look_alike_id), og mange par står i
+ * begge retninger. Raden ført fra den farlige siden — «Hvit fluesopp →
+ * Sjampinjong», critical — peker på MATSOPPEN. Tatt med ukritisk ble den
+ * forslagets «farlige dobbeltgjenger»: et dødelig AI-forslag fikk «Farlig
+ * dobbeltgjenger: Sjampinjong» med et grønt «Spiselig»-merke, og «Kan
+ * forveksles med Sjampinjong — sjekk nøye før du spiser» under seg. Et grønt
+ * spisestempel som svar på et forslag vi selv kaller dødelig. Lest i
+ * produksjon 16. november 2026: fire slike speilrader blant de 28 alvorlige —
+ * falsk kantarell → kantarell, hvit fluesopp → sjampinjong, karbol-sjampinjong
+ * → sjampinjong og spiss giftslørsopp → traktkantarell.
+ *
+ * Regelen er asymmetrisk med vilje, samme asymmetri som AiEdibilityBadge:
+ *
+ *   • Er forvekslingsarten IKKE mat (giftig, dødelig, uspiselig, ukjent eller
+ *     uten klasse), vises raden alltid. En advarsel om noe som ikke skal spises
+ *     er riktig uansett hva forslaget er — vi feiler mot advarselen.
+ *   • Er forvekslingsarten mat, vises den bare når forslaget selv er mat. En
+ *     matsopp er aldri «den farlige» ved siden av et forslag som ikke er det.
+ *
+ * Kantarell → falsk kantarell står dermed som før, mens falsk kantarell →
+ * kantarell faller bort. Står forslaget igjen uten rader, blir tilstanden
+ * 'none_recorded', men kortet (IdentifyResult) viser ikke det gule «ikke ført
+ * inn ennå» under et forslag som ikke er mat: radene FINNES, så setningen
+ * ville vært usann for nettopp de fire artene over, og forslagets eget merke
+ * (Uspiselig, Giftig, Dødelig, Ukjent) er advarselen. Ingen grønn tvilling,
+ * og matsoppens navn kommer ikke tilbake ved siden av et dødelig forslag.
+ * Artssiden viser fortsatt paret fra begge sider, med retningen merket
+ * (src/lib/species/forvekslinger.ts).
+ */
+export function visesSomFarligForveksling(
+  forslagetsSpiselighet: string | null | undefined,
+  forvekslingensSpiselighet: string | null | undefined
+): boolean {
+  return !isRecommendableSpecies(forvekslingensSpiselighet) || isRecommendableSpecies(forslagetsSpiselighet);
 }
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -240,6 +280,13 @@ export async function enrichSuggestions(
       userLog.error('identify.look_alikes_failed', lookAlikeError, { speciesIds });
     }
 
+    // Katalogens spiselighet for hvert forslag (satt over fra mushroom_species,
+    // aldri leverandørens) — det radene vurderes mot. Se visesSomFarligForveksling.
+    const spiselighetPerArt = new Map<number, string | null>();
+    for (const s of suggestions) {
+      if (s.speciesId != null) spiselighetPerArt.set(s.speciesId, s.edibility ?? null);
+    }
+
     const byId = new Map<number, LookAlikeEntry[]>();
     for (const row of lookAlikes ?? []) {
       const r = row as unknown as {
@@ -254,6 +301,9 @@ export async function enrichSuggestions(
       };
       const laObj = Array.isArray(r.la) ? r.la[0] : r.la;
       if (r.species_id == null || !laObj?.norwegian_name) continue;
+      // Speilraden fra den farlige siden peker på matsoppen — den er ingen
+      // farlig dobbeltgjenger for et forslag som ikke selv er mat.
+      if (!visesSomFarligForveksling(spiselighetPerArt.get(r.species_id), laObj.edibility)) continue;
       const arr = byId.get(r.species_id) ?? [];
       arr.push({
         // Advarselslinja i UI-et er oversatt, men navnene inni kom rått fra

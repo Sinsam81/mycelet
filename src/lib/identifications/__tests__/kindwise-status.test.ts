@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { erAiNokkelSatt, hentKindwiseStatus, tolkUsageInfo } from '../kindwise-status';
+import { erAiNokkelSatt, hentKindwiseStatus, kindwiseTilstand, tolkUsageInfo } from '../kindwise-status';
 
 /** Ordrett svaret Kindwise ga 29. sep 2026, før første vellykkede kall. */
 const SVAR = {
@@ -71,5 +71,21 @@ describe('erAiNokkelSatt', () => {
     expect(erAiNokkelSatt('your-api-key-here')).toBe(false);
     expect(erAiNokkelSatt('kort')).toBe(false);
     expect(erAiNokkelSatt('x'.repeat(20))).toBe(true);
+  });
+});
+
+describe('kindwiseTilstand', () => {
+  const ok = (igjen: number | null, kanBruke = true, aktiv = true) =>
+    ({ ok: true as const, status: { aktiv, kanBruke, grunn: null, igjen, bruktUke: null, bruktMaaned: null, bruktTotalt: null } });
+
+  it('grenser og tilstander', () => {
+    expect(kindwiseTilstand(ok(200), 200)).toBe('ok');
+    expect(kindwiseTilstand(ok(199), 200)).toBe('lav');
+    expect(kindwiseTilstand(ok(null), 200)).toBe('ok');
+    expect(kindwiseTilstand(ok(500, false), 200)).toBe('sperret');
+    expect(kindwiseTilstand(ok(500, true, false), 200)).toBe('sperret');
+    expect(kindwiseTilstand({ ok: false, httpStatus: 403, feil: 'x' }, 200)).toBe('sperret');
+    expect(kindwiseTilstand({ ok: false, httpStatus: 502, feil: 'x' }, 200)).toBe('utilgjengelig');
+    expect(kindwiseTilstand({ ok: false, httpStatus: null, feil: 'x' }, 200)).toBe('utilgjengelig');
   });
 });

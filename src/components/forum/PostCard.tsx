@@ -5,6 +5,7 @@ import { getJoinedSpeciesName } from '@/lib/utils/species-name';
 import { ForumPost } from '@/types/forum';
 import { forumBadgeClass } from '@/lib/utils/forumBadge';
 import { useForumBadge } from '@/lib/hooks/useForumBadge';
+import { forumDato } from '@/components/forum/forumDato';
 
 const categoryLabelKey: Record<ForumPost['category'], string> = {
   find: 'categoryFind',
@@ -59,11 +60,19 @@ export function PostCard({ post }: PostCardProps) {
         </p>
       ) : null}
 
-      {image ? <img src={image} alt={post.title} className="mt-3 h-36 w-full rounded-xl object-cover" /> : null}
+      {/* Fast høyde i klassen holder plassen, så lat lasting gir ikke layoutskift. */}
+      {image ? (
+        <img src={image} alt={post.title} loading="lazy" decoding="async" className="mt-3 h-36 w-full rounded-xl object-cover" />
+      ) : null}
 
       <div className="mt-3 flex items-center gap-4 text-sm text-gray-600">
         <span className="inline-flex items-center gap-1.5"><Heart className="h-4 w-4" /> {post.likes_count}</span>
         <span className="inline-flex items-center gap-1.5"><MessageCircle className="h-4 w-4" /> {post.comments_count}</span>
+        {post.created_at ? (
+          <time dateTime={post.created_at} className="ml-auto text-xs text-gray-500">
+            {forumDato(post.created_at, locale)}
+          </time>
+        ) : null}
       </div>
     </Link>
   );

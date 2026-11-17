@@ -15,7 +15,17 @@ export async function GET(request: NextRequest) {
   const next = getSafeNext(nextOrRedirect);
 
   let response = NextResponse.redirect(new URL(next, requestUrl.origin));
-  if (!code) return response;
+  if (!code) {
+    // En utløpt, brukt eller erstattet bekreftelseslenke kommer hit uten kode:
+    // Supabase sender `error_code=otp_expired` i stedet. Den landet stille på
+    // forsiden; nå får den samme beskjed som /auth/confirm gir. Bare akkurat
+    // denne koden — en avbrutt Google-innlogging kommer også hit uten kode, og
+    // er ikke en utløpt lenke.
+    if (requestUrl.searchParams.get('error_code') === 'otp_expired') {
+      return NextResponse.redirect(new URL('/auth/login?linkExpired=1', requestUrl.origin));
+    }
+    return response;
+  }
 
   // Next 15+: cookies() is async. Resolve once and reuse the store inside
   // each callback to keep the createServerClient signature unchanged.

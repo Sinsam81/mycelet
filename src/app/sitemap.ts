@@ -56,6 +56,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     // Soppforholdene endrer seg hver dag — det er hele produktet.
     { sti: '/calendar', prioritet: 0.8, frekvens: 'daily' },
     { sti: '/species', prioritet: 0.8, frekvens: 'weekly' },
+    { sti: '/species/forvekslinger', prioritet: 0.6, frekvens: 'monthly' },
     { sti: '/pricing', prioritet: 0.7, frekvens: 'monthly' },
     { sti: '/forum', prioritet: 0.6, frekvens: 'daily' },
     { sti: '/sikkerhet', prioritet: 0.6, frekvens: 'monthly' },

@@ -13,9 +13,17 @@ import { createClient } from '@/lib/supabase/server';
 import { getBillingCapabilities, getUserBillingSubscription } from '@/lib/billing/subscription';
 import type { Edibility } from '@/types/species';
 import { intlLocale } from '@/lib/utils/intl-locale';
+import { timeZoneForLocale } from '@/i18n/config';
 import { formatMemberSince } from '@/lib/utils/member-since';
 import { statusLabel, tierLabel } from '@/lib/billing/labels';
+import { abonnementKanal, periodelinje, periodelinjeVerdier } from '@/lib/billing/kanal';
 import { logger } from '@/lib/log';
+import { privatSide } from '@/lib/seo/side-titler';
+
+export async function generateMetadata() {
+  const t = await getTranslations('Profile');
+  return privatSide(t('myProfile'));
+}
 
 interface UserStats {
   total_findings: number;
@@ -113,10 +121,24 @@ export default async function ProfilePage() {
   const findings = (findingsRes.data ?? []) as unknown as FindingRow[];
   const posts = (postsRes.data ?? []) as PostRow[];
   const billing = getBillingCapabilities(subscription);
+  // Samme kanalregel og samme datolinje som prissiden (src/lib/billing/kanal.ts).
+  const kanal = abonnementKanal(subscription);
+  const periodeNokkel = periodelinje({
+    status: subscription?.status,
+    cancelAtPeriodEnd: subscription?.cancel_at_period_end,
+    periodeSlutt: subscription?.current_period_end,
+    kanal,
+    metadata: subscription?.metadata,
+    naa: new Date()
+  });
   const isAdmin = roleRes.data?.role === 'admin' || roleRes.data?.role === 'moderator';
 
   // Kontoens dato, ikke profilradens — se src/lib/utils/member-since.ts.
   const memberSince = formatMemberSince(user, profile ?? null, locale);
+  // Serveren står i UTC. Et funn eller innlegg fra kl. 00.30 norsk tid skal
+  // ikke få gårsdagens dato — samme regel som på /mine-steder.
+  const dato = (iso: string) =>
+    new Date(iso).toLocaleDateString(intlLocale(locale), { timeZone: timeZoneForLocale(locale) });
 
   const TierIcon = billing.tier === 'premium' ? Crown : billing.tier === 'season_pass' ? Leaf : null;
   const CATEGORY_LABELS = categoryLabels(t);
@@ -165,6 +187,13 @@ export default async function ProfilePage() {
             <span className="text-gray-500">·</span>
             <span className="text-gray-700">{statusLabel(billing.status, tPricing)}</span>
           </div>
+          {/* Fornyes, sagt opp eller første belastning — med dato (Oslo-tid,
+              samme verdier som prissiden; siden rendres på en UTC-server). */}
+          {periodeNokkel && subscription?.current_period_end ? (
+            <p className="mt-1 text-xs text-gray-600">
+              {tPricing(periodeNokkel, periodelinjeVerdier(subscription.current_period_end, locale))}
+            </p>
+          ) : null}
           {!billing.paid && billing.aiDailyLimit !== null ? (
             <p className="mt-1 text-xs text-gray-600">{t('aiQuota', { limit: billing.aiDailyLimit })}</p>
           ) : null}
@@ -199,13 +228,24 @@ export default async function ProfilePage() {
                     <MapPin className="h-3 w-3" />
                     {f.location_name ?? t('unknownLocation')}
                     <span>·</span>
-                    {new Date(f.found_at).toLocaleDateString(intlLocale(locale))}
+                    {dato(f.found_at)}
                   </p>
                   {f.notes ? <p className="mt-1 text-sm text-gray-800">{f.notes}</p> : null}
                 </li>
               ))}
             </ul>
           )}
+          {/* Lista over er bare til å se på. Funnene styres under Mine steder:
+              deling, notat, sletting og angring. */}
+          {findings.length > 0 ? (
+            <Link
+              href="/mine-steder"
+              className="mt-3 flex min-h-11 items-center justify-between gap-2 rounded-lg border border-forest-200 bg-forest-50 px-3 py-2 text-sm font-medium text-forest-800 hover:border-forest-400"
+            >
+              <span>{t('manageFindings')}</span>
+              <span aria-hidden>→</span>
+            </Link>
+          ) : null}
         </article>
 
         <article className="rounded-2xl bg-white p-4 shadow-card">
@@ -219,7 +259,7 @@ export default async function ProfilePage() {
                   <Link href={`/forum/${p.id}`} className="block rounded-lg border border-gray-100 p-2 hover:border-forest-700">
                     <p className="truncate font-medium">{p.title}</p>
                     <p className="mt-1 text-xs text-gray-600">
-                      {CATEGORY_LABELS[p.category] ?? p.category} · {new Date(p.created_at).toLocaleDateString(intlLocale(locale))} · {t('commentsCount', { count: p.comments_count })} · {t('likesCount', { count: p.likes_count })}
+                      {CATEGORY_LABELS[p.category] ?? p.category} · {dato(p.created_at)} · {t('commentsCount', { count: p.comments_count })} · {t('likesCount', { count: p.likes_count })}
                     </p>
                   </Link>
                 </li>
@@ -264,13 +304,8 @@ export default async function ProfilePage() {
         <BlockedUsersList />
 
         <AccountDataActions
-          abonnementKanal={
-            subscription?.metadata?.provider === 'revenuecat'
-              ? 'apple'
-              : subscription?.stripe_subscription_id
-                ? 'stripe'
-                : null
-          }
+          // Gavepass har ingen butikk å advare om ved sletting.
+          abonnementKanal={kanal === 'tildelt' ? null : kanal}
         />
 
         {/* Terms, privacy and contact must be reachable from inside the app —

@@ -81,7 +81,7 @@ export async function ensureProfile(
 
   // Brukernavnet er opptatt av en ANNEN bruker. Uten en utvei ville kontoen
   // forblitt uten profil for alltid; en suffiksert variant er bedre enn ingen
-  // konto, og brukeren kan endre den i profilinnstillingene etterpå.
+  // konto. (Det finnes ingen profilredigering ennå — brukernavnet blir stående.)
   if (error.code === UNIQUE_VIOLATION) {
     const fallback = `${desired}-${user.id.slice(0, 6)}`;
     const { error: fallbackError } = await attempt(fallback);

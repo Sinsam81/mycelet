@@ -2,10 +2,16 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { fetchRpcPaged } from '@/lib/supabase/paged-rpc';
 import { getBillingCapabilities, getUserBillingSubscription } from '@/lib/billing/subscription';
-import { fetchWeatherSamplesForBounds, nearestWeatherSample, weatherSourceSummary } from '@/lib/weather/samples';
+import { fetchWeatherSummary } from '@/lib/weather';
+import {
+  nearestWeatherSample,
+  weatherSamplePoints,
+  weatherSourceSummary,
+  type WeatherBounds,
+  type WeatherSample
+} from '@/lib/weather/samples';
 import { getForestProperties, buildSpeciesHabitatPreferences, computeHabitatScore } from '@/lib/forest';
 import { computeCellPrediction } from '@/lib/prediction/cell-score';
-import { dayOfYearOf } from '@/lib/prediction/phenology';
 import { weightedOccurrenceDensity, OCCURRENCE_FETCH_LIMIT } from '@/lib/prediction/occurrences';
 import { getElevation } from '@/lib/terrain';
 import { FORSKYVNINGSVINDU_LEVENDE_MS, provSkogIRuter, skogavstandKm } from '@/lib/prediction/skogprover';
@@ -17,6 +23,9 @@ import { createRequestLogger } from '@/lib/log/request';
 import { getUserLocale } from '@/i18n/locale';
 import { getSpeciesDisplayName } from '@/lib/utils/species-name';
 import { isRecommendableSpecies } from '@/lib/prediction/recommendable';
+import { loggFeil } from '@/lib/api/feil';
+import { roundForProviderLookup } from '@/lib/privacy/provider-precision';
+import { osloDagIAaret, osloIDag } from '@/lib/api/oslo-dag';
 
 /**
  * "Soppbilder på kartet" — for each species in season, find the single best
@@ -97,6 +106,25 @@ async function mapWithConcurrency<I, O>(items: I[], limit: number, fn: (item: I)
   return results;
 }
 
+/**
+ * Værprøvene for kartutsnittet, med punktene avrundet før de forlater oss.
+ *
+ * Samme oppdeling som fetchWeatherSamplesForBounds (weatherSamplePoints). Men
+ * et utsnitt under ~0,6° gir ETT prøvepunkt — midten av kartet — og står kartet
+ * sentrert på brukeren, er det GPS-posisjonen, sendt til værleverandøren med
+ * alle desimalene klienten hadde. Se provider-precision.ts.
+ */
+async function hentVaerprover(bounds: WeatherBounds): Promise<WeatherSample[]> {
+  const prover = await Promise.all(
+    weatherSamplePoints(bounds).map(async (p) => {
+      const punkt = roundForProviderLookup(p.lat, p.lon);
+      const weather = await fetchWeatherSummary(punkt);
+      return weather ? { ...punkt, weather } : null;
+    })
+  );
+  return prover.filter((prove): prove is WeatherSample => prove !== null);
+}
+
 function inSeason(month: number, start: number, end: number): boolean {
   if (start <= end) return month >= start && month <= end;
   return month >= start || month <= end; // season wraps the year boundary
@@ -143,8 +171,11 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: copy.premiumRequired, upsell: true }, { status: 403 });
     }
 
-    const month = new Date().getMonth() + 1;
-    const dayOfYear = dayOfYearOf(new Date());
+    // Oslo, ikke UTC-serveren: ved et månedsskifte svarte ruta for feil måned
+    // i en til to timer etter midnatt (se src/lib/api/oslo-dag.ts).
+    const naa = new Date();
+    const month = osloIDag(naa).maaned;
+    const dayOfYear = osloDagIAaret(naa);
 
     // Feilen MÅ leses. Uten den ble speciesRows null, candidates [], og ruta
     // svarte 200 med «Ingen arter med bilde er i sesong nå» til en betalende
@@ -157,7 +188,7 @@ export async function GET(request: NextRequest) {
       )
       .not('primary_image_url', 'is', null);
     if (speciesErr) {
-      log.error('prediction.species_spots.species_query_failed', speciesErr);
+      loggFeil(log, 'prediction.species_spots.species_query_failed', speciesErr);
       return NextResponse.json({ error: copy.failed }, { status: 500 });
     }
 
@@ -180,7 +211,7 @@ export async function GET(request: NextRequest) {
     const centerLat = (minLat + maxLat) / 2;
     const centerLng = (minLng + maxLng) / 2;
     const bounds = { minLat, minLng, maxLat, maxLng };
-    const weatherSamples = await fetchWeatherSamplesForBounds(bounds);
+    const weatherSamples = await hentVaerprover(bounds);
     const centerWeather = nearestWeatherSample(weatherSamples, centerLat, centerLng)?.weather ?? null;
     const weatherSource = weatherSourceSummary(weatherSamples);
     if (!centerWeather) {
@@ -244,15 +275,24 @@ export async function GET(request: NextRequest) {
     // Samme prøveregel som nattjobben og /api/prediction/grid: midtpunktet, så
     // de fire kvadrantsentrene når midtpunktet ikke er skog
     // (src/lib/prediction/skogprover.ts). Nåla står fortsatt i midtpunktet.
+    //
+    // Rutesentrene regnes ut fra kartutsnittet, altså fra hvor brukeren ser —
+    // og med et odde antall ruter er den midterste rutas senter selve
+    // kartsenteret. NIBIO/CORINE og Kartverket får derfor punktene avrundet til
+    // ~110 m (provider-precision.ts), akkurat som i /api/prediction. Avrundingen
+    // skjer HER, ved oppslaget: ruta, nåla og avstanden til en forskjøvet
+    // skogprøve regnes fortsatt fra de eksakte punktene.
     const skogFrist = Date.now() + FORSKYVNINGSVINDU_LEVENDE_MS;
     const [skog, elevations] = await Promise.all([
       provSkogIRuter(
         cellCenters,
         { lat: latSpan, lng: lngSpan },
-        (p) => withTimeout(getForestProperties({ lat: p.lat, lon: p.lng }), FOREST_TIMEOUT_MS),
+        (p) => withTimeout(getForestProperties(roundForProviderLookup(p.lat, p.lng)), FOREST_TIMEOUT_MS),
         { samtidighet: FOREST_CONCURRENCY, tillatForskyvning: () => Date.now() < skogFrist }
       ),
-      mapWithConcurrency(cellCenters, FOREST_CONCURRENCY, (cell) => getElevation({ lat: cell.lat, lon: cell.lng }))
+      mapWithConcurrency(cellCenters, FOREST_CONCURRENCY, (cell) =>
+        getElevation(roundForProviderLookup(cell.lat, cell.lng))
+      )
     ]);
     const forested = cellCenters.map((cell, i) => {
       const forest = skog.prover[i].skog;

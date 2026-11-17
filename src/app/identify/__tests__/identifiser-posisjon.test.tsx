@@ -4,6 +4,7 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { NextIntlClientProvider } from 'next-intl';
 import type { ReactNode } from 'react';
 import nb from '../../../../messages/nb.json';
+import sv from '../../../../messages/sv.json';
 
 /**
  * «Gjenkjenningen virker ikke i appen» (eieren, 17. okt 2026): GPS-pluginen i
@@ -17,11 +18,13 @@ const push = vi.fn();
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push }) }));
 vi.mock('next/link', () => ({ default: ({ href, children }: { href: string; children: ReactNode }) => <a href={href}>{children}</a> }));
 vi.mock('@/components/layout/PageWrapper', () => ({ PageWrapper: ({ children }: { children: ReactNode }) => <div>{children}</div> }));
-vi.mock('@/components/identify/AiFiksetBanner', () => ({ AiFiksetBanner: () => null }));
 vi.mock('@/lib/native/platform', () => ({ isNativePlatform: () => true }));
 vi.mock('@/lib/supabase/client', () => ({ createClient: () => ({}) }));
-vi.mock('@/lib/utils/image', () => ({
-  optimizeImageForIdentification: vi.fn(async () => 'QUJD'),
+// BildeFeil og bildeFeilKode er de ekte: siden oversetter ut fra koden i dem.
+const optimaliser = vi.hoisted(() => vi.fn(async (_fil: File) => 'QUJD'));
+vi.mock('@/lib/utils/image', async (original) => ({
+  ...(await original<typeof import('@/lib/utils/image')>()),
+  optimizeImageForIdentification: optimaliser,
   base64ToBlob: () => new Blob(['x'], { type: 'image/jpeg' }),
   reencodeBase64ForHistory: vi.fn()
 }));
@@ -40,7 +43,7 @@ const mutateAsync = vi.fn(async (_foresporsel: unknown) => ({
   historyImagePath: null,
   originalImageDataUrl: 'data:image/jpeg;base64,QUJD',
   originalImageDataUrls: ['data:image/jpeg;base64,QUJD'],
-  location: { latitude: null, longitude: null },
+  location: { latitude: null as number | null, longitude: null as number | null },
   suggestions: [],
   isPlant: true,
   safetyDataIncomplete: false,
@@ -96,9 +99,9 @@ async function flush() {
   }
 }
 
-function tegn() {
+function tegn(sprak: 'nb' | 'sv' = 'nb') {
   return render(
-    <NextIntlClientProvider locale="nb" messages={nb}>
+    <NextIntlClientProvider locale={sprak} messages={sprak === 'nb' ? nb : sv}>
       <IdentifyPage />
     </NextIntlClientProvider>
   );
@@ -204,6 +207,71 @@ describe('«Identifiser» når GPS-pluginen tier', () => {
   });
 });
 
+/**
+ * Posisjonen fra «Identifiser» skal inn i økta med tiden selve målingen bærer.
+ * Uten den regnet resultatsiden alderen fra da den selv leste resultatet, og en
+ * lagret iOS-posisjon fra en time siden gikk gjennom som «for under ett minutt
+ * siden» — funnet ble lagret uten spørsmål der telefonen sist hadde en
+ * posisjon. Klokka er den ekte her; tidene er regnet fra den.
+ */
+describe('posisjonen lagres med tiden den ble målt', () => {
+  const MIN = 60_000;
+
+  /** Kindwise-svaret, med posisjonen slik useIdentify bygger den fra forespørselen. */
+  function svarMedPosisjonFraForesporselen() {
+    mutateAsync.mockImplementationOnce(async (foresporsel: unknown) => {
+      const { latitude, longitude } = foresporsel as { latitude?: number; longitude?: number };
+      return {
+        identificationId: null,
+        historyImagePath: null,
+        originalImageDataUrl: 'data:image/jpeg;base64,QUJD',
+        originalImageDataUrls: ['data:image/jpeg;base64,QUJD'],
+        location: { latitude: latitude ?? null, longitude: longitude ?? null },
+        suggestions: [],
+        isPlant: true,
+        safetyDataIncomplete: false,
+        freeQuotaRemaining: null
+      };
+    });
+  }
+
+  async function identifiserMedPosisjon(posisjon: unknown) {
+    getCurrentPosition.mockImplementationOnce(() => Promise.resolve(posisjon));
+    svarMedPosisjonFraForesporselen();
+    tegn();
+    await flush();
+    fireEvent.click(await leggTilBilde());
+    await flush();
+    expect(push).toHaveBeenCalledWith('/identify/result');
+    return JSON.parse(sessionStorage.getItem('identifyResult')!);
+  }
+
+  it('en lagret iOS-posisjon fra en time siden får sin egen tid, ikke trykkets', async () => {
+    const enTimeSiden = Date.now() - 60 * MIN;
+    const iOkta = await identifiserMedPosisjon({
+      timestamp: enTimeSiden,
+      coords: { latitude: 59.9706, longitude: 10.7286, accuracy: 65 }
+    });
+    expect(mutateAsync.mock.calls[0][0]).toMatchObject({ latitude: 59.9706, longitude: 10.7286 });
+    expect(iOkta.location).toEqual({ latitude: 59.9706, longitude: 10.7286, timestamp: enTimeSiden });
+  });
+
+  it('et tidsstempel foran enhetens klokke lagres som tiden posisjonen kom fram', async () => {
+    const foer = Date.now();
+    const iOkta = await identifiserMedPosisjon({
+      timestamp: foer + 30 * MIN,
+      coords: { latitude: 59.9706, longitude: 10.7286, accuracy: 12 }
+    });
+    expect(iOkta.location.timestamp).toBeGreaterThanOrEqual(foer);
+    expect(iOkta.location.timestamp).toBeLessThanOrEqual(Date.now());
+  });
+
+  it('uten et brukbart tidsstempel: ingen tid i økta — resultatsiden sier da at alderen er omtrentlig', async () => {
+    const iOkta = await identifiserMedPosisjon({ coords: { latitude: 59.9706, longitude: 10.7286, accuracy: 12 } });
+    expect(iOkta.location).toEqual({ latitude: 59.9706, longitude: 10.7286 });
+  });
+});
+
 describe('kamera- og bildetilgang avslått', () => {
   it('viser norsk forklaring i stedet for pluginens engelske tekst', async () => {
     captureNativePhoto.mockRejectedValueOnce(new Error('User denied access to photos'));
@@ -214,5 +282,191 @@ describe('kamera- og bildetilgang avslått', () => {
     expect(screen.getByText(nb.Identify.photosDenied)).toBeTruthy();
     expect(screen.queryByText('User denied access to photos')).toBeNull();
     expect(meld).toHaveBeenCalledWith(expect.objectContaining({ steg: 'kamera' }));
+  });
+
+  it('en avvisning siden ikke kjenner igjen vises aldri som pluginens rå engelske tekst', async () => {
+    captureNativePhoto.mockRejectedValueOnce(new Error('Unable to resolve image picker'));
+    tegn();
+    await flush();
+    fireEvent.click(screen.getByRole('button', { name: nb.Identify.takeOrChoosePhoto }));
+    await flush();
+    expect(screen.getByText(nb.Identify.couldNotGetImage)).toBeTruthy();
+    expect(screen.queryByText('Unable to resolve image picker')).toBeNull();
+    // Den rå teksten er ikke borte — den står i Sentry.
+    expect(meld).toHaveBeenCalledWith(expect.objectContaining({ steg: 'kamera' }));
+  });
+});
+
+/**
+ * image.ts kastet `new Error('Kunne ikke lese bilde.')`, og siden viste
+ * `err.message` rått — norsk til svenske brukere. Nå bærer feilen en kode, og
+ * siden velger teksten fra katalogen.
+ */
+describe('bildet lar seg ikke behandle', () => {
+  async function velgBildeSomFeiler(feil: unknown, sprak: 'nb' | 'sv' = 'nb') {
+    const { BildeFeil } = await import('@/lib/utils/image');
+    optimaliser.mockRejectedValueOnce(typeof feil === 'string' ? new BildeFeil(feil as never) : feil);
+    tegn(sprak);
+    await flush();
+    const katalog = sprak === 'nb' ? nb : sv;
+    fireEvent.click(screen.getByRole('button', { name: katalog.Identify.takeOrChoosePhoto }));
+    await flush();
+  }
+
+  it('et bilde nettleseren ikke kan lese får sin egen tekst — med noe brukeren kan gjøre', async () => {
+    await velgBildeSomFeiler('ulesbart');
+    expect(screen.getByText(nb.Identify.imageUnreadable)).toBeTruthy();
+    expect(screen.queryByText('Kunne ikke lese bilde.')).toBeNull();
+    expect(meld).toHaveBeenCalledWith(expect.objectContaining({ steg: 'bilde' }));
+  });
+
+  it('en svensk bruker får den på svensk, ikke den norske setningen fra image.ts', async () => {
+    await velgBildeSomFeiler('ulesbart', 'sv');
+    expect(screen.getByText(sv.Identify.imageUnreadable)).toBeTruthy();
+    expect(screen.queryByText('Kunne ikke lese bilde.')).toBeNull();
+    expect(sv.Identify.imageUnreadable).not.toBe(nb.Identify.imageUnreadable);
+  });
+
+  it('de andre bildefeilene får den generelle teksten fra katalogen', async () => {
+    await velgBildeSomFeiler('canvas', 'sv');
+    expect(screen.getByText(sv.Identify.couldNotGetImage)).toBeTruthy();
+    expect(screen.queryByText('Kunne ikke initialisere canvas.')).toBeNull();
+  });
+
+  it('nettleserens egne feil vises aldri rått', async () => {
+    // En DOMException er en Error i nettleseren. I jsdom er den det ikke, så
+    // testen bygger feilen slik den ser ut for siden: en Error med navnet.
+    await velgBildeSomFeiler(
+      Object.assign(new Error('The string to be decoded is not correctly encoded.'), { name: 'InvalidCharacterError' })
+    );
+    expect(screen.getByText(nb.Identify.couldNotGetImage)).toBeTruthy();
+    expect(screen.queryByText(/not correctly encoded/)).toBeNull();
+  });
+});
+
+describe('forespørselen som aldri får et brukbart svar', () => {
+  async function identifiserMedFeil(feil: unknown) {
+    mutateAsync.mockRejectedValueOnce(feil);
+    tegn();
+    await flush();
+    const knapp = await leggTilBilde();
+    fireEvent.click(knapp);
+    await flush();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(FRIST);
+    });
+    await flush();
+    return knapp as HTMLButtonElement;
+  }
+
+  // Lenka i sidehodet har samme etikett og står der alltid. Den som teller
+  // her, er den som dukker opp UNDER feilteksten.
+  const historikklenker = () =>
+    screen.getAllByRole('link').filter((lenke) => lenke.getAttribute('href') === '/identifiseringer');
+
+  it('opplastingen sto stille → bildene kom aldri fram: prøv igjen, ingen omvei om historikken', async () => {
+    const { IdentifyError } = await import('@/lib/hooks/useIdentify');
+    const knapp = await identifiserMedFeil(new IdentifyError('diagnosetekst til Sentry', 'upload_stalled'));
+    expect(screen.getByText(nb.Identify.uploadStalledError)).toBeTruthy();
+    expect(screen.queryByText('diagnosetekst til Sentry')).toBeNull();
+    // Ingenting er brukt, og bildet ligger fortsatt i feltet: et nytt forsøk er ett trykk.
+    expect(knapp.disabled).toBe(false);
+    expect(historikklenker()).toHaveLength(1);
+    expect(push).not.toHaveBeenCalled();
+    expect(meld).toHaveBeenCalledWith(expect.objectContaining({ steg: 'foresporsel', kode: 'upload_stalled' }));
+  });
+
+  it.each(['timeout', 'response_lost'])(
+    'klienten ga opp etter at bildene var sendt (%s) → pek til historikken, ikke et blindt nytt forsøk',
+    async (kode) => {
+      // Serveren kan ha brukt kvoteenheten og skrevet svaret i historikken.
+      // «Prøv igjen» alene ville kostet én enhet til for samme sopp.
+      const { IdentifyError } = await import('@/lib/hooks/useIdentify');
+      const knapp = await identifiserMedFeil(new IdentifyError('diagnosetekst til Sentry', kode));
+      expect(screen.getByText(nb.Identify.timeoutError)).toBeTruthy();
+      expect(screen.queryByText('diagnosetekst til Sentry')).toBeNull();
+      // Lenka under feilteksten kommer i tillegg til den i sidehodet.
+      expect(historikklenker()).toHaveLength(2);
+      // Ikke en blindvei: fant de ingenting i historikken, kan de prøve på nytt.
+      expect(knapp.disabled).toBe(false);
+      expect(push).not.toHaveBeenCalled();
+      expect(meld).toHaveBeenCalledWith(expect.objectContaining({ steg: 'foresporsel', kode }));
+    }
+  );
+
+  it('lenka til historikken forsvinner når et nytt forsøk starter', async () => {
+    const { IdentifyError } = await import('@/lib/hooks/useIdentify');
+    const knapp = await identifiserMedFeil(new IdentifyError('timeout', 'timeout'));
+    expect(historikklenker()).toHaveLength(2);
+    fireEvent.click(knapp);
+    await flush();
+    expect(historikklenker()).toHaveLength(1);
+    expect(screen.queryByText(nb.Identify.timeoutError)).toBeNull();
+  });
+
+  it('lenka følger feilen den hører til — den blir ikke stående under en annen', async () => {
+    const { IdentifyError } = await import('@/lib/hooks/useIdentify');
+    await identifiserMedFeil(new IdentifyError('timeout', 'timeout'));
+    expect(historikklenker()).toHaveLength(2);
+    // Neste feil er en helt annen: bildetilgangen er avslått.
+    captureNativePhoto.mockRejectedValueOnce(new Error('User denied access to photos'));
+    fireEvent.click(screen.getByRole('button', { name: nb.Identify.slotUnderside }));
+    await flush();
+    expect(screen.getByText(nb.Identify.photosDenied)).toBeTruthy();
+    expect(historikklenker()).toHaveLength(1);
+  });
+
+  it('en brutt forbindelse før alt var sendt → «sjekk dekningen», som før', async () => {
+    await identifiserMedFeil(new TypeError('Network request failed'));
+    expect(screen.getByText(nb.Identify.networkError)).toBeTruthy();
+    expect(screen.queryByText('Network request failed')).toBeNull();
+    expect(historikklenker()).toHaveLength(1);
+  });
+
+  it('en ukjent kode fra klienten vises aldri som rå diagnosetekst', async () => {
+    const { IdentifyError } = await import('@/lib/hooks/useIdentify');
+    await identifiserMedFeil(new IdentifyError('diagnosetekst til Sentry', 'noe_nytt'));
+    expect(screen.getByText(nb.Identify.identifyFailed)).toBeTruthy();
+    expect(screen.queryByText('diagnosetekst til Sentry')).toBeNull();
+  });
+
+  it('en feil som ikke kom fra kallet (full sessionStorage) vises aldri som nettleserens engelske tekst', async () => {
+    // Samme forbehold som over: en Error med navnet, slik nettleseren gir den.
+    await identifiserMedFeil(Object.assign(new Error('The quota has been exceeded.'), { name: 'QuotaExceededError' }));
+    expect(screen.getByText(nb.Identify.identifyFailed)).toBeTruthy();
+    expect(screen.queryByText('The quota has been exceeded.')).toBeNull();
+  });
+
+  it('rutens egne feil vises fortsatt med serverens oversatte tekst', async () => {
+    const { IdentifyError } = await import('@/lib/hooks/useIdentify');
+    await identifiserMedFeil(
+      new IdentifyError('AI-tjenesten svarer ikke akkurat nå. Prøv igjen om litt.', 'provider_timeout', 504, true)
+    );
+    expect(screen.getByText('AI-tjenesten svarer ikke akkurat nå. Prøv igjen om litt.')).toBeTruthy();
+    expect(historikklenker()).toHaveLength(1);
+  });
+
+  it('plattformens HTML-svar (413/504) vises med katalogens tekst, ikke feilens egen', async () => {
+    // Reserveteksten i useIdentify var hardkodet norsk og ble vist ordrett —
+    // også til svenske brukere. Siden skal velge den oversatte selv.
+    const { IdentifyError } = await import('@/lib/hooks/useIdentify');
+    await identifiserMedFeil(new IdentifyError('rå tekst som ikke skal vises', undefined, 504, false));
+    expect(screen.getByText(nb.Identify.identifyFailed)).toBeTruthy();
+    expect(screen.queryByText('rå tekst som ikke skal vises')).toBeNull();
+  });
+});
+
+describe('filfeltet på nett', () => {
+  it('tvinger ikke kameraet — bildebiblioteket skal kunne velges', async () => {
+    // capture="environment" åpner kameraet direkte på mobil og hopper over
+    // velgeren. Knappen heter «Ta bilde / velg bilde»; begge halvdeler må være sanne.
+    const { container } = tegn();
+    await flush();
+    const felt = container.querySelector('input[type="file"]');
+    expect(felt).not.toBeNull();
+    expect(felt!.getAttribute('accept')).toBe('image/*');
+    expect(felt!.hasAttribute('capture')).toBe(false);
+    // Ett bilde per felt — handleFile og feltindeksen er bygget rundt det.
+    expect(felt!.hasAttribute('multiple')).toBe(false);
   });
 });

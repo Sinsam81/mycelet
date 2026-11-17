@@ -31,10 +31,9 @@ const ogOmrade = fs.readFileSync(
   new URL('../../../app/soppforhold/[omrade]/opengraph-image.tsx', import.meta.url),
   'utf8'
 );
-const ogSamleside = fs.readFileSync(
-  new URL('../../../app/soppforhold/opengraph-image.tsx', import.meta.url),
-  'utf8'
-);
+// Samlesidens bilde tegnes i samlebilde.tsx (opengraph-image.tsx henter bare
+// tallene og pakker tegningen inn), så teksten leses derfra.
+const ogSamleside = fs.readFileSync(new URL('../../../app/soppforhold/samlebilde.tsx', import.meta.url), 'utf8');
 const nb = JSON.parse(fs.readFileSync(new URL('../../../../messages/nb.json', import.meta.url), 'utf8'));
 const sv = JSON.parse(fs.readFileSync(new URL('../../../../messages/sv.json', import.meta.url), 'utf8'));
 const regioner = fs.readFileSync(
@@ -132,6 +131,9 @@ describe('tallene og påstandene i forbeholdet', () => {
     expect(ogOmrade).toContain('Vær, sesong og skogtype');
     expect(ogSamleside).toContain('Vær, sesong og skogtype');
     expect(ogOmrade).toContain('Väder, säsong och skogstyp');
+    // Samlesidens bilde kan ikke velge språk (skrapere sender ingen cookie),
+    // så det bærer forbeholdet på begge.
+    expect(ogSamleside).toContain('Väder, säsong och skogstyp');
   });
 
   it('sier det samme på forsiden som på /soppforhold', () => {

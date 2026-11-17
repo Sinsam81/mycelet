@@ -32,13 +32,20 @@ const COPY: Record<Locale, { title: string; body: string; retry: string; home: s
   }
 };
 
-/** Språket ligger i MYCELET_LOCALE-cookien; ingen server-kontekst her. */
+/**
+ * Språket: MYCELET_LOCALE-cookien hvis den er gyldig, ellers nettleserens
+ * språkliste med samme regel som serveren (getUserLocale) og offline-siden —
+ * svensk når et hvilket som helst språk i lista er svensk. Før så denne bare
+ * på det første språket, så en nettleser med ['en-US', 'sv-SE'] fikk svensk
+ * app og norsk feilside.
+ */
 function readLocale(): Locale {
   if (typeof document === 'undefined') return DEFAULT_LOCALE;
   const match = document.cookie.match(new RegExp(`(?:^|; )${LOCALE_COOKIE}=([^;]*)`));
   const fromCookie = match ? decodeURIComponent(match[1]) : undefined;
   if (isLocale(fromCookie)) return fromCookie;
-  return navigator.language?.toLowerCase().startsWith('sv') ? 'sv' : DEFAULT_LOCALE;
+  const sprak = navigator.languages?.length ? navigator.languages : [navigator.language];
+  return sprak.some((tag) => /^sv\b/i.test(String(tag ?? ''))) ? 'sv' : DEFAULT_LOCALE;
 }
 
 export default function GlobalError({

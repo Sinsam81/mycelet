@@ -1,6 +1,7 @@
 import { ImageResponse } from 'next/og';
 import { regionFromSlug } from '@/lib/prediction/region-slug';
-import { datoTekst, fargeHex, hentRegioner } from '../hent-regioner';
+import { sesongtilstand } from '@/lib/sesong/sesongtilstand';
+import { datoTekst, fargeHex, hentRegioner, omradeTilstand } from '../hent-regioner';
 
 /**
  * Delingsbildet for områdesidene: det som vises når lenka limes inn i en
@@ -16,6 +17,12 @@ import { datoTekst, fargeHex, hentRegioner } from '../hent-regioner';
  * bilde-URL-en med rasterdatoen (?d=ÅÅÅÅ-MM-DD) — ny dag gir ny URL, og både
  * vår cache og delings-skraperne henter da ferskt bilde. Ikke fjern den
  * versjoneringen uten å løse koblingen på en annen måte.
+ *
+ * Ingen `export const alt` her, av samme grunn: når siden setter
+ * openGraph.images selv, sender Next aldri ut filas egen alt-tekst. Den sto
+ * som en norsk konstant — også for de svenske områdene — uten å nå noen.
+ * Alt-teksten settes der bildet lenkes (openGraph.images[].alt i page.tsx), på
+ * landets språk.
  */
 
 // Må være en bokstavelig verdi (Next leser segment-konfig statisk) — hold den
@@ -23,13 +30,14 @@ import { datoTekst, fargeHex, hentRegioner } from '../hent-regioner';
 export const revalidate = 3600;
 export const size = { width: 1200, height: 630 };
 export const contentType = 'image/png';
-export const alt = 'Dagens soppforhold for området, som tall fra 0 til 100';
 
 export default async function OgBilde({ params }: { params: Promise<{ omrade: string }> }) {
   const { omrade } = await params;
   const regionDef = regionFromSlug(omrade);
   if (!regionDef) {
-    return new Response('Ikke funnet', { status: 404 });
+    // Uten tekst: svaret er et bilde som ikke finnes, og siden selv er på
+    // landets språk — som et ukjent område ikke har.
+    return new Response(null, { status: 404 });
   }
   const land = regionDef.country;
   const { tileDate, regions } = await hentRegioner(land === 'SE' ? 'sv' : 'nb');
@@ -44,6 +52,13 @@ export default async function OgBilde({ params }: { params: Promise<{ omrade: st
   const navn = regionDef.name;
   const scoreTekst = region ? String(region.score) : '–';
   const bandFarge = region ? fargeHex(region.score) : '#9ca3af';
+  // Samme regel som siden (omradeTilstand): utenom sesongen bærer ikke et stort
+  // «3» bildet — da står det hva tallet betyr, med tallet lite ved siden av.
+  const utenomSesong = region
+    ? omradeTilstand(region, regions, sesongtilstand(new Date()).iHovedsesong).utenomSesong
+    : false;
+  const utenomTekst = land === 'SE' ? 'Utanför högsäsongen' : 'Utenom hovedsesongen';
+  const stilleTekst = land === 'SE' ? 'stilla i hela landet nu' : 'stille i hele landet nå';
 
   return new ImageResponse(
     (
@@ -74,10 +89,19 @@ export default async function OgBilde({ params }: { params: Promise<{ omrade: st
             {etikett}{tileDate ? ` · ${datoTekst(tileDate, land)}` : ''}
           </div>
           <div style={{ display: 'flex', fontSize: 84, lineHeight: 1.1 }}>{navn}</div>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: 16, marginTop: 8 }}>
-            <div style={{ display: 'flex', fontSize: 150, color: '#ffffff' }}>{scoreTekst}</div>
-            <div style={{ display: 'flex', fontSize: 44, color: '#cfe0c2' }}>av 100</div>
-          </div>
+          {utenomSesong ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
+              <div style={{ display: 'flex', fontSize: 72, color: '#ffffff' }}>{utenomTekst}</div>
+              <div style={{ display: 'flex', fontSize: 40, color: '#cfe0c2' }}>
+                {`${scoreTekst} av 100 · ${stilleTekst}`}
+              </div>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 16, marginTop: 8 }}>
+              <div style={{ display: 'flex', fontSize: 150, color: '#ffffff' }}>{scoreTekst}</div>
+              <div style={{ display: 'flex', fontSize: 44, color: '#cfe0c2' }}>av 100</div>
+            </div>
+          )}
           <div style={{ display: 'flex', width: 480, height: 18, borderRadius: 9, backgroundColor: '#2c4a1a' }}>
             <div
               style={{

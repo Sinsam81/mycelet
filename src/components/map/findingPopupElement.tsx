@@ -1,7 +1,7 @@
 import type { ReactElement } from 'react';
 import { NextIntlClientProvider } from 'next-intl';
 import { timeZoneForLocale } from '@/i18n/config';
-import { FindingPopup } from './FindingPopup';
+import { FindingPopup, type FindingReportPayload } from './FindingPopup';
 import { MapFinding } from '@/types/finding';
 
 interface FindingPopupElementArgs {
@@ -14,6 +14,10 @@ interface FindingPopupElementArgs {
   canDelete?: boolean;
   /** Kartets slettehandling — se FindingPopup for arbeidsdelingen. */
   onDelete?: (findingId: string) => Promise<void>;
+  /** Kartets meldehandling. Bare satt for en innlogget leser på andres funn. */
+  onReport?: (findingId: string, payload: FindingReportPayload) => Promise<void>;
+  /** Kartets blokkeringshandling. Samme vilkår som onReport. */
+  onBlock?: (finding: MapFinding) => Promise<void>;
 }
 
 /**
@@ -37,7 +41,9 @@ export function findingPopupElement({
   locale,
   messages,
   canDelete,
-  onDelete
+  onDelete,
+  onReport,
+  onBlock
 }: FindingPopupElementArgs): ReactElement {
   return (
     // timeZone må settes eksplisitt: uten den bruker next-intl serverens
@@ -48,6 +54,8 @@ export function findingPopupElement({
         displayName={displayName}
         canDelete={canDelete}
         onDelete={onDelete}
+        onReport={onReport}
+        onBlock={onBlock}
       />
     </NextIntlClientProvider>
   );

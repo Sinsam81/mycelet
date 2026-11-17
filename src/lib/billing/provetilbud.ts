@@ -7,7 +7,7 @@
  * det ene stedet tilbudet blir vist til en som nettopp har fått verdi.
  *
  * Reglene er bevisst strenge, fordi et tilbud som maser koster mer enn det
- * gir: vises bare til gratisbrukere, bare når noe har skjedd («viser 3 av 12»
+ * gir: vises bare til gratisbrukere, bare når noe har skjedd («viser opptil 3 av 12»
  * i lovende områder, et halvt minutt i første kartøkt, eller kartet brukt på
  * to ulike dager), aldri to ganger samme døgn, og aldri mer enn to ganger.
  * Etter to dager med 12 kartbrukere og 1 prissidevisning (11. sep 2026) ble

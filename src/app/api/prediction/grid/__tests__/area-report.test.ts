@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterAll } from 'vitest';
 import { NextRequest } from 'next/server';
 
 /**
@@ -10,6 +10,11 @@ import { NextRequest } from 'next/server';
  * er det eneste «nabolaget» vi har målt. Testen går gjennom hele ruta og inn i
  * teksten brukeren faktisk leser, fordi poenget ikke er at feltene finnes, men
  * at de kommer fram.
+ *
+ * Datoen er låst til 1. september. Ruta leser måned og dag i året fra klokka,
+ * og utenfor sesongen kommer ingen rute over bunngrensen for «lovende» — da
+ * er lista tom med vilje, og testene under hadde ingenting å lese. Uten låsen
+ * var fila grønn i august og rød i november.
  */
 
 const NESODDEN = { lat: 59.85, lng: 10.66 };
@@ -146,6 +151,7 @@ interface Cell {
 }
 
 let call = 0;
+let sisteStatus = 0;
 async function topSpots(): Promise<Cell[]> {
   call += 1;
   currentUserId = `bruker-${call}`; // egen ratelimit-bøtte per kall
@@ -158,6 +164,7 @@ async function topSpots(): Promise<Cell[]> {
     top: '3'
   });
   const res = await GET(new NextRequest(`https://mycelet.com/api/prediction/grid?${params.toString()}`));
+  sisteStatus = res.status;
   const body = await res.json();
   return (body.cells ?? []) as Cell[];
 }
@@ -167,7 +174,14 @@ function sectionLines(cell: Cell, id: string): string {
 }
 
 beforeEach(() => {
+  // Bare Date — ruta bruker ekte tidsavbrudd rundt skogoppslagene.
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date('2026-09-01T09:00:00Z'));
   paidUser = true;
+});
+
+afterAll(() => {
+  vi.useRealTimers();
 });
 
 describe('områderapporten i /api/prediction/grid?top=', () => {
@@ -213,6 +227,14 @@ describe('områderapporten i /api/prediction/grid?top=', () => {
     const why = sectionLines(best, 'distinctive');
     expect(why).toContain('2 registrerte funn innenfor 500 m');
     expect(why).toContain('følger stier og veier');
+  });
+
+  it('utenfor sesongen lover ruta ingenting: samme skog og vær i november gir ingen «lovende» steder', async () => {
+    // Ikke en feil, men bunngrensen i ruta: topp-N av lave tall er ikke lovende.
+    vi.setSystemTime(new Date('2026-11-10T09:00:00Z'));
+    expect(await topSpots()).toEqual([]);
+    // Et tomt svar, ikke en feil.
+    expect(sisteStatus).toBe(200);
   });
 
   it('gir ingen rapport til gratisbrukere — rapporten er premium-halvdelen', async () => {

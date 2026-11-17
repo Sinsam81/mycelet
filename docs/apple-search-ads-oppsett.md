@@ -18,10 +18,10 @@ Timing: sesongtoppen for «sopp»/«svamp»-søk er ca. 1. september–medio okt
 Kampanjen bør stå på gjennom hele vinduet og skrus AV i november (sett
 sluttdato — ikke la den stå og dryppe gjennom vinteren).
 
-## Kontooppsett (Sindre gjør dette — engangsjobb, ~15 min)
+## Kontooppsett (eieren gjør dette — engangsjobb, ~15 min)
 
 1. Gå til **searchads.apple.com** → logg inn med Apple-ID-en som eier
-   utviklerkontoen (sindre.alstad@gmail.com).
+   utviklerkontoen (adressen står i passordbehandleren).
 2. Velg **Search Ads Advanced** (IKKE Basic — Basic gir ingen kontroll på
    søkeord, og hele strategien under avhenger av den kontrollen).
 3. Koble kontoen til App Store Connect-appen (Mycelet, ASC app-id 6784672944)
@@ -138,7 +138,7 @@ skjermbilder), ikke budet, som skal justeres.
    (alle Search Match AV, exact-klammer) + Discovery – search match $0.30
    (Search Match PÅ, ingen søkeord). Status «App pending review» — Apples
    engangsgodkjenning av appen for annonsering, går live av seg selv.
-4. 🔜 Sindre: verifiser at betalingskort ligger inne (Account Settings →
+4. 🔜 Eieren: verifiser at betalingskort ligger inne (Account Settings →
    Billing) — uten kort står kampanjen godkjent men bruker ingenting
 5. 🔜 Ukentlig, 5 min: Search terms-rapporten → flytt/negativér (Claude kan
    analysere rapporten hvis du limer den inn eller eksporterer CSV)

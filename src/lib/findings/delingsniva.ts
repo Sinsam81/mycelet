@@ -13,8 +13,14 @@ import { readLocal, removeLocal, writeLocal } from '@/lib/utils/safe-storage';
  *
  * Selve VELGEREN skal alltid være synlig på lagringsflaten. Standardverdien
  * her endrer bare hva den står på — lærdommen fra personvernfunn #92
- * (delingsnivået var en gang usynlig hardkodet, og funn kan ikke slettes i
- * appen) er at valget aldri får skje i det stille.
+ * (delingsnivået var en gang usynlig hardkodet, og funn kunne den gang verken
+ * slettes eller endres i appen) er at valget aldri får skje i det stille.
+ *
+ * Det gjelder fortsatt, selv om et funn nå både kan slettes og få delingen
+ * endret i etterkant (PATCH /api/findings/:id, «Endre deling» på Mine steder):
+ * et punkt som har ligget ute, er sett. Innstrammingen virker framover — den
+ * tar ikke tilbake det som alt er vist. Reglene for når delingen kan ÅPNES
+ * igjen står i delingsendring.ts.
  */
 
 export type DelingsnivaValg = 'public' | 'approximate' | 'zone' | 'private';

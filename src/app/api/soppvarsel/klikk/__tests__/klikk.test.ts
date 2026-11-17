@@ -22,7 +22,7 @@ vi.mock('@/lib/supabase/admin', () => ({
   })
 }));
 
-import { GET } from '../route';
+import { GET, HEAD } from '../route';
 
 const TOKEN = '11111111-2222-4333-8444-555555555555';
 const NAA = Date.now();
@@ -65,6 +65,14 @@ describe('varselklikk', () => {
   it('ukjent token: samme videresending, ingen skriving', async () => {
     const res = await klikk('oslo', 'ikke-en-uuid');
     expect(res.headers.get('location')).toBe('https://www.mycelet.com/soppforhold/oslo');
+    expect(oppdateringer).toHaveLength(0);
+  });
+
+  it('HEAD (lenkesjekk) får samme videresending, men noteres aldri — heller ikke lenge etter utsendingen', async () => {
+    rad = { last_notified_at: new Date(NAA - 3 * 3600_000).toISOString(), forste_apnet_at: null };
+    const res = await HEAD(new NextRequest(`http://localhost/api/soppvarsel/klikk?t=${TOKEN}&r=bergen`, { method: 'HEAD' }));
+    expect(res.status).toBe(303);
+    expect(res.headers.get('location')).toBe('https://www.mycelet.com/soppforhold/bergen');
     expect(oppdateringer).toHaveLength(0);
   });
 

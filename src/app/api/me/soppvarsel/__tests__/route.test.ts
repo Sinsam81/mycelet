@@ -157,3 +157,40 @@ describe('PUT /api/me/soppvarsel', () => {
     expect(s.upserts[0].rad.kilde).toBeUndefined();
   });
 });
+
+/**
+ * Feilsvarene var hardkodet norsk. Ingen av klientene viser dem i dag (kortet
+ * og stripa har egne tekster), men ruta er brukervendt, og en klient som
+ * begynner å vise `error` skal ikke få norsk til svenske brukere.
+ */
+describe('feilsvarene fra /api/me/soppvarsel', () => {
+  it('lesefeil: oversatt tekst med kode, og databasens melding blir igjen på serveren', async () => {
+    s.lesefeil = 'permission denied for table alert_subscriptions';
+    const res = await GET(req());
+    expect(res.status).toBe(500);
+    const tekst = await res.text();
+    expect(JSON.parse(tekst)).toEqual({ error: 'Kunne ikke hente varselet.', code: 'alert_load_failed' });
+    expect(tekst).not.toContain('permission denied');
+  });
+
+  it('ukjent område: 400 med kode', async () => {
+    const res = await PUT(req({ region: 'Mordor', active: true }));
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: 'Ukjent område.', code: 'alert_unknown_area' });
+  });
+
+  it('feiler avslåingen av de andre områdene, skrives ingenting — og svaret har en kode', async () => {
+    s.deaktiveringsfeil = 'deadlock detected';
+    const res = await PUT(req({ region: 'Oslo', active: true }));
+    expect(res.status).toBe(500);
+    const tekst = await res.text();
+    expect(JSON.parse(tekst)).toEqual({ error: 'Kunne ikke lagre varselet.', code: 'alert_save_failed' });
+    expect(tekst).not.toContain('deadlock');
+    expect(s.upserts).toEqual([]);
+  });
+
+  it('uten innlogging: 401 med kode', async () => {
+    s.bruker = null;
+    expect((await (await PUT(req({ region: 'Oslo' }))).json()).code).toBe('unauthenticated');
+  });
+});

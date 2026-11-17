@@ -5,6 +5,7 @@ import { checkRateLimit } from '@/lib/rate-limit';
 import { getClientKey, rateLimitResponse } from '@/lib/rate-limit/route';
 import { alleRegionSlugs } from '@/lib/prediction/region-slug';
 import { HJEM_OMRADER, TILBUD_UTLOSERE, erFlate, osloDag } from '@/lib/bruk/bruksdag';
+import { apiFeil } from '@/lib/api/feil';
 
 /**
  * «Jeg så soppforholdene i dag» — én rad per bruker, dag og flate
@@ -31,7 +32,7 @@ export async function POST(request: NextRequest) {
   const {
     data: { user }
   } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: 'Ikke innlogget' }, { status: 401 });
+  if (!user) return apiFeil('unauthenticated', 401);
 
   const rl = checkRateLimit(`bruksdag:${getClientKey(request, user.id)}`, 30, 60);
   if (!rl.allowed) return rateLimitResponse(rl);
@@ -39,7 +40,7 @@ export async function POST(request: NextRequest) {
   const raa = await request.json().catch(() => null);
   const body = (raa && typeof raa === 'object' ? raa : {}) as Record<string, unknown>;
   const flate = body.flate;
-  if (!erFlate(flate)) return NextResponse.json({ error: 'Ugyldig flate' }, { status: 400 });
+  if (!erFlate(flate)) return apiFeil('invalid_request', 400, { hint: 'Ugyldig flate' });
 
   // Kolonnen er fritekst og ender i dagsrapporten, så bare kjente verdier
   // slipper inn: områdeslug for områdesidene (påkrevd), «egen»/«standard» for
@@ -47,7 +48,7 @@ export async function POST(request: NextRequest) {
   let omrade = '';
   const onsket = typeof body.omrade === 'string' ? body.omrade : '';
   if (flate === 'omrade') {
-    if (!GYLDIGE_OMRADER.has(onsket)) return NextResponse.json({ error: 'Ugyldig område' }, { status: 400 });
+    if (!GYLDIGE_OMRADER.has(onsket)) return apiFeil('invalid_request', 400, { hint: 'Ugyldig område' });
     omrade = onsket;
   } else if (flate === 'hjem' && (HJEM_OMRADER as readonly string[]).includes(onsket)) {
     omrade = onsket;

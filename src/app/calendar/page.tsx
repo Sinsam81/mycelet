@@ -1,16 +1,42 @@
+import type { Metadata } from 'next';
 import { getLocale, getTranslations } from 'next-intl/server';
 import { PageWrapper } from '@/components/layout/PageWrapper';
 import { createClient } from '@/lib/supabase/server';
 import { SeasonNow, type CalendarSpecies } from '@/components/calendar/SeasonNow';
 import { YearTable } from '@/components/calendar/YearTable';
 import { SafetyNote } from '@/components/safety/SafetyNote';
+import { getUserLocale } from '@/i18n/locale';
+import { sideMetadata } from '@/lib/seo/side-metadata';
+import { sesongtilstand } from '@/lib/sesong/sesongtilstand';
 import { compareSpeciesByDisplayName } from '@/lib/utils/species-name';
+
+/**
+ * Kalenderen arvet forsidens tittel og beskrivelse og hadde ingen canonical,
+ * enda den står i sitemap.xml med prioritet 0,8. Beskrivelsen er bevisst uten
+ * månedsnavn og uten «plukk nå»: den sier hva siden VISER, og blir ikke
+ * stående med feil måned i et søketreff som er noen uker gammelt.
+ */
+export async function generateMetadata(): Promise<Metadata> {
+  const locale = await getUserLocale();
+  const t = await getTranslations({ locale, namespace: 'Calendar' });
+  return sideMetadata({
+    sti: '/calendar',
+    tittel: t('metaTitle'),
+    beskrivelse: t('metaDescription'),
+    locale
+  });
+}
 
 export default async function CalendarPage() {
   const t = await getTranslations('Calendar');
   const locale = await getLocale();
   const supabase = createClient();
-  const currentMonth = new Date().getMonth() + 1;
+  // Én måned for hele siden, i Oslo-tid, fra den ene sesonghjelperen. Den ble
+  // lest to steder: her med serverens klokke (UTC på Vercel) for årstabellen,
+  // og i SeasonNow med enhetens — de første timene av en ny måned kunne «I
+  // sesong nå (november)» stå over en tabell som fortsatt markerte oktober, og
+  // serverens og nettleserens første rendring av SeasonNow kunne bli ulike.
+  const { maaned } = sesongtilstand();
   const { data, error } = await supabase
     .from('mushroom_species')
     .select('id,norwegian_name,swedish_name,latin_name,edibility,season_start,season_end,peak_season_start,peak_season_end,primary_image_url');
@@ -40,10 +66,17 @@ export default async function CalendarPage() {
             Forbeholdet står derfor ØVERST, før den første spiselig-merkelappen. */}
         <SafetyNote />
 
-        {/* Location-aware "in season now" + "coming soon" (client — opt-in position). */}
-        <SeasonNow species={species} />
+        {/* Ikke ved feil: uten arter ville panelene sagt «ingen arter er i
+            sesong» og vist en tom årstabell — påstander om sesongen, ikke om at
+            oppslaget feilet. Feilmeldingen over er hele svaret da. */}
+        {error ? null : (
+          <>
+            {/* Location-aware "in season now" + "next up" (client — opt-in position). */}
+            <SeasonNow species={species} month={maaned} />
 
-        <YearTable species={species} locale={locale} currentMonth={currentMonth} />
+            <YearTable species={species} locale={locale} currentMonth={maaned} />
+          </>
+        )}
       </section>
     </PageWrapper>
   );

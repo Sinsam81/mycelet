@@ -3,17 +3,19 @@ import { redirect } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
 import { Camera, MapPin, Sparkles } from 'lucide-react';
 import { PageWrapper } from '@/components/layout/PageWrapper';
-import { EdibilityBadge } from '@/components/ui/EdibilityBadge';
+import { AiEdibilityBadge } from '@/components/identify/AiEdibilityBadge';
 import { SlettIdentifisering } from '@/components/identifikasjoner/SlettIdentifisering';
 import { createClient } from '@/lib/supabase/server';
 import { intlLocale } from '@/lib/utils/intl-locale';
+import { timeZoneForLocale } from '@/i18n/config';
 import { getJoinedSpeciesName } from '@/lib/utils/species-name';
 import { IDENTIFY_HISTORY_BUCKET } from '@/lib/identifications/config';
 import type { Edibility } from '@/types/species';
+import { privatSide } from '@/lib/seo/side-titler';
 
 export async function generateMetadata() {
   const t = await getTranslations('Identifiseringer');
-  return { title: t('metaTitle') };
+  return privatSide(t('metaTitle'));
 }
 
 /**
@@ -150,15 +152,20 @@ export default async function IdentifiseringerPage() {
                           </h2>
                           <p className="truncate text-xs italic text-gray-600">{rad.top_suggestion_name}</p>
                         </div>
-                        {art?.edibility ? <EdibilityBadge edibility={art.edibility} /> : null}
+                        {/* Radene er UBEKREFTEDE AI-forslag: aldri et grønt
+                            «spiselig» her — se AiEdibilityBadge. */}
+                        {art ? <AiEdibilityBadge edibility={art.edibility} /> : null}
                       </div>
 
                       <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-gray-600">
                         <span>
+                          {/* Serveren står i UTC. En identifisering kl. 00.30
+                              norsk tid skal ikke få gårsdagens dato. */}
                           {new Date(rad.created_at).toLocaleDateString(intlLocale(locale), {
                             day: 'numeric',
                             month: 'short',
-                            year: 'numeric'
+                            year: 'numeric',
+                            timeZone: timeZoneForLocale(locale)
                           })}
                         </span>
                         {rad.top_probability != null ? (

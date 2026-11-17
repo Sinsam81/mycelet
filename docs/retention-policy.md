@@ -35,13 +35,17 @@ Lagt til 26. august 2026 (migrasjon 056). Fram til da fantes det ingen vei ut av
 et feilregistrert funn: RLS tillot sletting, men ingen flate brukte den, så
 eneste utvei var å slette hele kontoen.
 
-- **Flate:** kartpopupen, kun på egne funn. To-trinns bekreftelse.
+- **Flate:** kartpopupen og stedskortene på `/mine-steder`, kun på egne funn.
+  To-trinns bekreftelse begge steder.
 - **Sletting:** myk — `findings.deleted_at` settes. Raden forsvinner samtidig
   fra alle lesesteder (`public_findings`-viewet, `get_user_stats`, /mine-steder,
   profilen, forsiden, kartet, GPX-eksporten, forum-koblingen, admin-statistikken).
 - **Angre:** `POST /api/findings/:id/restore`, tilbudt i varselet rett etter
-  slettingen og gyldig så lenge raden finnes.
-- **Permanent fjerning:** `/api/cron/purge-deleted-findings` (daglig 03:30)
+  slettingen og gyldig så lenge raden finnes. «Nylig slettet» på
+  `/mine-steder` er flaten som viser vinduet: den lister egne slettede funn med
+  antall dager igjen og knapp for å gjenopprette. Dagene regnes av
+  `PURGE_AFTER_DAYS`, importert fra cron-ruta, ikke kopiert.
+- **Permanent fjerning:** `/api/cron/purge-deleted-findings` (daglig 04:00 UTC)
   hard-sletter rader eldre enn 30 dager og fjerner bildet i `finding-images`.
   Bildet ryddes FØRST, raden etterpå — feiler bildet, blir raden liggende og
   neste kjøring prøver på nytt.
@@ -53,7 +57,7 @@ eneste utvei var å slette hele kontoen.
   «identifiser → lagre → slett» gitt en ny gratis runde hver gang.
 
 Vinduet på 30 dager står fire steder og må holdes i takt: her, i
-`PURGE_AFTER_DAYS`, i kommentaren på `findings.deleted_at` (migrasjon 056), og i
+`PURGE_AFTER_DAYS` (som «Nylig slettet» leser), i kommentaren på `findings.deleted_at` (migrasjon 056), og i
 personvernerklæringen (`Personvern.retentionActiveDesc`, nb + sv).
 
 ## Tre beslutninger — låst 9. mai 2026

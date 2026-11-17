@@ -95,6 +95,14 @@ export interface IdentifyResultPayload {
   suggestions: IdentifySuggestion[];
   isPlant: boolean;
   /**
+   * Kindwise sin egen vurdering av om bildet viser en sopp. TRE tilstander:
+   * true, false, eller null/udefinert = ukjent (feltet manglet i svaret,
+   * visningen er hydrert fra historikken, eller payloaden er eldre enn feltet).
+   * Resultatsiden viser usikkerhetsbeskjeden KUN ved et eksplisitt `false` —
+   * aldri utled den fra `isPlant`, som faller tilbake på false når feltet mangler.
+   */
+  isMushroom?: boolean | null;
+  /**
    * Satt når serveren ikke fikk lest spiselighet eller farlige
    * forvekslingsarter for ett eller flere forslag. Fraværet av en advarsel
    * betyr da IKKE at det er trygt — bare at vi ikke vet.

@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { getTranslations } from 'next-intl/server';
+import { getLocale, getTranslations } from 'next-intl/server';
 import {
   AlertTriangle,
   BookOpen,
@@ -25,6 +25,15 @@ import { BILLING_PLANS, FREE_DAILY_AI_LIMIT } from '@/lib/billing/plans';
  *
  * Renders inside the app chrome (Header + BottomNav), so it has no nav of its
  * own; the bottom nav doubles as an invitation to explore the open pages.
+ *
+ * ⚠️ THIS IS THE FALLBACK, NOT THE LANDING PAGE VISITORS SEE. In production
+ * the middleware rewrites a logged-out «/» to the static public/landing/
+ * index.html (Swedish: index.sv.html). This component renders only where
+ * middleware does not run — local Turbopack dev, and therefore `npm run qa`.
+ * It drifted for exactly that reason: its FAQ still said the iOS app was
+ * awaiting Apple's review months after the app went live, next to a button
+ * linking to the App Store listing. Change one, change both;
+ * src/lib/__tests__/landing-static.test.ts holds the shared facts together.
  */
 
 const PREMIUM_MONTHLY = BILLING_PLANS.premium.monthlyNok ?? 99;
@@ -45,8 +54,13 @@ function FaqRow({ q, a }: { q: string; a: string }) {
   );
 }
 
+/** App Store-oppføringen, i butikken for leserens språk — samme par som de statiske landingssidene. */
+function appStoreHref(locale: string): string {
+  return `https://apps.apple.com/${locale === 'sv' ? 'se' : 'no'}/app/id6784672944`;
+}
+
 /** Mini soppforhold-gauge for the phone mockup (static, matches a real July day). */
-function MockGauge() {
+function MockGauge({ outOf }: { outOf: string }) {
   const radius = 26;
   const circumference = 2 * Math.PI * radius;
   const filled = circumference * 0.72;
@@ -68,7 +82,7 @@ function MockGauge() {
         72
       </text>
       <text x="32" y="42" textAnchor="middle" fontSize="8" fill="#6b7280">
-        av 100
+        {outOf}
       </text>
     </svg>
   );
@@ -76,14 +90,17 @@ function MockGauge() {
 
 /** Static phone mockup of the app's home screen (pure CSS/SVG — no screenshot). */
 function PhoneMockup({ t }: { t: Awaited<ReturnType<typeof getTranslations<'Landing'>>> }) {
+  // Ukedagene sto som norsk tekst rett i koden, ved siden av en oversatt «I
+  // dag»: den svenske siden viste «lør, søn, man». Fra katalogen, ikke fra
+  // Intl — nb-NO gir «ons.» med punktum, og kolonnene er smale.
   const forecastBars = [
     { h: 'h-9', tone: 'bg-forest-600', label: t('mockToday') },
-    { h: 'h-6', tone: 'bg-amber-500', label: 'ons' },
-    { h: 'h-7', tone: 'bg-amber-500', label: 'tor' },
-    { h: 'h-6', tone: 'bg-amber-500', label: 'fre' },
-    { h: 'h-9', tone: 'bg-forest-600', label: 'lør' },
-    { h: 'h-8', tone: 'bg-amber-500', label: 'søn' },
-    { h: 'h-7', tone: 'bg-amber-500', label: 'man' }
+    { h: 'h-6', tone: 'bg-amber-500', label: t('mockDay1') },
+    { h: 'h-7', tone: 'bg-amber-500', label: t('mockDay2') },
+    { h: 'h-6', tone: 'bg-amber-500', label: t('mockDay3') },
+    { h: 'h-9', tone: 'bg-forest-600', label: t('mockDay4') },
+    { h: 'h-8', tone: 'bg-amber-500', label: t('mockDay5') },
+    { h: 'h-7', tone: 'bg-amber-500', label: t('mockDay6') }
   ];
 
   return (
@@ -106,7 +123,7 @@ function PhoneMockup({ t }: { t: Awaited<ReturnType<typeof getTranslations<'Land
           </div>
           <div className="rounded-xl bg-white p-3 shadow-sm">
             <div className="flex items-center gap-3">
-              <MockGauge />
+              <MockGauge outOf={t('mockOutOf')} />
               <div className="min-w-0">
                 <p className="text-[11px] font-bold text-forest-900">🍄 {t('mockVerdict')}</p>
                 <p className="text-[9px] leading-snug text-gray-600">{t('mockVerdictSub')}</p>
@@ -138,7 +155,7 @@ function PhoneMockup({ t }: { t: Awaited<ReturnType<typeof getTranslations<'Land
 }
 
 export async function LandingPage() {
-  const t = await getTranslations('Landing');
+  const [t, locale] = await Promise.all([getTranslations('Landing'), getLocale()]);
 
   const steps = [
     { icon: CloudRain, title: t('step1Title'), body: t('step1Body') },
@@ -167,13 +184,14 @@ export async function LandingPage() {
     { q: t('faqSwedenQ'), a: t('faqSwedenA') },
     { q: t('faqAiQ'), a: t('faqAiA') },
     { q: t('faqOfflineQ'), a: t('faqOfflineA') }
-    // «Når kommer iOS-appen?» er FLYTTET ned i en NonNativeOnly-blokk. Den lå
-    // her, og siden dette er den første skjermen i iOS-skallet (capacitor
-    // server.url peker på www.mycelet.com, og /-ruten viser LandingPage til
-    // alle som ikke er logget inn), fortalte appen sin egen anmelder hos Apple
-    // at den «er til vurdering hos Apple» og ba dem åpne mycelet.com i
-    // nettleseren i mellomtiden. Det er en oppfordring ut av appen, til et sted
-    // der de samme abonnementene selges via Stripe — retningslinje 3.1.1.
+    // «Finnes Mycelet som app?» står IKKE her, men nede i en NonNativeOnly-blokk.
+    // Dette er den første skjermen i iOS-skallet (capacitor server.url peker på
+    // www.mycelet.com, og /-ruten viser LandingPage til alle som ikke er logget
+    // inn). Svaret peker på App Store og på mycelet.com i nettleseren — inne i
+    // appen er det en oppfordring ut av appen, til et sted der de samme
+    // abonnementene selges via Stripe (retningslinje 3.1.1). Den gamle
+    // ordlyden, «til vurdering hos Apple nå», fortalte dessuten appens egen
+    // anmelder at appen ikke var sluppet.
   ];
 
   return (
@@ -199,7 +217,7 @@ export async function LandingPage() {
           </Link>
           <NonNativeOnly>
             <a
-              href="https://apps.apple.com/no/app/id6784672944"
+              href={appStoreHref(locale)}
               className="inline-flex flex-col items-start rounded-xl border border-gray-300 px-5 py-2 text-left transition hover:border-forest-700"
             >
               <span className="text-[10px] font-semibold uppercase tracking-wide text-gray-500">{t('heroAppStoreKicker')}</span>

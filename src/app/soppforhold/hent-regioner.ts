@@ -1,5 +1,5 @@
 import { timeZoneForLocale, type Locale } from '@/i18n/config';
-import { regionBand, regionBandHex } from '@/lib/prediction/region-score';
+import { regionBand, regionBandHex, regionScoreToCondition } from '@/lib/prediction/region-score';
 import { intlLocale } from '@/lib/utils/intl-locale';
 
 /**
@@ -41,6 +41,17 @@ export interface SoppforholdRegion {
   score: number;
   cells: number;
   leadingSpecies: string | null;
+  /**
+   * Er `leadingSpecies` i sesong i rasterdatoens måned? Samme vindu som
+   * kalenderen og artssidene (erArtISesong i src/lib/sesong/art-i-sesong.ts),
+   * ikke katalogmånedene alene — de er for smale og skjulte artssetningen for
+   * piggsopp i august.
+   * `leadingSpecies` er bare arten på ruta med høyest tall — rasteret skriver en
+   * rad per art også utenfor sesong — så «er i sesong» må sjekkes for seg.
+   * Mangler (undefined/null) i svar som ble cachet før feltet kom og for arter
+   * uten sesong i basen; da regnes det som ukjent, ikke som «utenfor».
+   */
+  leadingInSeason?: boolean | null;
   verdict: string | null;
 }
 
@@ -148,4 +159,104 @@ export function innledningsRegion(
     region: iEgetLand ?? regions[0] ?? null,
     egetLandMangler: regions.length > 0 && iEgetLand === null
   };
+}
+
+/**
+ * Er området i laveste bånd? Leser SAMME stige som dommen i kortet
+ * (REGION_CONDITION_THRESHOLDS via regionScoreToCondition) — aldri et eget tall
+ * her, ellers kan innledningen og kortet under den si hver sin ting.
+ */
+export function erStille(region: Pick<SoppforholdRegion, 'score'>): boolean {
+  return regionScoreToCondition(region.score) === 'poor';
+}
+
+/**
+ * Får siden lov til å skrive at arten «er i sesong her nå»?
+ *
+ * Bare når området ikke er i laveste bånd OG arten er innenfor sin egen sesong.
+ * Setningen sto ubetinget, rett over en dom som kunne si «Lite kantarell i
+ * skogen nå», og fra januar til april om arter som ikke har sesong i det hele
+ * tatt.
+ */
+export function visArtslinje(region: SoppforholdRegion): boolean {
+  return Boolean(region.leadingSpecies) && !erStille(region) && region.leadingInSeason !== false;
+}
+
+/**
+ * Hvilken innledning samlesiden skal ha:
+ *  - 'vanlig'        beste område i leserens land er over laveste bånd
+ *  - 'stille'        også det beste er i laveste bånd (en tørr uke, senhøsten)
+ *  - 'utenomSesong'  ALLE områder er i laveste bånd OG kalenderen sier
+ *                    desember–mai
+ *
+ * 'utenomSesong' krever begge deler med vilje. Bare kalender ville kalt en mild
+ * november med ekte tall «over», og blankt ut en god morkelvår; bare tall ville
+ * kalt en tørr uke i august «utenom sesongen». `iHovedsesong` kommer fra
+ * sesongtilstand() og sendes inn, så funksjonen er ren.
+ */
+export type Innledning = 'vanlig' | 'stille' | 'utenomSesong';
+
+export function innledningsTilstand(
+  regions: SoppforholdRegion[],
+  locale: Locale,
+  iHovedsesong: boolean
+): { region: SoppforholdRegion | null; egetLandMangler: boolean; tilstand: Innledning; alleStille: boolean } {
+  const { region, egetLandMangler } = innledningsRegion(regions, locale);
+  const alleStille = regions.length > 0 && regions.every(erStille);
+  const tilstand: Innledning =
+    !region || !erStille(region) ? 'vanlig' : alleStille && !iHovedsesong ? 'utenomSesong' : 'stille';
+  return { region, egetLandMangler, tilstand, alleStille };
+}
+
+/**
+ * Det samme for én områdeside, regnet innenfor områdets eget LAND (siden
+ * handler om ett land): `landStille` når ingen av landets områder er over
+ * laveste bånd — da er «nummer 4 av 13» en rangering av støy — og
+ * `utenomSesong` når det i tillegg er desember–mai.
+ */
+export function omradeTilstand(
+  region: SoppforholdRegion,
+  regions: SoppforholdRegion[],
+  iHovedsesong: boolean
+): { landStille: boolean; utenomSesong: boolean } {
+  const iLandet = regions.filter((r) => r.country === region.country);
+  const landStille = iLandet.length > 0 && iLandet.every(erStille);
+  return { landStille, utenomSesong: landStille && !iHovedsesong };
+}
+
+/**
+ * Det beste området i hvert land, Norge først — radene på samlesidens
+ * delingsbilde.
+ *
+ * Bildet viste bare «Soppforhold i Norge i dag» og det beste NORSKE området,
+ * selv om siden handler om begge land og setter Sverige først for svenske
+ * lesere. Delingsskrapere sender ingen språkcookie, så bildet kan ikke følge
+ * leseren slik siden gjør: det må være riktig for begge. Derfor ett område per
+ * land, i fast rekkefølge.
+ *
+ * Høyeste tall vinner, og ved likhet det som står først i API-svaret (som er
+ * sortert på score). Regnes ut her i stedet for å stole på sorteringen, så et
+ * usortert eller delvis svar aldri gir feil «best». Et land uten tall i dagens
+ * raster (NO skrives en halvtime før SE) får ingen rad.
+ */
+export function bestePerLand(regions: SoppforholdRegion[]): SoppforholdRegion[] {
+  return (['NO', 'SE'] as const)
+    .map((land) =>
+      regions
+        .filter((r) => r.country === land)
+        .reduce<SoppforholdRegion | null>((beste, r) => (beste === null || r.score > beste.score ? r : beste), null)
+    )
+    .filter((r): r is SoppforholdRegion => r !== null);
+}
+
+/**
+ * Rasterdatoen som rene tall: «2026-09-15» → «15.09.2026».
+ *
+ * For flater som ikke kan velge språk (samlesidens delingsbilde): «15. september»
+ * er norsk og «15 september» svensk, tallformen leses likt av begge. Ren
+ * strengregning — ingen Date, så ingen tidssone kan flytte dagen.
+ */
+export function tallDato(iso: string | null): string {
+  const treff = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso ?? '');
+  return treff ? `${treff[3]}.${treff[2]}.${treff[1]}` : '';
 }

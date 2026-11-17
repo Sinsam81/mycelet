@@ -11,6 +11,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { getClientKey, rateLimitResponse } from '@/lib/rate-limit/route';
 import { createRequestLogger } from '@/lib/log/request';
+import { loggFeil } from '@/lib/api/feil';
 import { getUserLocale } from '@/i18n/locale';
 import { DEFAULT_LOCALE, type Locale } from '@/i18n/config';
 
@@ -184,7 +185,18 @@ export async function POST(request: NextRequest) {
     // Samme tre sjekker som /api/billing/status (kanFaaProve) og forsiden
     // (tidligere-abonnent.ts): raden, IAP-leverandøren, og e-postens
     // Stripe-historikk under en slettet konto.
-    const tidligereAbonnent = await harHattTilgangFor({ subscription: existing, email: user.email, stripe: () => stripe });
+    //
+    // Og samme frist, som ligger i funksjonen selv: svarer ikke Stripe innen
+    // 5 s, får kunden prøven — det flatene nettopp lovet, for de fikk samme
+    // «ingen svar». Før ventet denne ruta på det ekte svaret mens statusruta
+    // hadde gitt opp, og en tidligere kunde som var lovet gratisuka ble
+    // trukket samme dag.
+    const tidligereAbonnent = await harHattTilgangFor({
+      subscription: existing,
+      email: user.email,
+      stripe: () => stripe,
+      vedFrist: (fristMs) => userLog.warn('billing.checkout.stripe_lookup_timeout', { fristMs })
+    });
 
     const idempotencyKey = `checkout_${user.id}_${plan}_${Math.floor(Date.now() / (1000 * 60 * 5))}`;
 
@@ -253,8 +265,9 @@ export async function POST(request: NextRequest) {
 
     if (upsertError) {
       // Databasens egen feiltekst (tabellnavn, kolonner, constraint-navn) er
-      // for loggen. Kunden får noe de kan handle på.
-      userLog.error('billing.checkout.subscription_upsert_failed', upsertError);
+      // for loggen. Kunden får noe de kan handle på. loggFeil, fordi
+      // log.error gjør et rent feilobjekt om til «[object Object]».
+      loggFeil(userLog, 'billing.checkout.subscription_upsert_failed', upsertError);
       return NextResponse.json({ error: billingCopy('saveFailed', locale) }, { status: 500 });
     }
 

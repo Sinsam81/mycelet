@@ -16,27 +16,42 @@ let currentUser: { id: string; email: string; created_at: string } | null = null
 /** Hvilke tabeller ble spurt om, og med hvilken klient. */
 let queriedWithSession: string[] = [];
 let queriedWithAdmin: string[] = [];
+/** Hvert `.eq()` tjenesterollen la på: [tabell, kolonne, verdi]. */
+let adminFilters: Array<[string, string, unknown]> = [];
 /** Simulerer at SUPABASE_SERVICE_ROLE_KEY mangler. */
 let adminClientAvailable = true;
+/** Leserens språk. Feilsvarene skal følge det. */
+let sprak: 'nb' | 'sv' = 'nb';
+
+vi.mock('@/i18n/locale', () => ({ getUserLocale: async () => sprak }));
 /** Svaret fra signeringen av historikkbildene. */
 let signedUrls: { data: { path: string; signedUrl: string }[] | null; error: { message: string } | null } = {
   data: [],
   error: null
 };
 
+/** Filterstrengene som ble sendt til `.or()` — der settes verdier inn som tekst. */
+let orFiltre: string[] = [];
+
 /**
  * Minimal Supabase-etterligning. Query-byggeren er «thenable», så både
  * `await from(x).select().eq()` og `.maybeSingle()` løser til samme resultat —
  * det er nok for denne ruten, som aldri filtrerer på annet enn eier.
  */
-function makeQuery(result: TableResult) {
+function makeQuery(result: TableResult, onEq?: (column: string, value: unknown) => void) {
   // range() simulerer PostgREST-siden: svaret er utsnittet [fra, til].
   let fra: number | null = null;
   let til: number | null = null;
   const builder: Record<string, unknown> = {
     select: () => builder,
-    eq: () => builder,
-    or: () => builder,
+    eq: (column: string, value: unknown) => {
+      onEq?.(column, value);
+      return builder;
+    },
+    or: (filter: string) => {
+      orFiltre.push(filter);
+      return builder;
+    },
     order: () => builder,
     range: (a: number, b: number) => {
       fra = a;
@@ -71,7 +86,7 @@ vi.mock('@/lib/supabase/admin', () => ({
     return {
       from: (table: string) => {
         queriedWithAdmin.push(table);
-        return makeQuery(tableResponses[table] ?? { data: [], error: null });
+        return makeQuery(tableResponses[table] ?? { data: [], error: null }, (column, value) => adminFilters.push([table, column, value]));
       },
       storage: {
         from: () => ({
@@ -110,8 +125,11 @@ beforeEach(() => {
   tableResponses = {};
   queriedWithSession = [];
   queriedWithAdmin = [];
+  adminFilters = [];
+  orFiltre = [];
   adminClientAvailable = true;
   signedUrls = { data: [], error: null };
+  sprak = 'nb';
 });
 
 describe('GET /api/me/export', () => {
@@ -180,6 +198,33 @@ describe('GET /api/me/export', () => {
       expect(body._manifest.datasets.aiIdentifications).toBe(2);
     });
 
+    it('leser egne innlegg og kommentarer med tjenesterollen, så det en moderator har skjult følger med', async () => {
+      // SELECT-policyen krever is_hidden = false, også for forfatteren. Med
+      // øktklienten ville skjulte rader falt ut av en fil merket komplett.
+      tableResponses = {
+        forum_posts: {
+          data: [
+            { id: 'p1', title: 'Synlig', is_hidden: false },
+            { id: 'p2', title: 'Skjult av moderator', is_hidden: true }
+          ],
+          error: null
+        },
+        comments: { data: [{ id: 'c1', content: 'Skjult svar', is_hidden: true }], error: null }
+      };
+      const body = JSON.parse(await (await GET(makeRequest())).text());
+      expect(queriedWithAdmin).toEqual(expect.arrayContaining(['forum_posts', 'comments']));
+      expect(queriedWithSession).not.toContain('forum_posts');
+      expect(queriedWithSession).not.toContain('comments');
+      // Tjenesterollen ser alles rader. Filteret på eieren er det eneste som
+      // holder andres innlegg ute av fila.
+      expect(adminFilters).toContainEqual(['forum_posts', 'user_id', currentUser!.id]);
+      expect(adminFilters).toContainEqual(['comments', 'user_id', currentUser!.id]);
+      expect(body.forumPosts).toHaveLength(2);
+      expect(body.forumPosts[1]).toMatchObject({ id: 'p2', is_hidden: true });
+      expect(body.comments).toEqual([{ id: 'c1', content: 'Skjult svar', is_hidden: true }]);
+      expect(body._manifest.datasets).toMatchObject({ forumPosts: 2, comments: 1 });
+    });
+
     it('leser påminnelsen før første App Store-belastning og svaret på spørsmålet i den med tjenesterollen', async () => {
       // Begge tabellene (migrasjon 072) har RLS på uten policyer, som
       // ai_identifications. Øktklienten ville gitt [] — en tom liste som
@@ -196,6 +241,21 @@ describe('GET /api/me/export', () => {
       expect(body.trialReminders).toEqual([{ kanal: 'revenuecat', prove_slutt: '2026-09-27', sendt_at: '2026-09-24T06:30:00Z' }]);
       expect(body.trialAnswers).toEqual([{ prove_slutt: '2026-09-27', valg: 'offline', svart_at: '2026-09-25T10:00:00Z' }]);
       expect(body._manifest.datasets).toMatchObject({ trialReminders: 1, trialAnswers: 1 });
+    });
+
+    it('leser verified_foragers med tjenesterollen, så merknaden følger med også etter migrasjon 074', async () => {
+      // Etter 074 har øktklienten ikke lenger SELECT på `note`; `select('*')`
+      // derfra ville gitt 42501 og en avbrutt eksport.
+      tableResponses.verified_foragers = {
+        data: { user_id: currentUser!.id, role: 'expert', badge_label: 'Soppkontrollør', note: 'intern merknad' },
+        error: null
+      };
+      const res = await GET(makeRequest());
+      expect(res.status).toBe(200);
+      const body = JSON.parse(await res.text());
+      expect(queriedWithAdmin).toContain('verified_foragers');
+      expect(queriedWithSession).not.toContain('verified_foragers');
+      expect(body.verifiedForager.note).toBe('intern merknad');
     });
 
     it('sier fra i stedet for å levere en fil uten AI-tellerne', async () => {
@@ -257,6 +317,30 @@ describe('GET /api/me/export', () => {
       tableResponses = { findings: { data: null, error: { message: 'boom' } } };
       const body = JSON.parse(await (await GET(makeRequest())).text());
       expect(body.details).toContain('privacy@mycelet.com');
+    });
+
+    it('en svensk bruker får hele forklaringen på svensk, med en stabil kode', async () => {
+      // Begge tekstene var hardkodet norsk. Det viktigste i dem — at fila IKKE
+      // er ufullstendig — skal ikke stå på et annet språk enn resten av appen.
+      sprak = 'sv';
+      tableResponses = { findings: { data: null, error: { message: 'boom' } } };
+      const res = await GET(makeRequest());
+      expect(res.status).toBe(500);
+      const body = JSON.parse(await res.text());
+      expect(body.code).toBe('export_incomplete');
+      expect(body.error).toBe('Kunde inte hämta ut alla dina data.');
+      expect(body.details).toMatch(/INTE fått en ofullständig fil/);
+      expect(body.details).toContain('privacy@mycelet.com');
+      expect(`${body.error} ${body.details}`).not.toMatch(/IKKE|Kunne|ufullstendig/);
+    });
+
+    it('mangler tjenestenøkkelen, sier svaret «serverfeil» — også det på leserens språk', async () => {
+      sprak = 'sv';
+      adminClientAvailable = false;
+      const body = JSON.parse(await (await GET(makeRequest())).text());
+      expect(body.code).toBe('export_incomplete');
+      expect(body.details).toMatch(/serverfel/);
+      expect(body.details).toMatch(/INTE fått en ofullständig fil/);
     });
   });
 
@@ -354,6 +438,26 @@ describe('identifiseringshistorikken (art. 15)', () => {
     expect(body._manifest.datasets.blockedUsers).toBe(1);
     expect(queriedWithAdmin).toContain('alert_subscriptions');
     expect(queriedWithSession).toContain('blocked_users');
+  });
+
+  it('adressen står som én verdi i varselfilteret, med små bokstaver', async () => {
+    currentUser = { ...(currentUser as NonNullable<typeof currentUser>), email: 'Test@Example.com' };
+    await GET(makeRequest());
+    expect(orFiltre).toEqual([`user_id.eq.${currentUser!.id},email.eq."test@example.com"`]);
+  });
+
+  it('en adresse med anførselstegn kan ikke åpne et vilkår til i varselfilteret', async () => {
+    // Tjenesterollen leser en tabell full av andres adresser. Sto adressen rett
+    // i filterstrengen, ville `"` lukket verdien og resten blitt et eget vilkår.
+    currentUser = {
+      ...(currentUser as NonNullable<typeof currentUser>),
+      email: 'x",user_id.not.is.null,email.eq."y@example.com'
+    };
+    await GET(makeRequest());
+    expect(orFiltre).toHaveLength(1);
+    // Utenfor anførselstegnene finnes bare de to vilkårene ruta selv skrev.
+    const utenforSitat = orFiltre[0].replace(/"(?:[^"\\]|\\.)*"/g, '«»');
+    expect(utenforSitat).toBe(`user_id.eq.${currentUser!.id},email.eq.«»`);
   });
 
   it('kontoens metadata (kilde, vilkårssamtykke) og innloggingsidentiteter er med', async () => {

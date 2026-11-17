@@ -130,7 +130,7 @@ export const SANKETIPS: readonly SanketipsArtikkel[] = [
     "slug": "soppkart-over-norge",
     "lang": "nb",
     "title": "Soppkart over Norge: 428 829 funn — og hva de egentlig forteller",
-    "summary": "428 829 registrerte sopfunn på ett kart — hva prikkene faktisk betyr, hvorfor 72 prosent av dem er historie, og hvordan du bruker et soppkart uten å bli lurt av det.",
+    "summary": "428 829 registrerte soppfunn på ett kart — hva prikkene faktisk betyr, hvorfor 72 prosent av dem er historie, og hvordan du bruker et soppkart uten å bli lurt av det.",
     "kicker": "Kart og funn · 5 min",
     "published": "2026-09-02",
     "updated": "2026-09-03",

@@ -108,29 +108,106 @@ export function maskEmail(value: string): string {
 const EMAIL_REGEX = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
 
 /**
+ * The longest string the patterns above are ever handed. EMAIL_REGEX
+ * backtracks quadratically on a long run without «@» — 25 kB took 0.7 s and
+ * 100 kB 12.5 s — and the logger is handed strings from outside: an error
+ * message with user input in it, a webhook body anyone can post. A longer
+ * string is cut before any pattern runs, so no log line can hold the
+ * function: at this cap the worst string costs about 8 ms (8192 gave 34 ms).
+ * It is still more than a message or a stack needs, and call sites that log
+ * a response body already cut it to a few hundred characters.
+ */
+export const MAX_STRING_LENGTH = 4096;
+
+/** Every character that can sit inside an address or a token the patterns above recognise. */
+const TOKEN_CHAR = /[A-Za-z0-9._%+~/=@-]/;
+
+/**
+ * The first MAX_STRING_LENGTH characters — but never half an address or half
+ * a token. «ola.nordmann@exa» is no longer an e-mail to EMAIL_REGEX, and two
+ * thirds of a JWT is no longer a JWT: cut there, both would be written in
+ * clear. When the cut lands inside a run of such characters, it moves back to
+ * where the run starts.
+ */
+function cutAtLimit(value: string): string {
+  let end = MAX_STRING_LENGTH;
+  if (TOKEN_CHAR.test(value[end])) {
+    while (end > 0 && TOKEN_CHAR.test(value[end - 1])) end -= 1;
+  }
+  return value.slice(0, end);
+}
+
+/** Mask embedded secrets first, then embedded emails. */
+function redactString(value: string): string {
+  const kept = value.length > MAX_STRING_LENGTH ? cutAtLimit(value) : value;
+  const masked = redactSecretValues(kept).replace(EMAIL_REGEX, (match) => maskEmail(match));
+  return kept === value ? masked : `${masked}…<truncated: ${value.length} chars>`;
+}
+
+/**
+ * The own fields of an Error that reach the log — an allowlist, never every
+ * own field. Library errors carry more than the caller sees: Stripe's
+ * StripeSignatureVerificationError keeps the raw webhook body (`payload`) and
+ * the Stripe-Signature value (`header`), and its API errors keep `raw`,
+ * `headers` and whole payment objects. Copying every field wrote the
+ * customer's name from the webhook body into the log on every failed
+ * signature check. These say why a call failed: PostgREST's
+ * code/details/hint, Node's code/errno/syscall, an HTTP status, Stripe's
+ * type/rawType/requestId.
+ */
+const ERROR_FIELDS = [
+  'code',
+  'details',
+  'hint',
+  'status',
+  'statusCode',
+  'errno',
+  'syscall',
+  'type',
+  'rawType',
+  'requestId'
+] as const;
+
+/**
  * Walk a value and return a deep clone with PII redacted. Handles plain
  * objects, arrays, primitives, and Errors. Cycles are tracked so a
- * self-referencing object doesn't infinite-loop.
+ * self-referencing object doesn't infinite-loop. Strings longer than
+ * MAX_STRING_LENGTH are cut first.
  */
 export function redactPII(value: unknown, seen: WeakSet<object> = new WeakSet()): unknown {
   if (value === null || value === undefined) return value;
 
-  // Strings: mask embedded secrets first, then embedded emails.
-  if (typeof value === 'string') {
-    return redactSecretValues(value).replace(EMAIL_REGEX, (match) => maskEmail(match));
-  }
+  if (typeof value === 'string') return redactString(value);
 
   // Primitives pass through.
   if (typeof value !== 'object') return value;
 
   // Errors get serialized with name, message, stack — but we redact emails
   // inside the message and stack just in case.
+  //
+  // The own fields in ERROR_FIELDS come along too: PostgrestError extends
+  // Error and keeps code/details/hint as own properties, and Node errors
+  // carry code/errno. Without them a failed query logged only «permission
+  // denied …» and lost the code that says which policy refused it. `cause`
+  // is walked the same way, so a wrapped error is not reduced to its outer
+  // message.
   if (value instanceof Error) {
-    return {
+    if (seen.has(value)) return '<cycle>';
+    seen.add(value);
+    const out: Record<string, unknown> = {
       name: value.name,
       message: redactPII(value.message, seen),
       stack: typeof value.stack === 'string' ? redactPII(value.stack, seen) : undefined
     };
+    const fields = value as unknown as Record<string, unknown>;
+    for (const key of ERROR_FIELDS) {
+      if (!Object.prototype.hasOwnProperty.call(value, key)) continue;
+      const child = fields[key];
+      if (child !== undefined) out[key] = redactPII(child, seen);
+    }
+    const cause = (value as { cause?: unknown }).cause;
+    if (cause !== undefined) out.cause = redactPII(cause, seen);
+    return out;
   }
 
   // Defend against cyclic references.

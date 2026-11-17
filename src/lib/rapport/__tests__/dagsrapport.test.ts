@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { tellAbonnement } from '../abonnement';
+import { BEHANDLINGSFRIST_TIMER, oppsummerAapneRapporter } from '@/lib/moderation/moderering';
 import {
   byggDagsrapport,
+  byggModereringsblokk,
   kontoerSomFolgerOmrade,
   type AbonnementRad,
   type BrukerRad,
@@ -722,7 +724,7 @@ describe('tellinger før konto (anonyme flatetellinger)', () => {
 
 describe('AI-identifiseringen: virker den, og bruker noen den?', () => {
   // Fra mai til 29. september 2026 feilet hvert Kindwise-kall uten at noe sa
-  // fra. Vellykkede kall telles bare ved suksess, så «død» og «ubrukt» var
+  // fra. Bare kall som lyktes etterlot en rad, så «død» og «ubrukt» var
   // samme tall. Blokka finnes for å skille dem.
   const frisk = { aktiv: true, kanBruke: true, grunn: null, igjen: 2099, bruktUke: 3, bruktMaaned: 3, bruktTotalt: 3 };
 
@@ -767,5 +769,68 @@ describe('AI-identifiseringen: virker den, og bruker noen den?', () => {
   it('lave kreditter varsles under grensen, ikke på den', () => {
     expect(byggDagsrapport(inn({ kindwise: { ...frisk, igjen: 199 } })).ai.varsel).toBe('bare 199 Kindwise-kreditter igjen — kjøp flere');
     expect(byggDagsrapport(inn({ kindwise: { ...frisk, igjen: 200 } })).ai.varsel).toBeNull();
+  });
+});
+
+describe('moderering: meldt innhold som venter', () => {
+  // En melding i forumet sa ikke fra til noen. Den ble sett når en moderator
+  // tilfeldigvis åpnet /forum/moderation, og Apple (retningslinje 1.2) venter
+  // svar innen ett døgn. Rapporten roper derfor så snart noe venter, skriver
+  // klokkeslettet fristen går ut, og roper høyere når fristen alt er ute.
+  // Regelen for «nå» og kveldsvarselet er testet i modereringsvarsel.test.ts.
+  // NAA er 13. august kl. 08:00 norsk tid.
+  const timerSiden = (t: number) => new Date(NAA.getTime() - t * 3_600_000).toISOString();
+  const STILLE = { antall: 0, eldsteTimer: null, overFrist: false, fristUtloper: null, fristTekst: null, haster: false, varsel: null };
+
+  it('«ikke målt» når tabellen ikke svarte — aldri «0 åpne» på en gjetning', () => {
+    expect(byggModereringsblokk({ naa: NAA })).toEqual({ maalt: false, ...STILLE });
+    expect(byggDagsrapport(inn()).moderering.maalt).toBe(false);
+  });
+
+  it('ingen åpne rapporter er stillhet', () => {
+    const m = byggDagsrapport(inn({ aapneRapporter: { antall: 0, eldsteOpprettet: null } })).moderering;
+    expect(m).toEqual({ maalt: true, ...STILLE });
+  });
+
+  it('én åpen rapport innenfor fristen varsles, med klokkeslettet fristen går ut', () => {
+    const m = byggModereringsblokk({ aapneRapporter: { antall: 1, eldsteOpprettet: timerSiden(5) }, naa: NAA });
+    expect(m).toMatchObject({ maalt: true, antall: 1, eldsteTimer: 5, overFrist: false, haster: false });
+    expect(m.fristUtloper).toBe('2026-08-14T01:00:00.000Z');
+    expect(m.varsel).toBe('1 åpen rapport i forumet — den har ventet 5 t, fristen på 24 t går ut i morgen kl. 03:00');
+  });
+
+  it('flere åpne: alderen og fristen er den eldstes', () => {
+    const m = byggModereringsblokk({ aapneRapporter: { antall: 3, eldsteOpprettet: timerSiden(23.5) }, naa: NAA });
+    expect(m).toMatchObject({ antall: 3, eldsteTimer: 23, overFrist: false, haster: true });
+    expect(m.varsel).toBe('3 åpne rapporter i forumet — den eldste har ventet 23 t, fristen på 24 t går ut i dag kl. 08:30');
+  });
+
+  it('over fristen fra og med 24 t — samme grense som banneret i moderasjonskonsollen', () => {
+    const naa = oppsummerAapneRapporter({ antall: 2, eldsteOpprettet: timerSiden(24), naa: NAA });
+    const m = byggModereringsblokk({ aapneRapporter: { antall: 2, eldsteOpprettet: timerSiden(24) }, naa: NAA });
+    expect(m.overFrist).toBe(true);
+    expect(m.overFrist).toBe(naa.over24t);
+    expect(m.eldsteTimer).toBe(naa.eldsteTimer);
+    expect(m.varsel).toBe(`2 åpne rapporter i forumet — den eldste har ventet 24 t, fristen på ${BEHANDLINGSFRIST_TIMER} t gikk ut i dag kl. 08:00`);
+  });
+
+  it('et sekund under fristen er ikke over', () => {
+    const m = byggModereringsblokk({
+      aapneRapporter: { antall: 1, eldsteOpprettet: new Date(NAA.getTime() - 24 * 3_600_000 + 1000).toISOString() },
+      naa: NAA
+    });
+    expect(m.overFrist).toBe(false);
+    expect(m.varsel).toContain('går ut i dag kl. 08:00');
+  });
+
+  it('lenge over fristen: timene skrives ut som de er, og fristen står med dato', () => {
+    const m = byggModereringsblokk({ aapneRapporter: { antall: 1, eldsteOpprettet: timerSiden(100) }, naa: NAA });
+    expect(m.varsel).toBe('1 åpen rapport i forumet — den har ventet 100 t, fristen på 24 t gikk ut 10. august kl. 04:00');
+  });
+
+  it('et tidsstempel som ikke kan leses tar ikke bort varselet — antallet er fortsatt sant, og da haster det', () => {
+    const m = byggModereringsblokk({ aapneRapporter: { antall: 2, eldsteOpprettet: 'tull' }, naa: NAA });
+    expect(m).toMatchObject({ maalt: true, antall: 2, eldsteTimer: null, overFrist: false, fristUtloper: null, fristTekst: null, haster: true });
+    expect(m.varsel).toBe('2 åpne rapporter i forumet — fristen er 24 t');
   });
 });

@@ -19,6 +19,8 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { hentAlleBrukere } from '@/lib/supabase/alle-brukere';
 import { erInternKonto, tellAbonnement, type AbonnementRad } from '@/lib/rapport/abonnement';
+import { hentAapneRapporter } from '@/lib/rapport/aapne-rapporter';
+import { oppsummerAapneRapporter } from '@/lib/moderation/moderering';
 
 /**
  * Admin statistics dashboard — the `/admin` landing page (and hub linking to
@@ -64,8 +66,13 @@ const CATEGORY_LABEL_KEYS: Record<string, string> = {
   discussion: 'categoryDiscussion'
 };
 
+/** Der meldt innhold behandles. Tallene om rapporter og skjulte innlegg lenker hit. */
+const MODERASJON_HREF = '/forum/moderation';
+
 export default async function AdminDashboardPage() {
   const t = await getTranslations('Admin');
+  // Setningen om åpne rapporter er konsollens egen (samme ord, samme frist).
+  const tMod = await getTranslations('ForumModeration');
   const supabase = createClient();
   const {
     data: { user }
@@ -153,7 +160,9 @@ export default async function AdminDashboardPage() {
     let q = admin.from(table).select('*', { count: 'exact', head: true });
     if (build) q = build(q);
     const { count, error } = await q;
-    return error ? null : count ?? 0;
+    // HEAD mot en tabell som ikke finnes gir verken feil eller tall (se
+    // tabell-finnes.ts) — da er svaret «ukjent», ikke 0.
+    return error || count == null ? null : count;
   };
 
   const iso = (msAgo: number) => new Date(Date.now() - msAgo).toISOString();
@@ -204,6 +213,18 @@ export default async function AdminDashboardPage() {
       .from('billing_subscriptions')
       .select('user_id,tier,status,current_period_end,cancel_at_period_end,created_at,metadata');
     return error ? null : ((data ?? []) as AbonnementRad[]);
+  };
+
+  /**
+   * Åpne rapporter: antall og alderen på den eldste, med konsollens regel
+   * (pending ELLER reviewed) og dagsrapportens spørring. Kortet telte før
+   * bare `pending`, så en rapport forsvant herfra i det noen hadde markert den
+   * som gjennomgått — uten at innholdet var verken skjult eller frikjent.
+   * `null` = spørringen feilet («—» på kortet, aldri 0).
+   */
+  const fetchOpenReports = async () => {
+    const svar = await hentAapneRapporter(admin);
+    return svar.ok ? oppsummerAapneRapporter({ ...svar.aapne, naa: new Date() }) : null;
   };
 
   const fetchSpecies = async () => {
@@ -269,7 +290,7 @@ export default async function AdminDashboardPage() {
     likesComment,
     savedTotal,
     reportsTotal,
-    reportsPending,
+    openReports,
     occurrences,
     tiles,
     verifiedForagers,
@@ -297,7 +318,7 @@ export default async function AdminDashboardPage() {
     c('comment_likes'),
     c('saved_posts'),
     c('reports'),
-    c('reports', (q) => q.eq('status', 'pending')),
+    fetchOpenReports(),
     c('species_occurrences'),
     c('prediction_tiles'),
     c('verified_foragers'),
@@ -422,22 +443,39 @@ export default async function AdminDashboardPage() {
           </Grid>
           {postsHidden != null && postsHidden > 0 && (
             <p className="text-xs text-amber-800">
-              {t('postsHidden', { count: postsHidden })}
+              {t('postsHidden', { count: postsHidden })}{' '}
+              <Link href={MODERASJON_HREF} className="font-medium underline underline-offset-2 hover:text-amber-950">
+                {t('postsHiddenLink')}
+              </Link>
             </p>
           )}
         </Section>
 
         <Section title={t('sectionModeration')} icon={ShieldAlert}>
           <Grid>
+            {/* Kortet er lenken: et tall om noe som venter, skal kunne trykkes
+                på. Rødt når den eldste er over konsollens døgnfrist. */}
             <StatCard
               label={t('reportsPending')}
-              value={reportsPending}
-              tone={reportsPending != null && reportsPending > 0 ? 'warn' : 'default'}
+              value={openReports?.antall ?? null}
+              tone={openReports == null || openReports.antall === 0 ? 'default' : openReports.over24t ? 'danger' : 'warn'}
+              href={MODERASJON_HREF}
             />
             <StatCard label={t('reportsTotal')} value={reportsTotal} />
             <StatCard label={t('verifiedForagers')} value={verifiedForagers} />
             <StatCard label={t('moderatorsAdmins')} value={moderators} />
           </Grid>
+          {openReports != null && openReports.antall > 0 && (
+            <p className={`text-xs ${openReports.over24t ? 'font-medium text-red-800' : 'text-amber-800'}`}>
+              {openReports.eldsteTimer != null
+                ? tMod('openSummary', { count: openReports.antall, hours: openReports.eldsteTimer })
+                : null}
+              {openReports.over24t ? ` ${tMod('overdue')}` : ''}{' '}
+              <Link href={MODERASJON_HREF} className="font-medium underline underline-offset-2">
+                {t('openModeration')}
+              </Link>
+            </p>
+          )}
           {pendingDeletions != null && pendingDeletions > 0 && (
             <p className="text-xs text-amber-800">
               {t('pendingDeletions', { count: pendingDeletions })}
@@ -499,12 +537,15 @@ function StatCard({
   label,
   value,
   tone = 'default',
-  icon: Icon
+  icon: Icon,
+  href
 }: {
   label: string;
   value: number | string | null;
   tone?: 'default' | 'warn' | 'danger' | 'good';
   icon?: React.ComponentType<{ className?: string }>;
+  /** Satt når tallet har et sted det kan handles på — da er hele kortet en lenke. */
+  href?: string;
 }) {
   const display = typeof value === 'number' ? value.toLocaleString('nb-NO') : value ?? '—';
   const box =
@@ -517,15 +558,27 @@ function StatCard({
           : 'border-transparent bg-white';
   const valueColor =
     tone === 'warn' ? 'text-amber-800' : tone === 'danger' ? 'text-red-800' : 'text-forest-900';
-  return (
-    <div className={`rounded-xl border ${box} p-3 text-center shadow-sm`}>
+  const innhold = (
+    <>
       <p className={`text-2xl font-bold ${valueColor}`}>{display}</p>
       <p className="mt-0.5 flex items-center justify-center gap-1 text-xs text-gray-600">
         {Icon && <Icon className="h-3 w-3" />}
         {label}
+        {href && <ArrowRight className="h-3 w-3" aria-hidden="true" />}
       </p>
-    </div>
+    </>
   );
+  if (href) {
+    return (
+      <Link
+        href={href}
+        className={`block rounded-xl border ${box} p-3 text-center shadow-sm transition hover:border-forest-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-forest-700`}
+      >
+        {innhold}
+      </Link>
+    );
+  }
+  return <div className={`rounded-xl border ${box} p-3 text-center shadow-sm`}>{innhold}</div>;
 }
 
 function AdminLink({

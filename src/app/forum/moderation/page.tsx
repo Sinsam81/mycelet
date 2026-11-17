@@ -4,6 +4,12 @@ import { getTranslations } from 'next-intl/server';
 import { PageWrapper } from '@/components/layout/PageWrapper';
 import { createClient } from '@/lib/supabase/server';
 import { ModerationConsole } from './ModerationConsole';
+import { privatSide } from '@/lib/seo/side-titler';
+
+export async function generateMetadata() {
+  const t = await getTranslations('ForumModeration');
+  return privatSide(t('title'));
+}
 
 /**
  * Serverside-vakt foran moderasjonskonsollen.

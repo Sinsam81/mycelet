@@ -1,10 +1,13 @@
 'use client';
 
 import { FolgOmrade } from '@/components/home/FolgOmrade';
+import { Hentefeil, skalProveIgjen } from '@/components/home/hentefeil';
+import { erUtenomSesongFlush } from '@/components/home/utenom-sesong-flush';
 import { RegistrerBruksdag } from '@/components/bruk/RegistrerBruksdag';
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { MapPin } from 'lucide-react';
+import { skipToken, useQuery } from '@tanstack/react-query';
 import { useLocale, useTranslations } from 'next-intl';
 import { forecastBarHeights } from '@/lib/utils/forecast-bars';
 import { forecastBand } from '@/lib/utils/forecast-scale';
@@ -13,6 +16,7 @@ import { lagreHusketPosisjon, lesHusketPosisjon, sammeRute } from '@/lib/map/hus
 import { posisjonsVisning } from '@/lib/map/posisjon-visning';
 import { standardPosisjon } from '@/lib/map/standard-posisjon';
 import { nearestRegion } from '@/lib/prediction/tile-regions';
+import { osloIDag } from '@/lib/api/oslo-dag';
 import type { HJEM_OMRADER } from '@/lib/bruk/bruksdag';
 
 interface DayPoint {
@@ -31,6 +35,10 @@ interface Flush {
   daysUntil: number | null;
   title: string;
   message: string;
+  /** Hvorfor status er 'dormant' (flush.ts). Mangler i svar cachet før feltet kom. */
+  reason?: 'offSeason' | 'cold' | 'warm' | 'speciesOffSeason';
+  /** Ordene er sesongkvalifisert — tidlig eller sent i sesongen (flush.ts). */
+  shoulder?: 'early' | 'late';
 }
 
 interface Forecast {
@@ -49,6 +57,76 @@ interface Posisjon {
   kilde: Kilde;
 }
 
+/** Det kortet viser: prognosen OG posisjonen den gjelder for. De to hører sammen — aldri nytt navn på gammelt tall. */
+interface Vist {
+  prognose: Forecast;
+  posisjon: Posisjon;
+}
+
+/**
+ * ── HENTINGEN ───────────────────────────────────────────────────────────────
+ *
+ * Prognosen hentes gjennom appens QueryClient (Providers). Kortet holdt før
+ * svaret i sin egen tilstand og hentet i en løs useEffect, så hver retur til
+ * forsiden (Hjem → Kart → Hjem) startet på «Sjekker soppforholdene …» og
+ * spurte på nytt om noe ruta selv holder i 30 minutter. Nå tegnes kortet med
+ * en gang når svaret alt ligger i minnet, og friskes opp i bakgrunnen når det
+ * er eldre enn et kvarter.
+ *
+ * Bare HENTINGEN er flyttet. Hvor kortet regner (posisjonsvalget), hva det
+ * viser mens en ny henting går eller feiler, bruksdagen og «kortet har data»
+ * er som før: oppførselstestene i __tests__/MushroomDayCard.test.tsx (alt før
+ * «prognosen huskes mellom åpninger») ble skrevet mot den gamle hentingen og
+ * besto mot begge.
+ *
+ * To ting er nye, med vilje: et kall som feiler får ETT forsøk til (før: ingen),
+ * og svaret huskes mellom åpninger.
+ */
+
+/** Så lenge regnes en hentet prognose som fersk. Ruta selv holder svaret i 30 minutter. */
+export const PROGNOSE_FERSK_MS = 15 * 60_000;
+/** Så lenge huskes prognosen etter at kortet er borte fra skjermen. */
+export const PROGNOSE_HUSKES_MS = 60 * 60_000;
+/** Nye forsøk etter det første når hentingen feiler. Før: ingen. */
+export const PROGNOSE_NYE_FORSOK = 1;
+
+/**
+ * Nøkkelen i minnet. Alt svaret avhenger av, står her:
+ *  · ruta — to desimaler, samme avrunding som adressen og rutas eget lager;
+ *  · språket — dommen, banneret og ukedagene er tekst på leserens språk, og et
+ *    lager uten språk i nøkkelen serverer første lesers språk til alle;
+ *  · dagen — «i dag» i svaret er rutas Oslo-dato. Et svar fra i går skal aldri
+ *    kunne tegnes som dagens.
+ * `kilde` («egen» / «standard») står IKKE her: den sier hvor posisjonen kom
+ * fra, ikke hva prognosen er, og følger posisjonen i kortets egen tilstand.
+ */
+export const prognoseNokkel = (p: { lat: number; lng: number }, locale: string, dag: string) =>
+  ['mushroom-forecast', p.lat.toFixed(2), p.lng.toFixed(2), locale, dag] as const;
+
+/**
+ * Rutas «i dag»: Oslo-datoen, samme kall som todayKey i /api/mushroom-forecast.
+ *
+ * Nøkkelen sto på UTC-datoen etter at ruta hadde gått over til Oslo. Da byttet
+ * nøkkelen dag ved UTC-midnatt, men ruta (og «I dag» i svaret) ved midnatt i
+ * Oslo, og den første timen (vinter) eller de to første (sommer) av en ny dag
+ * kunne gårsdagens stripe tegnes som «I dag» — fra minnet, uten nytt kall.
+ */
+const rutasDag = (naar: Date) => osloIDag(naar).dato;
+
+async function hentPrognose(p: { lat: number; lng: number }): Promise<Forecast> {
+  // Grovkorn til ~1 km FØR posisjonen legges i en URL. Hjemskjermen lastes
+  // hver gang appen åpnes, og en URL med meterpresis GPS havner i
+  // infrastrukturens forespørselslogg — over en sesong blir det et
+  // bevegelsesspor vi ikke har bruk for. Ruta runder uansett selv til to
+  // desimaler for cache-nøkkelen sin, og værdataene er regionale, så svaret
+  // er identisk.
+  const res = await fetch(`/api/mushroom-forecast?lat=${p.lat.toFixed(2)}&lon=${p.lng.toFixed(2)}`, {
+    cache: 'no-store'
+  });
+  if (!res.ok) throw new Hentefeil('Prognosen', res.status);
+  return (await res.json()) as Forecast;
+}
+
 /** Sendes på window én gang, når kortet først har data — andre flater (tilbudsarket) kan vente på den. */
 // Én kilde for hendelsesnavnet: tilbudsarket lytter på det samme (provetilbud-venting.ts).
 import { FORSIDEKORT_KLAR_EVENT } from '@/lib/billing/provetilbud-venting';
@@ -63,6 +141,21 @@ const FLUSH_TINT: Record<FlushStatus, string> = {
   dry: 'border-gray-200 bg-gray-50 text-gray-700',
   dormant: 'border-gray-200 bg-gray-50 text-gray-600'
 };
+
+/**
+ * Grønt er kortets «dra nå» — samme farge som en feiret ring. Et 'fruiting'
+ * med sesongkvalifiserte ord («men sent i sesongen», «men tidlig i sesongen»)
+ * tegnes gult, som 'building' og 'soon': flush.ts kvalifiserer bare når dommen
+ * over IKKE feirer, så ringen over er da alltid gul eller grå, og etter
+ * 17. november kan den ikke bli grønn i det hele tatt. Et grønt banner ville
+ * vært det eneste på skjermen som fortsatt sa «dra nå», under ord som sier
+ * «sent, mindre å finne» og over «Det er stille i alle områdene nå». Gult er
+ * appens «delvis» — det ordene sier. Statusen og tallene er de samme.
+ */
+export function flushTint(flush: { status: FlushStatus; shoulder?: 'early' | 'late' }): string {
+  if (flush.status === 'fruiting' && flush.shoulder) return FLUSH_TINT.building;
+  return FLUSH_TINT[flush.status];
+}
 
 // Tersklene og båndlogikken ligger i forecast-scale.ts, delt med
 // PlaceForecastStrip. De var fire ulike sett på samme skjerm.
@@ -106,16 +199,21 @@ export function MushroomDayCard({
 }) {
   const t = useTranslations('MushroomDayCard');
   const locale = useLocale();
-  const [data, setData] = useState<Forecast | null>(null);
-  const [loading, setLoading] = useState(true);
+  /** Posisjonen kortet ØNSKER å regne på. Det som vises, kan henge etter (se `viser`). */
   const [posisjon, setPosisjon] = useState<Posisjon | null>(null);
-  /** Posisjonen dataene på skjermen faktisk gjelder for (etiketten følger den, ikke ønsket). */
-  const [vist, setVist] = useState<Posisjon | null>(null);
+  /**
+   * Det kortet sist viste. Står når prognosen for en NY posisjon er underveis,
+   * og når den hentingen feiler — med sin egen posisjon, så etiketten følger
+   * tallet og ikke ønsket.
+   */
+  const [sistVist, setSistVist] = useState<Vist | null>(null);
   /** Fersk måling fra denne monteringen (stille eller ved eget trykk) — bekrefter det som vises, eller ikke. */
   const [ferskFix, setFerskFix] = useState<{ lat: number; lng: number } | null>(null);
   /** Frosset ved første data: én hjem-rad per montering, med kilden kortet viste. */
   const [registrert, setRegistrert] = useState<Kilde | null>(null);
   const klarSendt = useRef(false);
+  /** Dagen kortet ble åpnet. En ny åpning etter midnatt i Oslo får ny nøkkel, og dermed nytt svar. */
+  const [dag] = useState(() => rutasDag(new Date()));
 
   // 1. Hvor? Se dokkommentaren over. Kjøres på nytt ved språkbytte, fordi
   // standardområdet følger språket — bruksdagen og hendelsen er alt frosset.
@@ -143,49 +241,74 @@ export function MushroomDayCard({
     };
   }, [locale]);
 
-  // 2. Hent prognosen for den valgte posisjonen. Bytter posisjonen mens en
-  // henting pågår, forkastes det gamle svaret (cancelled) — det huskede og det
-  // ferske kappløpet skal ikke ende med feil etikett på riktig tall.
+  // 2. Hent prognosen for den valgte posisjonen — se «HENTINGEN» over.
+  // networkMode 'always': standarden setter spørringen på VENT når nettleseren
+  // har meldt «offline». Da ville «Sjekker soppforholdene …» stått så lenge
+  // dekningen var borte. Slik feiler kallet som før, og kortet viser det det
+  // har — eller ingenting.
+  const sporring = useQuery({
+    queryKey: posisjon ? prognoseNokkel(posisjon, locale, dag) : (['mushroom-forecast', 'uten-posisjon'] as const),
+    queryFn: posisjon ? () => hentPrognose(posisjon) : skipToken,
+    staleTime: PROGNOSE_FERSK_MS,
+    gcTime: PROGNOSE_HUSKES_MS,
+    // Nettverksfeil og 5xx: ett forsøk til. 4xx: aldri (hentefeil.ts).
+    retry: (antallFeil, feil) => skalProveIgjen(antallFeil, feil, PROGNOSE_NYE_FORSOK),
+    networkMode: 'always'
+  });
+
+  // En NY posisjon i SAMME rute: spørringen ser bare nøkkelen, og den er den
+  // samme, så av seg selv gjør den ingenting. Før hentet kortet på nytt hver
+  // gang posisjonen ble satt. To tilfeller der det fortsatt må skje:
+  //  · forrige henting for ruta FEILET — ellers var et nytt trykk på «Min
+  //    posisjon» etter en feil et dødt trykk;
+  //  · svaret er eldre enn et kvarter (kortet har stått åpent lenge).
+  // Er svaret ferskt, er det ingenting å hente: det er hele poenget med minnet.
+  // Referansen sørger for at dette skjer ved posisjonsbyttet og aldri ellers —
+  // en feil skal ikke selv sette i gang en ny henting. cancelRefetch: false:
+  // går det alt en henting for ruta, er det den vi venter på.
+  const hentingFeilet = sporring.isError;
+  // «Gammelt» krever at det FINNES et svar: en rute uten svar henter
+  // spørringen selv i det nøkkelen byttes.
+  const svaretErGammelt = sporring.data !== undefined && sporring.isStale;
+  const hentIgjen = sporring.refetch;
+  const vurdertFor = useRef<Posisjon | null>(null);
   useEffect(() => {
-    if (!posisjon) return;
-    let cancelled = false;
-    const hent = async () => {
-      setLoading(true);
-      try {
-        // Grovkorn til ~1 km FØR posisjonen legges i en URL. Hjemskjermen lastes
-        // hver gang appen åpnes, og en URL med meterpresis GPS havner i
-        // infrastrukturens forespørselslogg — over en sesong blir det et
-        // bevegelsesspor vi ikke har bruk for. Ruta runder uansett selv til to
-        // desimaler for cache-nøkkelen sin, og værdataene er regionale, så svaret
-        // er identisk.
-        const res = await fetch(
-          `/api/mushroom-forecast?lat=${posisjon.lat.toFixed(2)}&lon=${posisjon.lng.toFixed(2)}`,
-          { cache: 'no-store' }
-        );
-        const neste = res.ok ? ((await res.json()) as Forecast) : null;
-        if (cancelled) return;
-        // Feiler en OPPFRISKING, blir det som alt vises stående; feiler den
-        // første hentingen, er det ingenting å vise (som før).
-        setData((forrige) => neste ?? forrige);
-        if (neste) {
-          setVist(posisjon);
-          setRegistrert((forrige) => forrige ?? posisjon.kilde);
-          if (!klarSendt.current) {
-            klarSendt.current = true;
-            window.dispatchEvent(new Event(FORSIDEKORT_KLAR_EVENT));
-          }
-        }
-      } catch {
-        // Nett nede: samme regel som over — behold det som vises, ellers ingenting.
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    };
-    void hent();
-    return () => {
-      cancelled = true;
-    };
-  }, [posisjon]);
+    if (vurdertFor.current === posisjon) return;
+    vurdertFor.current = posisjon;
+    if (posisjon && (hentingFeilet || svaretErGammelt)) void hentIgjen({ cancelRefetch: false });
+  }, [posisjon, hentingFeilet, svaretErGammelt, hentIgjen]);
+
+  // Svaret for posisjonen kortet ønsker — finnes det, vises det, under sitt
+  // eget sted. Spørringen svarer alltid for nøkkelen i DENNE tegningen, så et
+  // tregt svar for det forrige stedet kan aldri havne under det nye navnet.
+  const svarNaa: Vist | null = posisjon && sporring.data ? { prognose: sporring.data, posisjon } : null;
+  // Husk det, så det står når neste henting er underveis eller feiler: feiler
+  // en OPPFRISKING, blir det som alt vises stående; feiler den første
+  // hentingen, er det ingenting å vise (som før). Satt under tegning — Reacts
+  // eget mønster for tilstand som følger av andre verdier — så kortet aldri
+  // tegnes tomt én gang mellom svaret og minnet om det.
+  if (
+    svarNaa &&
+    (sistVist === null || sistVist.prognose !== svarNaa.prognose || sistVist.posisjon !== svarNaa.posisjon)
+  ) {
+    setSistVist(svarNaa);
+  }
+  // Frosset ved første data: kilden kortet viste FØRST, aldri «standard» og så «egen».
+  if (svarNaa && registrert === null) {
+    setRegistrert(svarNaa.posisjon.kilde);
+  }
+  const viser = svarNaa ?? sistVist;
+
+  // «Kortet har data» — én gang per åpning. Tilbudsarket (ProvGratisVedStart)
+  // står FØR kortet i treet og setter lytteren sin i sin egen mount-effekt, så
+  // den er på plass også når svaret kommer rett fra minnet: denne effekten kan
+  // tidligst kjøre etter at posisjonen er valgt, altså etter første tegning.
+  const harData = viser !== null;
+  useEffect(() => {
+    if (!harData || klarSendt.current) return;
+    klarSendt.current = true;
+    window.dispatchEvent(new Event(FORSIDEKORT_KLAR_EVENT));
+  }, [harData]);
 
   // Brukerens eget trykk — den ene gangen kortet får be om tillatelse, og da
   // gjennom Capacitor-laget så det virker i skallet også.
@@ -209,18 +332,27 @@ export function MushroomDayCard({
     return p.kilde === 'standard' ? t('defaultRegion') : t('yourPosition');
   };
 
-  if (loading && !data) {
-    // Reserve the loaded card's height so content below doesn't jump when the
-    // forecast arrives (was the main layout-shift / CLS source on the home page).
-    return (
-      <div className="flex min-h-[15rem] items-center justify-center rounded-xl bg-white p-4 text-sm text-gray-500 shadow-sm">
-        {t('checkingConditions')}
-      </div>
-    );
+  if (!viser) {
+    // Ingenting å vise ennå. Venter kortet fortsatt på et svar — posisjonen er
+    // ikke valgt, eller en henting går (det ene nye forsøket medregnet)?
+    // isPending dekker også en ny åpning etter en feilet henting: spørringen
+    // går tilbake til «venter» i det den prøver igjen, så plassen holdes av.
+    if (posisjon === null || sporring.isPending) {
+      // Reserve the loaded card's height so content below doesn't jump when the
+      // forecast arrives (was the main layout-shift / CLS source on the home page).
+      return (
+        <div className="flex min-h-[15rem] items-center justify-center rounded-xl bg-white p-4 text-sm text-gray-500 shadow-sm">
+          {t('checkingConditions')}
+        </div>
+      );
+    }
+    // Weather unavailable → render nothing rather than a broken card.
+    return null;
   }
-  // Weather unavailable → render nothing rather than a broken card.
-  if (!data) return null;
 
+  const data = viser.prognose;
+  /** Posisjonen dataene på skjermen faktisk gjelder for (etiketten følger den, ikke ønsket). */
+  const vist: Posisjon | null = viser.posisjon;
   const { today, days } = data;
   // Standard → «omtrentlig» + det store delingstilbudet. Alt en fersk måling fra
   // denne åpningen IKKE bekrefter (husket fra forrige uke, Safari uten Permissions
@@ -240,6 +372,9 @@ export function MushroomDayCard({
   const r = 46;
   const circumference = 2 * Math.PI * r;
   const offset = circumference * (1 - today.score / 100);
+  // Desember–mai: dommen over og flush-banneret er samme tekst. Vis den én
+  // gang, og bruk plassen på veien videre — se utenom-sesong-flush.ts.
+  const utenomSesong = erUtenomSesongFlush(data.flush, today.title);
 
   return (
     <article className="min-h-[15rem] rounded-xl bg-white p-4 shadow-sm">
@@ -298,8 +433,22 @@ export function MushroomDayCard({
         omrade={folgbartOmrade}
       />
 
-      {data.flush ? (
-        <div className={`mt-3 rounded-xl border px-3 py-2 ${FLUSH_TINT[data.flush.status]}`}>
+      {utenomSesong ? (
+        // Ingen ny påstand om funn: bare hvor appen faktisk har noe å vise nå —
+        // kalenderen (artene som har sesong om vinteren og våren) og, for
+        // innloggede, stedene fra deres egen sesong.
+        <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-xs">
+          <Link href="/calendar" className="font-medium text-forest-800 hover:underline">
+            {t('offSeasonCalendar')} →
+          </Link>
+          {innlogget ? (
+            <Link href="/mine-steder" className="font-medium text-forest-800 hover:underline">
+              {t('offSeasonMyPlaces')} →
+            </Link>
+          ) : null}
+        </div>
+      ) : data.flush ? (
+        <div className={`mt-3 rounded-xl border px-3 py-2 ${flushTint(data.flush)}`}>
           <p className="text-sm font-semibold">{data.flush.title}</p>
           <p className="mt-0.5 text-xs opacity-90">{data.flush.message}</p>
         </div>
@@ -356,7 +505,7 @@ export function MushroomDayCard({
       <div className="mt-2 flex items-center justify-between text-xs">
         <span className="text-gray-500">
           📍 {areaLabel}
-          {omtrentlig ? <span className="text-gray-400"> · {t('approximate')}</span> : null}
+          {omtrentlig ? <span className="text-gray-600"> · {t('approximate')}</span> : null}
         </span>
         <div className="flex items-center gap-3">
           {/* Også for en husket posisjon: den kan være gammel, og uten lenka her var

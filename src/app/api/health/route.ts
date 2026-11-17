@@ -1,9 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { NYERE_TABELLER, erManglendeTabell } from '@/lib/supabase/tabell-finnes';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { getClientKey, rateLimitResponse } from '@/lib/rate-limit/route';
 import { createRequestLogger } from '@/lib/log/request';
-import { erAiNokkelSatt, hentKindwiseStatus } from '@/lib/identifications/kindwise-status';
+import {
+  erAiNokkelSatt,
+  hentKindwiseStatus,
+  kindwiseTilstand,
+  type KindwiseTilstand
+} from '@/lib/identifications/kindwise-status';
+import { KINDWISE_KREDITT_VARSEL } from '@/lib/rapport/dagsrapport';
 
 /**
  * Health check endpoint for uptime monitoring (UptimeRobot, BetterUptime,
@@ -28,7 +35,7 @@ import { erAiNokkelSatt, hentKindwiseStatus } from '@/lib/identifications/kindwi
  * expose anything sensitive in the response.
  *
  * Den har likevel en bremse. Uten `?fast=1` gjør hvert kall to spørringer mot
- * databasen, og ruta er offentlig og trivielt gjettbar — en løkke mot den var
+ * databasen (pluss tabellisten, som mellomlagres i fem minutter), og ruta er offentlig og trivielt gjettbar — en løkke mot den var
  * en vei til å presse ut Supabase-poolen for ekte brukere. Grensen er satt
  * romslig (120/min per klient = 2 i sekundet); enhver reell oppetidsprobe
  * ligger flere størrelsesordener under.
@@ -54,10 +61,12 @@ interface HealthResponse {
   checks: {
     envVars: CheckResult;
     epost: CheckResult;
-    /** Kindwise-nøkkelen: gyldig, og med kreditter igjen? Bare uten ?fast=1. */
-    ai?: CheckResult;
+    /** Kindwise-nøkkelen: gyldig, og med kreditter igjen? Bare uten ?fast=1. Grov tilstand, aldri tall. */
+    ai?: CheckResult & { tilstand: KindwiseTilstand };
     database?: CheckResult;
     auditLogTable?: CheckResult;
+    /** Tabeller fra nyere migrasjoner: finnes de? Bare uten ?fast=1, aldri 503. */
+    tabeller?: CheckResult;
   };
 }
 
@@ -112,33 +121,42 @@ function checkEpost(): CheckResult {
  * teller feilede kall mot vellykkede.)
  *
  * Kindwise spørres høyst hvert femte minutt uansett hvor ofte proben kaller;
- * ruta er offentlig, og de skal ikke få vår trafikk. Sier bare OM nøkkelen
- * virker og hvor mange kreditter som er igjen — aldri nøkkelen.
+ * ruta er offentlig, og de skal ikke få vår trafikk. Svaret er bare `ok` og en
+ * grov `tilstand` (ok / lav / sperret / utilgjengelig / mangler-nokkel) —
+ * aldri nøkkelen, aldri antall kreditter, aldri Kindwise sin svartekst. Før
+ * sto «N kreditter igjen» her, lesbart for alle. Tallene står i eierens
+ * dagsrapport; detaljen fra Kindwise går til serverloggen.
  */
 const AI_CACHE_MS = 5 * 60 * 1000;
-let aiCache: { ts: number; resultat: CheckResult } | null = null;
+type AiSjekk = NonNullable<HealthResponse['checks']['ai']>;
+let aiCache: { ts: number; resultat: AiSjekk } | null = null;
 
-async function checkAi(): Promise<CheckResult> {
+const AI_MELDING: Record<KindwiseTilstand, string> = {
+  ok: 'Kindwise svarer, nøkkelen virker.',
+  lav: 'Kindwise svarer, men det er få kreditter igjen.',
+  sperret: 'Kindwise avviser nøkkelen. Hvert AI-kall feiler.',
+  utilgjengelig: 'Kindwise svarte ikke.',
+  'mangler-nokkel': 'AI er ikke konfigurert — PLANTID_API_KEY mangler eller er plassholderen. /api/identify svarer 503.'
+};
+
+function aiSjekk(tilstand: KindwiseTilstand): AiSjekk {
+  return { ok: tilstand === 'ok' || tilstand === 'lav', tilstand, message: AI_MELDING[tilstand] };
+}
+
+async function checkAi(log: ReturnType<typeof createRequestLogger>): Promise<AiSjekk> {
   const apiKey = process.env.PLANTID_API_KEY;
-  if (!erAiNokkelSatt(apiKey)) {
-    return { ok: false, message: 'AI er ikke konfigurert — PLANTID_API_KEY mangler eller er plassholderen. /api/identify svarer 503.' };
-  }
+  if (!erAiNokkelSatt(apiKey)) return aiSjekk('mangler-nokkel');
   if (aiCache && Date.now() - aiCache.ts < AI_CACHE_MS) return aiCache.resultat;
 
   const r = await hentKindwiseStatus(apiKey);
-  let resultat: CheckResult;
-  if (!r.ok) {
-    resultat = {
-      ok: false,
-      message: r.httpStatus === 401 || r.httpStatus === 403
-        ? `Kindwise avviser nøkkelen (${r.httpStatus}). Hvert AI-kall feiler.`
-        : `Kindwise svarte ikke (${r.httpStatus ?? 'nett'}): ${r.feil}`
-    };
-  } else if (!r.status.aktiv || !r.status.kanBruke) {
-    resultat = { ok: false, message: `Kindwise: nøkkelen kan ikke brukes${r.status.grunn ? ` (${r.status.grunn})` : ''} — ${r.status.igjen ?? '?'} kreditter igjen.` };
-  } else {
-    resultat = { ok: true, message: `${r.status.igjen ?? '?'} kreditter igjen` };
+  const tilstand = kindwiseTilstand(r, KINDWISE_KREDITT_VARSEL);
+  if (tilstand !== 'ok') {
+    // Detaljen hører hjemme i serverloggen, ikke i det offentlige svaret.
+    log.warn('health.ai_detalj', r.ok
+      ? { tilstand, grunn: r.status.grunn, igjen: r.status.igjen }
+      : { tilstand, httpStatus: r.httpStatus, feil: r.feil });
   }
+  const resultat = aiSjekk(tilstand);
   aiCache = { ts: Date.now(), resultat };
   return resultat;
 }
@@ -162,10 +180,13 @@ async function checkAuditLogTable(): Promise<CheckResult> {
     // Migration 008 introduced admin_audit_log. If the table doesn't exist
     // (migration not applied), we surface it here so deployment scripts
     // can catch it before it bites in production.
-    const { error } = await supabase.from('admin_audit_log').select('id', { count: 'exact', head: true }).limit(1);
+    //
+    // GET, not HEAD: a HEAD against a missing table has no body, and the
+    // client turns that into "no error" — the check could never fire. The
+    // code PostgREST sends is PGRST205, not Postgres' 42P01.
+    const { error } = await supabase.from('admin_audit_log').select('id').limit(1);
     if (error) {
-      // 42P01 = relation does not exist
-      if (error.code === '42P01') {
+      if (erManglendeTabell(error)) {
         return { ok: false, message: 'Migrasjon 008 ikke påført' };
       }
       // Any other error (RLS denial etc.) means the table exists, which is
@@ -178,10 +199,43 @@ async function checkAuditLogTable(): Promise<CheckResult> {
   }
 }
 
+/**
+ * Tabeller som kom med nyere migrasjoner. Migrasjonene limes inn for hånd, og
+ * en glemt en har før gitt måneder med stille nuller. Her blir den synlig.
+ *
+ * Skjemacachen er lik for alle roller, så anon-klienten får PGRST205 bare når
+ * tabellen virkelig mangler. Et tomt svar eller et RLS-avslag betyr at den
+ * finnes. Ingen rader forlater funksjonen. Listen bor i tabell-finnes.ts.
+ */
+const TABELL_CACHE_MS = 5 * 60 * 1000;
+let tabellCache: { ts: number; resultat: CheckResult } | null = null;
+
+async function checkNyereTabeller(): Promise<CheckResult> {
+  if (tabellCache && Date.now() - tabellCache.ts < TABELL_CACHE_MS) return tabellCache.resultat;
+  let resultat: CheckResult;
+  try {
+    const supabase = createClient();
+    const svar = await Promise.all(
+      NYERE_TABELLER.map(async ({ tabell, migrasjon }) => {
+        const { error } = await supabase.from(tabell).select('*').limit(1);
+        return erManglendeTabell(error) ? `${tabell} (migrasjon ${migrasjon})` : null;
+      })
+    );
+    const mangler = svar.filter((s): s is string => s !== null);
+    resultat = mangler.length
+      ? { ok: false, message: `Mangler: ${mangler.join(', ')}` }
+      : { ok: true, message: `${NYERE_TABELLER.length} tabeller funnet` };
+  } catch (err) {
+    resultat = { ok: false, message: err instanceof Error ? err.message : 'unknown' };
+  }
+  // Bare et rent svar mellomlagres — en mangel skal forsvinne straks den er rettet.
+  if (resultat.ok) tabellCache = { ts: Date.now(), resultat };
+  return resultat;
+}
+
 // Read Next's version from its package.json once at module load; this
 // resolves through node_modules and works on both Node and Edge runtimes
 // since the file is a static JSON.
-// eslint-disable-next-line @typescript-eslint/no-var-requires
 const NEXT_VERSION = (() => {
   try {
     // require() works because this route is on the Node runtime (force-dynamic)
@@ -217,10 +271,16 @@ export async function GET(request: NextRequest) {
   };
 
   if (!fast) {
-    const [database, auditLogTable, ai] = await Promise.all([checkDatabase(), checkAuditLogTable(), checkAi()]);
+    const [database, auditLogTable, ai, tabeller] = await Promise.all([
+      checkDatabase(),
+      checkAuditLogTable(),
+      checkAi(log),
+      checkNyereTabeller()
+    ]);
     checks.database = database;
     checks.auditLogTable = auditLogTable;
     checks.ai = ai;
+    checks.tabeller = tabeller;
   }
 
   // E-post står i svaret, men teller IKKE mot 503.
@@ -237,7 +297,10 @@ export async function GET(request: NextRequest) {
   // AI-sjekken står utenfor 503 av samme grunn: nøkkelen er aldri satt lokalt
   // og i `npm run qa`, og kart, arter og betaling går uten den. Den som vil
   // vokte AI-en, vokter `checks.ai.ok` — og dagsrapporten sier fra hver morgen.
-  const { epost, ai, ...oppetidssjekker } = checks;
+  // Tabellisten står også utenfor 503 i første runde: den er ny, og et
+  // oppetidsvarsel skal ikke bli rødt av en liste ingen har sett svaret på i
+  // prod ennå. Den logges som advarsel og kan voktes via `checks.tabeller.ok`.
+  const { epost, ai, tabeller, ...oppetidssjekker } = checks;
   const allOk = Object.values(oppetidssjekker).every((c) => c?.ok);
   const status: 'ok' | 'degraded' = allOk ? 'ok' : 'degraded';
 
@@ -245,6 +308,9 @@ export async function GET(request: NextRequest) {
     log.warn('health.degraded', { checks });
   } else if (!fast) {
     log.debug('health.ok');
+  }
+  if (tabeller && !tabeller.ok) {
+    log.warn('health.tabeller_mangler', { message: tabeller.message });
   }
   if (ai && !ai.ok) {
     log.warn('health.ai_utilgjengelig', { message: ai.message });

@@ -3,11 +3,13 @@
 import Link from 'next/link';
 import { useLocale, useTranslations } from 'next-intl';
 import { EdibilityBadge } from '@/components/ui/EdibilityBadge';
+import { Artsnavn } from '@/components/species/Artsnavn';
 import { getSpeciesDisplayName } from '@/lib/utils/species-name';
 import { Species } from '@/types/species';
 
 interface SpeciesCardProps {
-  species: Species;
+  /** Kortet viser aldri beskrivelsen; biblioteket henter den ikke (artskatalog.ts). */
+  species: Omit<Species, 'description'>;
   imageUrl?: string | null;
 }
 
@@ -22,9 +24,15 @@ export function SpeciesCard({ species, imageUrl }: SpeciesCardProps) {
     >
       <div className="relative aspect-square w-full overflow-hidden bg-gray-100">
         {imageUrl ? (
+          // Biblioteket er ~80 kort, og uten `loading="lazy"` startet alle
+          // bildene samtidig — også de som ligger mange skjermhøyder nede på en
+          // telefon. Rammen rundt har fast kvadratisk form, så ingenting hopper
+          // når bildet kommer.
           <img
             src={imageUrl}
             alt={displayName}
+            loading="lazy"
+            decoding="async"
             className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
           />
         ) : (
@@ -35,8 +43,15 @@ export function SpeciesCard({ species, imageUrl }: SpeciesCardProps) {
         </div>
       </div>
       <div className="space-y-0.5 p-3">
-        <h3 className="font-serif text-base font-bold text-forest-900">{displayName}</h3>
-        <p className="text-xs italic text-gray-600">{species.latin_name}</p>
+        {/* To kolonner på en telefon gir navnet ~132–147 px, og kortet har
+            overflow-hidden: «Brunkjøttbukkesopp» og «Snöbollschampinjon» mistet
+            slutten. Artsnavn bryter ordet i stedet (se komponenten). */}
+        <Artsnavn
+          as="h3"
+          navn={displayName}
+          className="font-serif text-base font-bold leading-tight text-forest-900"
+        />
+        <p className="break-words text-xs italic text-gray-600">{species.latin_name}</p>
       </div>
     </Link>
   );

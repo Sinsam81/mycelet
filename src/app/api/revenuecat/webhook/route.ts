@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import * as Sentry from '@sentry/nextjs';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { erManglendeTabell } from '@/lib/supabase/tabell-finnes';
 import {
   RevenueCatWebhookBody,
   mapRevenueCatEvent,
@@ -36,6 +37,14 @@ import { secretsMatch } from '@/lib/security/secret-compare';
  * event stores its event_timestamp_ms in metadata; an older event arriving
  * late (retry after a failure) is skipped instead of clobbering newer state.
  *
+ * Billing problems: a failed renewal arrives as BILLING_ISSUE *and* a
+ * CANCELLATION with cancel_reason BILLING_ERROR, generated together. Only
+ * BILLING_ISSUE is applied (it alone carries the grace period); the
+ * CANCELLATION is ACKed by mapRevenueCatEvent and writes nothing — so it can
+ * neither replace the grace period with an expiry that has already passed nor
+ * move the ordering mark past the BILLING_ISSUE it travels with. Both arrival
+ * orders end in the same row. See BILLING_ERROR_CANCELLATION_ACK.
+ *
  * Auth: RevenueCat sends the dashboard-configured string verbatim in the
  * `Authorization` header (no signature scheme). Compared timing-safe via
  * SHA-256 digests (uniform length — no length oracle).
@@ -47,6 +56,18 @@ import { secretsMatch } from '@/lib/security/secret-compare';
  */
 
 export const runtime = 'nodejs';
+
+/**
+ * Taket for hele kjøringen. RevenueCat kobler fra etter 60 s uten svar og
+ * prøver igjen senere; uten et tak her arvet ruta plattformens standardgrense,
+ * og et databasekall som hang holdt funksjonen i live lenge etter at ingen
+ * lyttet — mens neste forsøk på SAMME hendelse kunne starte ved siden av.
+ * Ruta har ingen andre eksterne kall enn databasen (og Sentry.flush, som har
+ * sin egen frist på 2 s), og en vanlig kjøring tar under et sekund. Halvparten
+ * av RevenueCats vindu holder: blir funksjonen drept her, står hendelsen som
+ * «received» i billing_webhook_events, og det nye forsøket behandler den.
+ */
+export const maxDuration = 30;
 
 function authorized(request: NextRequest): boolean {
   // Konstant tid, felles hjelper — samme sjekk som cron-rutene bruker.
@@ -216,7 +237,7 @@ export async function POST(request: NextRequest) {
         .maybeSingle();
 
       if (eventReadError) {
-        if (eventReadError.code === '42P01') canLogEvents = false;
+        if (erManglendeTabell(eventReadError)) canLogEvents = false;
         else return NextResponse.json({ error: eventReadError.message }, { status: 500 });
       }
       if (canLogEvents && existingEvent?.status === 'processed') {
@@ -406,6 +427,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ received: true });
   } catch (error) {
     log.error('revenuecat.webhook.failed', error, { eventType, eventId });
+    // Feilteksten følger med svaret med vilje. Hit kommer bare en forespørsel
+    // som har bestått autorisasjonen over — altså RevenueCat — så teksten går
+    // til leveringsforsøket hos dem, der den er til hjelp i feilsøking, og
+    // aldri til en bruker. En uautorisert forespørsel får 401 før try-blokka
+    // og ser ingenting av dette.
     return NextResponse.json(
       { error: 'Webhook-feil', details: error instanceof Error ? error.message : 'unknown' },
       { status: 500 }

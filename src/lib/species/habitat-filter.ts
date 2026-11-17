@@ -34,9 +34,13 @@ export interface HabitatTerm {
 }
 
 /**
- * De 33 distinkte habitatverdiene i basen per august 2026, med svensk
+ * De 37 distinkte habitatverdiene i basen per november 2026, med svensk
  * skrivemåte. Svenske former er alminnelige svenske naturord (barrskog,
  * lövskog, blandskog, tallskog …), ikke oversettelser gjort ord for ord.
+ *
+ * De fire siste kom inn med de åtte forvekslingsartene i migrasjon 049, to
+ * dager etter at tabellen ble skrevet, og manglet her til artssiden begynte å
+ * vise habitatet på leserens språk (habitatDisplay under).
  */
 export const HABITAT_TERMS: readonly HabitatTerm[] = [
   { nb: 'barskog', sv: 'barrskog' },
@@ -69,9 +73,15 @@ export const HABITAT_TERMS: readonly HabitatTerm[] = [
   { nb: 'kalkrik', sv: 'kalkrik' },
   { nb: 'sur jord', sv: 'sur jord' },
   { nb: 'sandig mark', sv: 'sandig mark' },
-  { nb: 'sandgrunn', sv: 'sandgrund' },
+  // «Sandmark», ikke «sandgrund»: et sandgrund er en sandbanke i vann. Samme
+  // ord som prediksjonsforklaringen bruker for denne taggen.
+  { nb: 'sandgrunn', sv: 'sandmark' },
   { nb: 'eldre bestand', sv: 'äldre bestånd' },
-  { nb: 'sti', sv: 'stig' }
+  { nb: 'sti', sv: 'stig' },
+  { nb: 'edelløvskog', sv: 'ädellövskog', also: ['edellauvskog'] },
+  { nb: 'gammelskog', sv: 'gammelskog' },
+  { nb: 'hogstflate', sv: 'hygge' },
+  { nb: 'plantet skog', sv: 'planterad skog' }
 ];
 
 const TERMS_BY_NB = new Map(HABITAT_TERMS.map((term) => [term.nb, term]));
@@ -108,4 +118,28 @@ export function matchesHabitat(habitats: readonly string[] | null | undefined, q
 export function habitatSuggestions(locale: string): string[] {
   const key = locale === 'sv' ? 'sv' : 'nb';
   return [...new Set(HABITAT_TERMS.map((term) => term[key]))];
+}
+
+/**
+ * Artens habitatliste slik den skal VISES, på leserens språk.
+ *
+ * Artssiden skrev lista rått fra basen, så en svensk leser fikk «barskog,
+ * blandingsskog, myr-kant» under en svensk etikett — mens tabellen over
+ * allerede hadde «barrskog, blandskog, myrkant» og bare ble brukt til søket.
+ *
+ * Norsk vises som det står i basen. På svensk slås hver verdi opp; en verdi
+ * tabellen ikke kjenner slipper gjennom uendret (et norsk ord er bedre enn et
+ * hull i lista), og dubletter fjernes ETTER oppslaget: «løvskog» og
+ * «lauvskog» er begge «lövskog», «gressplen» og «plen» begge «gräsmatta».
+ */
+export function habitatDisplay(habitats: readonly string[] | null | undefined, locale: string): string[] {
+  const shown: string[] = [];
+  for (const raw of habitats ?? []) {
+    if (typeof raw !== 'string') continue;
+    const value = raw.trim();
+    if (!value) continue;
+    const term = locale === 'sv' ? (TERMS_BY_NB.get(value.toLowerCase())?.sv ?? value) : value;
+    if (!shown.includes(term)) shown.push(term);
+  }
+  return shown;
 }

@@ -48,6 +48,11 @@ export interface ForumPost {
   comments_count: number;
   created_at: string;
   profiles?: ForumProfile | null;
+  finding_id?: string | null;
+  /**
+   * Resolved through the `public_findings` view (src/lib/forum/koblede-funn.ts),
+   * never embedded straight from `findings` — that table is owner-only.
+   */
   finding?: {
     id: string;
     species_id?: number | null;
@@ -93,6 +98,7 @@ export interface UserFindingOption {
   species_id: number | null;
   species_name_override: string | null;
   found_at: string;
+  visibility?: 'public' | 'approximate' | 'private' | null;
   is_zone_finding?: boolean | null;
   zone_label?: string | null;
   zone_precision_km?: number | null;

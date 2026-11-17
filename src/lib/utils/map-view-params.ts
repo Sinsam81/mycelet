@@ -54,7 +54,6 @@ function tall(value: string | string[] | undefined): number | null {
  */
 function stedsnavn(value: string | string[] | undefined): string | null {
   if (typeof value !== 'string') return null;
-  // eslint-disable-next-line no-control-regex
   const rent = value.replace(/[\u0000-\u001f\u007f]/g, '').trim();
   if (rent === '') return null;
   return rent.slice(0, 60);

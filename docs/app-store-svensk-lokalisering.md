@@ -14,7 +14,7 @@ Verifisert live på https://apps.apple.com/se/app/id6784672944 :
 | Undertittel | `Svamptur, kantarell och AI` |
 | Beskrivelse | Full svensk — svampkonsulent + Giftinformationscentralen 010-456 67 00 / 112 |
 | Priser i beskrivelsen | Løst elegant: «Aktuella priser i din valuta visas i appen och i App Store» (godkjent av review) |
-| Skjermbilder | Svenske (lastet opp av Sindre) |
+| Skjermbilder | Svenske (lastet opp av eieren) |
 
 Konsekvens: **SE-kampanjen i `apple-search-ads-oppsett.md` er IKKE blokkert**
 — svenske annonser lander på en svensk side.

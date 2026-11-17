@@ -1,10 +1,13 @@
 'use client';
 
+import type { ReactNode } from 'react';
 import Link from 'next/link';
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import { AlertTriangle } from 'lucide-react';
+import { AiEdibilityBadge } from '@/components/identify/AiEdibilityBadge';
 import { EdibilityBadge } from '@/components/ui/EdibilityBadge';
 import { PhotoCredit } from '@/components/ui/PhotoCredit';
+import { isRecommendableSpecies } from '@/lib/prediction/recommendable';
 import { IdentifySuggestion, PhotoCreditInfo } from '@/types/identify';
 import { Edibility } from '@/types/species';
 
@@ -29,14 +32,21 @@ function PhotoCard({
   name,
   imageUrl,
   imageCredit,
-  edibility,
+  badge,
   tone
 }: {
   label: string;
   name: string;
   imageUrl: string | null | undefined;
   imageCredit: PhotoCreditInfo | null | undefined;
-  edibility: Edibility | null;
+  /**
+   * Merket under navnet. Et spor, ikke en spiselighetsverdi, med vilje: de to
+   * kortene har ULIKE regler. «Ditt forslag» er et AI-forslag og får aldri et
+   * grønt «spiselig» (AiEdibilityBadge); den farlige forvekslingsarten er
+   * kuratert look_alikes-data og en advarsel, og beholder det rå merket — men
+   * bare når den ikke er mat. Se kallstedet.
+   */
+  badge: ReactNode;
   tone: 'chosen' | 'danger';
 }) {
   return (
@@ -56,7 +66,7 @@ function PhotoCard({
           {label}
         </p>
         <p className="text-sm font-semibold leading-tight text-gray-900">{name}</p>
-        {edibility ? <EdibilityBadge edibility={edibility} /> : null}
+        {badge}
         {/* Artsbildene er Commons-filer under CC BY / CC BY-SA. Krediteringen
             hører til akkurat det bildet som vises — se kallstedet: den følger
             aldri med når kortet faller tilbake på et AI-bilde. */}
@@ -72,6 +82,7 @@ function PhotoCard({
 
 export function LookAlikeCheck({ suggestion }: { suggestion: IdentifySuggestion | undefined }) {
   const t = useTranslations('LookAlikeCheck');
+  const locale = useLocale();
   const lookAlike = suggestion?.dangerousLookAlikes?.[0];
   if (!suggestion || !lookAlike) return null;
 
@@ -84,6 +95,21 @@ export function LookAlikeCheck({ suggestion }: { suggestion: IdentifySuggestion 
   // på reservebildet, krediterer vi feil fotograf for et helt annet bilde.
   const chosenImageUrl = suggestion.imageUrl ?? suggestion.similarImages?.[0] ?? null;
   const chosenImageCredit = suggestion.imageUrl ? suggestion.imageCredit : null;
+  // Det rå merket står bare på en tvilling som IKKE er mat. Serveren sender
+  // aldri en matsopp som dobbeltgjenger for et forslag som ikke er mat
+  // (visesSomFarligForveksling i enrich.ts), men et grønt «Spiselig» under
+  // «Farlig dobbeltgjenger» skal ikke kunne komme fra noen kilde — heller ikke
+  // fra et resultat som ble lagt i økta før den regelen fantes.
+  const dangerEdibility = asEdibility(lookAlike.edibility);
+  const twinBadge =
+    dangerEdibility && !isRecommendableSpecies(dangerEdibility) ? <EdibilityBadge edibility={dangerEdibility} /> : null;
+  // «Hvorfor de forveksles» og «Hvordan skille» kommer fra look_alikes og
+  // finnes bare på norsk. De vises på alle språk — skilleteksten er
+  // sikkerhetsteksten, og den skjules aldri — men merkes lang="nb", og en
+  // svensk leser får vite at teksten er norsk i stedet for å tro at appen
+  // skriver svensk slik.
+  const norskProsa = locale === 'nb' ? undefined : 'nb';
+  const harProsa = Boolean(lookAlike.whySimilar || lookAlike.howToTell);
 
   return (
     <section
@@ -109,7 +135,7 @@ export function LookAlikeCheck({ suggestion }: { suggestion: IdentifySuggestion 
           name={chosenName}
           imageUrl={chosenImageUrl}
           imageCredit={chosenImageCredit}
-          edibility={asEdibility(suggestion.edibility)}
+          badge={<AiEdibilityBadge edibility={suggestion.edibility} />}
           tone="chosen"
         />
         <PhotoCard
@@ -117,21 +143,24 @@ export function LookAlikeCheck({ suggestion }: { suggestion: IdentifySuggestion 
           name={lookAlike.name}
           imageUrl={lookAlike.imageUrl}
           imageCredit={lookAlike.imageCredit}
-          edibility={asEdibility(lookAlike.edibility)}
+          badge={twinBadge}
           tone="danger"
         />
       </div>
 
       {lookAlike.whySimilar ? (
         <p className="mt-3 text-xs leading-relaxed text-gray-700">
-          <span className="font-semibold text-gray-900">{t('whyConfused')}</span> {lookAlike.whySimilar}
+          <span className="font-semibold text-gray-900">{t('whyConfused')}</span>{' '}
+          <span lang={norskProsa}>{lookAlike.whySimilar}</span>
         </p>
       ) : null}
       {lookAlike.howToTell ? (
         <p className={`mt-2 rounded-xl p-3 text-sm leading-relaxed ${critical ? 'bg-red-100 text-red-900' : 'bg-orange-100 text-orange-900'}`}>
-          <span className="font-bold">{t('howToTell')}</span> {lookAlike.howToTell}
+          <span className="font-bold">{t('howToTell')}</span>{' '}
+          <span lang={norskProsa}>{lookAlike.howToTell}</span>
         </p>
       ) : null}
+      {norskProsa && harProsa ? <p className="mt-2 text-xs text-gray-600">{t('norwegianTextNote')}</p> : null}
 
       <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
         {lookAlike.speciesId ? (

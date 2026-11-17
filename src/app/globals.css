@@ -74,3 +74,41 @@ body {
 html[data-native='true'] [data-web-only] {
   display: none !important;
 }
+
+/* iOS zoomer inn hele siden når et skjemafelt med skrift under 16 px får
+   fokus, og zoomer ikke ut igjen. Kartsøket var 12 px, de fleste andre felt
+   14 px (text-sm) — i appen gled toppen og kartknappene ut av skjermen for
+   hvert trykk i et felt.
+
+   @supports-testen treffer bare iOS (Safari og WKWebView), så skrivebord og
+   Android ser ut som før. !important trengs fordi Tailwinds text-xs/text-sm
+   kommer senere i kaskaden. IKKE løs dette med maximum-scale=1 eller
+   user-scalable=no i viewporten: det slår av knipezoom for alle. */
+@supports (-webkit-touch-callout: none) {
+  input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file']),
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
+
+/* «Reduser bevegelse» (iOS: Tilgjengelighet → Bevegelse). Animasjoner og
+   overganger kortes ned til ingenting i stedet for å fjernes, så
+   animationend/transitionend fortsatt fyrer for kode som venter på dem.
+
+   Leaflet er unntatt: panorering og zoom bruker CSS-overganger og venter på
+   transitionend, og biblioteket leser ikke innstillingen selv. Kartet skal
+   ikke kunne henge fordi en overgang ble klippet.
+
+   JS-rulling med behavior: 'smooth' følger ikke scroll-behavior i CSS — de
+   kallene spør rulleAtferd() i src/lib/utils/bevegelse.ts. */
+@media (prefers-reduced-motion: reduce) {
+  *:not(.leaflet-container):not(.leaflet-container *),
+  *:not(.leaflet-container):not(.leaflet-container *)::before,
+  *:not(.leaflet-container):not(.leaflet-container *)::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

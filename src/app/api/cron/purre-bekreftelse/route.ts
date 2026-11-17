@@ -2,7 +2,15 @@ import { NextRequest, NextResponse } from 'next/server';
 import { bearerSecretMatches } from '@/lib/security/secret-compare';
 import { createRequestLogger } from '@/lib/log/request';
 import { sendEpost } from '@/lib/email/send';
-import { byggPurreEpost, PURRE_MARKOR, velgUbekreftede, type UbekreftetKandidat } from '@/lib/onboarding/purre';
+import { sprakFraMetadata } from '@/lib/billing/prove-paaminnelse';
+import {
+  byggPurreEpost,
+  PURRE_KALL_FRIST_MS,
+  PURRE_KJORETID_FRIST_MS,
+  PURRE_MARKOR,
+  velgUbekreftede,
+  type UbekreftetKandidat
+} from '@/lib/onboarding/purre';
 
 /**
  * Daglig purremail til kontoer som aldri bekreftet e-posten sin.
@@ -16,6 +24,27 @@ import { byggPurreEpost, PURRE_MARKOR, velgUbekreftede, type UbekreftetKandidat 
  * Går via Supabase Admin-API-et direkte (ikke supabase-js) av samme grunn som
  * ellers i cron-rutene: vi trenger bare tre små kall, og admin-endepunktene
  * for auth-brukere er ikke eksponert gjennom klientbiblioteket vårt.
+ *
+ * ── HVERT KALL UT HAR EN FRIST ──────────────────────────────────────────────
+ *
+ * Ingen av kallene mot Supabase hadde tidsavbrudd. Et kall som hang, holdt
+ * hele kjøringen til plattformen drepte den (maxDuration) — midt i løkka, uten
+ * en eneste logglinje om hvor langt den kom. Nå har hvert kall
+ * PURRE_KALL_FRIST_MS, og utsendingen sin egen frist i sendEpost. Et kall som
+ * ikke svarer i tide behandles som et kall som feilet, med de samme forsiktige
+ * utfallene som før:
+ *
+ *   · brukerlista svarer ikke   → kjøringen avbrytes (500), ingen er rørt
+ *   · lenka kan ikke lages      → kandidaten hoppes over UMERKET, nytt forsøk
+ *                                 i morgen
+ *   · merkingen svarer ikke     → ingen e-post. Vi vet ikke om merket ble
+ *                                 satt; én tapt purring er greit, dobbel er
+ *                                 det ikke
+ *
+ * Løkka slutter også å starte på nye kandidater når PURRE_KJORETID_FRIST_MS
+ * er brukt, så en treg dag ender med en logglinje og resten i morgen — ikke
+ * med at funksjonen drepes mellom merking og sending. Tallene bor i
+ * src/lib/onboarding/purre.ts.
  */
 
 export const runtime = 'nodejs';
@@ -32,6 +61,13 @@ function adminHoder(): Record<string, string> {
   };
 }
 
+type Logg = ReturnType<typeof createRequestLogger>;
+
+/** AbortSignal.timeout gir «TimeoutError»; eldre kjøremiljøer «AbortError». */
+function erTidsavbrudd(feil: unknown): boolean {
+  return feil instanceof Error && (feil.name === 'TimeoutError' || feil.name === 'AbortError');
+}
+
 async function hentAlleBrukere(base: string): Promise<UbekreftetKandidat[]> {
   // Map på id, ikke liste: GoTrue pagineres med offset over created_at DESC,
   // så en registrering som lander MELLOM to sidehentinger forskyver radene og
@@ -45,7 +81,8 @@ async function hentAlleBrukere(base: string): Promise<UbekreftetKandidat[]> {
   for (let side = 1; side <= 25; side++) {
     const res = await fetch(`${base}/auth/v1/admin/users?page=${side}&per_page=${PER_SIDE}`, {
       headers: adminHoder(),
-      cache: 'no-store'
+      cache: 'no-store',
+      signal: AbortSignal.timeout(PURRE_KALL_FRIST_MS)
     });
     if (!res.ok) throw new Error(`admin/users side ${side}: ${res.status}`);
     const data = (await res.json()) as { users?: UbekreftetKandidat[] };
@@ -67,32 +104,49 @@ async function hentAlleBrukere(base: string): Promise<UbekreftetKandidat[]> {
  * forarbeid: adressen er ubekreftet og kan tilhøre feil person), og gir
  * tydelig beskjed i begge utfall. Se kommentaren i auth/confirm/route.ts.
  */
-async function lagBekreftelseslenke(base: string, epost: string): Promise<string | null> {
-  const res = await fetch(`${base}/auth/v1/admin/generate_link`, {
-    method: 'POST',
-    headers: adminHoder(),
-    body: JSON.stringify({ type: 'magiclink', email: epost }),
-    cache: 'no-store'
-  });
-  if (!res.ok) return null;
-  const data = (await res.json()) as {
-    hashed_token?: string;
-    properties?: { hashed_token?: string };
-  };
-  const token = data.hashed_token ?? data.properties?.hashed_token ?? null;
-  if (!token) return null;
-  return `https://www.mycelet.com/auth/confirm?token_hash=${encodeURIComponent(token)}`;
+async function lagBekreftelseslenke(base: string, epost: string, log: Logg): Promise<string | null> {
+  try {
+    const res = await fetch(`${base}/auth/v1/admin/generate_link`, {
+      method: 'POST',
+      headers: adminHoder(),
+      body: JSON.stringify({ type: 'magiclink', email: epost }),
+      cache: 'no-store',
+      signal: AbortSignal.timeout(PURRE_KALL_FRIST_MS)
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as {
+      hashed_token?: string;
+      properties?: { hashed_token?: string };
+    };
+    const token = data.hashed_token ?? data.properties?.hashed_token ?? null;
+    if (!token) return null;
+    return `https://www.mycelet.com/auth/confirm?token_hash=${encodeURIComponent(token)}`;
+  } catch (feil) {
+    // Tidsavbrudd eller nettverksfeil: ingen lenke. Kandidaten er ikke merket,
+    // så den får et nytt forsøk i morgen — og resten av lista går som normalt.
+    // (Adressen logges ikke; kalleren logger bruker-id-en.)
+    log.warn('purre.kall-feilet', { kall: 'generate_link', tidsavbrudd: erTidsavbrudd(feil) });
+    return null;
+  }
 }
 
 /** Merk kontoen som purret — app_metadata kan ikke endres av brukeren selv. */
-async function merkSomPurret(base: string, brukerId: string): Promise<boolean> {
-  const res = await fetch(`${base}/auth/v1/admin/users/${brukerId}`, {
-    method: 'PUT',
-    headers: adminHoder(),
-    body: JSON.stringify({ app_metadata: { [PURRE_MARKOR]: new Date().toISOString() } }),
-    cache: 'no-store'
-  });
-  return res.ok;
+async function merkSomPurret(base: string, brukerId: string, log: Logg): Promise<boolean> {
+  try {
+    const res = await fetch(`${base}/auth/v1/admin/users/${brukerId}`, {
+      method: 'PUT',
+      headers: adminHoder(),
+      body: JSON.stringify({ app_metadata: { [PURRE_MARKOR]: new Date().toISOString() } }),
+      cache: 'no-store',
+      signal: AbortSignal.timeout(PURRE_KALL_FRIST_MS)
+    });
+    return res.ok;
+  } catch (feil) {
+    // Vi vet ikke om merket ble satt. Da sendes ingenting: står merket der i
+    // morgen, er dette én tapt purring; gjør det ikke, purres kontoen da.
+    log.warn('purre.kall-feilet', { kall: 'merk', brukerId, tidsavbrudd: erTidsavbrudd(feil) });
+    return false;
+  }
 }
 
 export async function GET(request: NextRequest) {
@@ -109,14 +163,25 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    // Klokka for kjøretidsfristen starter FØR brukerlista hentes: den teller
+    // også mot maxDuration.
+    const startet = Date.now();
     const alle = await hentAlleBrukere(base);
     const kandidater = velgUbekreftede(alle, new Date());
     log.info('purre.kandidater', { totalt: alle.length, kandidater: kandidater.length });
 
     let sendt = 0;
     let hoppetOver = 0;
-    for (const kandidat of kandidater) {
-      const lenke = await lagBekreftelseslenke(base, kandidat.email!);
+    let utsatt = 0;
+    for (const [nr, kandidat] of kandidater.entries()) {
+      if (Date.now() - startet > PURRE_KJORETID_FRIST_MS) {
+        // Ingen av de gjenstående er merket, så de tas i morgen.
+        utsatt = kandidater.length - nr;
+        log.warn('purre.avkortet', { utsatt });
+        break;
+      }
+
+      const lenke = await lagBekreftelseslenke(base, kandidat.email!, log);
       if (!lenke) {
         // Typisk: kontoen er sperret eller slettet i mellomtiden. Ikke merk
         // som purret — da får den et nytt forsøk i morgen hvis den kvalifiserer.
@@ -128,14 +193,16 @@ export async function GET(request: NextRequest) {
       // MERK FØR SENDING. Skulle merkingen feile, sender vi heller ikke —
       // motsatt rekkefølge kunne gitt samme bruker en ny purring hver dag,
       // og «aldri mer enn én» er regelen som gjør utsendingen forsvarlig.
-      const merket = await merkSomPurret(base, kandidat.id);
+      const merket = await merkSomPurret(base, kandidat.id, log);
       if (!merket) {
         log.warn('purre.merking-feilet', { brukerId: kandidat.id });
         hoppetOver++;
         continue;
       }
 
-      const epost = byggPurreEpost(lenke);
+      // Språket kontoen ble opprettet på (user_metadata.sprak, siden
+      // 14.09.2026). Mangler det, eller er det noe annet enn nb/sv: norsk.
+      const epost = byggPurreEpost(lenke, sprakFraMetadata(kandidat.user_metadata));
       const resultat = await sendEpost({
         til: kandidat.email!,
         emne: epost.emne,
@@ -155,10 +222,11 @@ export async function GET(request: NextRequest) {
       await new Promise((r) => setTimeout(r, 600));
     }
 
-    log.info('purre.ferdig', { sendt, hoppetOver });
-    return NextResponse.json({ ok: true, sendt, hoppetOver, kandidater: kandidater.length });
+    log.info('purre.ferdig', { sendt, hoppetOver, utsatt });
+    return NextResponse.json({ ok: true, sendt, hoppetOver, utsatt, kandidater: kandidater.length });
   } catch (err) {
-    log.error('purre.feilet', err);
+    // Feilen er ANDRE argument, konteksten tredje — se Logger.error.
+    log.error('purre.feilet', err, { tidsavbrudd: erTidsavbrudd(err) });
     return NextResponse.json({ ok: false }, { status: 500 });
   }
 }

@@ -6,7 +6,6 @@ import { getBillingCapabilities, getUserBillingSubscription } from '@/lib/billin
 import { fetchWeatherSamplesForBounds, nearestWeatherSample, weatherSourceSummary } from '@/lib/weather/samples';
 import { getForestProperties, buildSpeciesHabitatPreferences } from '@/lib/forest';
 import { computeCellPrediction } from '@/lib/prediction/cell-score';
-import { dayOfYearOf } from '@/lib/prediction/phenology';
 import { weightedOccurrenceDensity, countWithinKm, OCCURRENCE_FETCH_LIMIT } from '@/lib/prediction/occurrences';
 import { buildAreaReport, summariseNeighbourhood } from '@/lib/prediction/area-report';
 import { getElevation } from '@/lib/terrain';
@@ -20,7 +19,9 @@ import { createRequestLogger } from '@/lib/log/request';
 import { getUserLocale } from '@/i18n/locale';
 import { getSpeciesDisplayName } from '@/lib/utils/species-name';
 import { isRecommendableSpecies } from '@/lib/prediction/recommendable';
+import { festBoksTilOppslagspresisjon } from '@/lib/map/oppslagsboks';
 import { DEFAULT_LOCALE, type Locale } from '@/i18n/config';
+import { osloDagIAaret, osloIDag } from '@/lib/api/oslo-dag';
 
 // Surfaced verbatim as toasts on the map, so they follow the reader's language.
 const COPY: Record<
@@ -129,23 +130,45 @@ export async function GET(request: NextRequest) {
   // hentes FØR valideringen — ellers får en svensk bruker norsk feiltekst.
   const locale = await getUserLocale();
   const copy = COPY[locale] ?? COPY[DEFAULT_LOCALE];
-  const minLat = num(url.searchParams.get('minLat'));
-  const minLng = num(url.searchParams.get('minLng'));
-  const maxLat = num(url.searchParams.get('maxLat'));
-  const maxLng = num(url.searchParams.get('maxLng'));
+  const raa = {
+    minLat: num(url.searchParams.get('minLat')),
+    minLng: num(url.searchParams.get('minLng')),
+    maxLat: num(url.searchParams.get('maxLat')),
+    maxLng: num(url.searchParams.get('maxLng'))
+  };
   const speciesIdParam = url.searchParams.get('speciesId');
   const speciesId = speciesIdParam ? Number(speciesIdParam) : null;
   const n = Math.max(3, Math.min(MAX_N, Math.round(Number(url.searchParams.get('n'))) || DEFAULT_N));
   const topParam = Math.round(Number(url.searchParams.get('top')));
   const top = Number.isFinite(topParam) && topParam > 0 ? Math.min(20, topParam) : null;
 
-  if (![minLat, minLng, maxLat, maxLng].every(Number.isFinite) || maxLat <= minLat || maxLng <= minLng) {
+  if (
+    ![raa.minLat, raa.minLng, raa.maxLat, raa.maxLng].every(Number.isFinite) ||
+    raa.maxLat <= raa.minLat ||
+    raa.maxLng <= raa.minLng
+  ) {
     return NextResponse.json({ error: copy.badCoordinates }, { status: 400 });
   }
   // Guard against absurd areas — a country-sized box would make cells meaningless.
-  if (maxLat - minLat > 1.5 || maxLng - minLng > 3) {
+  if (raa.maxLat - raa.minLat > 1.5 || raa.maxLng - raa.minLng > 3) {
     return NextResponse.json({ error: copy.zoomIn }, { status: 400 });
   }
+
+  // Boksen er lagt rundt et punkt, og for «Lovende» er det punktet enhetens
+  // GPS-posisjon — ofte der brukeren står i sitt eget soppsted. Rutenettet
+  // regnes ut fra boksen, så midtpunktet ble sendt med full presisjon videre:
+  // som værprøven (midt i boksen) til MET/SMHI, og som midtruta til skog- og
+  // høydeoppslaget. /api/prediction, /api/findings og /api/spot-feedback
+  // runder alt av (se provider-precision.ts); dette var søskenet som sto igjen.
+  //
+  // Her festes MIDTPUNKTET til samme presisjon (~100 m), og boksen beholder
+  // størrelsen sin. Da er hele rutenettet forskjøvet som én enhet: rutene og
+  // kvadrantpunktene inni dem (skogprover.ts) ligger nøyaktig like langt fra
+  // hverandre som før, så ingenting ved prøvetakingen endres — og det eneste
+  // punktet som VAR posisjonen, midtpunktet, går ut med tre desimaler. Rundes
+  // hvert oppslagspunkt for seg i stedet, klapper kvadrantpunktene sammen når
+  // rutene er små. Se src/lib/map/oppslagsboks.ts.
+  const { minLat, minLng, maxLat, maxLng } = festBoksTilOppslagspresisjon(raa);
 
   try {
     const supabase = createClient();
@@ -180,8 +203,11 @@ export async function GET(request: NextRequest) {
 
     const centerLat = (minLat + maxLat) / 2;
     const centerLng = (minLng + maxLng) / 2;
-    const month = new Date().getMonth() + 1;
-    const dayOfYear = dayOfYearOf(new Date());
+    // Måned og dag i året fra én og samme Oslo-dato, ikke UTC-serverens (se
+    // src/lib/api/oslo-dag.ts) — slik /api/prediction og species-spots gjør.
+    const naa = new Date();
+    const month = osloIDag(naa).maaned;
+    const dayOfYear = osloDagIAaret(naa);
 
     const bounds = { minLat, minLng, maxLat, maxLng };
     const [weatherSamples, speciesRes, occRes] = await Promise.all([
@@ -212,12 +238,14 @@ export async function GET(request: NextRequest) {
     ]);
     const occurrences = occRes.rows;
     if (occRes.truncated) {
+      // Grovt (~1 km) med vilje, som i /api/prediction: midt i boksen står
+      // brukeren, og serverloggen skal ikke holde et spor av posisjoner.
       log.warn('prediction_grid.occurrences_truncated', {
         limit: OCCURRENCE_FETCH_LIMIT,
-        minLat,
-        minLng,
-        maxLat,
-        maxLng
+        minLat: Number(minLat.toFixed(2)),
+        minLng: Number(minLng.toFixed(2)),
+        maxLat: Number(maxLat.toFixed(2)),
+        maxLng: Number(maxLng.toFixed(2))
       });
     }
     const centerWeather = nearestWeatherSample(weatherSamples, centerLat, centerLng)?.weather ?? null;
@@ -602,6 +630,15 @@ export async function GET(request: NextRequest) {
       speciesId
     });
 
+    // Topp-modus: den beste ruta med skogdata, OGSÅ når ingen når bunngrensen
+    // og `cells` er tom. Kartet leste en tom liste som «ingen skog her» og
+    // utvidet søket til 35 km — fire slike kall — før det ba en bruker midt i
+    // skogen om å flytte kartet nærmere skog. Med dette tallet og `coverage`
+    // kan det skille «ingen skog» fra «skog, men for svake forhold» etter
+    // første kall (src/lib/map/lovende-sok.ts). Ett regionalt tall, ikke et
+    // sted — derfor også til gratisbrukere. Null når ingen rute fikk skogdata.
+    const bestScore = allCells.length > 0 ? Math.max(...allCells.map((cell) => cell.score)) : null;
+
     return NextResponse.json({
       cells,
       top: effectiveTop,
@@ -610,6 +647,7 @@ export async function GET(request: NextRequest) {
       cellLatSpan: latSpan,
       cellLngSpan: lngSpan,
       coverage: cellCenters.length ? allCells.length / cellCenters.length : 0,
+      ...(effectiveTop ? { bestScore } : {}),
       weatherSource,
       weatherSamples: weatherSamples.length
     });

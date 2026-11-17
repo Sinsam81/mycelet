@@ -3,15 +3,18 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { NextIntlClientProvider } from 'next-intl';
 import { FindingPopup } from '../FindingPopup';
+import { VisbarFeil } from '@/lib/map/visbar-feil';
 import nb from '../../../../messages/nb.json';
 import sv from '../../../../messages/sv.json';
 
 /**
- * Slette-veien i kartpopupen — den ENESTE slette-flaten i appen.
+ * Slette-veien i kartpopupen. Den var lenge den eneste slette-flaten i appen;
+ * nå kan funn også slettes og gjenopprettes på Mine steder
+ * (src/components/places/StedetsFunn.tsx og NyligSlettet.tsx).
  *
- * Bakgrunn: fram til nå kunne ingen fjerne et feilregistrert funn. RLS tillot
- * det (migrasjon 001:333), men grensesnittet fantes ikke, så eneste utvei var
- * å slette hele kontoen.
+ * Bakgrunn: før denne fantes kunne ingen fjerne et feilregistrert funn. RLS
+ * tillot det (migrasjon 001:333), men grensesnittet fantes ikke, så eneste
+ * utvei var å slette hele kontoen.
  *
  * Testene låser de fire tingene som gjør flaten trygg:
  *  1. Knappen vises BARE på egne funn.
@@ -99,7 +102,7 @@ describe('FindingPopup — sletting', () => {
   });
 
   it('viser feilen og lar brukeren prøve igjen når slettingen feiler', async () => {
-    const onDelete = vi.fn().mockRejectedValue(new Error('Nettverket falt ut'));
+    const onDelete = vi.fn().mockRejectedValue(new VisbarFeil('Nettverket falt ut'));
     rendrer({ canDelete: true, onDelete });
 
     fireEvent.click(screen.getByText('Slett funn'));
@@ -111,9 +114,36 @@ describe('FindingPopup — sletting', () => {
     expect(screen.getByText('Slett funn')).toBeTruthy();
   });
 
+  it('viser aldri en rå feil — bare tekst kartet har merket som trygg', async () => {
+    const onDelete = vi.fn().mockRejectedValue(new TypeError('Load failed'));
+    rendrer({ canDelete: true, onDelete }, 'sv');
+
+    fireEvent.click(screen.getByText('Radera fynd'));
+    fireEvent.click(screen.getByText('Radera'));
+
+    await waitFor(() => expect(screen.getByText(sv.FindingPopup.deleteFailed)).toBeTruthy());
+    expect(screen.queryByText('Load failed')).toBeNull();
+  });
+
+  it('eieren får en lenke til Mine steder for å endre deling eller notat — bare med id-en', () => {
+    rendrer({ canDelete: true, onDelete: vi.fn() });
+    const lenke = screen.getByRole('link', { name: nb.FindingPopup.manageFinding });
+    expect(lenke.getAttribute('href')).toBe(`/mine-steder?funn=${finding.id}`);
+  });
+
+  it('andre får ingen slik lenke', () => {
+    rendrer({ canDelete: false, onDelete: vi.fn() });
+    expect(screen.queryByRole('link', { name: nb.FindingPopup.manageFinding })).toBeNull();
+  });
+
   it('er oversatt til svensk', () => {
     rendrer({ canDelete: true, onDelete: vi.fn() }, 'sv');
     fireEvent.click(screen.getByText('Radera fynd'));
     expect(screen.getByText('Radera det här fyndet?')).toBeTruthy();
+  });
+
+  it('lenken til Mina platser er oversatt', () => {
+    rendrer({ canDelete: true, onDelete: vi.fn() }, 'sv');
+    expect(screen.getByRole('link', { name: sv.FindingPopup.manageFinding })).toBeTruthy();
   });
 });

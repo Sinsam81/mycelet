@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  BILLING_ERROR_CANCELLATION_ACK,
   BillingUpdate,
   ManualGrant,
   RevenueCatEvent,
@@ -177,6 +178,67 @@ describe('mapRevenueCatEvent — billing issues', () => {
     if (decision.action !== 'apply') return;
     expect(decision.kind).toBe('revoke');
     expect(decision.update.status).toBe('past_due');
+  });
+
+  it('BILLING_ISSUE med frist ved første trekk etter en prøve beholder trialing — ingen penger har flyttet seg', () => {
+    const graceEnd = EXPIRES_MS + 16 * 24 * 60 * 60 * 1000;
+    const decision = mapRevenueCatEvent(
+      baseEvent({ type: 'BILLING_ISSUE', period_type: 'TRIAL', grace_period_expiration_at_ms: graceEnd })
+    );
+    expect(decision.action).toBe('apply');
+    if (decision.action !== 'apply') return;
+    expect(decision.kind).toBe('modify');
+    expect(decision.update.status).toBe('trialing');
+    // Tilgangen står til fristen, som for en betalende.
+    expect(decision.update.currentPeriodEnd).toBe(new Date(graceEnd).toISOString());
+    expect(decision.update.cancelAtPeriodEnd).toBe(true);
+  });
+
+  it('BILLING_ISSUE uten frist i en prøve er past_due som ellers', () => {
+    const decision = mapRevenueCatEvent(baseEvent({ type: 'BILLING_ISSUE', period_type: 'TRIAL' }));
+    expect(decision.action === 'apply' && decision.update.status).toBe('past_due');
+  });
+});
+
+/**
+ * Et betalingsproblem kommer som TO hendelser samtidig: BILLING_ISSUE og en
+ * CANCELLATION med cancel_reason BILLING_ERROR. Den siste ble behandlet som en
+ * frivillig oppsigelse og skrev utløpsdatoen som nettopp var passert over
+ * fristen BILLING_ISSUE hadde satt. Hele kjeden, i begge rekkefølger, er
+ * testet mot ruta (route.test.ts); her er selve avgjørelsen.
+ */
+describe('mapRevenueCatEvent — CANCELLATION med BILLING_ERROR er ikke en oppsigelse', () => {
+  it.each(['NORMAL', 'TRIAL', 'INTRO'])('ACKes uten å skrive (period_type %s)', (periodType) => {
+    const decision = mapRevenueCatEvent(baseEvent({ type: 'CANCELLATION', cancel_reason: 'BILLING_ERROR', period_type: periodType }));
+    expect(decision).toEqual({ action: 'ack', reason: BILLING_ERROR_CANCELLATION_ACK });
+  });
+
+  it('bærer ingen frist selv — derfor kan den ikke være den som skriver', () => {
+    // Slik RevenueCat sender den: utløpet er perioden som nettopp gikk ut, og
+    // grace_period_expiration_at_ms står bare på BILLING_ISSUE.
+    const utlopt = PURCHASED_MS + 1000;
+    const decision = mapRevenueCatEvent(
+      baseEvent({ type: 'CANCELLATION', cancel_reason: 'BILLING_ERROR', expiration_at_ms: utlopt, event_timestamp_ms: utlopt + 5 * 3600_000 })
+    );
+    expect(decision.action).toBe('ack');
+  });
+
+  it.each(['UNSUBSCRIBE', 'DEVELOPER_INITIATED', 'PRICE_INCREASE', 'UNKNOWN', null])(
+    'andre årsaker (%s) er fortsatt «auto-fornyelse av, tilgang ut perioden»',
+    (reason) => {
+      const decision = mapRevenueCatEvent(baseEvent({ type: 'CANCELLATION', cancel_reason: reason }));
+      expect(decision.action).toBe('apply');
+      if (decision.action !== 'apply') return;
+      expect(decision.kind).toBe('modify');
+      expect(decision.update.status).toBe('active');
+      expect(decision.update.cancelAtPeriodEnd).toBe(true);
+      expect(decision.update.currentPeriodEnd).toBe(new Date(EXPIRES_MS).toISOString());
+    }
+  );
+
+  it('ukjent produkt ACKes som før, uansett årsak', () => {
+    const decision = mapRevenueCatEvent(baseEvent({ type: 'CANCELLATION', cancel_reason: 'BILLING_ERROR', product_id: 'com.other.unknown' }));
+    expect(decision).toEqual({ action: 'ack', reason: 'unknown_product' });
   });
 });
 

@@ -9,6 +9,8 @@ import { getClientKey, rateLimitResponse } from '@/lib/rate-limit/route';
 import { createRequestLogger } from '@/lib/log/request';
 import { getUserLocale } from '@/i18n/locale';
 import { DEFAULT_LOCALE, type Locale } from '@/i18n/config';
+import { roundForProviderLookup } from '@/lib/privacy/provider-precision';
+import { osloIDag } from '@/lib/api/oslo-dag';
 
 /**
  * 7-day "soppforhold"-trend for the home page.
@@ -73,9 +75,16 @@ export async function GET(request: NextRequest) {
     return rateLimitResponse(rl);
   }
 
-  const now = new Date();
-  const todayKey = now.toISOString().slice(0, 10);
-  const month = now.getMonth() + 1;
+  // «I dag» er dagen i Oslo, ikke i UTC. Med UTC-datoen viste stripen mellom
+  // midnatt og kl. 01/02 norsk tid «I dag» for dagen som nettopp var slutt, og
+  // kalte dagen leseren faktisk sto i for morgendagens ukedag. Prognosens døgn
+  // er METs UTC-døgn; filterUpcomingDays tar dem som ligger ETTER denne datoen,
+  // så dagen i dag hverken faller ut eller står to ganger. Se
+  // src/lib/api/oslo-dag.ts.
+  const iDag = osloIDag(new Date());
+  const todayKey = iDag.dato;
+  const month = iDag.maaned;
+  // Dagen og språket er del av nøkkelen: svaret bærer både datoene og teksten.
   const cacheKey = `${lat.toFixed(2)},${lon.toFixed(2)},${todayKey},${locale}`;
   const cached = cache.get(cacheKey);
   if (cached && Date.now() - cached.at < CACHE_TTL_MS) {
@@ -83,9 +92,14 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    // Punktet er leserens posisjon, og begge kallene går ut av huset (observert
+    // vær og METs prognose). De får det avrundet til ~110 m — samme regel som
+    // /api/prediction, se provider-precision.ts. Dagens klienter sender to
+    // desimaler; ruta håndhever nå det den før bare håpet på.
+    const oppslag = roundForProviderLookup(lat, lon);
     const [observed, forecast] = await Promise.all([
-      fetchWeatherSummary({ lat, lon }),
-      fetchDailyForecast({ lat, lon })
+      fetchWeatherSummary(oppslag),
+      fetchDailyForecast(oppslag)
     ]);
     if (!observed) {
       return NextResponse.json({ error: copy.noWeather }, { status: 502 });
@@ -99,15 +113,22 @@ export async function GET(request: NextRequest) {
     const { today, days } = buildWeek(observed, future, {
       todayKey,
       month,
-      dayOfMonth: now.getDate(),
+      dayOfMonth: iDag.dagIManeden,
       locale
     });
 
     // Flush timing — "should I go now, or wait?" — from the moisture base now
     // plus the upcoming forecast rain.
+    //
+    // Dagen og dommen over banneret sendes med, så banneret sier det samme om
+    // sesongen som dommen: tidlig eller sent i en skulder, og feiringen bare der
+    // dommen også feirer (seasonShoulder i mushroom-day.ts). Begge følger
+    // Oslo-datoen, som alt er i mellomlagernøkkelen sammen med språket.
     const flush = assessFlush(
       {
         month,
+        dayOfMonth: iDag.dagIManeden,
+        dayOptimal: today.optimal,
         soilMoistureIndex: observed.soilMoistureIndex,
         rain7dMm: observed.rain7dMm ?? observed.rain3dMm * 2,
         currentTempC: observed.temperatureC,

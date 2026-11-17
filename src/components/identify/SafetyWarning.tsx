@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { AlertTriangle, Info, Phone } from 'lucide-react';
 import { useLocale, useTranslations } from 'next-intl';
+import { PoisonHotlineLinksClient } from '@/components/safety/PoisonHotlineLinksClient';
 
 interface SafetyWarningProps {
   level: 'info' | 'caution' | 'danger';
@@ -36,9 +37,16 @@ export function SafetyWarning({ level, edibility }: SafetyWarningProps) {
             <p className="mt-1 text-red-700">
               {t('dangerBody')}
             </p>
-            <div className="mt-3 flex items-center gap-2 text-red-700">
-              <Phone className="h-4 w-4" />
-              <span className="text-sm font-medium">{s('poisonDisplay')}</span>
+            {/* Ringelenker, ikke tekst: dette er øyeblikket noen kan trenge
+                nummeret, og et telefonikon ved siden av ren tekst ser ut som
+                en knapp uten å være det. flex-wrap fordi svensk har to nummer
+                (112 akutt / 010-456 67 00) som må kunne brytes på 320 px. */}
+            <div className="mt-2 flex flex-wrap items-center gap-x-2 text-sm font-medium text-red-700">
+              <Phone className="h-4 w-4 shrink-0" aria-hidden />
+              <PoisonHotlineLinksClient
+                withName
+                className="inline-flex min-h-11 items-center font-semibold text-red-800 underline"
+              />
             </div>
             <div className="mt-2 flex flex-col gap-1">
               {visDigital ? (

@@ -3,13 +3,20 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Mycelet — offline-kart</title>
+<title data-sv="Mycelet — offlinekarta">Mycelet — offline-kart</title>
 <meta name="robots" content="noindex">
 <meta name="theme-color" content="#1a3a24">
 <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
 <!--
   Denne siden precaches av public/sw.js og er det service workeren svarer med
-  når en navigasjon feiler fordi enheten er uten nett.
+  når en navigasjon ikke kommer fram: enheten er uten nett, eller nettet har
+  ikke svart innen fristen (ti sekunder, se v6 og v7 i sw.js).
+
+  Den precaches for ALLE besøkende, ikke bare dem som har lagret et kart. Den
+  må derfor si hvorfor den vises: offline-map.js setter overskriften, og fyller
+  #offline-reason når siden står i stedet for en annen side mens enheten er
+  påkoblet («Nettet svarer ikke»). Knappen nederst ber service workeren vente
+  på nettet uten frist før den laster på nytt.
 
   Tre krav som ikke må brytes:
   1. Ingen eksterne ressurser og ingen ressurser fra /_next/. Alt siden trenger
@@ -17,8 +24,10 @@
   2. Ingen serverdata. Siden er åpen for alle (i motsetning til /map, som er
      auth-gated), så den kan bare vise det som allerede ligger i brukerens egen
      nettleser.
-  3. Svensk tekst i data-sv på hvert element. offline-map.js bytter dem ut når
-     MYCELET_LOCALE-cookien sier sv.
+  3. Svensk tekst i data-sv på hvert element, også sidetittelen. offline-map.js
+     bytter dem ut når språket er svensk: MYCELET_LOCALE-cookien først, ellers
+     nettleserens språk — samme regel som serveren (getUserLocale i
+     src/i18n/locale.ts), så skallet snakker samme språk som appen.
 -->
 <style>
   :root { color-scheme: light; }
@@ -66,6 +75,7 @@
     cursor: pointer;
   }
   button.secondary { background: transparent; color: #2d5238; border: 1px solid #b9c6b8; }
+  button[aria-disabled="true"] { opacity: 0.6; cursor: default; }
   #map-scroller {
     margin-top: 10px;
     overflow: auto;
@@ -102,6 +112,7 @@
   </div>
 
   <h1 id="offline-heading">Offline-kart</h1>
+  <p id="offline-reason" hidden></p>
 
   <p data-sv="Kartområdena du har sparat ligger på den här enheten och kan öppnas nu. Resten av Mycelet — svampprognos, AI-identifiering, fynd och forum — kräver täckning.">
     Kartområdene du har lagret ligger på denne enheten og kan åpnes nå. Resten av Mycelet — soppvarsel,
@@ -110,7 +121,7 @@
 
   <div class="warning">
     <p>
-      <strong data-sv="Ingen artsinformation utan nät">Ingen artsinformasjon uten nett</strong>
+      <strong data-sv="Ingen artinformation utan nät">Ingen artsinformasjon uten nett</strong>
       <span data-sv="Artbeskrivningar, förväxlingsvarningar och AI-identifiering är inte tillgängliga här. Att en svamp inte är märkt som giftig betyder inte att den är säker. Låt den stå tills du har kontrollerat den mot artbiblioteket eller hos en svampkonsulent.">
         Artsbeskrivelser, forvekslingsvarsler og AI-identifisering er ikke tilgjengelig her. At en sopp ikke er
         merket som giftig betyr ikke at den er trygg. La den stå til du har sjekket den mot artsbiblioteket eller

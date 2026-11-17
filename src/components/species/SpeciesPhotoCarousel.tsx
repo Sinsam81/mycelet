@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { PhotoCredit } from '@/components/ui/PhotoCredit';
+import { Artsbilde } from './Artsbilde';
 
 interface Photo {
   id: string;
@@ -17,14 +18,22 @@ interface Photo {
   license: string | null;
   /** Filsiden på Wikimedia Commons. */
   source_url: string | null;
+  /**
+   * Bredere utgaver av samme bilde, som `srcset` — bygget på serveren
+   * (hovedbildeSrcSet i src/lib/species/artsbilde.ts). Utelatt = bare
+   * `image_url`, som før.
+   */
+  srcSet?: string | null;
 }
 
 interface SpeciesPhotoCarouselProps {
   photos: Photo[];
   speciesName: string;
+  /** `sizes` til `srcSet`: hvor bredt bildet vises. Bare i bruk sammen med `srcSet`. */
+  sizes?: string;
 }
 
-export function SpeciesPhotoCarousel({ photos, speciesName }: SpeciesPhotoCarouselProps) {
+export function SpeciesPhotoCarousel({ photos, speciesName, sizes }: SpeciesPhotoCarouselProps) {
   const t = useTranslations('SpeciesPhotoCarousel');
   const [index, setIndex] = useState(0);
   const count = photos.length;
@@ -50,7 +59,17 @@ export function SpeciesPhotoCarousel({ photos, speciesName }: SpeciesPhotoCarous
   return (
     <div>
       <div className="relative aspect-square w-full overflow-hidden rounded-2xl border border-gray-200 bg-gray-100 shadow-card">
-        <img src={photo.image_url} alt={photo.caption ?? speciesName} className="h-full w-full object-cover" />
+        {/* Hovedbildet er det leseren sammenligner soppen sin med, og sidens
+            største element: lastes straks (ingen lazy), i den bredden skjermen
+            trenger. `image_url` er utgaven som er lagret, og den Artsbilde
+            faller tilbake på om en bredere utgave ikke lar seg laste. */}
+        <Artsbilde
+          src={photo.image_url}
+          srcSet={photo.srcSet}
+          sizes={sizes}
+          alt={photo.caption ?? speciesName}
+          className="h-full w-full object-cover"
+        />
 
         {count > 1 ? (
           <>
@@ -74,23 +93,26 @@ export function SpeciesPhotoCarousel({ photos, speciesName }: SpeciesPhotoCarous
         ) : null}
       </div>
 
-      <p className="mt-2 text-center text-xs text-gray-600">
-        {count > 1 ? t('counter', { current: index + 1, total: count }) : t('counterSingle')}
-      </p>
+      <div className="mt-2 space-y-1">
+        {/* Bare når det er noe å bla i. Hver art har i dag ett bilde, og linja
+            «1 bilde» sto under samtlige uten å si noe. */}
+        {count > 1 ? (
+          <p className="text-center text-xs text-gray-600">{t('counter', { current: index + 1, total: count })}</p>
+        ) : null}
 
-      {photo.caption ? (
-        <p className="mt-1 text-center text-xs italic text-gray-500">{photo.caption}</p>
-      ) : null}
+        {photo.caption ? <p className="text-center text-xs italic text-gray-500">{photo.caption}</p> : null}
 
-      {/* CC BY / CC BY-SA krever at fotograf og lisens navngis der bildet
-          vises. Linja rendrer seg bort av seg selv når vi ikke har ekte
-          verdier — se buildPhotoCredit. */}
-      <PhotoCredit
-        photographer={photo.photographer}
-        license={photo.license}
-        sourceUrl={photo.source_url}
-        className="mt-1 text-center"
-      />
+        {/* CC BY / CC BY-SA krever at fotograf og lisens navngis der bildet
+            vises. Linja rendrer seg bort av seg selv når vi ikke har ekte
+            verdier — se buildPhotoCredit. Krediteringen gjelder fila, så den
+            er den samme uansett hvilken bredde nettleseren valgte. */}
+        <PhotoCredit
+          photographer={photo.photographer}
+          license={photo.license}
+          sourceUrl={photo.source_url}
+          className="text-center"
+        />
+      </div>
     </div>
   );
 }

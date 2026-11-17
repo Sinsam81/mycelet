@@ -7,6 +7,7 @@ import { enrichSuggestions, type BaseSuggestion } from '@/lib/identifications/en
 import { IDENTIFY_HISTORY_BUCKET } from '@/lib/identifications/config';
 import { getUserLocale } from '@/i18n/locale';
 import { DEFAULT_LOCALE, type Locale } from '@/i18n/config';
+import { osloIDag } from '@/lib/api/oslo-dag';
 
 export const runtime = 'nodejs';
 
@@ -29,7 +30,7 @@ export const runtime = 'nodejs';
  */
 
 const ERRORS = {
-  unauthenticated: { nb: 'Ikke autentisert', sv: 'Inte autentiserad' },
+  unauthenticated: { nb: 'Du må være logget inn.', sv: 'Du måste vara inloggad.' },
   not_found: { nb: 'Fant ikke identifiseringen', sv: 'Hittade inte identifieringen' },
   delete_failed: {
     nb: 'Kunne ikke slette identifiseringen. Prøv igjen.',
@@ -126,7 +127,9 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   // Sesongvurderingen bruker måneden identifiseringen BLE GJORT, ikke dagens:
   // «i sesong nå» på en septemberidentifisering man ser på i januar er svar på
   // et spørsmål ingen stilte.
-  const observedMonth = new Date(row.created_at).getMonth() + 1;
+  // I Oslo-tid: en identifisering 1. november kl. 00.30 norsk tid er gjort i
+  // november, selv om UTC-serveren fortsatt ser 31. oktober.
+  const observedMonth = osloIDag(new Date(row.created_at)).maaned;
   const { suggestions, safetyDataIncomplete } = await enrichSuggestions(
     supabase,
     (row.suggestions ?? []).map((s) => ({
@@ -153,6 +156,9 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     // ville gjort en historisk visning til noe annet enn det de så.
     suggestions,
     isPlant: false,
+    // Ble aldri lagret. null = ukjent, så «usikker på om dette er en sopp»
+    // aldri vises på en historikkvisning på grunnlag av et felt vi ikke har.
+    isMushroom: null,
     // Flagget settes av den ferske berikelsen, ikke av den lagrede verdien:
     // det beskriver om VI klarte oppslaget nå. Var det ufullstendig den gangen
     // også, tas det med — da manglet det noe i begge ender.

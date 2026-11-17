@@ -1,19 +1,22 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 import { useTranslations } from 'next-intl';
 import { Copy, Download, Loader2, X } from 'lucide-react';
 import { useIsNative } from '@/lib/hooks/useIsNative';
+import { LUKKEKNAPP_KLASSER, useDialogFokus } from '@/components/ui/useDialogFokus';
 
 /**
  * «Last ned som GPX» på Mine steder — brukerens egne funn som veipunkter,
  * klare for Garmin, UT.no og Organic Maps.
  *
  * Fila bygges av /api/me/gpx (owner-RLS, paginerer forbi sidevisningens
- * 1000-raders tak, artsnavn på leserens språk) — ikke av props: notatene til
- * opptil tusenvis av funn skal ikke fraktes i RSC-payloaden på hver eneste
- * sidevisning for en fil de færreste laster ned.
+ * 1000-raders tak, artsnavn på leserens språk) — ikke av props: eksporten skal
+ * ha ALLE funnene med eksakte koordinater, og de skal ikke fraktes i
+ * RSC-payloaden på hver eneste sidevisning for en fil de færreste laster ned.
+ * (Lista under hvert sted får notatene til funnene siden alt har hentet, men
+ * ingen koordinater — se src/lib/findings/mine-funn.ts.)
  *
  * Nedlastingsveien er GDPR-eksportens (AccountDataActions):
  *  · nett: fetch → blob + a[download].
@@ -27,6 +30,8 @@ export function GpxEksportKnapp({ antall }: { antall: number }) {
   const native = useIsNative();
   const [henter, setHenter] = useState(false);
   const [gpxTekst, setGpxTekst] = useState<string | null>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  useDialogFokus(panelRef, { aapen: Boolean(gpxTekst),onLukk: () => setGpxTekst(null) });
 
   if (antall === 0) return null;
 
@@ -89,13 +94,23 @@ export function GpxEksportKnapp({ antall }: { antall: number }) {
           onClick={() => setGpxTekst(null)}
           className="fixed inset-0 z-[1100] flex items-end justify-center bg-black/50 p-4 sm:items-center"
         >
-          <div onClick={(e) => e.stopPropagation()} className="w-full max-w-lg rounded-2xl bg-white p-4 shadow-xl">
+          <div
+            ref={panelRef}
+            tabIndex={-1}
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-lg rounded-2xl bg-white p-4 shadow-xl outline-none"
+          >
             <div className="flex items-start justify-between gap-2">
               <h2 id="gpx-eksport-tittel" className="font-serif text-lg font-semibold text-forest-900">
                 {t('gpxModalHeading')}
               </h2>
-              <button type="button" aria-label={t('gpxModalClose')} onClick={() => setGpxTekst(null)}>
-                <X className="h-5 w-5 text-gray-500" />
+              <button
+                type="button"
+                aria-label={t('gpxModalClose')}
+                onClick={() => setGpxTekst(null)}
+                className={LUKKEKNAPP_KLASSER}
+              >
+                <X className="h-5 w-5" aria-hidden />
               </button>
             </div>
             <p className="mt-1 text-sm text-gray-700">{t('gpxModalBody')}</p>

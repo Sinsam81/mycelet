@@ -118,3 +118,35 @@ test.describe('Feltfeedback', () => {
     expect(response.status()).toBe(401);
   });
 });
+
+// Lenkene i varsel-e-postene. En henting som ikke er et menneske som navigerer
+// — her uten nettleserens navigeringsheadere, slik en e-postskanner henter —
+// skal ALDRI melde noen av eller bekrefte noe: den får en side med én knapp.
+// Lenkekoden under finnes ikke (en uuid av bare nuller — ikke en hemmelighet),
+// og rutene slår den ikke opp for slike hentinger, så dette er ren lesing.
+// Knappen trykkes aldri herfra.
+test.describe('Soppvarsel-lenker tåler e-postskannere', () => {
+  const UKJENT_UUID = '00000000-0000-4000-8000-000000000000';
+  const SKANNER = { 'sec-fetch-dest': 'empty', 'sec-fetch-mode': 'cors' };
+
+  for (const rute of ['av', 'bekreft']) {
+    test(`/api/soppvarsel/${rute}: GET uten navigering gir en side med én knapp — ingen omdirigering`, async ({
+      request
+    }) => {
+      const res = await request.get(`/api/soppvarsel/${rute}?t=${UKJENT_UUID}`, { headers: SKANNER, maxRedirects: 0 });
+      expect(res.status(), 'en omdirigering her betyr at lenka handlet på en ren GET').toBe(200);
+      expect(res.headers()['content-type']).toContain('text/html');
+      expect(res.headers()['cache-control']).toContain('no-store');
+      const html = await res.text();
+      expect(html).toContain('<form method="post"');
+      expect(html.match(/<button/g)).toHaveLength(1);
+      // Veien ut går aldri gjennom innlogging.
+      expect(html).not.toContain('/auth/');
+    });
+
+    test(`/api/soppvarsel/${rute}: HEAD (lenkesjekk) svarer 200 uten å gjøre noe`, async ({ request }) => {
+      const res = await request.head(`/api/soppvarsel/${rute}?t=${UKJENT_UUID}`, { maxRedirects: 0 });
+      expect(res.status()).toBe(200);
+    });
+  }
+});
