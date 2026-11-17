@@ -42,6 +42,13 @@ vi.mock('@/lib/hooks/useProveLofte', () => ({
   glemProveLofte: vi.fn()
 }));
 
+/** Står arket i iOS-skallet? Da selger App Store, med Apples frist (24 timer før prøveslutt). */
+let iAppen = false;
+vi.mock('@/lib/native/platform', () => ({
+  isNativePlatform: () => iAppen,
+  plattform: () => (iAppen ? 'ios' : 'web')
+}));
+
 vi.mock('next/link', () => ({
   default: ({ href, children, onClick }: { href: string; children: React.ReactNode; onClick?: () => void }) => (
     <a href={href} onClick={onClick}>
@@ -83,6 +90,7 @@ const PASS_VILKAAR_PROVE = fyll(nb.ProvGratisArk.passVilkaarProve, { dager: 7, f
 
 beforeEach(() => {
   vi.setSystemTime(HOST);
+  iAppen = false;
   lofte = { kjent: true, season_pass: PASS, premium: MAANED };
   fetchMock.mockClear();
   onStart.mockClear();
@@ -238,18 +246,23 @@ describe('ProvGratisArk — sesongpasset først', () => {
   });
 });
 
-describe('ProvGratisArk — vilkårene følger sesongen', () => {
-  // Regnes inne i hver test, ETTER at datoen er flyttet: både datoene og
-  // dekningsleddet avhenger av «i dag».
-  const vilkaar = (katalog: typeof nb, dekning: string, locale: 'nb' | 'sv') =>
-    fyll(katalog.ProvGratisArk.passVilkaarProve, {
-      dager: 7,
-      forsteBelastning: forsteBelastningsTekst(7, locale),
-      pris: '249 kr',
-      dato: fornyelsesTekst('season_pass', locale, 7),
-      dekning
-    });
+// Regnes inne i hver test, ETTER at datoen er flyttet: både datoene og
+// dekningsleddet avhenger av «i dag». `nokkel` velger nett- eller App Store-utgaven.
+const vilkaar = (
+  katalog: typeof nb,
+  dekning: string,
+  locale: 'nb' | 'sv',
+  nokkel: 'passVilkaarProve' | 'passVilkaarProveApp' = 'passVilkaarProve'
+) =>
+  fyll(katalog.ProvGratisArk[nokkel], {
+    dager: 7,
+    forsteBelastning: forsteBelastningsTekst(7, locale),
+    pris: '249 kr',
+    dato: fornyelsesTekst('season_pass', locale, 7),
+    dekning
+  });
 
+describe('ProvGratisArk — vilkårene følger sesongen', () => {
   it('september: «resten av høsten nå»', () => {
     rendrer('start');
     expect(screen.getByText(vilkaar(nb, nb.ProvGratisArk.passDekningHost, 'nb')).textContent).toContain(
@@ -298,5 +311,147 @@ describe('ProvGratisArk — vilkårene følger sesongen', () => {
     expect(
       screen.getByText(fyll(nb.ProvGratisArk.passVilkaarProveUkjentLengde, { pris: '249 kr', dekning }))
     ).toBeTruthy();
+  });
+});
+
+/**
+ * ⭐ Lovende finner ofte ingenting fra november til juni — kartet sier selv at
+ * forholdene er for svake. Arket som vises på forsiden og etter 30 sekunder i
+ * kartet, skal ikke selge «Alle 12 lovende områder nær deg» de månedene.
+ */
+describe('ProvGratisArk — brødteksten følger sesongen', () => {
+  const iMaaned = (m: number) => new Date(`2027-${String(m).padStart(2, '0')}-15T10:00:00Z`);
+  /** Fasit skrevet ut her, ikke lest fra sesongtekst.ts: juli–oktober. */
+  const lovendeNaa = (m: number) => m >= 7 && m <= 10;
+
+  for (const locale of ['nb', 'sv'] as const) {
+    const katalog = locale === 'sv' ? sv : nb;
+
+    it.each([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12])(`${locale}: måned %i`, (m) => {
+      vi.setSystemTime(iMaaned(m));
+      rendrer('start', locale);
+      const [forventet, aldri] = lovendeNaa(m)
+        ? [katalog.ProvGratisArk.tekstStart, katalog.ProvGratisArk.tekstStartBetinget]
+        : [katalog.ProvGratisArk.tekstStartBetinget, katalog.ProvGratisArk.tekstStart];
+      const brodtekst = screen.getByText(forventet);
+      expect(screen.queryByText(aldri)).toBeNull();
+      if (!lovendeNaa(m)) {
+        expect(brodtekst.textContent).not.toMatch(/\b12\b/);
+        expect(brodtekst.textContent).toMatch(locale === 'sv' ? /Från november till juni/ : /Fra november til juni/);
+      }
+    });
+  }
+
+  it('kartets utløsere får den samme sesongteksten som forsiden, på begge språk', () => {
+    vi.setSystemTime(iMaaned(1));
+    for (const utloser of ['forste-okt', 'andre-dag'] as const) {
+      for (const [locale, katalog] of [
+        ['nb', nb],
+        ['sv', sv]
+      ] as const) {
+        rendrer(utloser, locale);
+        expect(screen.getByText(katalog.ProvGratisArk.tekstStartBetinget)).toBeTruthy();
+        expect(screen.queryByText(katalog.ProvGratisArk.tekstStart)).toBeNull();
+        cleanup();
+      }
+    }
+  });
+
+  it('november: betinget brødtekst, mens vilkårene fortsatt sier hva passet dekker («resten av høsten nå»)', () => {
+    vi.setSystemTime(new Date('2026-11-16T13:00:00Z'));
+    rendrer('start');
+    expect(screen.getByText(nb.ProvGratisArk.tekstStartBetinget)).toBeTruthy();
+    expect(screen.getByText(vilkaar(nb, nb.ProvGratisArk.passDekningHost, 'nb')).textContent).toContain('resten av høsten nå');
+  });
+
+  it('«begrenset» beholder «3 av 12» også om vinteren — den vises bare etter at kartet har vist områdene', () => {
+    vi.setSystemTime(iMaaned(1));
+    rendrer('begrenset');
+    expect(screen.getByText(nb.ProvGratisArk.tekst)).toBeTruthy();
+    expect(screen.queryByText(nb.ProvGratisArk.tekstStartBetinget)).toBeNull();
+  });
+});
+
+/**
+ * I appen selger App Store, og Apple forsøker trekket i løpet av det siste
+ * døgnet FØR prøven slutter (kanal.ts / avslutningsfrist). «Fornyes … om du
+ * ikke avslutter før {prøveslutt}» ga en frist et døgn for sent — den som
+ * fulgte den, kunne bli belastet årsprisen. På nett (Stripe, belaster ved
+ * prøveslutt) står teksten uendret.
+ */
+describe('ProvGratisArk — i appen gjelder Apples frist', () => {
+  it('passet med gratisuke: samme datoer og pris som på nett, men avslutt senest 24 timer før prøveslutt', () => {
+    iAppen = true;
+    rendrer('start');
+    const tekst = screen.getByText(vilkaar(nb, nb.ProvGratisArk.passDekningHost, 'nb', 'passVilkaarProveApp')).textContent ?? '';
+    expect(tekst).toContain(`Fra ${FORSTE_BELASTNING} koster passet 249 kr per år`);
+    expect(tekst).toContain(`gjelder da til ${DATO_ETTER_PROVE}`);
+    expect(tekst).toContain('Fornyes automatisk om du ikke avslutter senest 24 timer før prøveperioden er over.');
+    // Prøveslutt er aldri fristen i appen.
+    expect(tekst).not.toContain(`avslutter før ${FORSTE_BELASTNING}`);
+    expect(screen.queryByText(PASS_VILKAAR_PROVE)).toBeNull();
+  });
+
+  it('nettet er uendret: Stripe belaster ved prøveslutt, og der er prøveslutt fristen', () => {
+    iAppen = false;
+    rendrer('start');
+    const tekst = screen.getByText(PASS_VILKAAR_PROVE).textContent ?? '';
+    expect(tekst).toContain(`avslutter før ${FORSTE_BELASTNING}`);
+    expect(tekst).not.toMatch(/24 timer/);
+  });
+
+  it('ukjent lengde i appen: ingen dato, men samme 24-timersfrist', () => {
+    iAppen = true;
+    lofte = { kjent: true, season_pass: { ...PASS, proveDager: null }, premium: MAANED };
+    rendrer('start');
+    const forventet = fyll(nb.ProvGratisArk.passVilkaarProveUkjentLengdeApp, { pris: '249 kr', dekning: nb.ProvGratisArk.passDekningHost });
+    expect(screen.getByText(forventet)).toBeTruthy();
+    expect(forventet).toContain('senest 24 timer før prøveperioden er over');
+    expect(forventet).not.toMatch(/\d{4}/);
+    expect(screen.queryByText(fyll(nb.ProvGratisArk.passVilkaarProveUkjentLengde, { pris: '249 kr', dekning: nb.ProvGratisArk.passDekningHost }))).toBeNull();
+  });
+
+  it('svensk i appen: «senast 24 timmar innan provperioden är slut», aldri «före {datum}»', () => {
+    iAppen = true;
+    rendrer('start', 'sv');
+    const forsteBelastning = forsteBelastningsTekst(7, 'sv');
+    const tekst = screen.getByText(vilkaar(sv, sv.ProvGratisArk.passDekningHost, 'sv', 'passVilkaarProveApp')).textContent ?? '';
+    expect(tekst).toContain(`Från ${forsteBelastning} kostar passet 249 kr per år`);
+    expect(tekst).toContain('Förnyas automatiskt om du inte avslutar senast 24 timmar innan provperioden är slut.');
+    expect(tekst).not.toContain(`före ${forsteBelastning}`);
+  });
+
+  it('sesong og kanal er uavhengige: januar i appen gir vinterleddet, den betingede brødteksten og 24-timersfristen', () => {
+    vi.setSystemTime(new Date('2027-01-15T10:00:00Z'));
+    iAppen = true;
+    rendrer('start');
+    const tekst = screen.getByText(vilkaar(nb, nb.ProvGratisArk.passDekningUtenomSesong, 'nb', 'passVilkaarProveApp')).textContent ?? '';
+    expect(tekst).toContain('hele neste soppsesong er med');
+    expect(tekst).toContain('senest 24 timer før prøveperioden er over');
+    expect(screen.getByText(nb.ProvGratisArk.tekstStartBetinget)).toBeTruthy();
+  });
+
+  it('passet uten gratisuke i appen: ingen prøve, ingen frist å flytte — samme vilkår som før', () => {
+    iAppen = true;
+    lofte = { kjent: true, season_pass: PASS_UTEN_PROVE, premium: MAANED };
+    rendrer('start');
+    expect(screen.getByText(fyll(nb.ProvGratisArk.passVilkaar, { dato: DATO, dekning: nb.ProvGratisArk.passDekningHost }))).toBeTruthy();
+    expect(screen.queryByText(/24 timer/)).toBeNull();
+  });
+
+  it('app-utgavene skiller seg fra nettutgavene bare i fristen, på begge språk', () => {
+    for (const [katalog, nett, app] of [
+      [nb, 'før {forsteBelastning}.', 'senest 24 timer før prøveperioden er over.'],
+      [sv, 'före {forsteBelastning}.', 'senast 24 timmar innan provperioden är slut.']
+    ] as const) {
+      const a = katalog.ProvGratisArk;
+      expect(a.passVilkaarProveApp).toBe(a.passVilkaarProve.replace(nett, app));
+    }
+    expect(nb.ProvGratisArk.passVilkaarProveUkjentLengdeApp).toBe(
+      nb.ProvGratisArk.passVilkaarProveUkjentLengde.replace('før prøveperioden er over.', 'senest 24 timer før prøveperioden er over.')
+    );
+    expect(sv.ProvGratisArk.passVilkaarProveUkjentLengdeApp).toBe(
+      sv.ProvGratisArk.passVilkaarProveUkjentLengde.replace('innan provperioden är slut.', 'senast 24 timmar innan provperioden är slut.')
+    );
   });
 });

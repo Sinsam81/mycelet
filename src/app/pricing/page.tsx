@@ -13,7 +13,7 @@ import { BILLING_PLANS, FREE_DAILY_AI_LIMIT, STRIPE_PROVEDAGER } from '@/lib/bil
 import { canPurchasePlan, getBlockingPaidPlan, getPlanViewState } from '@/lib/billing/plan-state';
 import { fornyelsesTekst, forsteBelastningsTekst } from '@/lib/billing/fornyelse';
 import { kanFaaProveperiode } from '@/lib/billing/provetilbud';
-import { prisSesonglinje } from '@/lib/billing/sesongtekst';
+import { prediksjonspunktPris, prisSesonglinje } from '@/lib/billing/sesongtekst';
 import { perMaanedAvAarspris, seasonPriceComesFromStore, showsStorePrices } from '@/lib/billing/store-pricing';
 import { statusLabel, tierLabel } from '@/lib/billing/labels';
 import { APPLE_ABONNEMENTER_URL, abonnementKanal, faq2Nokkel, periodelinje, periodelinjeVerdier } from '@/lib/billing/kanal';
@@ -93,6 +93,15 @@ function PricingInner() {
     ingenAbonnering,
     () => prisSesonglinje(new Date()),
     () => null
+  );
+  // Premium-punktet om lovende områder følger sesongen på samme måte: fra
+  // november til juni finner ⭐ Lovende ofte ingenting, også for betalende
+  // (sesongtekst.ts → lovendeLofte). Serverbildet er den betingede ordlyden,
+  // som er sann hele året.
+  const prediksjonspunkt = useSyncExternalStore(
+    ingenAbonnering,
+    () => prediksjonspunktPris(new Date()),
+    () => 'premiumFeature2Betinget' as const
   );
 
   const [loadingPlan, setLoadingPlan] = useState<'premium' | 'season_pass' | null>(null);
@@ -196,7 +205,7 @@ function PricingInner() {
       // «Prioritert eksperthjelp (kommer)» sto her, med hake, som fjerde gode
       // ved Premium. Å selge et abonnement på en funksjon som ikke finnes er
       // 3.1.2 rett i fleisen. Den kommer tilbake den dagen den finnes.
-      features: [t('premiumFeature1'), t('premiumFeature2'), t('premiumFeature3')],
+      features: [t('premiumFeature1'), t(prediksjonspunkt), t('premiumFeature3')],
       highlight: false
     },
     {
@@ -734,12 +743,20 @@ function PricingInner() {
               : kanFaaProve
                 ? STRIPE_PROVEDAGER
                 : 0;
+            // I appen er prøveslutt ingen frist: Apple forsøker trekket i løpet
+            // av det siste døgnet FØR prøven slutter (kanal.ts /
+            // avslutningsfrist). «Første belastning {prøveslutt}» leste som om
+            // prøveslutt var fristen, og motsa statuskortet over, som etter
+            // kjøpet sier «Prøven varer til … – avslutt senest …». Appens linje
+            // sier det samme før kjøpet, med «senest 24 timer før» i stedet for
+            // et klokkeslett (se ProvGratisArk). Nettlinja er uendret: Stripe
+            // belaster ved prøveslutt.
             const fornyelseTekst = !checkoutPlan
               ? null
               : proveDager === null
-                ? t('renewsOnProveUkjentLengde')
+                ? t(native ? 'renewsOnProveUkjentLengdeApp' : 'renewsOnProveUkjentLengde')
                 : proveDager > 0
-                  ? t('renewsOnEtterProve', {
+                  ? t(native ? 'renewsOnEtterProveApp' : 'renewsOnEtterProve', {
                       forsteBelastning: forsteBelastningsTekst(proveDager, locale),
                       dato: fornyelsesTekst(checkoutPlan, locale, proveDager)
                     })

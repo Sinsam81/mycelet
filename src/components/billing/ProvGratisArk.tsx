@@ -8,9 +8,10 @@ import { X } from 'lucide-react';
 import type { TILBUD_UTLOSERE } from '@/lib/bruk/bruksdag';
 import { fornyelsesTekst, forsteBelastningsTekst } from '@/lib/billing/fornyelse';
 import { planLofte } from '@/lib/billing/prove-lofte';
-import { passDekning } from '@/lib/billing/sesongtekst';
+import { passDekning, provearkTekst } from '@/lib/billing/sesongtekst';
 import { meldTilbudsarkApent } from '@/lib/billing/tilbudsark-apent';
 import { useProveLofte } from '@/lib/hooks/useProveLofte';
+import { isNativePlatform } from '@/lib/native/platform';
 import { LUKKEKNAPP_KLASSER, useDialogFokus } from '@/components/ui/useDialogFokus';
 
 /** Hva som fikk arket til å vises — samme verdier som bruksdag-raden «tilbud» lagrer. */
@@ -39,19 +40,37 @@ export type TilbudUtloser = (typeof TILBUD_UTLOSERE)[number];
  * «Gratis viser 3 av 12» sies bare når det er det brukeren ser (utløser
  * «begrenset»).
  *
+ * Brødteksten følger sesongen, som vilkårsleddet {dekning}: «Alle 12 lovende
+ * områder nær deg» står bare juli–oktober. Fra november til juni finner
+ * ⭐ Lovende ofte ingenting å vise, også for betalende, så der sier arket det
+ * rett ut i stedet for å selge en prøveuke på en knapp som svarer «for svake»
+ * (sesongtekst.ts → lovendeLofte). «Begrenset» beholder sin tekst: den vises
+ * bare etter at kartet har vist lovende områder.
+ *
  * Løftet om en gratis uke står bare når det er sant FOR DEN PLANEN: på nett
  * gir Stripe den til nye abonnenter på begge; i appen bare når App Store gir
  * den på akkurat det produktet (useProveLofte, per plan). Har passet ingen
  * gratisuke i butikken, selges det til pris — «Kjøp Sesongpass» — mens
  * månedslinja kan ha sin egen gratisuke.
  *
- * Med gratisuke sier vilkårene BEGGE datoene: når de 249 kronene trekkes
- * første gang (kjøpsdag + prøvedager — Stripe fakturerer ved trial_end,
- * Apple det samme), og at passet gjelder ett år fra DEN dagen. Første utgave
- * regnet passet fra kjøpsdagen og nevnte aldri første belastning; «gjelder
- * til september 2027, deretter 249 kr» leste som et gratis år, og Apple
- * krever datoen for første belastning ved introduksjonstilbud (3.1.2). Er
- * prøvens lengde ukjent, sies ingen dato — heller ingen enn en gal.
+ * Med gratisuke sier vilkårene BEGGE datoene: når det betalte året begynner
+ * (kjøpsdag + prøvedager — der begynner det både hos Stripe og Apple), og at
+ * passet gjelder ett år fra DEN dagen. Første utgave regnet passet fra
+ * kjøpsdagen og nevnte aldri første belastning; «gjelder til september 2027,
+ * deretter 249 kr» leste som et gratis år, og Apple krever datoen for første
+ * belastning ved introduksjonstilbud (3.1.2). Er prøvens lengde ukjent, sies
+ * ingen dato — heller ingen enn en gal.
+ *
+ * Fristen for å avslutte er IKKE den samme. Stripe fakturerer ved trial_end,
+ * så på nett er prøveslutt fristen («om du ikke avslutter før {dato}»). Apple
+ * forsøker trekket i løpet av det siste døgnet FØR prøven slutter (kanal.ts /
+ * avslutningsfrist). Sto nettutgaven i appen, kunne en som avsluttet kvelden
+ * før prøveslutt alt være belastet årsprisen. I appen (isNativePlatform)
+ * sier vilkårene derfor «senest 24 timer før prøveperioden er over», samme
+ * frist som statuskortet og påminnelsen gir etter kjøpet. Ikke et klokkeslett:
+ * prøvens lengde kommer fra RevenueCat som «P1M» = 30 dager, og en måned som
+ * begynner i februar er kortere, så et utregnet tidspunkt kunne ligget etter
+ * Apples.
  *
  * Portal til <body>: kartets verktøyrad har en CSS-transform, og position:fixed
  * inni en transformert forelder får forelderen som ramme.
@@ -111,16 +130,23 @@ export function ProvGratisArk({
   // Hva passet dekker følger sesongen: «resten av høsten nå» sto ubetinget og
   // ble vist også i januar. Bare dette leddet varierer — første belastning,
   // pris, fornyelse og avslutning står likt i alle varianter (sesongtekst.ts).
+  // Brødteksten følger også sesongen (provearkTekst), med samme «nå».
   // Trygt å regne i render: komponenten returnerer null uten document (over)
   // og tegnes gjennom en portal, så ingenting av dette er servertegnet.
-  const dekning = t(passDekning(new Date()));
+  const naa = new Date();
+  const dekning = t(passDekning(naa));
+  const brodtekst = t(begrenset ? 'tekst' : provearkTekst(naa));
+  // I appen selger App Store, og Apples frist for å avslutte en prøve ligger
+  // ett døgn før prøveslutt (se doc-kommentaren over). Synkront og trygt i
+  // render av samme grunn som datoen: arket tegnes bare i nettleseren.
+  const app = isNativePlatform();
   const vilkaar = !pass
     ? t('vilkaarUtenProve')
     : !pass.harProve
       ? t('passVilkaar', { dato: passDato, dekning })
       : passProveDager === null
-        ? t('passVilkaarProveUkjentLengde', { pris: pass.pris, dekning })
-        : t('passVilkaarProve', {
+        ? t(app ? 'passVilkaarProveUkjentLengdeApp' : 'passVilkaarProveUkjentLengde', { pris: pass.pris, dekning })
+        : t(app ? 'passVilkaarProveApp' : 'passVilkaarProve', {
             dager: passProveDager,
             forsteBelastning: forsteBelastningsTekst(passProveDager, locale),
             pris: pass.pris,
@@ -161,7 +187,7 @@ export function ProvGratisArk({
             <X className="h-5 w-5" aria-hidden />
           </button>
         </div>
-        <p className="mt-2 text-sm leading-relaxed text-gray-700">{t(begrenset ? 'tekst' : 'tekstStart')}</p>
+        <p className="mt-2 text-sm leading-relaxed text-gray-700">{brodtekst}</p>
         <p className={pass ? 'mt-2 text-sm leading-relaxed text-gray-700' : 'mt-1 text-xs text-gray-500'}>{vilkaar}</p>
         <div className="mt-4 flex flex-col gap-2">
           <Link

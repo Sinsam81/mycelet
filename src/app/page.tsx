@@ -31,6 +31,7 @@ import { logger } from '@/lib/log';
 import { BLOKKERINGSMARGIN, utenBlokkerte } from '@/lib/moderation/blokkering';
 import { seasonHeadline } from '@/lib/utils/season-headline';
 import { sesongtilstand } from '@/lib/sesong/sesongtilstand';
+import { prediksjonspunktHjem } from '@/lib/billing/sesongtekst';
 import { erOppsummeringstid, sesongoppsummering } from '@/lib/findings/sesongoppsummering';
 
 type HomeTranslator = Awaited<ReturnType<typeof getTranslations<'Home'>>>;
@@ -356,7 +357,9 @@ async function HjemInnhold({
           11. sep 2026). Betalende ser ingenting av dette.
           Kortet leder til sesongpasset (?plan=season_pass — prissiden åpner med det
           valgt) og lover ingen sopp: tittelen sier hva du får, ikke hva du finner.
-          Punktene i samme rekkefølge som arket: områdene med begrunnelse, offline, AI sist. */}
+          Punktene i samme rekkefølge som arket: områdene med begrunnelse, offline, AI sist.
+          Områdepunktet følger sesongen som arket: november–juni finner ⭐ Lovende
+          ofte ingenting, så der står «når forholdene tillater det» (sesongtekst.ts). */}
       {betaler ? null : (
       <Link
         href="/pricing?plan=season_pass"
@@ -368,7 +371,7 @@ async function HjemInnhold({
           </div>
           <ul className="mt-3 space-y-1.5 text-sm text-white/90">
             <li className="flex items-center gap-2">
-              <Check className="h-4 w-4 shrink-0 text-amber-400" /> {t('premiumFeatureFullPrediction')}
+              <Check className="h-4 w-4 shrink-0 text-amber-400" /> {t(prediksjonspunktHjem(naa))}
             </li>
             <li className="flex items-center gap-2">
               <Check className="h-4 w-4 shrink-0 text-amber-400" /> {t('premiumFeatureOfflineMap')}

@@ -62,17 +62,31 @@ export async function GET(request: NextRequest) {
     const capabilities = getBillingCapabilities(subscription);
 
     // Får kunden gratisuka? Én fasit, den samme som checkout bruker når den
-    // avgjør trial_period_days (tidligere-abonnent.ts): arket, forsidekortet
-    // og headeren leste før «finnes det en rad?» og lovet uka til en som hadde
-    // slettet kontoen etter en betalt sesong. Betalende spør vi ikke om —
-    // de kan ikke løse inn noe, og Stripe slipper et oppslag per sidevisning.
+    // avgjør trial_period_days (harHattTilgangFor i tidligere-abonnent.ts).
+    // Headeren, kartarket og prissiden leser svaret herfra
+    // (kanFaaProveperiode); flatene leste før «finnes det en rad?» og lovet
+    // uka til en som hadde slettet kontoen etter en betalt sesong. Betalende
+    // spør vi ikke om — de kan ikke løse inn noe, og Stripe slipper et
+    // oppslag per sidevisning.
     //
     // Fristen for Stripe-oppslaget (4 s per kall, 5 s samlet) ligger i
-    // tidligere-abonnent.ts, ikke her: forsiden og checkout gjør det samme
-    // oppslaget, og de tre skal vente like lenge og svare det samme. Går
+    // tidligere-abonnent.ts, ikke her: denne ruta og checkout kaller samme
+    // funksjon, venter like lenge og svarer likt når Stripe er tregt. Går
     // taket ut, er svaret det samme som når Stripe feiler — prøven som
-    // standard — i stedet for at headeren, arket og prissiden henger for
-    // alle som ikke betaler. Herfra kommer bare logglinja.
+    // standard, slik checkout også gir den — i stedet for at headeren, arket
+    // og prissiden henger for alle som ikke betaler. Herfra kommer bare
+    // logglinja. (Det er to oppslag til hver sin tid: et Stripe som svarer på
+    // det ene og ikke det andre, kan fortsatt gi to svar — se
+    // tidligere-abonnent.ts.)
+    //
+    // Forsidens innhold (startarket og Premium-kortet) gjør IKKE dette
+    // oppslaget. Det bruker visningsvarianten provesvarForVisning
+    // (tidligere-abonnent-visning.ts): samme regel, men kortere frist (2,5 s),
+    // og et svar som ikke kom i tide eller feilet er «ukjent» — da lover
+    // forsiden ingenting i stedet for å gjette på prøven. En treg Stripe-dag
+    // kan derfor gi nøytral knapp og intet ark på forsiden mens headeren over
+    // den, som leser denne ruta, sier «Prøv gratis». Det er bevisst: forsiden
+    // avgjør ingenting, og «ukjent» kan aldri love en uke checkout nekter.
     const kanFaaProve =
       !capabilities.paid &&
       !(await harHattTilgangFor({

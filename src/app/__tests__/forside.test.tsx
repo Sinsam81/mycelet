@@ -307,6 +307,24 @@ describe('forsiden — gratisuka loves bare når den finnes', () => {
   });
 });
 
+describe('forsiden — Premium-kortet lover ikke lovende områder utenom sesongen', () => {
+  // ⭐ Lovende finner ofte ingenting fra november til juni, også for betalende
+  // (sesongtekst.ts → lovendeLofte). Da sier punktet «når forholdene tillater det».
+  it.each([
+    ['september', '2026-09-15T10:00:00Z', 'premiumFeatureFullPrediction'],
+    ['november', '2026-11-16T10:00:00Z', 'premiumFeatureFullPredictionBetinget'],
+    ['januar', '2027-01-15T10:00:00Z', 'premiumFeatureFullPredictionBetinget'],
+    ['juni', '2027-06-15T10:00:00Z', 'premiumFeatureFullPredictionBetinget'],
+    ['juli', '2027-07-15T10:00:00Z', 'premiumFeatureFullPrediction']
+  ])('%s: %s gir %s', async (_maaned, naa, nokkel) => {
+    vi.setSystemTime(new Date(naa));
+    const punkter = alle(premiumKort(await forside()))
+      .filter((e) => e.type === 'li')
+      .map((e) => tekst(e).trim());
+    expect(punkter).toEqual([nokkel, 'premiumFeatureOfflineMap', 'premiumFeatureUnlimitedAi']);
+  });
+});
+
 describe('forsiden — egne funn og varsel', () => {
   it('følger alt et område: kortene får vite det, og oppfordringen under er borte', async () => {
     tilstand.svar.alert_subscriptions = { data: { region: 'Oslo' }, error: null };
