@@ -157,6 +157,14 @@ describe('assessFlush — language', () => {
   it('defaults to Norwegian when no locale is given', () => {
     expect(assessFlush(dry).title).toBe('Tørt — soppen venter på regn');
   });
+
+  it('svensk «för lite fukt», ikke «lite fukt» — som på svensk leses «litt fukt»', () => {
+    expect(assessFlush(dry, undefined, 'sv').message).toBe(
+      'För lite fukt och inget regn i sikte. Chanserna är små tills det kommer nederbörd.'
+    );
+    // Norsk «lite» betyr allerede «ikke mye» — uendret.
+    expect(assessFlush(dry).message).toBe('Lite fukt og ingen regn i sikte. Sjansene er små inntil det kommer nedbør.');
+  });
 });
 
 /**
@@ -393,6 +401,128 @@ describe('assessFlush — skuldrene', () => {
         expect(tekst).not.toMatch(/kantarell|steinsopp|karljohan|piggsopp/i);
       }
     }
+  });
+});
+
+/**
+ * Fuktig mark utenfor temperaturbåndet. Før falt den gjennom til «Tørt —
+ * soppen venter på regn — Lite fukt og ingen regn i sikte», eller til «Regn på
+ * vei — sopp om ~N dager» når prognosen hadde regn — som om regn var det som
+ * manglet. 20. august, 21 °C og fuktindeks 0,649 sto det rett under «🍄
+ * Perfekt soppdag i dag!».
+ */
+describe('assessFlush — fuktig, men for varmt eller for kaldt', () => {
+  const FUKTIG = { soilMoistureIndex: 0.649, rain7dMm: 41.5, forecast: [] as DailyForecast[] };
+
+  it('20. august, 21 °C: «Fuktig, men varmt», grå dvale — ikke «Tørt — Lite fukt»', () => {
+    const nb = assessFlush({ ...FUKTIG, month: 8, dayOfMonth: 20, currentTempC: 21 });
+    expect(nb).toEqual({
+      status: 'dormant',
+      daysUntil: null,
+      title: 'Fuktig, men varmt — soppen venter på kjøligere vær',
+      message:
+        'Marka er fuktig nok, men det er for varmt for soppen akkurat nå. Det kan bli bedre når det blir kjøligere.',
+      reason: 'warm'
+    });
+    const sv = assessFlush({ ...FUKTIG, month: 8, dayOfMonth: 20, currentTempC: 21 }, undefined, 'sv');
+    expect(sv).toMatchObject({
+      status: 'dormant',
+      reason: 'warm',
+      title: 'Fuktigt, men varmt — svampen väntar på svalare väder',
+      message:
+        'Marken är fuktig nog, men det är för varmt för svampen just nu. Det kan bli bättre när det blir svalare.'
+    });
+  });
+
+  it('mellom frostporten (2 °C) og båndet (3 °C): «Fuktig, men kaldt»', () => {
+    const f = assessFlush({ ...FUKTIG, month: 10, dayOfMonth: 10, currentTempC: 2.5 });
+    expect(f).toMatchObject({
+      status: 'dormant',
+      reason: 'cold',
+      title: 'Fuktig, men kaldt — soppen venter på mildere vær'
+    });
+    expect(assessFlush({ ...FUKTIG, month: 10, dayOfMonth: 10, currentTempC: 2.5 }, undefined, 'sv').title).toBe(
+      'Fuktigt, men kallt — svampen väntar på mildare väder'
+    );
+    // Under 2 °C er det frosten som før.
+    expect(assessFlush({ ...FUKTIG, month: 10, dayOfMonth: 10, currentTempC: 1.9 }).title).toBe('For kaldt akkurat nå');
+  });
+
+  it('regn i prognosen gjør det ikke til «Regn på vei» — det er ikke regn som mangler', () => {
+    const f = assessFlush({ ...FUKTIG, forecast: fc([1, 10, 0]), month: 9, dayOfMonth: 15, currentTempC: 23 });
+    expect(f.status).toBe('dormant');
+    expect(f.reason).toBe('warm');
+    expect(f.daysUntil).toBeNull();
+  });
+
+  it('sier aldri «Tørt» eller «Lite fukt» om fuktig mark, fra −5 til 30 °C', () => {
+    for (let currentTempC = -5; currentTempC <= 30; currentTempC += 0.5) {
+      for (const soilMoistureIndex of [0.55, 0.8, 1]) {
+        for (const forecast of [[] as DailyForecast[], fc([0, 12, 0])]) {
+          for (const locale of ['nb', 'sv'] as const) {
+            const f = assessFlush(
+              { soilMoistureIndex, rain7dMm: 0, currentTempC, forecast, month: 9, dayOfMonth: 15 },
+              undefined,
+              locale
+            );
+            const hvor = `${currentTempC} °C, fukt ${soilMoistureIndex}, ${locale}`;
+            expect(['fruiting', 'dormant'], hvor).toContain(f.status);
+            expect(`${f.title} ${f.message}`, hvor).not.toMatch(/Tørt|Torrt|Lite fukt|regn på vei|regn på väg/i);
+            // Modent nøyaktig i båndet; utenfor det sier banneret hvilken vei.
+            expect(f.status === 'fruiting', hvor).toBe(isMildForFlush(currentTempC));
+            if (f.status === 'dormant') expect(f.reason, hvor).toBe(currentTempC > 20 ? 'warm' : 'cold');
+          }
+        }
+      }
+    }
+  });
+
+  it('tørr mark utenfor båndet er fortsatt «Tørt» — det er sant', () => {
+    const f = assessFlush({ soilMoistureIndex: 0.3, rain7dMm: 2, currentTempC: 25, forecast: [], month: 8, dayOfMonth: 1 });
+    expect(f.status).toBe('dry');
+    expect(f.title).toBe('Tørt — soppen venter på regn');
+  });
+
+  it('de nye ordene finnes på begge språk, svensk er svensk, og ingen lover funn', () => {
+    for (const currentTempC of [2.5, 25]) {
+      const nb = assessFlush({ ...FUKTIG, month: 9, dayOfMonth: 15, currentTempC });
+      const sv = assessFlush({ ...FUKTIG, month: 9, dayOfMonth: 15, currentTempC }, undefined, 'sv');
+      expect(sv.title).not.toBe(nb.title);
+      expect(`${sv.title} ${sv.message}`).not.toMatch(/[æøÆØ]/);
+      expect(`${nb.title} ${nb.message}`).not.toMatch(/[äöÄÖ]/);
+      for (const tekst of [`${nb.title} ${nb.message}`, `${sv.title} ${sv.message}`]) {
+        expect(tekst).not.toContain('🍄');
+        expect(tekst).not.toMatch(/ta turen ut|ut i skogen|finner du|hittar du|garanter|kantarell|steinsopp/i);
+      }
+    }
+  });
+});
+
+describe('assessFlush — en dag dommen feirer, er moden her også', () => {
+  // Uten fuktindeks (OpenWeather) slipper dommens fuktveto alt gjennom, mens
+  // banneret leser 7-døgnsregnet. 25 mm på 14 dager, men 5 på sju, ga
+  // «🍄 Perfekt soppdag i dag!» over «Tørt — soppen venter på regn».
+  const UTEN_INDEKS = { soilMoistureIndex: null, rain7dMm: 5, currentTempC: 14, forecast: [] as DailyForecast[] };
+
+  it('feiret dag uten fuktindeks: modent, ikke «Tørt»', () => {
+    const dom = assessMushroomDay(
+      { temperatureC: 14, humidityPct: 85, rain3dMm: 1, rain7dMm: 5, rain14dMm: 25, soilMoistureIndex: null },
+      9,
+      'nb',
+      15
+    );
+    expect(dom.optimal).toBe(true);
+    expect(assessFlush({ ...UTEN_INDEKS, month: 9, dayOfMonth: 15, dayOptimal: dom.optimal })).toMatchObject({
+      status: 'fruiting',
+      title: 'Forholdene er modne nå 🍄'
+    });
+    // Uten feiringen leser banneret sitt eget fuktmål, som før.
+    expect(assessFlush({ ...UTEN_INDEKS, month: 9, dayOfMonth: 15 }).status).toBe('dry');
+  });
+
+  it('feiringen overstyrer aldri temperaturbåndet', () => {
+    const f = assessFlush({ ...UTEN_INDEKS, currentTempC: 21, month: 9, dayOfMonth: 15, dayOptimal: true });
+    expect(f.status).not.toBe('fruiting');
   });
 });
 

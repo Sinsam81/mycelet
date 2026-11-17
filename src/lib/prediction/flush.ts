@@ -13,8 +13,9 @@
 import type { DailyForecast } from '@/lib/weather/forecast';
 import { dayOfYearFromMonth, phenologyFactor } from '@/lib/prediction/phenology';
 import {
+  flushTemperature,
   isInMushroomSeason,
-  isMildForFlush,
+  isWetForFlush,
   seasonShoulder,
   type SeasonShoulder
 } from '@/lib/prediction/mushroom-day';
@@ -32,10 +33,12 @@ export interface FlushAssessment {
   /**
    * Hvorfor status er 'dormant' — bare satt da. 'offSeason' er den generelle
    * sesongporten (desember–mai), og er den forsidekortet IKKE gjentar: dagens
-   * dom over sier allerede nøyaktig det samme. 'cold' og 'speciesOffSeason' er
-   * egne opplysninger og vises alltid.
+   * dom over sier allerede nøyaktig det samme. 'cold', 'warm' og
+   * 'speciesOffSeason' er egne opplysninger og vises alltid. 'cold' er både
+   * frosten (under 2 °C) og fuktig mark under bannerets bånd; 'warm' er fuktig
+   * mark over det.
    */
-  reason?: 'offSeason' | 'cold' | 'speciesOffSeason';
+  reason?: 'offSeason' | 'cold' | 'warm' | 'speciesOffSeason';
   /**
    * Satt når ordene er sesongkvalifisert — 'early' (juni og første halvdel av
    * juli) eller 'late' (november), se seasonShoulder i mushroom-day.ts. Status
@@ -59,6 +62,12 @@ export interface FlushInput {
    * alt «🍄 Perfekt soppdag i dag!». Da står feiringen her også, selv i en
    * skulder — et gult «men sent i sesongen» under den ville vært en ny
    * motsigelse. Uten verdien regnes dagen som ikke feiret.
+   *
+   * Uten fuktindeks (OpenWeather) er en feiret dag også fuktig nok her:
+   * dommens fuktport har alt sagt ja, mens banneret leser 7-døgnsregnet og
+   * kunne sagt «Tørt» under feiringen. Med indeks er de to samme port, og
+   * banneret leser sin egen. Temperaturbåndet gjelder uansett — en feiret dag
+   * ligger alltid innenfor det.
    */
   dayOptimal?: boolean;
   soilMoistureIndex: number | null;
@@ -122,10 +131,6 @@ function flushLagFor(species?: FlushSpeciesContext): number {
   return GENUS_FLUSH_LAG[species.genus] ?? FLUSH_LAG_DAYS;
 }
 
-function clamp01(v: number): number {
-  return Math.max(0, Math.min(1, v));
-}
-
 /**
  * User-facing copy per language. The flush banner is rendered verbatim from
  * `title`/`message`, so the caller passes the reader's locale — otherwise a
@@ -145,6 +150,17 @@ interface FlushCopy {
   soonMessage: (rainInDays: number) => string;
   dryTitle: string;
   dryMessage: string;
+  /**
+   * Fuktig mark, men utenfor temperaturbåndet (flushTemperature i
+   * mushroom-day.ts). Før fikk den marka «Tørt — soppen venter på regn — Lite
+   * fukt og ingen regn i sikte», eller «Regn på vei — sopp om ~N dager», som om
+   * det var regn som manglet. Samme form som «Tørt — soppen venter på regn»:
+   * hva som er på plass, og hva soppen venter på. Lover ingenting.
+   */
+  moistWarmTitle: string;
+  moistWarmMessage: string;
+  moistColdTitle: string;
+  moistColdMessage: string;
   /**
    * Skuldrene (seasonShoulder). Uten disse sto det «Forholdene er modne nå 🍄 —
    * soppen kommer nå. Ta turen ut!» midt i november, under en gul ring og over
@@ -182,6 +198,12 @@ const COPY: Record<Locale, FlushCopy> = {
       `Det er meldt regn om ${rainInDays} dag${rainInDays === 1 ? '' : 'er'}. Soppen følger gjerne ~1 uke etter.`,
     dryTitle: 'Tørt — soppen venter på regn',
     dryMessage: 'Lite fukt og ingen regn i sikte. Sjansene er små inntil det kommer nedbør.',
+    moistWarmTitle: 'Fuktig, men varmt — soppen venter på kjøligere vær',
+    moistWarmMessage:
+      'Marka er fuktig nok, men det er for varmt for soppen akkurat nå. Det kan bli bedre når det blir kjøligere.',
+    moistColdTitle: 'Fuktig, men kaldt — soppen venter på mildere vær',
+    moistColdMessage:
+      'Marka er fuktig nok, men det er for kaldt for soppen akkurat nå. Det kan bli bedre når det blir mildere.',
     fruitingEarlyTitle: 'Fuktig og mildt — men tidlig i sesongen',
     fruitingEarlyMessage:
       'Forholdene er gode nok for de artene som alt har kommet, men det er tidlig, og færre arter er ute enn senere på sommeren og høsten.',
@@ -209,7 +231,14 @@ const COPY: Record<Locale, FlushCopy> = {
     soonMessage: (rainInDays) =>
       `Regn väntas om ${rainInDays} dag${rainInDays === 1 ? '' : 'ar'}. Svampen följer ofta ~1 vecka efter.`,
     dryTitle: 'Torrt — svampen väntar på regn',
-    dryMessage: 'Lite fukt och inget regn i sikte. Chanserna är små tills det kommer nederbörd.',
+    // «För lite fukt»: svensk «lite fukt» leses som «litt fukt», ikke «lite fukt».
+    dryMessage: 'För lite fukt och inget regn i sikte. Chanserna är små tills det kommer nederbörd.',
+    moistWarmTitle: 'Fuktigt, men varmt — svampen väntar på svalare väder',
+    moistWarmMessage:
+      'Marken är fuktig nog, men det är för varmt för svampen just nu. Det kan bli bättre när det blir svalare.',
+    moistColdTitle: 'Fuktigt, men kallt — svampen väntar på mildare väder',
+    moistColdMessage:
+      'Marken är fuktig nog, men det är för kallt för svampen just nu. Det kan bli bättre när det blir mildare.',
     fruitingEarlyTitle: 'Fuktigt och milt — men tidigt på säsongen',
     fruitingEarlyMessage:
       'Förhållandena är bra nog för de arter som redan har kommit, men det är tidigt och färre arter är ute än senare på sommaren och hösten.',
@@ -295,13 +324,19 @@ export function assessFlush(
   const shoulder = speciesCurve == null ? seasonShoulder(month, input.dayOfMonth) : null;
 
   // 3–20 °C. Båndet ligger i mushroom-day.ts, delt med dommen over banneret,
-  // så dommen ikke kan si «Marka er fuktig» der banneret sier «Tørt».
-  const mildNow = isMildForFlush(currentTempC);
-  // Moisture now: prefer the soil-water index, else a rain-based proxy.
-  const wetNow = soilMoistureIndex != null ? soilMoistureIndex : clamp01(rain7dMm / 25);
+  // som nå også krever det for å feire — så «🍄 Perfekt soppdag» aldri står
+  // over noe annet enn modne forhold.
+  const temperatur = flushTemperature(currentTempC);
+  const mildNow = temperatur === 'mild';
+  // Moisture now: prefer the soil-water index, else a rain-based proxy. Samme
+  // grense (0,55) som dommens fuktveto — se isWetForFlush.
+  const wetNow = isWetForFlush(soilMoistureIndex, rain7dMm);
 
-  // Conditions ripe right now.
-  if (wetNow >= 0.55 && mildNow) {
+  // Conditions ripe right now — og alltid på en dag dommen over feirer. Med
+  // fuktindeks er dommens fuktport og wetNow den samme porten; uten den kan
+  // 7-døgnsregnet her si nei der dommen sa ja (se dayOptimal).
+  const feiretUtenIndeks = input.dayOptimal === true && soilMoistureIndex == null;
+  if (mildNow && (wetNow || feiretUtenIndeks)) {
     // Feiringen hører høysesongen til — og en skulderdag dommen over alt
     // feirer. Ellers sier banneret at det er tidlig eller sent, slik ringen og
     // dommen over det gjør.
@@ -320,6 +355,27 @@ export function assessFlush(
       daysUntil: 0,
       title: copy.fruitingTitle,
       message: copy.fruitingMessage
+    };
+  }
+
+  // Fuktig mark, men for varmt eller for kaldt (frosten under 2 °C er tatt
+  // over). Før falt dette gjennom til «Tørt — Lite fukt og ingen regn i sikte»
+  // — eller «Regn på vei — sopp om ~N dager», som om regn var det som manglet.
+  //
+  // Status 'dormant': soppen står stille på grunn av temperaturen, samme
+  // kategori som frosten over ('cold'), og grå i kortet (FLUSH_TINT i
+  // MushroomDayCard.tsx) som det tørre banneret den erstatter. Ikke 'dry' —
+  // statusen ville sagt «tørt» om fuktig mark. Ikke gul 'soon'/'building' —
+  // de lover at noe er på vei, og her vet vi ikke når temperaturen snur.
+  // reconcileFlushWithWeek rører bare 'soon' og 'fruiting', så ordene står.
+  if (wetNow) {
+    const varmt = temperatur === 'warm';
+    return {
+      status: 'dormant',
+      daysUntil: null,
+      title: varmt ? copy.moistWarmTitle : copy.moistColdTitle,
+      message: varmt ? copy.moistWarmMessage : copy.moistColdMessage,
+      reason: varmt ? 'warm' : 'cold'
     };
   }
 

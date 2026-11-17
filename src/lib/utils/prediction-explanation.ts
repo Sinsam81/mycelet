@@ -28,6 +28,7 @@
 import { resolveSpeciesPreferences, type SpeciesContext } from '@/lib/utils/species-scoring';
 import { DEFAULT_LOCALE, type Locale } from '@/i18n/config';
 import { CONDITION_THRESHOLDS } from '@/lib/utils/prediction';
+import { sesongfaseForManed, sesongtilstand } from '@/lib/sesong/sesongtilstand';
 
 export type ExplanationLevel = 'positive' | 'neutral' | 'negative';
 
@@ -226,6 +227,12 @@ interface ExplanationCopy {
   verdictPeak: (name?: string) => string;
   verdictGood: (name?: string) => string;
   verdictStarting: (name?: string) => string;
+  /**
+   * Samme trinn som verdictStarting, etter at toppen av soppåret er passert
+   * (etterToppen). «Så vidt i gang» betyr at noe nettopp har begynt — sant i
+   * juni, usant i oktober og november, der sesongen går mot slutten.
+   */
+  verdictStillGoing: (name?: string) => string;
   verdictQuiet: (name?: string) => string;
 }
 
@@ -305,6 +312,7 @@ const COPY: Record<Locale, ExplanationCopy> = {
     verdictPeak: (name) => (name ? `Nå er det ${name.toLowerCase()} 🍄` : 'Nå er det sopp i skogen 🍄'),
     verdictGood: (name) => (name ? `Gode dager for ${name.toLowerCase()} nå` : 'Gode soppforhold nå'),
     verdictStarting: (name) => (name ? `${name} er så vidt i gang` : 'Soppen er så vidt i gang'),
+    verdictStillGoing: (name) => (name ? `${name} er fortsatt i gang` : 'Soppen er fortsatt i gang'),
     verdictQuiet: (name) => (name ? `Lite ${name.toLowerCase()} i skogen nå` : 'Lite sopp i skogen nå')
   },
   sv: {
@@ -432,7 +440,11 @@ const COPY: Record<Locale, ExplanationCopy> = {
     verdictPeak: (name) => (name ? `Nu är det ${name.toLowerCase()} 🍄` : 'Nu är det svamp i skogen 🍄'),
     verdictGood: (name) => (name ? `Bra dagar för ${name.toLowerCase()} nu` : 'Bra svampförhållanden nu'),
     verdictStarting: (name) => (name ? `${name} är precis i gång` : 'Svampen är precis i gång'),
-    verdictQuiet: (name) => (name ? `Lite ${name.toLowerCase()} i skogen nu` : 'Lite svamp i skogen nu')
+    verdictStillGoing: (name) => (name ? `${name} är fortfarande i gång` : 'Svampen är fortfarande i gång'),
+    // «Inte mycket», ikke «Lite»: norsk «lite» betyr «ikke mye», men svensk
+    // «lite» leses som «litt» — «Lite svamp i skogen nu» kunne lese som en
+    // forsiktig god nyhet på det laveste trinnet.
+    verdictQuiet: (name) => (name ? `Inte mycket ${name.toLowerCase()} i skogen nu` : 'Inte mycket svamp i skogen nu')
   }
 };
 
@@ -789,16 +801,55 @@ const LEVEL_MARK: Record<ExplanationLevel, string> = { positive: '✓', neutral:
 // regionstallet på /soppforhold har samme 0-100-etikett, men helt ulike
 // fordelinger — regionstallet er 90-persentilen OVER ruter. Kallere som har et
 // regionstall sender REGION_CONDITION_THRESHOLDS; alle andre får rutestigen.
+//
+// `maaned` (1–12) velger ordene på det midterste trinnet — se etterToppen.
+// Stigen og tersklene er de samme hele året. Uten måned brukes måneden i Oslo
+// akkurat nå; kallere som vet hvilken dag tallet gjelder, sender den.
 function verdictText(
   score: number,
   copy: ExplanationCopy,
   speciesName?: string,
-  thresholds: ConditionThresholds = CONDITION_THRESHOLDS
+  thresholds: ConditionThresholds = CONDITION_THRESHOLDS,
+  maaned?: number
 ): string {
   if (score >= thresholds.excellent) return copy.verdictPeak(speciesName);
   if (score >= thresholds.good) return copy.verdictGood(speciesName);
-  if (score >= thresholds.moderate) return copy.verdictStarting(speciesName);
+  if (score >= thresholds.moderate) {
+    return etterToppen(maaned) ? copy.verdictStillGoing(speciesName) : copy.verdictStarting(speciesName);
+  }
   return copy.verdictQuiet(speciesName);
+}
+
+/**
+ * Er toppen av soppåret passert — så det midterste trinnet skal si «fortsatt i
+ * gang», ikke «så vidt i gang»?
+ *
+ * Målt i november: områdekortet på forsiden kunne si «Soppen er så vidt i
+ * gang» rett under «Fuktig nok — men sesongen er på hell» og «Fuktig og mildt
+ * — men sent i sesongen». «Så vidt i gang» sier at noe nettopp har begynt.
+ *
+ * Fra fasene i sesongtilstand.ts, den ene kilden for «hvor i soppåret er vi» —
+ * ingen egen månedsliste:
+ *  - ettersesongen (november) og vinteren: ja. Et midt-tall i desember er
+ *    sesongen som henger igjen, ikke en ny som begynner.
+ *  - siste måned i høysesongen (oktober): ja. Toppen er nådd, sesongvekta
+ *    begynner å falle midt i måneden, og mange steder kommer frosten.
+ *  - våren, forsesongen og resten av høysesongen: nei. Der stiger sesongen
+ *    eller står på topp, og da betyr et midt-tall nettopp «så vidt i gang».
+ *
+ * Kalenderen, ikke artens egen sesong: scoreVerdict får bare et navn, og kartets
+ * hjelpetekst og popup må si det samme om samme rute. En art som først
+ * begynner i oktober (vintersopp) får derfor «fortsatt i gang» der.
+ *
+ * Eksportert fordi kartpanelet (HotspotPanel) har sin egen korte etikett for
+ * det samme trinnet. Med «Så vidt i gang» der hele året sa panelet i november
+ * det motsatte av hjelpeteksten på rutene på samme kart. Uten måned: måneden i
+ * Oslo nå, den samme som scoreVerdict bruker når den ikke får noen.
+ */
+export function etterToppen(maaned: number = sesongtilstand(new Date()).maaned): boolean {
+  const fase = sesongfaseForManed(maaned);
+  if (fase === 'ettersesong' || fase === 'vinter') return true;
+  return fase === 'hoysesong' && sesongfaseForManed(maaned + 1) !== 'hoysesong';
 }
 
 /** Formen på en dommestige. Se CONDITION_THRESHOLDS og REGION_CONDITION_THRESHOLDS. */
@@ -815,14 +866,18 @@ export interface ConditionThresholds {
  * fortsatt er underveis, så der finnes verken vær, skog eller sesongkontekst —
  * bare tallet og artsnavnet. Uten denne skrev kartet ut rå «52/100», og det er
  * nettopp tallet uten dom som får alle ruter til å se like ut.
+ *
+ * `maaned` er måneden tallet gjelder (1–12); uten den brukes måneden i Oslo nå.
+ * Den endrer bare ordene på det midterste trinnet — se etterToppen.
  */
 export function scoreVerdict(
   score: number,
   locale?: Locale,
   speciesName?: string,
-  thresholds?: ConditionThresholds
+  thresholds?: ConditionThresholds,
+  maaned?: number
 ): string {
-  return verdictText(score, copyFor(locale), speciesName, thresholds);
+  return verdictText(score, copyFor(locale), speciesName, thresholds, maaned);
 }
 
 export interface SpotSummary {
@@ -842,7 +897,9 @@ export function buildSpotSummary(input: ExplanationInput & { score: number }): S
     verdict: verdictText(
       input.score,
       copy,
-      input.species ? speciesName(input.species, input.locale) : undefined
+      input.species ? speciesName(input.species, input.locale) : undefined,
+      CONDITION_THRESHOLDS,
+      input.month
     ),
     reasons: lines.map((line) => `${LEVEL_MARK[line.level]} ${line.text}`)
   };

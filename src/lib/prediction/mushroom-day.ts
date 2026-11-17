@@ -168,19 +168,61 @@ export function seasonShoulder(month: number, dayOfMonth?: number): SeasonShould
 const FLUSH_MILD_MIN_C = 3;
 const FLUSH_MILD_MAX_C = 20;
 
+/** Hvor temperaturen ligger mot bannerets bånd (3–20 °C). */
+export type FlushTemperature = 'cold' | 'mild' | 'warm';
+
 /**
- * Er det mildt nok til at flush-banneret (flush.ts) kan kalle forholdene modne?
+ * Temperaturen mot bannerets bånd, delt av dommen (her) og banneret (flush.ts).
  *
- * Delt med dommen, fordi de to står rett over hverandre og ikke har samme
- * temperaturskala: scoren gir temperaturpoeng helt opp til 22 °C, banneret
- * slutter på 20. Mellom de to sa dommen «Fuktig nok — men det er tidlig i
- * sesongen — Marka er fuktig og det har kommet nok regn» rett over banneret
- * «Tørt — soppen venter på regn — Lite fukt og ingen regn i sikte» (10. juli,
- * 21 °C, fuktig mark, tørr prognose). Dommen sier nå at marka er fuktig bare
- * der banneret under sier det samme. Tallene og banneret er urørt.
+ * De to står rett over hverandre og har ikke samme temperaturskala: scoren gir
+ * temperaturpoeng helt opp til 22 °C, banneret kaller forholdene modne bare
+ * mellom 3 og 20. Mellom de to sto det:
+ *
+ *  - «🍄 Perfekt soppdag i dag!» rett over «Tørt — soppen venter på regn —
+ *    Lite fukt og ingen regn i sikte» (20. august, 21 °C, 85 %, fuktindeks
+ *    0,649, 45 mm på 14 dager, tørr prognose: score 90, optimal).
+ *  - «Fuktig nok — men det er tidlig i sesongen» over det samme «Tørt»
+ *    (10. juli, 21 °C).
+ *  - «Lite fukt» i banneret hver gang marka VAR fuktig, men temperaturen lå
+ *    utenfor båndet — banneret hadde bare «Tørt» å falle tilbake på.
+ *
+ * Nå krever optimal-porten båndet (assessMushroomDay), dommen navngir
+ * temperaturen utenfor det, og banneret sier «fuktig, men for varmt / for
+ * kaldt» i stedet for «Tørt». Tallet er urørt: scoren regnes som før.
+ *
+ * Ikke-endelige verdier (NaN) havner i 'cold' — ingen adapter leverer dem.
  */
+export function flushTemperature(tempC: number): FlushTemperature {
+  if (tempC > FLUSH_MILD_MAX_C) return 'warm';
+  if (tempC >= FLUSH_MILD_MIN_C) return 'mild';
+  return 'cold';
+}
+
+/** Er det mildt nok til at flush-banneret (flush.ts) kan kalle forholdene modne? Se flushTemperature. */
 export function isMildForFlush(tempC: number): boolean {
-  return tempC >= FLUSH_MILD_MIN_C && tempC <= FLUSH_MILD_MAX_C;
+  return flushTemperature(tempC) === 'mild';
+}
+
+/**
+ * Fuktgrensen dommen og banneret deler: fuktindeksen 0,55. Samme tall som
+ * alltid, nå skrevet ned én gang for de to. («Siste regn»-linja i
+ * prediction-explanation.ts har sin egen kopi — den filen kan ikke importere
+ * herfra uten å lukke en sirkel.)
+ */
+const FLUSH_WET_MIN = 0.55;
+
+/**
+ * Er det fuktig nok til at flush-banneret kaller forholdene modne?
+ *
+ * Fuktindeksen når den finnes. Uten den (OpenWeather) bruker banneret
+ * 7-døgnsregnet som stedfortreder, 25 mm ≈ mettet. Dommens egen fuktport er en
+ * annen uten indeks — den slipper alt gjennom (se moistNow under) — så dommen
+ * spør HER før den skriver «Marka er fuktig». Med indeks er de to portene én og
+ * samme.
+ */
+export function isWetForFlush(soilMoistureIndex: number | null | undefined, rain7dMm: number): boolean {
+  const wet = soilMoistureIndex != null ? soilMoistureIndex : Math.max(0, Math.min(1, rain7dMm / 25));
+  return wet >= FLUSH_WET_MIN;
 }
 
 interface VerdictText {
@@ -220,6 +262,12 @@ interface DayCopy {
   titleLittleRain: string;
   messageLittleRain: string;
   shoulder: Record<SeasonShoulder, ShoulderCopy>;
+  /**
+   * Utenfor bannerets temperaturbånd (flushTemperature). Sier bare at det er
+   * for varmt eller for kaldt — ingenting om marka, som kan være både fuktig og
+   * tørr her. Banneret under sier resten.
+   */
+  temperature: Record<Exclude<FlushTemperature, 'mild'>, VerdictText>;
   // Utenom sesongen: teksten ligger i src/lib/sesong/utenom-sesong-tekst.ts,
   // delt med flush.ts, så de to ikke kan skille lag igjen.
 }
@@ -313,6 +361,16 @@ const COPY: Record<Locale, DayCopy> = {
             'Marka er fuktig og det har kommet nok regn. Det som holder tallet mest nede, er årstiden: det er sent på året, og færre arter er ute nå enn i høysesongen.'
         }
       }
+    },
+    temperature: {
+      warm: {
+        title: 'For varmt for sopp i dag',
+        message: 'Soppen trives best i mildt vær, og akkurat nå er det for varmt.'
+      },
+      cold: {
+        title: 'For kaldt for sopp i dag',
+        message: 'Soppen trives best i mildt vær, og akkurat nå er det for kaldt.'
+      }
     }
   },
   sv: {
@@ -324,8 +382,10 @@ const COPY: Record<Locale, DayCopy> = {
     messageDrySoil:
       'Väder och säsong är på plats, men marken är fortfarande för torr efter torkan. Den behöver ett ordentligt regn, sedan följer svampen om 1–2 veckor.',
     titleLittleRain: 'Milt nog — men det har regnat för lite',
+    // «bara lite» her og i skuldrene: svensk «lite nederbörd» alene leses som
+    // «litt nedbør», ikke «lite nedbør».
     messageLittleRain:
-      'Temperatur och säsong stämmer, men det har kommit lite nederbörd de senaste två veckorna. Första ordentliga regnet sätter i gång det.',
+      'Temperatur och säsong stämmer, men det har bara kommit lite nederbörd de senaste två veckorna. Första ordentliga regnet sätter i gång det.',
     shoulder: {
       early: {
         drySoil: {
@@ -336,7 +396,7 @@ const COPY: Record<Locale, DayCopy> = {
         littleRain: {
           title: 'För lite regn — och tidigt på säsongen',
           message:
-            'Det har kommit lite nederbörd de senaste två veckorna, och det är tidigt på säsongen. Första ordentliga regnet sätter i gång det, men färre arter har kommit nu än senare på sommaren och hösten.'
+            'Det har bara kommit lite nederbörd de senaste två veckorna, och det är tidigt på säsongen. Första ordentliga regnet sätter i gång det, men färre arter har kommit nu än senare på sommaren och hösten.'
         },
         season: {
           title: 'Fuktigt nog — men det är tidigt på säsongen',
@@ -353,13 +413,23 @@ const COPY: Record<Locale, DayCopy> = {
         littleRain: {
           title: 'För lite regn — och säsongen är på upphällningen',
           message:
-            'Det har kommit lite nederbörd de senaste två veckorna, och det är sent på året. Regn kan fortfarande hjälpa de sena arterna, men det är osäkert om det hinner innan säsongen är slut.'
+            'Det har bara kommit lite nederbörd de senaste två veckorna, och det är sent på året. Regn kan fortfarande hjälpa de sena arterna, men det är osäkert om det hinner innan säsongen är slut.'
         },
         season: {
           title: 'Fuktigt nog — men säsongen är på upphällningen',
           message:
             'Marken är fuktig och det har kommit tillräckligt med regn. Det som håller nere siffran mest är årstiden: det är sent på året, och färre arter är ute nu än under högsäsongen.'
         }
+      }
+    },
+    temperature: {
+      warm: {
+        title: 'För varmt för svamp i dag',
+        message: 'Svampen trivs bäst i milt väder, och just nu är det för varmt.'
+      },
+      cold: {
+        title: 'För kallt för svamp i dag',
+        message: 'Svampen trivs bäst i milt väder, och just nu är det för kallt.'
       }
     }
   }
@@ -430,8 +500,10 @@ export function assessMushroomDay(
     moistNow: boolean;
     shoulder: SeasonShoulder | null;
     seasonCostsMost: boolean;
-    /** Banneret under kaller forholdene modne ved denne temperaturen (isMildForFlush). */
-    mildForFlush: boolean;
+    /** Temperaturen mot bannerets bånd (flushTemperature). */
+    temperature: FlushTemperature;
+    /** Banneret under kaller marka fuktig (isWetForFlush). Skiller seg fra moistNow bare uten fuktindeks. */
+    wetForFlush: boolean;
   }): VerdictText {
     const { copy: c, optimal: ok, score: s, inSeasonWindow: iw, rain: r, moistNow: m } = input;
     if (ok) return { title: c.titleOptimal, message: c.messageOptimal };
@@ -444,6 +516,17 @@ export function assessMushroomDay(
     // Under det er «ikke helt optimalt» en dekkende beskrivelse i seg selv.
     // NB: EXPLAIN_SCORE_MIN, ikke OPTIMAL_SCORE_MIN — se kommentaren ved dem.
     if (s >= EXPLAIN_SCORE_MIN) {
+      // Utenfor bannerets temperaturbånd er det temperaturen som stopper dagen:
+      // optimal-porten krever båndet, og banneret under sier «for varmt» eller
+      // «for kaldt» (eller «Tørt» når marka også er tørr). Derfor FØRST — alle
+      // tekstene under påstår at været er på plass («Alt stemmer», «Vær og
+      // sesong er på plass», «Mildt nok», «Temperatur og sesong stemmer»), og
+      // «For lite regn» ville pekt på regn der banneret sier at marka har fukt
+      // nok. Målt før: 20. august, 21 °C, ga «🍄 Perfekt soppdag i dag!» over
+      // «Tørt — Lite fukt»; 10. juli, 21 °C, den intetsigende «ikke helt
+      // optimale» over det samme. Under frostgrensen (2 °C) kunne «Alt stemmer
+      // — Vær og sesong er på plass» stå over «For kaldt akkurat nå».
+      if (input.temperature !== 'mild') return c.temperature[input.temperature];
       // I en skulder (seasonShoulder) er årstiden med i forklaringen: «Alt
       // stemmer — bortsett fra marka» er ikke sant når årstiden selv holder
       // tallet nede, og banneret under (flush.ts) sier fra samme skulder at det
@@ -458,10 +541,11 @@ export function assessMushroomDay(
       // optimale» — den sto 16. november over 69 av 100, der sesongleddet var
       // det som manglet.
       //
-      // Bare der banneret under også kaller forholdene modne (isMildForFlush):
-      // teksten sier «Marka er fuktig», og over 20 °C sier banneret «Tørt» eller
-      // «Regn på vei». Der står den vanlige dommen, som før.
-      if (sk && input.seasonCostsMost && input.mildForFlush) return sk.season;
+      // Teksten sier «Marka er fuktig», så bare der banneret under også sier
+      // det (isWetForFlush). Med fuktindeks er det alltid sant her; uten den
+      // leser banneret 7-døgnsregnet og kan si «Tørt» der 14-døgnsregnet slapp
+      // dommen gjennom.
+      if (sk && input.seasonCostsMost && input.wetForFlush) return sk.season;
     }
     return { title: c.titleNormal, message: c.messageNormal };
   }
@@ -479,13 +563,22 @@ export function assessMushroomDay(
   // own it will celebrate a day when the ground has long since dried out. When
   // the bucket model is available it may VETO the celebration — it can never
   // lift a low score. 0.55 is the same gate assessFlush uses to return
-  // 'fruiting', so the headline and the flush banner directly beneath it cannot
-  // contradict each other. Without this, the card could read "🍄 Perfekt
+  // 'fruiting' (FLUSH_WET_MIN). Without this, the card could read "🍄 Perfekt
   // soppdag i dag!" above a grey "Tørt — soppen venter på regn".
   //
   // Null or undefined (OpenWeather, forecast days) leaves the veto inert.
-  const moistNow = weather.soilMoistureIndex == null || weather.soilMoistureIndex >= 0.55;
-  const optimal = score >= OPTIMAL_SCORE_MIN && inSeasonWindow && rain >= OPTIMAL_RAIN_MIN_MM && moistNow;
+  const moistNow = weather.soilMoistureIndex == null || weather.soilMoistureIndex >= FLUSH_WET_MIN;
+
+  // Bannerets temperaturbånd er også en port. Fuktvetoet alene holdt ikke: over
+  // 20 °C kaller banneret aldri forholdene modne, mens scoren gir temperatur-
+  // poeng til 22 °C — «🍄 Perfekt soppdag i dag!» sto over «Tørt — soppen
+  // venter på regn» (20. august, 21 °C, score 90). Med båndet i porten er en
+  // feiret dag alltid en dag banneret kaller moden. Scoren er urørt; optimal
+  // skifter bare der båndet utelukker dagen, og under 6 °C gir scoren ingen
+  // temperaturpoeng og kan ikke nå 85 uansett — i praksis 20–22 °C.
+  const temperature = flushTemperature(t);
+  const optimal =
+    score >= OPTIMAL_SCORE_MIN && inSeasonWindow && rain >= OPTIMAL_RAIN_MIN_MM && moistNow && temperature === 'mild';
 
   const reasons = buildExplanation({ weather, month, locale })
     .filter((line) => line.level === 'positive')
@@ -503,7 +596,9 @@ export function assessMushroomDay(
     moistNow,
     shoulder: seasonShoulder(month, dayOfMonth),
     seasonCostsMost,
-    mildForFlush: isMildForFlush(t)
+    temperature,
+    // Samme stedfortreder som ruta gir banneret når fuktindeksen mangler.
+    wetForFlush: isWetForFlush(weather.soilMoistureIndex, weather.rain7dMm ?? weather.rain3dMm * 2)
   });
 
   return { optimal, score, title, message, reasons };

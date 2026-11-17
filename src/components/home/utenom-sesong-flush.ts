@@ -7,8 +7,9 @@
  * stedet én rad med lenker til det som faktisk er nyttig utenom sesongen.
  *
  * `reason` er det sikre signalet. Tittel-likheten er reserven for svar som ble
- * cachet før feltet fantes. «For kaldt akkurat nå» (reason 'cold', annen
- * tittel) er en egen opplysning midt i sesongen og skal fortsatt vises.
+ * cachet før feltet fantes. «For kaldt akkurat nå» og «Fuktig, men kaldt»
+ * (reason 'cold') og «Fuktig, men varmt» (reason 'warm') er egne opplysninger
+ * midt i sesongen og skal fortsatt vises.
  *
  * NB: dette avgjøres i KORTET, ikke i API-et. /api/mushroom-forecast må
  * fortsette å sende banneret — PlaceForecastStrip (Mine steder) har flush som

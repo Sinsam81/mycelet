@@ -36,6 +36,18 @@ describe('erUtenomSesongFlush', () => {
     expect(erUtenomSesongFlush(kaldt, assessMushroomDay(vaer, 10).title)).toBe(false);
   });
 
+  it('«Fuktig, men varmt» og «Fuktig, men kaldt» er egne opplysninger og vises', () => {
+    const fuktigVarmt = assessFlush(flushInn(8, 21));
+    expect(fuktigVarmt).toMatchObject({ status: 'dormant', reason: 'warm' });
+    const varmDom = assessMushroomDay({ ...vaer, temperatureC: 21 }, 8);
+    expect(varmDom.title).not.toBe(fuktigVarmt.title);
+    expect(erUtenomSesongFlush(fuktigVarmt, varmDom.title)).toBe(false);
+
+    const fuktigKaldt = assessFlush(flushInn(10, 2.5));
+    expect(fuktigKaldt).toMatchObject({ status: 'dormant', reason: 'cold' });
+    expect(erUtenomSesongFlush(fuktigKaldt, assessMushroomDay({ ...vaer, temperatureC: 2.5 }, 10).title)).toBe(false);
+  });
+
   it('svar cachet før reason-feltet: faller tilbake på lik tittel', () => {
     expect(erUtenomSesongFlush({ status: 'dormant', title: 'Utenom soppsesongen' }, 'Utenom soppsesongen')).toBe(true);
     expect(erUtenomSesongFlush({ status: 'dormant', title: 'For kaldt akkurat nå' }, 'Soppforhold i dag')).toBe(false);

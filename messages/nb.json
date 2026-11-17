@@ -1416,6 +1416,7 @@
   "HotspotPanel": {
     "conditionPoor": "Lite sopp her nå",
     "conditionModerate": "Så vidt i gang",
+    "conditionModerateLate": "Fortsatt i gang",
     "conditionGood": "Gode dager nå",
     "conditionExcellent": "Nå er det sopp 🍄",
     "sourceWeather": "{provider} (vær)",

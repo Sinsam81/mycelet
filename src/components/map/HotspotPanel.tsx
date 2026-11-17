@@ -5,7 +5,7 @@ import { useLocale, useTranslations } from 'next-intl';
 import Link from 'next/link';
 import { ChevronDown, ChevronUp, X } from 'lucide-react';
 import { PredictionResponse } from '@/types/prediction';
-import type { Explanation } from '@/lib/utils/prediction-explanation';
+import { etterToppen, type Explanation } from '@/lib/utils/prediction-explanation';
 import { PredictionExplanation } from '@/components/prediction/PredictionExplanation';
 import { ProveLofteTekst } from '@/components/billing/ProveLofteTekst';
 import { getSpeciesDisplayName } from '@/lib/utils/species-name';
@@ -26,9 +26,14 @@ interface HotspotPanelProps {
 // Verdict styling per condition bucket. The colored dot gives an at-a-glance
 // read before the user even reads the label. The human-readable label is
 // resolved at render time via the translation key `condition_<bucket>`.
-const CONDITION: Record<string, { labelKey: string; dot: string; text: string }> = {
+//
+// `lateLabelKey`: ordene etter toppen av soppåret (etterToppen). Det midterste
+// trinnet sier da «Fortsatt i gang», som hjelpeteksten på rutene (scoreVerdict)
+// — med «Så vidt i gang» hele året sa panelet det motsatte av rutene på samme
+// kart i oktober–mars. Samme stige og samme farge, bare andre ord.
+const CONDITION: Record<string, { labelKey: string; lateLabelKey?: string; dot: string; text: string }> = {
   poor: { labelKey: 'conditionPoor', dot: 'bg-gray-400', text: 'text-gray-700' },
-  moderate: { labelKey: 'conditionModerate', dot: 'bg-amber-400', text: 'text-amber-700' },
+  moderate: { labelKey: 'conditionModerate', lateLabelKey: 'conditionModerateLate', dot: 'bg-amber-400', text: 'text-amber-700' },
   good: { labelKey: 'conditionGood', dot: 'bg-forest-500', text: 'text-forest-800' },
   excellent: { labelKey: 'conditionExcellent', dot: 'bg-forest-600', text: 'text-forest-900' }
 };
@@ -77,6 +82,9 @@ export function HotspotPanel({ speciesId, kanFaaProve = false, data, explanation
   const [showDetails, setShowDetails] = useState(false);
 
   const condition = data ? CONDITION[data.condition] ?? CONDITION.moderate : null;
+  const conditionLabel = condition
+    ? t(condition.lateLabelKey && etterToppen() ? condition.lateLabelKey : condition.labelKey)
+    : null;
   const credit = data ? sourceCredit(data, t) : null;
   const hotspotCount = data?.hotspots?.length ?? 0;
 
@@ -141,7 +149,7 @@ export function HotspotPanel({ speciesId, kanFaaProve = false, data, explanation
           {isLoading && !data ? t('calculatingShort') : data ? `${data.score}/100` : t('mushroomConditions')}
         </span>
         {condition ? (
-          <span className={`shrink-0 text-xs font-medium ${condition.text}`}>{t(condition.labelKey)}</span>
+          <span className={`shrink-0 text-xs font-medium ${condition.text}`}>{conditionLabel}</span>
         ) : null}
       </button>
     );
@@ -200,7 +208,7 @@ export function HotspotPanel({ speciesId, kanFaaProve = false, data, explanation
           {condition ? (
             <p className={`mt-1 flex items-center gap-1.5 text-sm font-medium ${condition.text}`}>
               <span className={`h-2.5 w-2.5 rounded-full ${condition.dot}`} aria-hidden="true" />
-              {t(condition.labelKey)}
+              {conditionLabel}
             </p>
           ) : null}
 
