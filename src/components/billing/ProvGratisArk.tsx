@@ -37,15 +37,25 @@ export type TilbudUtloser = (typeof TILBUD_UTLOSERE)[number];
  * tallet (det NÅR-per-område-signalet som faktisk er validert), så offline-
  * kartet, og AI-soppkjenneren SIST — ingen hadde brukt den på sju dager da
  * arket ledet med «ubegrenset AI» (docs/konvertering-og-gjenbruk-2026-09.md).
- * «Gratis viser 3 av 12» sies bare når det er det brukeren ser (utløser
- * «begrenset»).
  *
  * Brødteksten følger sesongen, som vilkårsleddet {dekning}: «Alle 12 lovende
  * områder nær deg» står bare juli–oktober. Fra november til juni finner
  * ⭐ Lovende ofte ingenting å vise, også for betalende, så der sier arket det
  * rett ut i stedet for å selge en prøveuke på en knapp som svarer «for svake»
- * (sesongtekst.ts → lovendeLofte). «Begrenset» beholder sin tekst: den vises
- * bare etter at kartet har vist lovende områder.
+ * (sesongtekst.ts → lovendeLofte).
+ *
+ * Utløseren «begrenset» (etter et gratissøk på ⭐ Lovende) har sin egen
+ * brødtekst, og den sier GRENSER, aldri et antall: «Gratis viser opptil 3 …
+ * opptil 12 i et finere rutenett». Den sa «Se alle 12 lovende områdene —
+ * Gratis viser 3 … alle 12», på premisset at arket bare vises etter at kartet
+ * har vist områdene, og at tallet derfor var sant. Men utløseren fyrer ved
+ * ett område eller flere, og ingen av tallene er garantert: rutenettet velger
+ * topp 3 (gratis, 5×5) eller topp 12 (betalende, 7×7) i hele boksen, og
+ * kartet kutter etterpå alt utenfor radiusen — 4 av 25 og 12 av 49
+ * rutesentre ligger utenfor. Selv når alle rutene holder og scoren ikke
+ * avhenger av plassering, viser gratis alle 3 i bare 58 % av søkene og
+ * betalende alle 12 i 2 %. «Opptil» er sant hele året, så teksten trenger
+ * ingen sesongbryter, og tittelen følger planen som for de andre utløserne.
  *
  * Løftet om en gratis uke står bare når det er sant FOR DEN PLANEN: på nett
  * gir Stripe den til nye abonnenter på begge; i appen bare når App Store gir
@@ -118,15 +128,15 @@ export function ProvGratisArk({
   const passProveDager = pass?.harProve ? pass.proveDager : 0;
   const passDato = fornyelsesTekst('season_pass', locale, passProveDager ?? 0);
 
-  const tittel = begrenset
-    ? t('tittel')
-    : !pass
-      ? t('tittelUkjent')
-      : !pass.harProve
-        ? t('tittelPassUtenProve', { pris: pass.pris })
-        : pass.proveDager === null
-          ? t('tittelPassProveUkjentLengde')
-          : t('tittelPassProve', { dager: pass.proveDager });
+  // Samme tittel for alle utløsere, også «begrenset»: et antall i tittelen
+  // («Se alle 12 …») var et løfte rutenettet sjelden holder (se over).
+  const tittel = !pass
+    ? t('tittelUkjent')
+    : !pass.harProve
+      ? t('tittelPassUtenProve', { pris: pass.pris })
+      : pass.proveDager === null
+        ? t('tittelPassProveUkjentLengde')
+        : t('tittelPassProve', { dager: pass.proveDager });
   // Hva passet dekker følger sesongen: «resten av høsten nå» sto ubetinget og
   // ble vist også i januar. Bare dette leddet varierer — første belastning,
   // pris, fornyelse og avslutning står likt i alle varianter (sesongtekst.ts).

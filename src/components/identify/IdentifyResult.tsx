@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { AiEdibilityBadge } from '@/components/identify/AiEdibilityBadge';
+import { isRecommendableSpecies } from '@/lib/prediction/recommendable';
 import { isDangerousEdibility } from '@/lib/utils/edibility';
 import { IdentifySuggestion } from '@/types/identify';
 
@@ -38,6 +39,10 @@ export function IdentifyResult({ suggestions, selectedIndex, onSelect }: Identif
         // «topp» og grønt leses som en anbefaling, og en grønn «Topp-sesong
         // nå» ved et dødelig forslag i august var nettopp det.
         const farlig = isDangerousEdibility(suggestion.edibility);
+        // Mat etter katalogen (spiselig eller betinget spiselig) — samme
+        // predikat som AiEdibilityBadge. Avgjør hvilke forvekslingsnotater
+        // kortet har lov til å vise; se under.
+        const mat = isRecommendableSpecies(suggestion.edibility);
         return (
           <article
             key={suggestion.name}
@@ -114,12 +119,34 @@ export function IdentifyResult({ suggestions, selectedIndex, onSelect }: Identif
                 forvekslingsarter rendret før nøyaktig likt som et vi har
                 sjekket — og 24 av 45 spiselige arter i katalogen har ingen
                 rader. Fravær av advarsel må aldri kunne leses som en
-                trygghetserklæring. */}
+                trygghetserklæring.
+
+                «Ikke ført inn ennå» står bare under et forslag som er mat.
+                Under et forslag som ikke er mat var setningen usann: enrich.ts
+                filtrerer bort speilradene som peker på en matsopp, og hvit
+                fluesopp, spiss giftslørsopp, karbol-sjampinjong og falsk
+                kantarell sto da uten rader og fikk «ikke ført inn» — mens
+                artssiden ett trykk unna lister paret. Der er forslagets eget
+                merke (Uspiselig, Giftig, Dødelig, Ukjent) advarselen, samme
+                regel som artssiden. Matsoppens navn skal ikke tilbake ved
+                siden av et dødelig forslag.
+
+                Den røde linja følger også forslagets egen klasse. «Sjekk nøye
+                før du spiser» under et forslag katalogen kaller giftig eller
+                uspiselig (svovelsopp ↔ honningsopp, honningsopp →
+                flatklokkehatt) leses som «spiselig om du er nøye» — det
+                migrasjon 047 tok bort for honningsopp. Der står «ikke spis
+                den», som bare sier noe om forslaget: et resultat lagt i økta
+                før speilregelen kan fortsatt liste en matsopp, og den skal
+                ikke kalles uspiselig. */}
             {suggestion.dangerousLookAlikes && suggestion.dangerousLookAlikes.length > 0 ? (
               <p className="mt-2 rounded-lg border border-red-300 bg-red-50 px-2 py-1.5 text-xs font-medium text-red-900">
-                ⚠️ {t('lookAlikeWarning', { names: suggestion.dangerousLookAlikes.map((d) => d.name).join(', ') })}
+                ⚠️{' '}
+                {t(mat ? 'lookAlikeWarning' : 'lookAlikeWarningNotFood', {
+                  names: suggestion.dangerousLookAlikes.map((d) => d.name).join(', ')
+                })}
               </p>
-            ) : suggestion.lookAlikeData === 'none_recorded' ? (
+            ) : suggestion.lookAlikeData === 'none_recorded' && mat ? (
               <p className="mt-2 rounded-lg border border-amber-300 bg-amber-50 px-2 py-1.5 text-xs text-amber-900">
                 {t('lookAlikeNoneRecorded')}
               </p>

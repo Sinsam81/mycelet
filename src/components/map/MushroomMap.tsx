@@ -604,8 +604,13 @@ export function MushroomMap({
   // den til en som har hatt abonnement før (se kanFaaProveperiode).
   const kanFaaProve = kanFaaProveperiode(billing.data);
   // Prøvetilbudet (src/lib/billing/provetilbud.ts): «andre dag» avgjøres ved
-  // mount fra lokalt lagrede kartdager; «begrenset» når lovende områder viser
-  // 3 av 12. Arket vises maks to ganger, aldri to ganger samme døgn.
+  // mount fra lokalt lagrede kartdager; «begrenset» når et gratissøk på
+  // ⭐ Lovende har vist minst ett område. Gratis får opptil 3, betalende
+  // opptil 12 — ingen av tallene er garantert, så arket, banneret, knappen og
+  // popupen på hvert område sier grenser, ikke antall (se ProvGratisArk).
+  // Popupen lover heller ingen gratisuke: den er en HTML-streng bygd uten
+  // butikkens svar (topSpotPopup.ts), mens knappen spør via ProveLofteTekst.
+  // Arket vises maks to ganger, aldri to ganger samme døgn.
   // Utløseren som fyrte følger med arket til bruksdag-raden («tilbud»/utløser),
   // så trakten ark → pris kan leses per utløser. Null = ikke vist.
   const [visProvetilbud, setVisProvetilbud] = useState<ProvetilbudUtloser | null>(null);

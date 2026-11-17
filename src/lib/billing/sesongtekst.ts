@@ -118,8 +118,11 @@ export function lovendeLofte(naa: Date = new Date()): LovendeLofte {
 
 /**
  * Prøvearkets brødtekst for alle utløsere unntatt «begrenset». Den har sin
- * egen («Gratis viser 3 … alle 12») og vises bare etter at kartet faktisk har
- * vist lovende områder — da er tallet sant.
+ * egen, som bare sier grenser («Gratis viser opptil 3 … opptil 12»), og en
+ * grense er sann hele året, så den trenger ingen bryter her. Et antall var
+ * det ikke: utløseren fyrer ved ett lovende område eller flere, og rutenettet
+ * velger topp 3 / topp 12 i hele boksen før kartet kutter det som ligger
+ * utenfor radiusen (se ProvGratisArk).
  */
 export type ProvearkTekst = 'tekstStart' | 'tekstStartBetinget';
 

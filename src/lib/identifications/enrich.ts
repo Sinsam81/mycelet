@@ -96,9 +96,13 @@ export interface EnrichResult {
  *
  * Kantarell → falsk kantarell står dermed som før, mens falsk kantarell →
  * kantarell faller bort. Står forslaget igjen uten rader, blir tilstanden
- * 'none_recorded' — det gule «fravær av advarsel betyr ikke at den er trygg»,
- * ikke en grønn tvilling. Artssiden viser fortsatt paret fra begge sider, med
- * retningen merket (src/lib/species/forvekslinger.ts).
+ * 'none_recorded', men kortet (IdentifyResult) viser ikke det gule «ikke ført
+ * inn ennå» under et forslag som ikke er mat: radene FINNES, så setningen
+ * ville vært usann for nettopp de fire artene over, og forslagets eget merke
+ * (Uspiselig, Giftig, Dødelig, Ukjent) er advarselen. Ingen grønn tvilling,
+ * og matsoppens navn kommer ikke tilbake ved siden av et dødelig forslag.
+ * Artssiden viser fortsatt paret fra begge sider, med retningen merket
+ * (src/lib/species/forvekslinger.ts).
  */
 export function visesSomFarligForveksling(
   forslagetsSpiselighet: string | null | undefined,

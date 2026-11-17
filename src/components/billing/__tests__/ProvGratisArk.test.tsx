@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
-import { NextIntlClientProvider } from 'next-intl';
+import { NextIntlClientProvider, createTranslator } from 'next-intl';
 import { ProvGratisArk, type TilbudUtloser } from '../ProvGratisArk';
+import { buildTopSpotPopupHtml } from '@/components/map/topSpotPopup';
 import nb from '../../../../messages/nb.json';
 import sv from '../../../../messages/sv.json';
 import { fornyelsesTekst, forsteBelastningsTekst } from '@/lib/billing/fornyelse';
@@ -24,9 +25,10 @@ vi.hoisted(() => {
  * Arket skal (1) lede med sesongpasset og vise måneden som et synlig, like
  * tydelig alternativ, (2) love «7 dager gratis» bare når butikken faktisk gir
  * den PÅ DEN PLANEN — og da si når de 249 kronene trekkes første gang og at
- * passet gjelder ett år fra DEN dagen, (3) si «3 av 12» bare når det er det
- * brukeren ser, og (4) melde utløseren på bruksdag-raden, så trakten
- * ark → pris kan leses per utløser.
+ * passet gjelder ett år fra DEN dagen, (3) si grensene for antall områder
+ * («opptil 3 … opptil 12») bare ved utløseren «begrenset», og aldri love et
+ * antall, og (4) melde utløseren på bruksdag-raden, så trakten ark → pris kan
+ * leses per utløser.
  */
 
 const PASS = { plan: 'season_pass' as const, harProve: true, proveDager: 7, pris: '249 kr' };
@@ -173,9 +175,10 @@ describe('ProvGratisArk — sesongpasset først', () => {
     expect(lenker()[0].textContent).toBe(nb.ProvGratisArk.provPass);
   });
 
-  it('«3 av 12» bare ved utløseren «begrenset» — og også der leder passknappen', () => {
+  it('grensene for antall områder bare ved utløseren «begrenset» — med planens tittel, og passknappen først', () => {
     rendrer('begrenset');
-    expect(screen.getByText(nb.ProvGratisArk.tittel)).toBeTruthy();
+    // Samme tittel som de andre utløserne: ingen «Se alle 12 …».
+    expect(screen.getByRole('heading').textContent).toBe(fyll(nb.ProvGratisArk.tittelPassProve, { dager: 7 }));
     expect(screen.getByText(nb.ProvGratisArk.tekst)).toBeTruthy();
     expect(screen.queryByText(nb.ProvGratisArk.tekstStart)).toBeNull();
     expect(lenker()[0].textContent).toBe(nb.ProvGratisArk.provPass);
@@ -183,7 +186,7 @@ describe('ProvGratisArk — sesongpasset først', () => {
     expect(sendtUtloser()).toBe('begrenset');
   });
 
-  it('kartets andre utløsere snakker om områdeprognosen, ikke om «3 av 12»', () => {
+  it('kartets andre utløsere snakker om områdeprognosen, ikke om grensene for gratis', () => {
     rendrer('forste-okt');
     expect(screen.queryByText(nb.ProvGratisArk.tekst)).toBeNull();
     expect(screen.getByText(nb.ProvGratisArk.tekstStart)).toBeTruthy();
@@ -364,11 +367,107 @@ describe('ProvGratisArk — brødteksten følger sesongen', () => {
     expect(screen.getByText(vilkaar(nb, nb.ProvGratisArk.passDekningHost, 'nb')).textContent).toContain('resten av høsten nå');
   });
 
-  it('«begrenset» beholder «3 av 12» også om vinteren — den vises bare etter at kartet har vist områdene', () => {
-    vi.setSystemTime(iMaaned(1));
-    rendrer('begrenset');
-    expect(screen.getByText(nb.ProvGratisArk.tekst)).toBeTruthy();
-    expect(screen.queryByText(nb.ProvGratisArk.tekstStartBetinget)).toBeNull();
+  it('«begrenset» sier de samme grensene hele året, på begge språk — en grense er sann også om vinteren', () => {
+    for (const m of [1, 9]) {
+      vi.setSystemTime(iMaaned(m));
+      for (const [locale, katalog] of [
+        ['nb', nb],
+        ['sv', sv]
+      ] as const) {
+        rendrer('begrenset', locale);
+        expect(screen.getByText(katalog.ProvGratisArk.tekst)).toBeTruthy();
+        expect(screen.queryByText(katalog.ProvGratisArk.tekstStartBetinget)).toBeNull();
+        expect(screen.queryByText(katalog.ProvGratisArk.tekstStart)).toBeNull();
+        cleanup();
+      }
+    }
+  });
+});
+
+/**
+ * «Begrenset» sa «Se alle 12 lovende områdene — Gratis viser 3. Sesongpass og
+ * Premium viser alle 12». Utløseren fyrer ved ett lovende område eller flere,
+ * og rutenettet velger topp 3 (gratis, 5×5) eller topp 12 (betalende, 7×7) i
+ * hele boksen før kartet kutter det som ligger utenfor radiusen: gratis viste
+ * ofte 1 eller 2, og betalende sjelden 12. Arket, banneret over kartet,
+ * popupen på hvert område og knappen under kartet sier derfor grenser, og
+ * tittelen følger planen.
+ */
+describe('ProvGratisArk — «begrenset» lover aldri et antall', () => {
+  const SPRAK = [
+    { locale: 'nb', katalog: nb, gratis: /\bopptil 3\b/, betalt: /\bopptil 12\b/, alle12: /\balle 12\b/i, bartTall: /\bviser \d/ },
+    { locale: 'sv', katalog: sv, gratis: /\bupp till 3\b/, betalt: /\bupp till 12\b/, alle12: /\balla 12\b/i, bartTall: /\bvisar \d/ }
+  ] as const;
+
+  for (const { locale, katalog, gratis, betalt, alle12, bartTall } of SPRAK) {
+    it(`${locale}: teksten sier grensen for gratis og for betalt, aldri «alle 12» eller et bart tall etter «viser»`, () => {
+      const tekst = katalog.ProvGratisArk.tekst;
+      expect(tekst).toMatch(gratis);
+      expect(tekst).toMatch(betalt);
+      expect(tekst).not.toMatch(alle12);
+      expect(tekst).not.toMatch(bartTall);
+      expect(tekst).not.toMatch(/\b(?:3|12)\./);
+    });
+
+    it(`${locale}: hele arket uten antall, og samme tittel som start-arket i hver butikktilstand`, () => {
+      const tilstander: ProveLofte[] = [
+        { kjent: true, season_pass: PASS, premium: MAANED },
+        { kjent: true, season_pass: PASS_UTEN_PROVE, premium: MAANED },
+        { kjent: true, season_pass: { ...PASS, proveDager: null }, premium: MAANED },
+        { kjent: false }
+      ];
+      for (const tilstand of tilstander) {
+        lofte = tilstand;
+        rendrer('start', locale);
+        const startTittel = screen.getByRole('heading').textContent;
+        cleanup();
+
+        rendrer('begrenset', locale);
+        const tittel = screen.getByRole('heading').textContent ?? '';
+        expect(tittel).toBe(startTittel);
+        expect(tittel).not.toMatch(/\b12\b|\balle\b|\balla\b/i);
+        const arket = screen.getByRole('dialog').textContent ?? '';
+        expect(arket).toContain(katalog.ProvGratisArk.tekst);
+        expect(arket).not.toMatch(alle12);
+        expect(arket).not.toMatch(bartTall);
+        cleanup();
+      }
+    });
+
+    it(`${locale}: banneret, popupen på hvert område og knappen på kartet sier den samme grensen som arket`, () => {
+      for (const nokkel of ['topSpotsLimited', 'premiumWhyHigh', 'seeAll12Premium', 'seeAll12PremiumUtenProve'] as const) {
+        expect(katalog.MushroomMap[nokkel], nokkel).toMatch(betalt);
+        expect(katalog.MushroomMap[nokkel], nokkel).not.toMatch(alle12);
+      }
+    });
+
+    it(`${locale}: popupen en gratisbruker trykker på sier grensen og lover ingen gratisuke`, () => {
+      // Popupen er en HTML-streng (topSpotPopup.ts) som bygges uten butikkens
+      // svar, så den kan ikke spørre slik ProveLofteTekst gjør for knappen
+      // under kartet. «Nye abonnenter får 7 dager gratis» sto der også i
+      // appen når App Store ikke ga gratisuke på produktet, og for den som
+      // har hatt abonnement før. Gratisuka loves av knappen og arket, som spør.
+      const messages = katalog as unknown as Record<string, unknown>;
+      const t = createTranslator({ locale, messages, namespace: 'MushroomMap' });
+      const html = buildTopSpotPopupHtml({
+        spot: { lat: 59.84, lng: 10.65, score: 62 },
+        distanceKm: 3.2,
+        directionLabel: 'sør',
+        radiusM: 714,
+        limited: true,
+        locale,
+        t: t as unknown as (key: string, values?: Record<string, string | number>) => string
+      });
+      expect(html).toContain(katalog.MushroomMap.premiumWhyHigh);
+      expect(html).toMatch(betalt);
+      expect(html).not.toMatch(alle12);
+      expect(html).not.toMatch(/gratis/i);
+    });
+  }
+
+  it('tittelen med antallet finnes ikke lenger i katalogen', () => {
+    expect('tittel' in nb.ProvGratisArk).toBe(false);
+    expect('tittel' in sv.ProvGratisArk).toBe(false);
   });
 });
 
