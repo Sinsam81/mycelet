@@ -65,8 +65,8 @@ const ERRORS = {
     sv: 'AI-identifiering är inte aktiverad ännu.'
   },
   unauthenticated: {
-    nb: 'Ikke autentisert',
-    sv: 'Inte autentiserad'
+    nb: 'Du må være logget inn.',
+    sv: 'Du måste vara inloggad.'
   },
   rate_limit_check_failed: {
     nb: 'Kunne ikke validere rate limit',

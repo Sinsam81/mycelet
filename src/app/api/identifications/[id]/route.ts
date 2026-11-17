@@ -30,7 +30,7 @@ export const runtime = 'nodejs';
  */
 
 const ERRORS = {
-  unauthenticated: { nb: 'Ikke autentisert', sv: 'Inte autentiserad' },
+  unauthenticated: { nb: 'Du må være logget inn.', sv: 'Du måste vara inloggad.' },
   not_found: { nb: 'Fant ikke identifiseringen', sv: 'Hittade inte identifieringen' },
   delete_failed: {
     nb: 'Kunne ikke slette identifiseringen. Prøv igjen.',

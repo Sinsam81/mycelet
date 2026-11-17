@@ -42,6 +42,16 @@ function status(igjen: number | null, over: Partial<{ aktiv: boolean; kanBruke: 
 }
 
 let teller = 0;
+/**
+ * Svaret uten tidsstempelet. `ts` er en ISO-tid, og sekunder eller
+ * millisekunder kan inneholde nettopp sifrene testene leter etter («57») —
+ * da feilet testen et par ganger av ti uten at noe var galt.
+ */
+function utenTidsstempel(tekst: string): string {
+  const { ts: _ts, ...resten } = JSON.parse(tekst) as Record<string, unknown>;
+  return JSON.stringify(resten);
+}
+
 async function kall() {
   // Ny modul per kall: checkAi mellomlagrer i fem minutter på modulnivå.
   vi.resetModules();
@@ -72,7 +82,7 @@ describe('helsesjekkens AI-svar er grovt', () => {
     const { tekst } = await kall();
     const ai = JSON.parse(tekst).checks.ai;
     expect(ai).toMatchObject({ ok: true, tilstand: 'ok' });
-    expect(tekst).not.toContain('1873');
+    expect(utenTidsstempel(tekst)).not.toContain('1873');
     expect(tekst).not.toMatch(/kreditter igjen/i);
   });
 
@@ -80,7 +90,7 @@ describe('helsesjekkens AI-svar er grovt', () => {
     kindwiseSvar = status(57);
     const { tekst } = await kall();
     expect(JSON.parse(tekst).checks.ai).toMatchObject({ ok: true, tilstand: 'lav' });
-    expect(tekst).not.toContain('57');
+    expect(utenTidsstempel(tekst)).not.toContain('57');
   });
 
   it('sperret nøkkel: ikke ok, uten grunn og tall i svaret — men i loggen', async () => {
