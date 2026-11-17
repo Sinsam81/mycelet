@@ -1,4 +1,4 @@
-import type { Locale } from '@/i18n/config';
+import { timeZoneForLocale, type Locale } from '@/i18n/config';
 import { intlLocale } from './intl-locale';
 
 /** Alt vi trenger av en auth-bruker eller en profilrad her: når den ble til. */
@@ -26,7 +26,11 @@ export function memberSinceIso(user: CreatedAtRow | null, profile: CreatedAtRow 
   return user?.created_at ?? profile?.created_at ?? null;
 }
 
-/** Samme valg som over, formatert som «måned år» på brukerens språk. */
+/**
+ * Samme valg som over, formatert som «måned år» på brukerens språk — i
+ * brukerens tidssone. Profilen rendres på en server i UTC: en konto opprettet
+ * 1. desember kl. 00.30 norsk tid var ellers «medlem siden november».
+ */
 export function formatMemberSince(
   user: CreatedAtRow | null,
   profile: CreatedAtRow | null,
@@ -38,5 +42,9 @@ export function formatMemberSince(
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return null;
 
-  return date.toLocaleDateString(intlLocale(locale), { year: 'numeric', month: 'long' });
+  return date.toLocaleDateString(intlLocale(locale), {
+    year: 'numeric',
+    month: 'long',
+    timeZone: timeZoneForLocale(locale)
+  });
 }

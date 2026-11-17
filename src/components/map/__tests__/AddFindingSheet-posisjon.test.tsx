@@ -324,7 +324,29 @@ describe('AddFindingSheet — opprydding og språk', () => {
     rendrer({ kartsenter: LYSNING, kartFlyttet: true }, 'sv');
     await ferskMaaling(HJEMME, 10);
     expect(screen.getByRole('radio', { name: /Där jag står nu/ })).toBeTruthy();
-    expect(screen.getByRole('radio', { name: /Där kartan står/ })).toBeTruthy();
-    expect(screen.getByText(/Kartan står 9 km från där du är nu/)).toBeTruthy();
+    expect(screen.getByRole('radio', { name: /Mitt på kartan/ })).toBeTruthy();
+    expect(screen.getByText(/Kartans mittpunkt ligger 9 km från där du är nu/)).toBeTruthy();
+  });
+
+  /**
+   * Norsk «der kartet står» ble ordrett «där kartan står» — men et kart «står»
+   * ikke på svensk. Svensken sier hvor midten av kartet er. Merknaden på
+   * resultatsiden siterer knappens navn, så den må følge med.
+   */
+  it('svensk: kartet «står» ikke — knappen og alle tekstene som viser til den, sier «Mitt på kartan»', () => {
+    const svenske = [
+      ...Object.values(sv.AddFindingSheet),
+      sv.IdentifyResult.positionOnMapNote
+    ].join('\n');
+    expect(svenske).not.toMatch(/kartan står/i);
+    for (const tekst of [
+      sv.AddFindingSheet.positionChooseMapUntouched,
+      sv.AddFindingSheet.positionChooseGpsMissing,
+      sv.IdentifyResult.positionOnMapNote
+    ]) {
+      expect(tekst).toContain(`«${sv.AddFindingSheet.positionMapCentre}»`);
+    }
+    // Samme kobling på norsk: merknaden siterer knappen ordrett.
+    expect(nb.IdentifyResult.positionOnMapNote).toContain(`«${nb.AddFindingSheet.positionMapCentre}»`);
   });
 });

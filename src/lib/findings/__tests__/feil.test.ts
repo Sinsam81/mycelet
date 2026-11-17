@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { LOCALES, type Locale } from '@/i18n/config';
+import { apiFeilTekst } from '@/lib/api/feil';
 import { FUNN_BESKJED, FUNN_FEIL, delingKaranteneTekst, funnBeskjedTekst, funnFeilTekst, type FunnFeilKode } from '../feil';
 
 /**
@@ -28,6 +29,19 @@ describe('feiltekstene til /api/findings', () => {
   it('er faktisk oversatt — svensk er ikke norsk limt inn', () => {
     const like = KODER.filter((kode) => TEKSTER[kode].nb === TEKSTER[kode].sv);
     expect(like).toEqual([]);
+  });
+
+  /**
+   * Én kode, én tekst. Funnrutene svarte «Ikke autentisert» / «Inte
+   * autentiserad» — sjargongen billing-tekstene nettopp hadde byttet ut — mens
+   * /api/me/* og de andre rutene sier «Du må være logget inn.». Klientene viser
+   * `error` rått, så en utløpt økt ga to ulike beskjeder i samme app.
+   */
+  it('«unauthenticated» har samme tekst som resten av API-et', () => {
+    for (const locale of LOCALES) {
+      expect(funnFeilTekst('unauthenticated', locale), locale).toBe(apiFeilTekst('unauthenticated', locale));
+      expect(funnFeilTekst('unauthenticated', locale), locale).not.toMatch(/autentiser/i);
+    }
   });
 
   it('bruker svenske ord for funn, ikke norske', () => {

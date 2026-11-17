@@ -25,6 +25,8 @@ import type { Edibility } from '@/types/species';
 import { getSpeciesDisplayName } from '@/lib/utils/species-name';
 import { baseSeasonMask, isMonthInMask, peakMask } from '@/lib/utils/season-region';
 import { intlLocale } from '@/lib/utils/intl-locale';
+// «i dag», «i går», datoen: Oslo-dager, ikke serverens UTC — se fila.
+import { formatTimeAgo } from '@/lib/utils/time-ago';
 import { logger } from '@/lib/log';
 import { BLOKKERINGSMARGIN, utenBlokkerte } from '@/lib/moderation/blokkering';
 import { seasonHeadline } from '@/lib/utils/season-headline';
@@ -67,17 +69,6 @@ interface RecentFindingRow {
   norwegian_name: string | null;
   edibility: Edibility | null;
   primary_image_url: string | null;
-}
-
-function formatTimeAgo(iso: string, t: HomeTranslator, locale: string) {
-  const diff = Date.now() - new Date(iso).getTime();
-  const dayMs = 24 * 60 * 60 * 1000;
-  const days = Math.round(diff / dayMs);
-  if (days === 0) return t('timeAgoToday');
-  if (days === 1) return t('timeAgoYesterday');
-  if (days < 7) return t('timeAgoDays', { days });
-  if (days < 30) return t('timeAgoWeeks', { weeks: Math.round(days / 7) });
-  return new Date(iso).toLocaleDateString(intlLocale(locale), { day: '2-digit', month: 'short' });
 }
 
 /** «14. august» / «14 augusti» for en Oslo-dato («ÅÅÅÅ-MM-DD»). Datoen er alt regnet om; formater den som den står. */
@@ -629,7 +620,7 @@ async function HjemInnhold({
                   <div className="min-w-0 flex-1">
                     <p className="truncate font-medium">{(f.species_id ? speciesNames.get(f.species_id) : null) ?? f.norwegian_name ?? t('unknownSpecies')}</p>
                     <p className="truncate text-xs text-gray-600">
-                      {f.location_name ?? t('unknownLocation')} · {formatTimeAgo(f.found_at, t, locale)}
+                      {f.location_name ?? t('unknownLocation')} · {formatTimeAgo(f.found_at, t, locale, naa)}
                     </p>
                   </div>
                   {f.edibility ? <EdibilityBadge edibility={f.edibility} /> : null}

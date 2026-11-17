@@ -7,6 +7,7 @@ import { AiEdibilityBadge } from '@/components/identify/AiEdibilityBadge';
 import { SlettIdentifisering } from '@/components/identifikasjoner/SlettIdentifisering';
 import { createClient } from '@/lib/supabase/server';
 import { intlLocale } from '@/lib/utils/intl-locale';
+import { timeZoneForLocale } from '@/i18n/config';
 import { getJoinedSpeciesName } from '@/lib/utils/species-name';
 import { IDENTIFY_HISTORY_BUCKET } from '@/lib/identifications/config';
 import type { Edibility } from '@/types/species';
@@ -158,10 +159,13 @@ export default async function IdentifiseringerPage() {
 
                       <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-gray-600">
                         <span>
+                          {/* Serveren står i UTC. En identifisering kl. 00.30
+                              norsk tid skal ikke få gårsdagens dato. */}
                           {new Date(rad.created_at).toLocaleDateString(intlLocale(locale), {
                             day: 'numeric',
                             month: 'short',
-                            year: 'numeric'
+                            year: 'numeric',
+                            timeZone: timeZoneForLocale(locale)
                           })}
                         </span>
                         {rad.top_probability != null ? (

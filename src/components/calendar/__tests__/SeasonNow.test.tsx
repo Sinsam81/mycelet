@@ -189,7 +189,10 @@ describe('neste ut', () => {
     expect(neste).toContain(nb.SeasonNow.nextUpLibraryLink);
     expect(neste).toMatch(/<a[^>]*href="\/species"/);
     expect(nb.SeasonNow.nextUpNote).toMatch(/ikke hva som står der du er/);
-    expect(sv.SeasonNow.nextUpNote).toMatch(/inte vad som står där du är/);
+    // Svensk «vad som står där» leses som «hva det står skrevet der». Sopp
+    // «växer» på svensk.
+    expect(sv.SeasonNow.nextUpNote).toMatch(/inte vad som växer där du är/);
+    expect(sv.SeasonNow.nextUpNote).not.toMatch(/vad som står/);
   });
 
   it('november, januar og februar får også «Neste ut: april»', () => {

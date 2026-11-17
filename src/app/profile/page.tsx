@@ -13,6 +13,7 @@ import { createClient } from '@/lib/supabase/server';
 import { getBillingCapabilities, getUserBillingSubscription } from '@/lib/billing/subscription';
 import type { Edibility } from '@/types/species';
 import { intlLocale } from '@/lib/utils/intl-locale';
+import { timeZoneForLocale } from '@/i18n/config';
 import { formatMemberSince } from '@/lib/utils/member-since';
 import { statusLabel, tierLabel } from '@/lib/billing/labels';
 import { abonnementKanal, periodelinje, periodelinjeVerdier } from '@/lib/billing/kanal';
@@ -134,6 +135,10 @@ export default async function ProfilePage() {
 
   // Kontoens dato, ikke profilradens — se src/lib/utils/member-since.ts.
   const memberSince = formatMemberSince(user, profile ?? null, locale);
+  // Serveren står i UTC. Et funn eller innlegg fra kl. 00.30 norsk tid skal
+  // ikke få gårsdagens dato — samme regel som på /mine-steder.
+  const dato = (iso: string) =>
+    new Date(iso).toLocaleDateString(intlLocale(locale), { timeZone: timeZoneForLocale(locale) });
 
   const TierIcon = billing.tier === 'premium' ? Crown : billing.tier === 'season_pass' ? Leaf : null;
   const CATEGORY_LABELS = categoryLabels(t);
@@ -223,7 +228,7 @@ export default async function ProfilePage() {
                     <MapPin className="h-3 w-3" />
                     {f.location_name ?? t('unknownLocation')}
                     <span>·</span>
-                    {new Date(f.found_at).toLocaleDateString(intlLocale(locale))}
+                    {dato(f.found_at)}
                   </p>
                   {f.notes ? <p className="mt-1 text-sm text-gray-800">{f.notes}</p> : null}
                 </li>
@@ -254,7 +259,7 @@ export default async function ProfilePage() {
                   <Link href={`/forum/${p.id}`} className="block rounded-lg border border-gray-100 p-2 hover:border-forest-700">
                     <p className="truncate font-medium">{p.title}</p>
                     <p className="mt-1 text-xs text-gray-600">
-                      {CATEGORY_LABELS[p.category] ?? p.category} · {new Date(p.created_at).toLocaleDateString(intlLocale(locale))} · {t('commentsCount', { count: p.comments_count })} · {t('likesCount', { count: p.likes_count })}
+                      {CATEGORY_LABELS[p.category] ?? p.category} · {dato(p.created_at)} · {t('commentsCount', { count: p.comments_count })} · {t('likesCount', { count: p.likes_count })}
                     </p>
                   </Link>
                 </li>

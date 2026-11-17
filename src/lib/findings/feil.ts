@@ -14,7 +14,10 @@ import { intlLocale } from '@/lib/utils/intl-locale';
  */
 export const FUNN_FEIL = {
   // ── Felles ────────────────────────────────────────────────────────────────
-  unauthenticated: { nb: 'Ikke autentisert', sv: 'Inte autentiserad' },
+  // Ordrett den samme som i src/lib/api/feil.ts: én kode, én tekst i hele
+  // appen. Den fila leser språket fra cookies og kan ikke importeres fra en
+  // ren modul som denne — testen holder de to like.
+  unauthenticated: { nb: 'Du må være logget inn.', sv: 'Du måste vara inloggad.' },
   invalid_id: { nb: 'Ugyldig funn-id', sv: 'Ogiltigt fynd-id' },
   not_found: { nb: 'Fant ikke funnet', sv: 'Hittade inte fyndet' },
   feature_not_enabled: { nb: 'Funksjonen er ikke slått på ennå', sv: 'Funktionen är inte aktiverad ännu' },
