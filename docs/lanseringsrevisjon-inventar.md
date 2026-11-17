@@ -203,6 +203,7 @@ Hvert tall appen viser, sporet til der det beregnes. Kolonnen som gjør inventar
 - beregnes: `supabase/migrations/029_prediction_feedback_context.sql:96-100 (get_user_stats)`
 - kan være feil hvis: total_likes_received summerer den DENORMALISERTE kolonnen forum_posts.likes_count, som vedlikeholdes av en trigger (supabase/migrations/001_initial_schema.sql:266-280). Enhver innsetting/sletting som omgår triggeren — eller en trigger som feiler én gang — gir permanent drift. Ingenting regner tallet på nytt fra post_likes.
 - bevises ved: select p.id, p.likes_count, (select count(*) from post_likes l where l.post_id=p.id) from forum_posts p where p.likes_count <> (select count(*) ...) — skal gi null rader.
+- funnet senere (november 2026): driften var ikke bare en teoretisk risiko. Tellerfunksjonene fra 001 kjørte som den som likte (SECURITY INVOKER), og den eneste UPDATE-policyen på forum_posts slipper bare forfatteren til — så en like fra noen andre oppdaterte 0 rader uten feil. Rettet i migrasjon 076 (SECURITY DEFINER med låst search_path, og tallene regnes om); status i `docs/migrasjoner-a-kjore.md`.
 
 ### «Medlem siden {måned år}»
 
@@ -217,6 +218,7 @@ Hvert tall appen viser, sporet til der det beregnes. Kolonnen som gjør inventar
 - beregnes: `triggere i supabase/migrations/001_initial_schema.sql:243-256 (comments) og :266-280 (likes)`
 - kan være feil hvis: Triggeren teller ALLE kommentarrader, mens visningen filtrerer bort skjulte (src/lib/hooks/useForum.ts:298 og :321, `is_hidden=false`). Et moderert innlegg viser «5 kommentarer» og lister tre. Samme gjelder blokkerte brukeres innhold via policyene i migrasjon 032.
 - bevises ved: select p.id, p.comments_count, (select count(*) from comments c where c.post_id=p.id and c.is_hidden=false) — differansen er det brukeren opplever som feil.
+- funnet senere (november 2026): den største kilden til feil var en annen. Begge tellerne kjørte som den som skrev raden (SECURITY INVOKER), og RLS lar bare forfatteren oppdatere et innlegg, så bare forfatterens egne kommentarer og likes flyttet tallene. Et besvart spørsmål ble stående under «Ubesvarte» (som leter etter comments_count = 0). Migrasjon 076 gjør tellerne til SECURITY DEFINER, lar kommentartelleren følge is_hidden og regner tallene om; 041 skal ikke lenger limes inn. Status i `docs/migrasjoner-a-kjore.md`.
 
 ### AI-treffprosenten «{X}% bildelikhet»
 

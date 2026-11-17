@@ -24,7 +24,8 @@
   - **Avvis** – rapporten var ikke berettiget. Innholdet står.
   - **Marker som gjennomgått** – du har sett den, men ikke bestemt deg. Rapporten er fortsatt åpen.
   - **Marker som løst** – saken er tatt hånd om uten skjuling (for eksempel at forfatteren selv rettet eller slettet).
-- «Åpen» betyr at rapporten venter på en avgjørelse: ny *eller* gjennomgått. Det samme tallet står i konsollen, på `/admin` og i dagsrapporten.
+- «Åpen» betyr at rapporten venter på en avgjørelse: ny *eller* gjennomgått. Det samme tallet står i konsollen, på `/admin` og i dagsrapporten. Får konsollen ikke telt, står det «ikke målt» i banneret, aldri 0 – «0 åpne» ville skjult døgnfristen akkurat når ingen vet om noe har ligget for lenge. Se da på lista under banneret.
+- Tallene for kommentarer og likes på innleggene teller alle fra og med migrasjon 076. Før den flyttet bare forfatterens egne kommentarer og likes tallene, så et besvart spørsmål kunne bli stående under «Ubesvarte». Status for 076 står i `docs/migrasjoner-a-kjore.md`.
 - **Fristen er ett døgn.** Apple (retningslinje 1.2) venter at en melding følges opp innen 24 timer.
 - **Slik får du vite om en melding.** Ingenting sier fra i det meldingen kommer inn. Varslingen er e-post på en fast klokke, to ganger i døgnet, til `post@mycelet.com`:
   - **Dagsrapporten om morgenen** (06:00 UTC – kl. 07 om vinteren, kl. 08 om sommeren) sier fra i emnelinja og øverst i e-posten så snart noe er åpent, med lenke rett til konsollen.

@@ -72,6 +72,16 @@ gikk i orden) eller `EXPIRATION` (fristen ute) avslutter.
 **Manuelt tildelt tilgang** (`metadata.source = 'manual_grant'`: founder-passet,
 App Review-demokontoen, kundeservice) er et gulv ingen butikkhendelse kan senke.
 
+**Fristen for å avslutte en prøve er ikke prøveslutt hos Apple.** Apple
+forsøker trekket i løpet av det siste døgnet før prøven er over, så den som
+avslutter kvelden før, kan alt være belastet. I appen sier derfor både
+prøvearket og kortet på prissiden før kjøpet, og statuskortet og
+påminnelsen etter, at man må avslutte senest 24 timer før prøveperioden er
+over — aldri prøveslutt som frist. Før kjøpet står det uten klokkeslett:
+RevenueCat oppgir en månedsprøve som 30 dager, så et utregnet tidspunkt kunne
+ligget etter Apples. På nett er prøveslutt fristen, fordi Stripe belaster ved
+`trial_end`.
+
 **Frister.** Kallene ut fra betalingsrutene har en frist, så et tregt svar hos
 Stripe eller Supabase ikke holder en hendelse, et kjøp eller en sidevisning
 hengende:
@@ -89,7 +99,12 @@ hengende:
   avgjør ingenting, så den bruker visningsutgaven (`provesvarForVisning` i
   `src/lib/billing/tidligere-abonnent-visning.ts`): samme regel, kortere
   frist, og «vet ikke» som eget svar.
-- **Supabase Auth og prøvepåminnelsen i Stripe-webhooken: 8 s.**
+- **Supabase Auth i Stripe-webhooken (`getUserById`): 8 s** (`OPPSLAG_FRIST_MS`).
+- **Prøvepåminnelsen fra Stripe-webhooken: `sendEpost` sin egen frist, 15 s**
+  (`RESEND_FRIST_MS` i `src/lib/email/send.ts`), romslig med vilje. Den sto
+  før også under de 8 sekundene over, og en påminnelse som kom fram etter
+  8–15 s, ble logget som mislykket. `sendEpost` skal aldri ligge under en
+  strammere frist enn sin egen.
 
 Går en frist ut, skjer nøyaktig det samme som når kallet feiler: webhooken
 svarer ikke-2xx og Stripe leverer hendelsen på nytt (for prøvepåminnelsen:

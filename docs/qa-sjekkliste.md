@@ -6,6 +6,7 @@ brudd (+ forslag til fiks for godkjenning). Den **deployer aldri** til live-appe
 
 - **Hvordan kjøre:** `npm run qa` (lokalt, mot `http://localhost:3000`)
 - **Bare live-røyktest:** `npm run qa:prod` (kun lesing, trygg mot mycelet.com)
+  - `qa:prod` kjører tilfellene i *din egen* utsjekk mot produksjonen. Et tilfelle skrevet for kode som ikke er deployet ennå, feiler der til deployen er gjort — det er ikke en feil i appen. For en utgivelse er det derfor kjøringen etter deployen som teller.
 - **Førstegangsoppsett:** `npm run qa:setup` (lager testbruker — se [Testbruker](#testbruker))
 - **Automatikken:** kjøres via `/loop` — se [Loop-oppsett](#loop-oppsett)
 
@@ -31,6 +32,7 @@ Dette er bug-klassen som rammet oss i prod (svensk kart blankt, fast i Oslo, dø
 - [ ] 🖐️ Native: «Finn meg» fungerer i iOS-appen (Capacitor Geolocation, ikke `navigator.geolocation`).
 - [ ] «Legg til funn» måler posisjonen på nytt når skjemaet åpnes og tilbyr både «der du står» og «der kartet står» når de er forskjellige — appen velger aldri i stillhet (`map-geo.e2e.ts`; skjemaet åpnes og avbrytes, ingenting lagres).
 - [ ] Kartet åpner med «Kun mine funn» på, og kontrollene oppå kartet tar imot trykk i hele 44 px-flaten (`map-geo.e2e.ts`).
+- [ ] 🖐️ Offline-skallet (`/offline`) er på svensk når nettleseren eller telefonen står på svensk, også når språkvelgeren aldri er brukt, og på norsk ellers. Et valg i språkvelgeren vinner over nettleserens språk.
 - [ ] 🖐️ Manuell (skriver til prod): «Meld funnet» og «Blokker brukeren» fra popupen til en annens funn. Popupen blir stående mens skjemaet er åpent (også når kartet flytter seg for å vise den), teksten er på riktig språk, og etter blokkering forsvinner den brukerens funn fra kartet uten ny innlasting. Opphev blokkeringen fra profilen etterpå.
 
 ## 2. AI-soppkjenner (`/identify`)
@@ -40,6 +42,7 @@ Dette er bug-klassen som rammet oss i prod (svensk kart blankt, fast i Oslo, dø
 - [ ] Ingen krasj når siden åpnes uten bilde.
 - [ ] 🖐️ Kindwise direkte, uten appen: `PLANTID_API_KEY=… node scripts/sjekk-kindwise.mjs [bilde.jpg]` — trinn 1 (`usage_info`) er gratis og bekrefter nøkkel + kreditter; trinn 2 sender rutens eksakte kropp og prøver varianter hvis den avvises. Bruk dette FØRST når appen sier «Identifikasjon feilet» — det skiller feil nøkkel i Vercel fra en parameter Kindwise avviser.
 - [ ] 🖐️ Manuell (kvote-/kostnadsavhengig): last opp ett kjent soppbilde → får forslag + forvekslings-sjekk (look-alike). Kjøres sjelden, ikke i hver loop (Kindwise-kreditter).
+- [ ] 🖐️ Samme kjøring: et giftig, dødelig eller ukjent forslag har grå sesongpille og aldri «Topp-sesong», og et forslag som ikke er mat viser aldri en matsopp som «Farlig dobbeltgjenger». I appen sier posisjonslinja på resultatsiden «Posisjonen telefonen målte …», ikke «da du trykket «Identifiser»», og en posisjon som er mer enn ti minutter gammel gir spørsmålet om hvor funnet skal lagres.
 - [ ] 🖐️ Manuell lagringsflyt (skriver til prod — kjøres sjelden): bekreftelses-boksen må krysses AKTIVT (aldri forhåndskrysset), delingsnivå-velgeren er synlig og starter på forrige lokalt lagrede valg (nullstilles ved utlogging), ved manglende GPS vises notis + «Hent posisjonen min» som henter posisjon UTEN ny AI-identifisering, og etter lagring lander man på `/map?mine=1` med «Kun mine funn» på (automatisert lese-sjekk av landingen finnes i `e2e/map-geo.e2e.ts`).
 
 ### 2b. Identifiseringshistorikk (`/identifiseringer`)
@@ -74,6 +77,7 @@ Dette er bug-klassen som rammet oss i prod (svensk kart blankt, fast i Oslo, dø
 - [ ] En enkelt tråd `/forum/[id]` åpner og viser innlegget (Next 16 `params`-regresjon).
 - [ ] `/forum/new` laster skjema (innlogget).
 - [ ] 🖐️ Manuell (skriver til prod): poste innlegg + laste opp bilde fungerer ende-til-ende.
+- [ ] 🖐️ Manuell (skriver til prod, når migrasjon 076 er kjørt): en kommentar og en like fra en annen konto endrer tallene på noen andres innlegg, og et spørsmål som har fått svar, forsvinner fra «Ubesvarte». Før 076 flyttet bare forfatterens egne kommentarer og likes tallene.
 
 ### 5b. Moderasjon (`/forum/moderation`)
 
@@ -106,6 +110,8 @@ App Store-regel 3.1.1: native-appen får **ikke** vise ekstern betaling/Google-l
 - [ ] **Native (simulert)** `/pricing`: kjøpsknappene er **skjult** (ingen «Velg Premium»/«Velg Sesongpass»).
 - [ ] **Native (simulert)** `/auth/login`: «Fortsett med Google» er **skjult**.
 - [ ] 🖐️ Manuell: bekreft i ekte iOS-app før hver App Store-innsending.
+- [ ] 🖐️ I iOS-appen er fristen for å avslutte prøven 24 timer før den slutter, aldri prøveslutt (Apple trekker i løpet av det siste døgnet før): prøvearkets vilkår sier «senest 24 timer før prøveperioden er over», fornyelseslinja på kortet på `/pricing` «avslutt senest 24 timer før den slutter» («Avslutt senest 24 timer før prøven slutter» når appen ikke kjenner prøvens lengde). På nett er prøveslutt fristen: arket sier «om du ikke avslutter før <dato>», kortet «Første belastning <dato>».
+- [ ] 🖐️ Løftet om lovende områder følger måneden (innlogget gratisbruker, nett): fra november til juni sier prøvearket (alle varianter unntatt den kartet viser etter «Gratis viser 3») ikke «Alle 12 lovende områder», men at forholdene ofte er for svake til at kartet kaller noe lovende, og Premium-punktet på forsiden og `/pricing` slutter på «når forholdene tillater det». Juli–oktober står «Alle 12».
 
 ## 8. Artssider
 
@@ -117,6 +123,7 @@ App Store-regel 3.1.1: native-appen får **ikke** vise ekstern betaling/Google-l
 - [ ] **Forvekslingstreneren** `/species/forvekslinger` laster utlogget og viser sikkerhetslinja, Giftinformasjonen og enten «Start en runde» eller tom-tilstanden. Én runde: to kort med «Foto: …» under hvert bilde før svaret, og «Slik skiller du dem» pluss lenker til begge artssidene etter (`smoke.e2e.ts`, bare lesing — fremdriften ligger i nettleseren).
 - [ ] 🖐️ Treneren på svensk: navn og merker på svensk, ingen norsk skilletekst — bare en merknad om at teksten står på artssiden. Lange navn («Snøballsjampinjong») brytes, kuttes ikke, på 360 px.
 - [ ] 🖐️ En art som bare finnes som en annens forveksling (f.eks. grønn fluesopp): forvekslingskortene vises fra den andre siden, uten faregrad på kortet. En matsopp uten egne rader (piggsopp) har forbeholdet over kortene.
+- [ ] 🖐️ En artsside for en matsopp (f.eks. kantarell): metabeskrivelsen i sidekilden og i delingskortet er den nøytrale setningen — navn, latinsk navn og sesong — og sier aldri «spiselig» eller «matsopp». Sesongkurven er grå, lik for matsopp og giftsopp.
 
 ### 8b. Områdesidene og soppvarselet (`/soppforhold/[omrade]`)
 
