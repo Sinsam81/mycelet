@@ -60,6 +60,16 @@ describe('VarselCta — skjemaet på en områdeside', () => {
     expect(oslo).toMatch(new RegExp(`<label[^>]*>${PAMELDINGSTEKST.nb.epost}<input`));
   });
 
+  it('plassholderen i e-postfeltet står på sidens språk — svensk på svenske områder', () => {
+    const plassholder = (markup: string) => {
+      const felt = /<input[^>]*name="email"[^>]*>/.exec(markup)?.[0] ?? '';
+      return /placeholder="([^"]*)"/.exec(felt)?.[1];
+    };
+    expect(plassholder(oslo)).toBe(PAMELDINGSTEKST.nb.epostEksempel);
+    expect(plassholder(goteborg)).toBe(PAMELDINGSTEKST.sv.epostEksempel);
+    expect(plassholder(goteborg)).toBe('du@example.com');
+  });
+
   it('samtykket er det samme som på /soppvarsel, ord for ord, med lenke til personvernerklæringen', () => {
     expect(oslo).toContain(PAMELDINGSTEKST.nb.samtykke);
     expect(goteborg).toContain(PAMELDINGSTEKST.sv.samtykke);

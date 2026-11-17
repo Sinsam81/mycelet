@@ -8,8 +8,15 @@ import { getClientKey, rateLimitResponse } from '@/lib/rate-limit/route';
 import { PREDICTION_TILE_REGIONS } from '@/lib/prediction/tile-regions';
 import { regionSlug } from '@/lib/prediction/region-slug';
 import { byggBekreftelsesEpost } from '@/lib/alerts/email';
-import { MAKS_BEKREFTELSER_PER_TIME, bekreftelsesvinduFra, nyligBekreftelseSendt } from '@/lib/alerts/pameldingstak';
+import {
+  MAKS_BEKREFTELSER_PER_TIME,
+  adresseMonster,
+  bekreftelsesvinduFra,
+  kanoniskAdresse,
+  nyligBekreftelseSendt
+} from '@/lib/alerts/pameldingstak';
 import { sendEpost } from '@/lib/email/send';
+import { vent } from '@/lib/utils/vent';
 
 /**
  * Konto-løs påmelding til soppvarselet (migrasjon 057).
@@ -39,47 +46,100 @@ import { sendEpost } from '@/lib/email/send';
  * e-post til noen som aldri hadde bedt om det. Mottakerne trykker
  * «søppelpost», og det rammer avsenderomdømmet de ekte varslene lever av.
  *
- * Tre lag, alle keyet på ADRESSEN, og alle svarer nøyaktig det samme som en
+ * Tre lag, alle keyet på INNBOKSEN, og alle svarer nøyaktig det samme som en
  * vellykket påmelding («sendt») — aldri 429. Et eget svar ville røpet at
- * adressen nylig er brukt, og fortalt en angriper hvor taket går:
+ * adressen nylig er brukt, og fortalt en angriper hvor taket går.
  *
- *   1. I minnet: MAKS_BEKREFTELSER_PER_TIME bekreftelser per adresse per time.
- *      Adressen hashes, så den aldri ligger i klartekst i begrensernes Map.
- *      Laget teller e-poster som GIKK UT, ikke forsøk: plassen reserveres før
- *      databasen røres, og gis tilbake på hver utgang der ingenting ble sendt
- *      (se POST).
+ * Innboksen, ikke strengen: «ola+1», «o.la» og «ola» på Gmail (og på
+ * googlemail.com) leveres alle til samme innboks. Da taket telte strengen,
+ * fikk et skript som byttet IP sende tre bekreftelser i timen per skrivemåte,
+ * uten grense på antall skrivemåter. Lag 1 og 3 slår skrivemåtene sammen (se
+ * kanoniskAdresse og adresseMonster i pameldingstak.ts); raden lagrer og
+ * e-posten går fortsatt til adressen slik den ble skrevet:
+ *
+ *   1. I minnet: MAKS_BEKREFTELSER_PER_TIME bekreftelser per innboks per time.
+ *      Nøkkelen hashes, så adressen aldri ligger i klartekst i begrensernes
+ *      Map. Laget teller e-poster som GIKK UT, ikke forsøk: plassen reserveres
+ *      før databasen røres, og gis tilbake på hver utgang der ingenting ble
+ *      sendt (se POST).
  *   2. På raden (overlever kaldstart og instansvifte): en ubekreftet rad får
  *      ikke ny e-post før ti minutter etter den forrige, og etter den første
  *      gjentakelsen ikke oftere enn hver time (nyligBekreftelseSendt).
  *      Tokenet roteres da heller ikke, så lenka som alt ligger i innboksen
  *      fortsatt virker — før drepte et dobbeltklikk på «Få soppvarsel» den.
- *   3. På tvers av områder (også varig): er det sendt bekreftelse for
- *      MAKS_BEKREFTELSER_PER_TIME ubekreftede rader på adressen den siste
- *      timen, sendes ingen flere — ellers ga lag 2 fortsatt 22 e-poster.
+ *   3. På tvers av områder og skrivemåter (også varig): er det sendt
+ *      bekreftelse for MAKS_BEKREFTELSER_PER_TIME ubekreftede rader til
+ *      innboksen den siste timen, sendes ingen flere — ellers ga lag 2
+ *      fortsatt 22 e-poster, og hver skrivemåte sine egne.
  *
  * Lag 2 og 3 leser radens updated_at (trigger fra migrasjon 051), som for en
  * ubekreftet rad er tidspunktet for siste utsending. Ingen ny kolonne. Reglene
  * og tallene bor i src/lib/alerts/pameldingstak.ts.
  *
- * En utsending som FEILER rulles tilbake (ny rad slettes, eksisterende rad
- * slås av), så et nytt forsøk rett etterpå ikke blir stoppet av lag 2 og
- * besvart med «sjekk innboksen» uten at noe er sendt. Av samme grunn bruker
- * den ikke opp plassen i lag 1.
+ * ── EN UTSENDING SOM FEILER ─────────────────────────────────────────────────
+ *
+ * Et nei fra sendEpost betyr ikke alltid at e-posten ikke gikk. Etter et
+ * tidsavbrudd (RESEND_FRIST_MS) kan Resend ha tatt imot den uten at svaret
+ * kom fram — og da slettet vi raden, svarte «noe gikk galt» og lot en død
+ * lenke ligge i innboksen. Nå går det ett nytt forsøk etter et sekund, med
+ * SAMME idempotensnøkkel (raden + lenka den bærer). Tok Resend imot det
+ * første, får det nye forsøket svaret på det — sendt, og aldri to ganger — og
+ * raden står, så lenka virker. Kom det første aldri fram, sendes den nå.
+ *
+ * Feiler også det nye forsøket, rulles skrivingen tilbake (ny rad slettes,
+ * eksisterende rad slås av), så et nytt forsøk fra leseren ikke blir stoppet
+ * av lag 2 og besvart med «sjekk innboksen» uten at noe er sendt. Av samme
+ * grunn bruker den ikke opp plassen i lag 1. Bare om Resend tok imot det
+ * første og så ikke svarte på noen av dem, kan en død lenke bli liggende —
+ * prisen for aldri å svare «sendt» uten å vite det.
  */
 
+/** Pausen før det ene nye forsøket på utsendingen — samme som glemt-passord. */
+export const NYTT_FORSOK_ETTER_MS = 1000;
+
 /**
- * Funksjonen må leve LENGER enn fristen på utsendingen (RESEND_FRIST_MS i
- * sendEpost, 15 s). Blir den drept mens Resend henger, kjøres aldri
- * tilbakerullingen nederst: raden står igjen ubekreftet, og neste forsøk
- * svares «sjekk innboksen» av lag 2 — uten at noe er sendt. Med 30 s rekker
- * fristen å slå til, raden å bli angret og leseren å få «noe gikk galt».
+ * Funksjonen må leve LENGER enn begge forsøkene på utsendingen med pausen
+ * imellom (2 × RESEND_FRIST_MS i sendEpost + NYTT_FORSOK_ETTER_MS, 31 s).
+ * Blir den drept mens Resend henger, kjøres aldri tilbakerullingen nederst:
+ * raden står igjen ubekreftet, og neste forsøk svares «sjekk innboksen» av
+ * lag 2 — uten at noe er sendt. Med 60 s rekker begge fristene å slå til,
+ * raden å bli angret og leseren å få «noe gikk galt».
  */
-export const maxDuration = 30;
+export const maxDuration = 60;
 
 const GYLDIGE_REGIONER = new Set(PREDICTION_TILE_REGIONS.map((r) => r.name));
 
-// Nok til å avvise tull, løst nok til å slippe gjennom alt som kan være ekte.
-const EPOST_MONSTER = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+/**
+ * En ren adresse og ingenting annet. Mønsteret slapp gjennom «"x"<a@b.no>»,
+ * «<a@b.no>», kommentarer og lister — da var strengen vi lagret og telte en
+ * annen enn den e-posten ble levert til, og taket per innboks kunne lures.
+ * Ellers løst med vilje: +, æøå og apostrof er ekte adresser. Begge skjemaene
+ * bruker <input type="email">, som avviser de samme tegnene, så ingen ekte
+ * påmelding går tapt.
+ */
+const EPOST_MONSTER = /^[^\s@<>()[\]\\,;:"]+@[^\s@<>()[\]\\,;:"]+\.[^\s@<>()[\]\\,;:".]{2,}$/;
+
+/** RFC 5321: en adresse er høyst 254 tegn. Lengre er aldri ekte — og mønsteret i lag 3 vokser med den. */
+const MAKS_ADRESSELENGDE = 254;
+
+function erGyldigAdresse(email: string): boolean {
+  return email.length <= MAKS_ADRESSELENGDE && EPOST_MONSTER.test(email);
+}
+
+/**
+ * Idempotensnøkkelen til bekreftelsen: raden og lenka den bærer.
+ *
+ * Samme rad og samme token gir samme nøkkel, så det nye forsøket aldri kan gi
+ * en e-post til. Nytt token (en ny utsending etter lag 2) gir ny nøkkel — med
+ * raden alene ville Resend svart «allerede sendt» på den nye lenka i 24 timer,
+ * og lenka i innboksen var den gamle, som rotasjonen nettopp drepte. Tokenet
+ * står som sammendrag, ikke i klartekst: det bekrefter samtykket, og hører
+ * ikke hjemme i et hode (samme regel som glemt-passord: verken adresse eller
+ * token i nøkkelen).
+ */
+function bekreftelsesnokkel(radId: string, token: string): string {
+  return `soppvarsel-bekreft/${radId}/${createHash('sha256').update(token).digest('hex').slice(0, 32)}`;
+}
 
 function erSkjemaPost(request: NextRequest) {
   return (request.headers.get('content-type') ?? '').includes('application/x-www-form-urlencoded');
@@ -156,8 +216,9 @@ async function meldPaa(request: NextRequest, plass: Adresseplass) {
         )
       : NextResponse.json({ ok: status === 'sendt' , status});
 
-  if (!EPOST_MONSTER.test(email) || !GYLDIGE_REGIONER.has(region)) {
-    log.info('varselpamelding.avvist', { region, gyldigEpost: EPOST_MONSTER.test(email) });
+  const gyldigEpost = erGyldigAdresse(email);
+  if (!gyldigEpost || !GYLDIGE_REGIONER.has(region)) {
+    log.info('varselpamelding.avvist', { region, gyldigEpost });
     return tilbake('ugyldig');
   }
 
@@ -171,8 +232,9 @@ async function meldPaa(request: NextRequest, plass: Adresseplass) {
 
   // Lag 1 av taket per adresse — FØR noe databaseoppslag. Samme nøytrale svar
   // som en påmelding som gikk gjennom; se «TAK PER ADRESSE» i filhodet.
+  // Nøkkelen er innboksen, så +merkelapper og Gmail-punktum deler plass.
   const adresse = email.toLowerCase();
-  const adresseHash = createHash('sha256').update(adresse).digest('hex');
+  const adresseHash = createHash('sha256').update(kanoniskAdresse(adresse)).digest('hex');
   const adresseNokkel = `varselpamelding-epost:${adresseHash}`;
   const tatt = checkRateLimit(adresseNokkel, MAKS_BEKREFTELSER_PER_TIME, 3600);
   if (!tatt.allowed) {
@@ -222,14 +284,20 @@ async function meldPaa(request: NextRequest, plass: Adresseplass) {
     return tilbake('sendt');
   }
 
-  // Lag 3: hvor mange ubekreftede rader på denne adressen har fått bekreftelse
-  // den siste timen — på tvers av områder? Telles i databasen, så taket holder
-  // over kaldstarter og instanser.
+  // Lag 3: hvor mange ubekreftede rader til denne innboksen har fått
+  // bekreftelse den siste timen — på tvers av områder og skrivemåter? Telles i
+  // databasen, så taket holder over kaldstarter og instanser.
+  //
+  // ⚠️ Et forankret, escapet regulært uttrykk (adresseMonster), ikke ilike.
+  // «ola%» på et domene ville også telt «olav» der — og da kunne hvem som
+  // helst fylt taket til en annen adresse og fått bekreftelsene dens svelget
+  // bak «sendt». Mønsteret treffer nøyaktig de lagrede adressene med samme
+  // innboks (se pameldingstak.ts og testene der).
   const { count: ventende, error: tellErr } = await db
     .from('alert_subscriptions')
     .select('id', { count: 'exact', head: true })
     .is('user_id', null)
-    .eq('email', adresse)
+    .regexIMatch('email', adresseMonster(adresse))
     .eq('active', true)
     .is('confirmed_at', null)
     .gte('updated_at', bekreftelsesvinduFra(naaMs));
@@ -243,7 +311,9 @@ async function meldPaa(request: NextRequest, plass: Adresseplass) {
     return tilbake('sendt');
   }
 
-  let confirmToken: string | null = null;
+  let confirmToken: string;
+  /** Raden lenka hører til — en del av idempotensnøkkelen. */
+  let radId: string;
   /** Angrer skrivingen under når e-posten ikke kom ut — se filhodet. */
   let rullTilbake: () => PromiseLike<{ error: { message: string } | null }>;
   if (eksisterende) {
@@ -266,6 +336,7 @@ async function meldPaa(request: NextRequest, plass: Adresseplass) {
       log.error('varselpamelding.reaktivering_feilet', undefined, { message: reaktiverErr.message });
       return tilbake('feil');
     }
+    radId = String(eksisterende.id);
     // Slås av igjen, ikke slettes: raden fantes fra før. Avslått er den utenfor
     // lag 2 og 3, så neste forsøk går rett gjennom.
     rullTilbake = () =>
@@ -281,6 +352,7 @@ async function meldPaa(request: NextRequest, plass: Adresseplass) {
       return tilbake('feil');
     }
     confirmToken = ny.confirm_token as string;
+    radId = String(ny.id);
     // Raden ble til nå, og ingen e-post bærer lenka dens: da skal den bort.
     // Bare så lenge den er ubekreftet — vi sletter aldri et gitt samtykke.
     rullTilbake = () =>
@@ -294,9 +366,25 @@ async function meldPaa(request: NextRequest, plass: Adresseplass) {
     // annet enn en navigering (ett trykk til) — den skal ha e-postens språk.
     bekreftUrl: `${appUrl}/api/soppvarsel/bekreft?t=${confirmToken}&sprak=${locale}`
   });
-  const res = await sendEpost({ til: email, emne, html, tekst });
+  const melding = {
+    // Til adressen slik den ble skrevet og lagret — ikke den kanoniske formen,
+    // som bare er en nøkkel for taket. Varslene går senere til den samme.
+    til: adresse,
+    emne,
+    html,
+    tekst,
+    idempotensNokkel: bekreftelsesnokkel(radId, confirmToken)
+  };
+  // Ett nytt forsøk med samme nøkkel og samme innhold: et tidsavbrudd kan ha
+  // sendt e-posten, og da gir Resend oss svaret på den i stedet for en til.
+  let res = await sendEpost(melding);
   if (!res.ok) {
-    log.error('varselpamelding.epost_feilet', undefined, { detalj: res.detalj });
+    log.warn('varselpamelding.epost_feilet', { detalj: res.detalj, forsok: 1 });
+    await vent(NYTT_FORSOK_ETTER_MS);
+    res = await sendEpost(melding);
+  }
+  if (!res.ok) {
+    log.error('varselpamelding.epost_feilet', undefined, { detalj: res.detalj, forsok: 2 });
     const { error: angreErr } = await rullTilbake();
     // Står raden igjen, svarer lag 2 «sendt» på neste forsøk uten å sende.
     if (angreErr) log.error('varselpamelding.tilbakerulling_feilet', undefined, { message: angreErr.message });

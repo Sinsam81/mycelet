@@ -48,6 +48,10 @@ export const COPY = {
       'Tallet gjelder et område, ikke skogen der du står — og vi lover aldri funn, bare at forholdene ligger til rette.',
     skjemaTittel: 'Meld deg på',
     epost: 'E-postadressen din',
+    // Plassholderen i e-postfeltet. Domenet er reservert til eksempler (RFC
+    // 2606) og kan aldri være noens ekte adresse — ikke «oversett» det til
+    // eksempel.no eller exempel.se, som kan tilhøre noen.
+    epostEksempel: 'deg@example.com',
     omrade: 'Område',
     // Første valg i nedtrekkslista, før et område er valgt. Samme ordlyd som
     // områdevalget i profilkortet for soppvarselet (SoppvarselCard).
@@ -89,6 +93,7 @@ export const COPY = {
       'Talet gäller ett område, inte skogen där du står — och vi lovar aldrig fynd, bara att förhållandena ligger rätt.',
     skjemaTittel: 'Anmäl dig',
     epost: 'Din e-postadress',
+    epostEksempel: 'du@example.com',
     omrade: 'Område',
     velgOmrade: 'Välj område …',
     norge: 'Norge',

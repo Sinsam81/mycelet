@@ -212,4 +212,15 @@ describe('COPY', () => {
       expect(tekst, nokkel).not.toMatch(/[æøÆØ]/);
     }
   });
+
+  it('plassholderen i e-postfeltet står på hvert sitt språk, på et domene reservert til eksempler', () => {
+    // Svenske skjemaer viste «deg@example.com» — «deg» er norsk, og betyr «deig» på svensk.
+    expect(COPY.nb.epostEksempel).toBe('deg@example.com');
+    expect(COPY.sv.epostEksempel).toBe('du@example.com');
+    // RFC 2606: example.com kan aldri være noens ekte adresse. eksempel.no og
+    // exempel.se er vanlige domener som kan tilhøre noen.
+    for (const locale of ['nb', 'sv'] as const) {
+      expect(COPY[locale].epostEksempel).toMatch(/^[a-z]+@example\.com$/);
+    }
+  });
 });

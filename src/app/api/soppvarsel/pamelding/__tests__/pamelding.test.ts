@@ -13,7 +13,8 @@ import { NextRequest } from 'next/server';
  * Og ruta skal ikke kunne brukes til å sende e-post i strøm til noen som aldri
  * ba om det: taket per ADRESSE (tre lag — minne, rad, på tvers av områder) er
  * testet nederst, sammen med at et stoppet kall svarer nøyaktig som et
- * vellykket.
+ * vellykket. Taket gjelder INNBOKSEN: +merkelapper og Gmail-punktum er samme
+ * mottaker, og en annen persons adresse telles aldri med.
  *
  * Laget i minnet teller e-poster som GIKK UT, ikke forsøk. Det telte forsøk,
  * og da ble det fjerde forsøket etter tre «noe gikk galt» svart «sjekk
@@ -32,10 +33,32 @@ interface Kall {
 let eksisterende: Record<string, unknown> | null = null;
 /** Svaret på tellingen av ubekreftede rader på adressen den siste timen. */
 let ventende = 0;
+/** Satt: tellingen regnes ut fra filtrene (som databasen ville gjort) i stedet for å svare `ventende`. */
+let tellRader: ((filtre: Filter[]) => number) | null = null;
 let tellFeil: { message: string } | null = null;
 let sendingOk = true;
 let kall: Kall[] = [];
-let sendteEposter: Array<{ til: string; tekst: string }> = [];
+
+type Epost = { til: string; tekst: string; idempotensNokkel?: string };
+/**
+ * Hvordan «Resend» svarer på hvert kall, i rekkefølge (tom kø → sendingOk avgjør):
+ *   levert           — e-posten går, og svaret kommer fram
+ *   nede             — avvist (5xx); ingenting går
+ *   tidsavbrudd      — kom aldri fram; ingenting går
+ *   levert-uten-svar — e-posten går, men svaret kommer ikke fram innen fristen
+ */
+type Resendsvar = 'levert' | 'nede' | 'tidsavbrudd' | 'levert-uten-svar';
+let resendSvar: Resendsvar[] = [];
+/** Nøklene «Resend» har sendt e-post for. Samme nøkkel sender aldri to ganger (husket 24 t). */
+let resendNokler = new Set<string>();
+/** Hvert kall til sendEpost, også de som feilet. */
+let utsendingsforsok: Epost[] = [];
+/** E-postene som faktisk ble levert. */
+let sendteEposter: Epost[] = [];
+/** Pausene ruta ba om (vent) — ingen av dem ventes i testen. */
+let pauser: number[] = [];
+/** Radene den falske databasen har satt inn så langt — hver får sin egen id og sitt eget token. */
+let innsatte = 0;
 /** true = den ekte begrenseren i minnet; false = «en annen instans», alt slipper gjennom. */
 let ekteTak = false;
 let klient = 'ip:1';
@@ -70,9 +93,25 @@ vi.mock('@/lib/rate-limit/route', () => ({
   rateLimitResponse: async () => new Response(null, { status: 429 })
 }));
 vi.mock('@/lib/email/send', () => ({
-  sendEpost: async (args: { til: string; tekst: string }) => {
-    sendteEposter.push(args);
-    return sendingOk ? { ok: true, detalj: 'sendt' } : { ok: false, detalj: 'Resend 500' };
+  sendEpost: async (args: Epost) => {
+    utsendingsforsok.push(args);
+    const svar = resendSvar.shift() ?? (sendingOk ? 'levert' : 'nede');
+    if (svar === 'nede') return { ok: false, detalj: 'Resend 500' };
+    if (svar === 'tidsavbrudd') return { ok: false, detalj: 'Resend svarte ikke innen 15 s' };
+    // Resend husker nøkkelen: samme nøkkel gir svaret på den første, aldri en e-post til.
+    const nokkel = args.idempotensNokkel;
+    const alleredeSendt = nokkel !== undefined && resendNokler.has(nokkel);
+    if (!alleredeSendt) {
+      sendteEposter.push(args);
+      if (nokkel !== undefined) resendNokler.add(nokkel);
+    }
+    if (svar === 'levert-uten-svar') return { ok: false, detalj: 'Resend svarte ikke innen 15 s' };
+    return { ok: true, detalj: alleredeSendt ? 'allerede sendt (idempotens)' : 'sendt' };
+  }
+}));
+vi.mock('@/lib/utils/vent', () => ({
+  vent: async (ms: number) => {
+    pauser.push(ms);
   }
 }));
 vi.mock('@/lib/supabase/admin', () => ({
@@ -87,11 +126,20 @@ vi.mock('@/lib/supabase/admin', () => ({
           is: (kol: string, v: unknown) => (k.filtre.push(['is', kol, v]), b),
           eq: (kol: string, v: unknown) => (k.filtre.push(['eq', kol, v]), b),
           gte: (kol: string, v: unknown) => (k.filtre.push(['gte', kol, v]), b),
+          regexIMatch: (kol: string, v: unknown) => (k.filtre.push(['imatch', kol, v]), b),
           select: () => b,
           maybeSingle: async () => ({ data: eksisterende, error: null }),
-          single: async () => ({ data: { id: 'ny-rad', confirm_token: 'ny-rad-token' }, error: null }),
+          // Første rad heter «ny-rad», de neste «ny-rad-2» … — som i databasen er
+          // id og token aldri like for to rader.
+          single: async () => {
+            innsatte += 1;
+            const n = innsatte === 1 ? '' : `-${innsatte}`;
+            return { data: { id: `ny-rad${n}`, confirm_token: `ny-rad-token${n}` }, error: null };
+          },
           then: (ok: (v: unknown) => unknown, feil?: (e: unknown) => unknown) =>
-            Promise.resolve(k.op === 'select' ? { count: ventende, error: tellFeil } : { error: null }).then(ok, feil)
+            Promise.resolve(
+              k.op === 'select' ? { count: tellRader ? tellRader(k.filtre) : ventende, error: tellFeil } : { error: null }
+            ).then(ok, feil)
         };
         return b;
       };
@@ -105,8 +153,10 @@ vi.mock('@/lib/supabase/admin', () => ({
   })
 }));
 
-import { POST, maxDuration } from '../route';
+import { createHash } from 'crypto';
+import { NYTT_FORSOK_ETTER_MS, POST, maxDuration } from '../route';
 import { _resetAllBuckets } from '@/lib/rate-limit';
+import { MAKS_BEKREFTELSER_PER_TIME } from '@/lib/alerts/pameldingstak';
 
 const NAA = '2026-09-25T10:00:00.000Z';
 const minutterSiden = (n: number) => new Date(Date.parse(NAA) - n * 60_000).toISOString();
@@ -137,10 +187,16 @@ beforeEach(() => {
   process.env.NEXT_PUBLIC_APP_URL = 'https://www.mycelet.com';
   eksisterende = null;
   ventende = 0;
+  tellRader = null;
   tellFeil = null;
   sendingOk = true;
   kall = [];
+  resendSvar = [];
+  resendNokler = new Set();
+  utsendingsforsok = [];
   sendteEposter = [];
+  pauser = [];
+  innsatte = 0;
   ekteTak = false;
   klient = 'ip:1';
   takNokler = [];
@@ -216,7 +272,7 @@ describe('påmelding — dobbel opt-in holder', () => {
     await post({ email: 'ny@example.com', region: 'Göteborg', locale: 'sv' });
     expect(sendteEposter[0].tekst).toContain('/api/soppvarsel/bekreft?t=ny-rad-token&sprak=sv');
     await post({ email: 'ny2@example.com', region: 'Oslo', locale: 'en' });
-    expect(sendteEposter[1].tekst).toContain('/api/soppvarsel/bekreft?t=ny-rad-token&sprak=nb');
+    expect(sendteEposter[1].tekst).toContain('/api/soppvarsel/bekreft?t=ny-rad-token-2&sprak=nb');
   });
 });
 
@@ -325,12 +381,13 @@ describe('påmelding — tak per adresse', () => {
     expect(sendteEposter).toHaveLength(0);
     expect(kall.filter((k) => k.op !== 'select')).toEqual([]);
 
-    // Tellingen: kontoløse, denne adressen, venter på bekreftelse, rørt siste time.
+    // Tellingen: kontoløse, denne innboksen (alle skrivemåter, forankret og
+    // escapet), venter på bekreftelse, rørt siste time.
     const telling = kall.find((k) => k.op === 'select' && k.valg?.head === true);
     expect(telling?.valg).toEqual({ count: 'exact', head: true });
     expect(telling?.filtre).toEqual([
       ['is', 'user_id', null],
-      ['eq', 'email', 'offer@example.com'],
+      ['imatch', 'email', '^offer(\\+[^@]*)?@example\\.com\\.*$'],
       ['eq', 'active', true],
       ['is', 'confirmed_at', null],
       ['gte', 'updated_at', minutterSiden(60)]
@@ -372,6 +429,99 @@ describe('påmelding — tak per adresse', () => {
       expect(res.status).toBe(303);
       expect(res.headers.get('location')).toBe('https://www.mycelet.com/soppvarsel?status=sendt#status');
     }
+  });
+});
+
+describe('påmelding — taket gjelder innboksen, ikke skrivemåten', () => {
+  // Trusselen: ett skript, mange skrivemåter av ÉN innboks, fra IP-er som
+  // byttes. «offer+1», «o.ffer» og «offer» på Gmail og googlemail.com leveres
+  // alle til samme innboks — med taket på strengen fikk hver av dem tre
+  // e-poster i timen, uten grense på antall skrivemåter.
+  //
+  // Gmail-adressene settes sammen av biter: repoet er offentlig, og vakta i
+  // src/lib/__tests__/docs-uten-hemmeligheter.test.ts stopper adresser hos
+  // private leverandører i innsjekkede filer — også oppdiktede.
+  const gm = (lokal: string, domene = 'gmail.com') => [lokal, domene].join('@');
+  const SKRIVEMATER = [gm('offer'), gm('offer+1'), gm('o.ffer'), gm('Offer', 'GoogleMail.com'), gm('of.fer+sopp')];
+
+  /** Lag 3 slik databasen svarer: radene som er satt inn, og som mønsteret treffer (`~*`). */
+  const tellInnsatte = (filtre: Filter[]) => {
+    const monster = filtre.find(([op, kol]) => op === 'imatch' && kol === 'email')?.[2];
+    if (typeof monster !== 'string') throw new Error('tellingen må matche adressen med et mønster');
+    const treff = new RegExp(monster, 'i');
+    return kall.filter((k) => k.op === 'insert' && treff.test(String(k.payload?.email))).length;
+  };
+
+  it('lag 1 (minne): fem skrivemåter fra fem IP-er → tre e-poster, og alle svarer likt', async () => {
+    ekteTak = true;
+    const svar: unknown[] = [];
+    for (const [i, email] of SKRIVEMATER.entries()) {
+      klient = `ip:${i + 1}`;
+      svar.push(await (await post({ email, region: 'Oslo' })).json());
+    }
+    expect(sendteEposter).toHaveLength(MAKS_BEKREFTELSER_PER_TIME);
+    // E-posten gikk til adressen slik den ble skrevet (lowercase), ikke den kanoniske formen.
+    expect(sendteEposter.map((e) => e.til)).toEqual(SKRIVEMATER.slice(0, 3));
+    expect(svar).toEqual(Array.from({ length: 5 }, () => ({ ok: true, status: 'sendt' })));
+  });
+
+  it('lag 3 (database): fem skrivemåter fra fem instanser → tre e-poster', async () => {
+    // Begrenseren i minnet ser ingenting (ny instans hver gang): tellingen holder taket.
+    tellRader = tellInnsatte;
+    for (const email of SKRIVEMATER) await post({ email, region: 'Oslo' });
+    expect(sendteEposter).toHaveLength(MAKS_BEKREFTELSER_PER_TIME);
+    // Raden lagrer adressen slik den ble skrevet; de to siste ble aldri satt inn.
+    expect(kall.filter((k) => k.op === 'insert').map((k) => k.payload?.email)).toEqual(SKRIVEMATER.slice(0, 3));
+  });
+
+  it('lag 3 teller aldri en annen innboks: samme begynnelse, kortere navn eller annet domene går gjennom', async () => {
+    // Ellers kunne hvem som helst fylt taket til en fremmed — og bekreftelsene
+    // dens ville blitt svelget bak «sendt».
+    tellRader = tellInnsatte;
+    for (const email of SKRIVEMATER.slice(0, 3)) await post({ email, region: 'Oslo' });
+    const andre = [gm('offerother'), gm('offe'), gm('xoffer'), 'offer@example.com'];
+    for (const email of andre) await post({ email, region: 'Oslo' });
+    expect(sendteEposter.map((e) => e.til)).toEqual([...SKRIVEMATER.slice(0, 3), ...andre]);
+  });
+
+  it('regex-tegn i adressen er bokstavelige: tre rader på oxk fyller ikke taket til o.k', async () => {
+    tellRader = tellInnsatte;
+    const oxk = ['oxk@firma.example', 'oxk+1@firma.example', 'oxk+2@firma.example', 'oxk+3@firma.example'];
+    for (const email of oxk) await post({ email, region: 'Oslo' });
+    expect(sendteEposter).toHaveLength(3);
+    // Uten escaping betydde punktumet «hvilket som helst tegn», og o.k traff alle radene over.
+    await post({ email: 'o.k@firma.example', region: 'Oslo' });
+    expect(sendteEposter.map((e) => e.til)).toEqual([...oxk.slice(0, 3), 'o.k@firma.example']);
+  });
+
+  it('visningsnavn, kommentarer, lister og et punktum til slutt er ugyldige — avvist før noe tak eller oppslag', async () => {
+    // Slapp de gjennom, var strengen som ble lagret og telt en annen enn den
+    // e-posten ble levert til.
+    ekteTak = true;
+    for (const email of [
+      '"x"<offer@example.com>',
+      'Offer <offer@example.com>',
+      '<offer@example.com>',
+      '(c)offer@example.com',
+      'offer@example.com,victim@example.com',
+      'offer@example.com;x',
+      'offer@example.com.',
+      'offer@[127.0.0.1]',
+      `${'a'.repeat(243)}@example.com` // 255 tegn
+    ]) {
+      expect(await (await post({ email, region: 'Oslo' })).json(), email).toEqual({ ok: false, status: 'ugyldig' });
+    }
+    expect(kall).toEqual([]);
+    expect(sendteEposter).toEqual([]);
+    expect(takNokler).toEqual([]);
+  });
+
+  it('ekte adresser slipper fortsatt gjennom: +merkelapp, æøå, apostrof, og 254 tegn', async () => {
+    const ekte = ['offer+sopp@example.com', 'søren@eksempel.example', "o'brien@example.org", `${'a'.repeat(242)}@example.com`];
+    for (const email of ekte) {
+      expect((await (await post({ email, region: 'Oslo' })).json()).status, email).toBe('sendt');
+    }
+    expect(sendteEposter.map((e) => e.til)).toEqual(ekte);
   });
 });
 
@@ -496,14 +646,17 @@ describe('påmelding — en utsending som feiler rulles tilbake', () => {
     sendingOk = true;
     eksisterende = null;
     expect((await (await post({ email: 'noen@example.com', region: 'Oslo' })).json()).status).toBe('sendt');
-    expect(sendteEposter).toHaveLength(2);
+    expect(sendteEposter).toHaveLength(1);
+    // To forsøk på den første påmeldingen (begge feilet), ett på den andre.
+    expect(utsendingsforsok).toHaveLength(3);
   });
 
-  it('funksjonen lever lenger enn fristen på utsendingen — ellers rekker ikke tilbakerullingen å kjøre', async () => {
+  it('funksjonen lever lenger enn begge forsøkene på utsendingen — ellers rekker ikke tilbakerullingen å kjøre', async () => {
     // Blir funksjonen drept mens Resend henger, står raden igjen ubekreftet, og
-    // neste forsøk svares «sjekk innboksen» (lag 2) uten at noe er sendt.
+    // neste forsøk svares «sjekk innboksen» (lag 2) uten at noe er sendt. To
+    // forsøk med hver sin frist, pausen imellom, og ti sekunder til databasen.
     const { RESEND_FRIST_MS } = await vi.importActual<typeof import('@/lib/email/send')>('@/lib/email/send');
-    expect(maxDuration * 1000).toBeGreaterThanOrEqual(RESEND_FRIST_MS + 10_000);
+    expect(maxDuration * 1000).toBeGreaterThanOrEqual(2 * RESEND_FRIST_MS + NYTT_FORSOK_ETTER_MS + 10_000);
   });
 
   it('eksisterende rad: slås av igjen, slettes aldri', async () => {
@@ -523,7 +676,88 @@ describe('påmelding — en utsending som feiler rulles tilbake', () => {
     sendingOk = true;
     eksisterende = { id: 'rad-1', confirmed_at: null, active: false, created_at: minutterSiden(300), updated_at: minutterSiden(0) };
     expect((await (await post({ email: 'noen@example.com', region: 'Oslo' })).json()).status).toBe('sendt');
+    expect(sendteEposter).toHaveLength(1);
+    expect(utsendingsforsok).toHaveLength(3);
+  });
+});
+
+describe('påmelding — et tidsavbrudd er ikke et nei: ett nytt forsøk med samme nøkkel', () => {
+  // sendEpost svarer { ok: false } etter RESEND_FRIST_MS — men Resend kan ha
+  // tatt imot e-posten uten at svaret kom fram. Før ble raden da slettet:
+  // leseren fikk «noe gikk galt», og lenka i innboksen var død. Nå går det ett
+  // nytt forsøk med samme idempotensnøkkel, og Resend svarer på det første i
+  // stedet for å sende en til.
+  const sammendrag = (token: string) => createHash('sha256').update(token).digest('hex').slice(0, 32);
+
+  it('Resend tok imot, svaret kom ikke fram: én e-post, raden står, lenka virker, svaret er «sendt»', async () => {
+    ekteTak = true;
+    resendSvar = ['levert-uten-svar', 'levert'];
+    const res = await post({ email: 'noen@example.com', region: 'Oslo' });
+    expect(await res.json()).toEqual({ ok: true, status: 'sendt' });
+
+    // To forsøk, samme nøkkel og samme innhold — men bare én e-post i innboksen.
+    expect(utsendingsforsok).toHaveLength(2);
+    expect(utsendingsforsok[1]).toEqual(utsendingsforsok[0]);
+    expect(sendteEposter).toHaveLength(1);
+    expect(pauser).toEqual([NYTT_FORSOK_ETTER_MS]);
+
+    // Ingen tilbakerulling: raden og tokenet i lenka finnes fortsatt.
+    expect(kall.filter((k) => k.op === 'delete' || k.op === 'update')).toEqual([]);
+    expect(sendteEposter[0].tekst).toContain('/api/soppvarsel/bekreft?t=ny-rad-token&sprak=nb');
+    // E-posten gikk ut, så plassen i taket per adresse er brukt — ikke gitt tilbake.
+    expect(tilbakegitt).toEqual([]);
+  });
+
+  it('det første kom aldri fram: det nye forsøket sender den', async () => {
+    resendSvar = ['tidsavbrudd', 'levert'];
+    expect(await (await post({ email: 'noen@example.com', region: 'Oslo' })).json()).toEqual({ ok: true, status: 'sendt' });
+    expect(utsendingsforsok).toHaveLength(2);
+    expect(sendteEposter).toHaveLength(1);
+    expect(kall.filter((k) => k.op === 'delete')).toEqual([]);
+  });
+
+  it('også det nye forsøket feiler: rullet tilbake som før, «noe gikk galt», og ikke et tredje forsøk', async () => {
+    ekteTak = true;
+    resendSvar = ['tidsavbrudd', 'tidsavbrudd'];
+    expect(await (await post({ email: 'noen@example.com', region: 'Oslo' })).json()).toEqual({ ok: false, status: 'feil' });
+    expect(utsendingsforsok).toHaveLength(2);
+    expect(utsendingsforsok[1].idempotensNokkel).toBe(utsendingsforsok[0].idempotensNokkel);
+    expect(sendteEposter).toEqual([]);
+    expect(sisteAv('delete')?.filtre).toContainEqual(['eq', 'id', 'ny-rad']);
+    expect(tilbakegitt).toHaveLength(1);
+  });
+
+  it('en utsending som går med én gang prøves ikke på nytt, og ingen venter', async () => {
+    await post({ email: 'noen@example.com', region: 'Oslo' });
+    expect(utsendingsforsok).toHaveLength(1);
+    expect(pauser).toEqual([]);
+  });
+
+  it('nøkkelen er raden og lenka: ny rad → egen nøkkel, og verken token eller adresse står i klartekst', async () => {
+    await post({ email: 'noen@example.com', region: 'Oslo' });
+    const nokkel = utsendingsforsok[0].idempotensNokkel ?? '';
+    expect(nokkel).toBe(`soppvarsel-bekreft/ny-rad/${sammendrag('ny-rad-token')}`);
+    expect(nokkel).not.toContain('ny-rad-token');
+    expect(nokkel).not.toContain('noen');
+  });
+
+  it('samme rad med ny lenke (ny utsending etter lag 2) får ny nøkkel — ellers ville Resend svart «allerede sendt»', async () => {
+    // Raden venter på bekreftelse, og e-posten gikk for over ti minutter siden:
+    // tokenet roteres, og den nye lenka MÅ ut. Med raden alene som nøkkel ville
+    // Resend svart «allerede sendt» i 24 timer — mens rotasjonen drepte den gamle.
+    const venter = () => ({ id: 'rad-1', confirmed_at: null, active: true, created_at: minutterSiden(11), updated_at: minutterSiden(11) });
+    eksisterende = venter();
+    await post({ email: 'noen@example.com', region: 'Oslo' });
+    eksisterende = { ...venter(), created_at: minutterSiden(200), updated_at: minutterSiden(61) };
+    await post({ email: 'noen@example.com', region: 'Oslo' });
+
+    const tokener = kall.filter((k) => k.op === 'update').map((k) => String(k.payload?.confirm_token));
+    expect(tokener).toHaveLength(2);
+    expect(tokener[0]).not.toBe(tokener[1]);
+    expect(utsendingsforsok.map((e) => e.idempotensNokkel)).toEqual(tokener.map((t) => `soppvarsel-bekreft/rad-1/${sammendrag(t)}`));
+    // Begge lenkene gikk ut.
     expect(sendteEposter).toHaveLength(2);
+    expect(sendteEposter[1].tekst).toContain(tokener[1]);
   });
 });
 

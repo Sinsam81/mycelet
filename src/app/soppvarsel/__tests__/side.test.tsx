@@ -86,3 +86,16 @@ describe('/soppvarsel — områdevalget', () => {
     expect(select.querySelectorAll('optgroup option').length).toBeGreaterThan(10);
   });
 });
+
+describe('/soppvarsel — e-postfeltet', () => {
+  const plassholder = () => document.querySelector<HTMLInputElement>('input[name="email"]')?.placeholder;
+
+  it('plassholderen følger språket: «deg@» på norsk, «du@» på svensk', async () => {
+    await side();
+    expect(plassholder()).toBe(COPY.nb.epostEksempel);
+    sprak = 'sv';
+    await side();
+    expect(plassholder()).toBe(COPY.sv.epostEksempel);
+    expect(plassholder()).toBe('du@example.com');
+  });
+});

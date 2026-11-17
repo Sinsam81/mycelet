@@ -94,7 +94,7 @@ export function VarselCta({
               required
               autoComplete="email"
               className="mt-1 w-full rounded-lg border border-forest-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400"
-              placeholder="deg@example.com"
+              placeholder={skjema.epostEksempel}
             />
           </label>
           <button

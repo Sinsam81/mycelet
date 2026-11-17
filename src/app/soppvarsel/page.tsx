@@ -98,7 +98,7 @@ export default async function SoppvarselSide({
               required
               autoComplete="email"
               className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-              placeholder="deg@example.com"
+              placeholder={t.epostEksempel}
             />
           </label>
           <label className="mt-3 block text-sm font-medium text-gray-700">
