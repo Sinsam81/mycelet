@@ -6,7 +6,6 @@ import { getBillingCapabilities, getUserBillingSubscription } from '@/lib/billin
 import { fetchWeatherSamplesForBounds, nearestWeatherSample, weatherSourceSummary } from '@/lib/weather/samples';
 import { getForestProperties, buildSpeciesHabitatPreferences } from '@/lib/forest';
 import { computeCellPrediction } from '@/lib/prediction/cell-score';
-import { dayOfYearOf } from '@/lib/prediction/phenology';
 import { weightedOccurrenceDensity, countWithinKm, OCCURRENCE_FETCH_LIMIT } from '@/lib/prediction/occurrences';
 import { buildAreaReport, summariseNeighbourhood } from '@/lib/prediction/area-report';
 import { getElevation } from '@/lib/terrain';
@@ -22,7 +21,7 @@ import { getSpeciesDisplayName } from '@/lib/utils/species-name';
 import { isRecommendableSpecies } from '@/lib/prediction/recommendable';
 import { festBoksTilOppslagspresisjon } from '@/lib/map/oppslagsboks';
 import { DEFAULT_LOCALE, type Locale } from '@/i18n/config';
-import { osloIDag } from '@/lib/api/oslo-dag';
+import { osloDagIAaret, osloIDag } from '@/lib/api/oslo-dag';
 
 // Surfaced verbatim as toasts on the map, so they follow the reader's language.
 const COPY: Record<
@@ -204,9 +203,11 @@ export async function GET(request: NextRequest) {
 
     const centerLat = (minLat + maxLat) / 2;
     const centerLng = (minLng + maxLng) / 2;
-    // Oslo-måneden, ikke UTC-serverens (se src/lib/api/oslo-dag.ts).
-    const month = osloIDag(new Date()).maaned;
-    const dayOfYear = dayOfYearOf(new Date());
+    // Måned og dag i året fra én og samme Oslo-dato, ikke UTC-serverens (se
+    // src/lib/api/oslo-dag.ts) — slik /api/prediction og species-spots gjør.
+    const naa = new Date();
+    const month = osloIDag(naa).maaned;
+    const dayOfYear = osloDagIAaret(naa);
 
     const bounds = { minLat, minLng, maxLat, maxLng };
     const [weatherSamples, speciesRes, occRes] = await Promise.all([

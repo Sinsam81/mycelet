@@ -234,15 +234,20 @@ describe('Logger', () => {
           const e = new Error('loop') as Error & { cause?: unknown };
           e.cause = e;
           log.error('loop.failed', e);
-          expect(linje()).toContain('loop');
+          // The err field, not the line: the event name 'loop.failed' contains 'loop' too.
+          expect((felter().err as Record<string, unknown>).message).toBe('loop');
         });
 
         it('still writes null and numbers as NonError', () => {
           const log = _createTestLogger({ level: 'error', writer: captured.writer });
+          // The err field, not the whole line: the line also carries the real
+          // timestamp, which contains '42' about one run in twenty, and a
+          // dropped payload would still leave 'null' in it as "err":null.
           log.error('weird', null);
+          expect(felter().err).toMatchObject({ name: 'NonError', message: 'null' });
+          captured.lines.length = 0; // felter() reads the first line
           log.error('weird', 42);
-          expect(captured.lines[0].line).toContain('null');
-          expect(captured.lines[1].line).toContain('42');
+          expect(felter().err).toMatchObject({ name: 'NonError', message: '42' });
         });
 
         it('keeps context alone when no error is given', () => {

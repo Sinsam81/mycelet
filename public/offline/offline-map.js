@@ -236,7 +236,7 @@ const COPY = {
     positionSearching: 'Hämtar din position …',
     positionInside: (accuracy) => `Din position är utmärkt på kartan (±${accuracy} m).`,
     positionOutside: 'Du står utanför det här kartområdet.',
-    positionDenied: 'Position är inte tillåten, så du visas inte på kartan.',
+    positionDenied: 'Appen har inte tillgång till din position, så du visas inte på kartan.',
     positionUnavailable: 'Kunde inte hämta din position.',
     retry: 'Försök ladda appen igen',
     retrying: 'Väntar på nätet …'

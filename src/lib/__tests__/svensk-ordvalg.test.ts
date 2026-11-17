@@ -1,7 +1,10 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { createTranslator } from 'next-intl';
 import nb from '../../../messages/nb.json';
 import sv from '../../../messages/sv.json';
+import { shellIntro } from '../../../public/offline/offline-map.js';
 
 /**
  * Svensk som er norsk i forkledning.
@@ -12,8 +15,9 @@ import sv from '../../../messages/sv.json';
  * nøklene finnes på begge språk; denne vokter mot de ordrette oversettelsene
  * vi alt har funnet og rettet, så de ikke kommer tilbake med neste tekst.
  *
- * Gjelder meldingskatalogen. Tekst som lages på serveren (COPY-tabellene i
- * src/lib) dekkes ikke her.
+ * Gjelder meldingskatalogen og offline-skallet (public/offline/), som har sin
+ * egen svenske tekst fordi next-intl ikke finnes der. Tekst som lages på
+ * serveren (COPY-tabellene i src/lib) dekkes ikke her.
  */
 
 type Catalog = { [nokkel: string]: string | Catalog };
@@ -26,6 +30,29 @@ function strenger(katalog: Catalog, prefiks = ''): Array<[string, string]> {
 }
 
 const SVENSK = strenger(sv as Catalog);
+
+/**
+ * Offline-skallets svenske tekst, som [sti, tekst]. Skallet lever utenfor
+ * React-bunten (se filhodet i public/offline/offline-map.js): svensken står i
+ * data-sv på elementene i index.html og i sv-blokka i COPY i offline-map.js.
+ * COPY er ikke eksportert, så blokka leses som tekst — og testen «offline-
+ * skallets svenske tekst er med» sjekker at det er den skallet faktisk bruker.
+ */
+function offlineSvensk(): Array<[string, string]> {
+  const html = readFileSync(join(process.cwd(), 'public/offline/index.html'), 'utf8');
+  const js = readFileSync(join(process.cwd(), 'public/offline/offline-map.js'), 'utf8');
+  const svBlokk = /\n {2}sv: \{\n([\s\S]*?)\n {2}\}/.exec(js)?.[1] ?? '';
+  const fraHtml = [...html.matchAll(/data-sv="([^"]*)"/g)].map(([, tekst]) => tekst);
+  const fraJs = [...svBlokk.matchAll(/'((?:[^'\\]|\\.)*)'|`((?:[^`\\]|\\.)*)`/g)].map(
+    ([, enkel, mal]) => enkel ?? mal
+  );
+  return [
+    ...fraHtml.map((tekst): [string, string] => [`public/offline/index.html (data-sv) «${tekst}»`, tekst]),
+    ...fraJs.map((tekst): [string, string] => [`public/offline/offline-map.js (COPY.sv) «${tekst}»`, tekst])
+  ];
+}
+
+const OFFLINE = offlineSvensk();
 
 /**
  * Frasen som helt ord. `\b` i JavaScript regner bare a–z, 0–9 og _ som
@@ -65,6 +92,19 @@ const FALLGRUVER: Array<{ monster: RegExp; hvorfor: string; skrivHeller: string 
     monster: frase('lite att hämta'),
     hvorfor: 'svensk «lite att hämta» betyr «litt å hente», ikke «lite å hente»',
     skrivHeller: '«inte mycket att hämta»'
+  },
+  // De to under sto i offline-skallet, som svenske brukere ser hver gang
+  // nettet er tregt. Bare akkurat «artsinformation» er forbudt, ikke «arts-»
+  // generelt: «artsida» er art + sida, og «en arts» er vanlig svensk genitiv.
+  {
+    monster: frase('artsinformation'),
+    hvorfor: 'binde-s-en er norsk («artsinformasjon»); svenske art-sammensetninger har den ikke',
+    skrivHeller: '«artinformation», som artnamn og artbibliotek'
+  },
+  {
+    monster: frase('position är inte tillåten'),
+    hvorfor: 'ordrett fra norsk «posisjon er ikke tillatt» — det er tilgangen som mangler, ikke posisjonen som er forbudt',
+    skrivHeller: '«Appen har inte tillgång till din position»'
   }
 ];
 
@@ -73,9 +113,21 @@ describe('svensken er svensk, ikke norsk ord for ord', () => {
     expect(SVENSK.length).toBeGreaterThan(500);
   });
 
+  it('offline-skallets svenske tekst er med, så vaktene under gjelder den også', () => {
+    const tekster = OFFLINE.map(([, tekst]) => tekst);
+    // Fra HTML-en: sidetittelen.
+    expect(tekster).toContain('Mycelet — offlinekarta');
+    // Fra skriptet: sv-blokka er den skallet faktisk viser på svensk …
+    expect(tekster).toContain(shellIntro('sv', 'offline').heading);
+    expect(tekster).toContain(shellIntro('sv', 'noResponse').note);
+    // … og bare den: den norske blokka står rett over.
+    expect(tekster).not.toContain(shellIntro('nb', 'offline').heading);
+    expect(tekster.length).toBeGreaterThan(15);
+  });
+
   for (const { monster, hvorfor, skrivHeller } of FALLGRUVER) {
     it(`ingen tekst bruker ${monster} — ${hvorfor}`, () => {
-      const treff = SVENSK.filter(([, tekst]) => monster.test(tekst)).map(([sti]) => sti);
+      const treff = [...SVENSK, ...OFFLINE].filter(([, tekst]) => monster.test(tekst)).map(([sti]) => sti);
       expect(treff, `skriv heller ${skrivHeller}`).toEqual([]);
     });
   }

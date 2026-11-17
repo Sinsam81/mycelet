@@ -135,7 +135,7 @@ describe('offline-skallet i nettleseren', () => {
     expect(knapp.textContent).toBe('Försök ladda appen igen');
     // Også teksten som står fast i HTML-en (data-sv), ikke bare den skriptet skriver.
     const side = document.querySelector('main')!.textContent!;
-    expect(side).toContain('Ingen artsinformation utan nät');
+    expect(side).toContain('Ingen artinformation utan nät');
     expect(side).toContain('svampkonsulent');
     expect(side).toContain('Sparade kartområden');
     expect(side).not.toMatch(/soppkontroll|Lagrede kartområder|Ingen artsinformasjon/);

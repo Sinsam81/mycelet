@@ -37,7 +37,10 @@ describe('forumDato', () => {
     try {
       expect(forumDato('2026-03-01T00:15:00Z', 'nb')).toBe(a);
     } finally {
-      process.env.TZ = opprinnelig;
+      // Ikke `process.env.TZ = opprinnelig` når den var tom: process.env gjør
+      // alt til tekst, og sonen ble da strengen «undefined» for resten av fila.
+      if (opprinnelig === undefined) delete process.env.TZ;
+      else process.env.TZ = opprinnelig;
     }
   });
 });
