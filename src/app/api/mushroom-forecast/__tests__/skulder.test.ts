@@ -166,10 +166,12 @@ describe('/api/mushroom-forecast: et sent «regn på vei» beholder ordene sine 
 describe('/api/mushroom-forecast: «Fuktig nok» står aldri over «Tørt»', () => {
   /**
    * 10. juli, 21 °C, 75 %: to regndøgn (22 og 18 mm) etter en tørr måned, 45 mm
-   * på 14 dager, fuktindeks 0,649. Scoren gir temperaturpoeng opp til 22 °C, men
-   * banneret kaller forholdene modne bare til 20 (isMildForFlush). Dommen sa
+   * på 14 dager, fuktindeks 0,649. Scoren ga temperaturpoeng opp til 22 °C, men
+   * banneret kalte forholdene modne bare til 20 (isMildForFlush). Dommen sa
    * «Fuktig nok — men det er tidlig i sesongen — Marka er fuktig …» rett over
-   * «Tørt — soppen venter på regn — Lite fukt og ingen regn i sikte».
+   * «Tørt — soppen venter på regn — Lite fukt og ingen regn i sikte». Nå slutter
+   * båndet der scoren gjør, på 22 °C. SMHI-kilden er med vilje: i Sverige er
+   * temperaturen den siste timesmålingen.
    */
   function varmJulidag(): WeatherSummary {
     const serie = [...Array<number>(16).fill(0), ...Array<number>(10).fill(0.5), 0, 0, 22, 18];
@@ -188,7 +190,7 @@ describe('/api/mushroom-forecast: «Fuktig nok» står aldri over «Tørt»', ()
     };
   }
 
-  it('svensk leser, tørr prognose: «För varmt» over «Fuktigt, men varmt» — ikke «Torrt»', async () => {
+  it('svensk leser, tørr prognose: «Fuktigt nog» over det tidlige «Fuktigt och milt» — ikke «Torrt»', async () => {
     sprak = 'sv';
     vi.setSystemTime(new Date('2026-07-10T09:00:00Z'));
     observert = varmJulidag();
@@ -196,22 +198,23 @@ describe('/api/mushroom-forecast: «Fuktig nok» står aldri over «Tørt»', ()
 
     expect(observert.soilMoistureIndex).toBe(0.649);
     const { today, flush } = await hent('59.86');
-    // Tallet er det samme som før — bare ordene følger banneret.
-    expect(today).toMatchObject({ score: 68, optimal: false, title: 'För varmt för svamp i dag' });
+    // Tallet er det samme som før — og 21 °C gir temperaturpoeng, så banneret kaller det modent.
+    expect(today).toMatchObject({ score: 68, optimal: false, title: 'Fuktigt nog — men det är tidigt på säsongen' });
     expect(flush).toMatchObject({
-      status: 'dormant',
-      reason: 'warm',
-      title: 'Fuktigt, men varmt — svampen väntar på svalare väder'
+      status: 'fruiting',
+      shoulder: 'early',
+      title: 'Fuktigt och milt — men tidigt på säsongen'
     });
   });
 
-  it('norsk leser, regn i prognosen: «Fuktig, men varmt» — ikke «Regn på vei»', async () => {
+  it('norsk leser, 22,5 °C og regn i prognosen: «For varmt» over «Fuktig, men varmt» — ikke «Regn på vei»', async () => {
     vi.setSystemTime(new Date('2026-07-10T09:00:00Z'));
-    observert = varmJulidag();
+    // Over 22 °C gir scoren ingen temperaturpoeng; med 85 % når tallet 65 og navngir varmen.
+    observert = { ...varmJulidag(), temperatureC: 22.5, humidityPct: 85 };
     prognose = dogn('2026-07-10', [0, 10, 0, 0, 0, 0], 19, 70);
 
     const { today, flush } = await hent('59.87');
-    expect(today).toMatchObject({ score: 68, optimal: false, title: 'For varmt for sopp i dag' });
+    expect(today).toMatchObject({ score: 65, optimal: false, title: 'For varmt for sopp akkurat nå' });
     // Marka er fuktig; det er ikke regn som mangler.
     expect(flush).toMatchObject({
       status: 'dormant',
@@ -220,9 +223,9 @@ describe('/api/mushroom-forecast: «Fuktig nok» står aldri over «Tørt»', ()
     });
   });
 
-  it('samme dag på 20 °C: banneret kaller det modent, og da sier dommen «Fuktig nok»', async () => {
+  it('samme dag på 22 °C, scorens egen kant: banneret kaller det modent, og da sier dommen «Fuktig nok»', async () => {
     vi.setSystemTime(new Date('2026-07-10T09:00:00Z'));
-    observert = { ...varmJulidag(), temperatureC: 20 };
+    observert = { ...varmJulidag(), temperatureC: 22 };
     prognose = dogn('2026-07-10', [1, 1, 1, 1, 1, 1], 19, 70);
 
     const { today, flush } = await hent('59.88');
@@ -235,9 +238,10 @@ describe('/api/mushroom-forecast: «Perfekt soppdag» står aldri over «Tørt»
   /**
    * Meldt: 20. august, 21 °C, 85 %, fuktindeks 0,649, 45 mm på 14 dager og
    * tørr prognose ga score 90 og «🍄 Perfekt soppdag i dag!» rett over «Tørt —
-   * soppen venter på regn — Lite fukt og ingen regn i sikte». Scoren gir
-   * temperaturpoeng opp til 22 °C; banneret kaller forholdene modne bare til 20.
-   * Samme to regndøgn som julidagen over (22 og 18 mm), nå i høysesong.
+   * soppen venter på regn — Lite fukt og ingen regn i sikte». Scoren ga
+   * temperaturpoeng opp til 22 °C; banneret kalte forholdene modne bare til 20.
+   * Nå slutter båndet på 22, der scoren gjør. Samme to regndøgn som julidagen
+   * over (22 og 18 mm), nå i høysesong.
    */
   function varmAugustdag(tempC: number): WeatherSummary {
     const serie = [...Array<number>(16).fill(0), ...Array<number>(10).fill(0.5), 0, 0, 22, 18];
@@ -256,41 +260,58 @@ describe('/api/mushroom-forecast: «Perfekt soppdag» står aldri over «Tørt»
     };
   }
 
-  it('21 °C: samme tall, «For varmt for sopp i dag» over «Fuktig, men varmt» — begge språk', async () => {
+  it('21 °C: samme tall, feiret, og banneret sier det samme — begge språk', async () => {
     vi.setSystemTime(new Date('2026-08-20T09:00:00Z'));
     observert = varmAugustdag(21);
     prognose = dogn('2026-08-20', [0, 0, 0, 0, 0, 0], 19, 70);
     expect(observert.soilMoistureIndex).toBe(0.649);
 
     const nb = await hent('59.91');
-    expect(nb.today).toMatchObject({ score: 90, optimal: false, title: 'For varmt for sopp i dag' });
+    expect(nb.today).toMatchObject({ score: 90, optimal: true, title: '🍄 Perfekt soppdag i dag!' });
+    expect(nb.flush).toMatchObject({ status: 'fruiting', title: 'Forholdene er modne nå 🍄' });
+    expect(nb.flush.message).not.toContain('Lite fukt');
+    expect(nb.days[0]).toMatchObject({ score: 90, optimal: true });
+
+    sprak = 'sv';
+    const sv = await hent('59.92');
+    expect(sv.today).toMatchObject({ score: 90, optimal: true, title: '🍄 Perfekt svampdag i dag!' });
+    expect(sv.flush).toMatchObject({ status: 'fruiting', title: 'Nu är det läge för svamp 🍄' });
+  });
+
+  it('22 °C: scorens egen kant — innenfor båndet feires dagen, og banneret sier det samme', async () => {
+    vi.setSystemTime(new Date('2026-08-20T09:00:00Z'));
+    observert = varmAugustdag(22);
+    prognose = dogn('2026-08-20', [0, 0, 0, 0, 0, 0], 19, 70);
+
+    const { today, flush } = await hent('59.93');
+    expect(today).toMatchObject({ score: 90, optimal: true, title: '🍄 Perfekt soppdag i dag!' });
+    expect(flush).toMatchObject({ status: 'fruiting', title: 'Forholdene er modne nå 🍄' });
+  });
+
+  it('22,5 °C: ingen temperaturpoeng — «For varmt for sopp akkurat nå» over «Fuktig, men varmt», begge språk', async () => {
+    vi.setSystemTime(new Date('2026-08-20T09:00:00Z'));
+    observert = varmAugustdag(22.5);
+    prognose = dogn('2026-08-20', [0, 0, 0, 0, 0, 0], 19, 70);
+
+    const nb = await hent('59.94');
+    expect(nb.today).toMatchObject({ score: 80, optimal: false, title: 'For varmt for sopp akkurat nå' });
     expect(nb.flush).toMatchObject({
       status: 'dormant',
       reason: 'warm',
       title: 'Fuktig, men varmt — soppen venter på kjøligere vær'
     });
     expect(nb.flush.message).not.toContain('Lite fukt');
-    // Ringen tegnes ikke grønn lenger: grønt krever optimal (forecastBand).
-    expect(nb.days[0]).toMatchObject({ score: 90, optimal: false });
+    // Ringen tegnes ikke grønn: grønt krever optimal (forecastBand).
+    expect(nb.days[0]).toMatchObject({ score: 80, optimal: false });
 
     sprak = 'sv';
-    const sv = await hent('59.92');
-    expect(sv.today).toMatchObject({ score: 90, optimal: false, title: 'För varmt för svamp i dag' });
+    const sv = await hent('59.95');
+    expect(sv.today).toMatchObject({ score: 80, optimal: false, title: 'För varmt för svamp just nu' });
     expect(sv.flush).toMatchObject({
       status: 'dormant',
       reason: 'warm',
       title: 'Fuktigt, men varmt — svampen väntar på svalare väder'
     });
-  });
-
-  it('20 °C: innenfor båndet feires dagen, og banneret sier det samme', async () => {
-    vi.setSystemTime(new Date('2026-08-20T09:00:00Z'));
-    observert = varmAugustdag(20);
-    prognose = dogn('2026-08-20', [0, 0, 0, 0, 0, 0], 19, 70);
-
-    const { today, flush } = await hent('59.93');
-    expect(today).toMatchObject({ score: 90, optimal: true, title: '🍄 Perfekt soppdag i dag!' });
-    expect(flush).toMatchObject({ status: 'fruiting', title: 'Forholdene er modne nå 🍄' });
   });
 });
 

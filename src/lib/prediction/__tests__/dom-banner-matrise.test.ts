@@ -15,21 +15,28 @@ import type { DailyForecast } from '@/lib/weather/forecast';
  * banneret kalte forholdene modne bare mellom 3 og 20. 20. august, 21 °C, 85 %,
  * fuktindeks 0,649 og 45 mm på 14 dager ga score 90 og «🍄 Perfekt soppdag i
  * dag!» rett over «Tørt — soppen venter på regn — Lite fukt og ingen regn i
- * sikte». Og fuktig mark utenfor båndet fikk alltid «Lite fukt».
+ * sikte». Og fuktig mark utenfor båndet fikk alltid «Lite fukt». Nå deler de
+ * to båndet 3–22 °C, der den varme kanten er scorens egen (flushTemperature).
  *
  * Matrisen: 12 måneder × 7 dager i måneden × 38 temperaturer (−5 til 30 °C,
- * pluss 2,5 og 20,5 ved bannerets grenser) × fuktindeks null/0,3/0,55/0,8 ×
- * 6 regnmønstre × 3 luftfuktigheter × tørr/våt prognose × nb/sv = 919 296
+ * pluss 2,5 og 22,5 ved bannerets grenser) × fuktindeks null/0,3/0,55/0,8 ×
+ * 7 regnmønstre × 3 luftfuktigheter × tørr/våt prognose × nb/sv = 1 072 512
  * kort. Mot koden før rettelsen: 6 687–7 448 brudd per måned og språk i
- * juni–november, desember–mai rene.
+ * juni–november, desember–mai rene (målt da matrisen hadde seks regnmønstre
+ * og 20,5 °C som grenseprøve, 919 296 kort).
  *
- * IKKE DEKKET HER — to spenninger i regndimensjonen, eldre enn temperatur-
+ * IKKE DEKKET HER — tre spenninger i regndimensjonen, eldre enn temperatur-
  * båndet, som trenger en beslutning om ordlyd (telt i denne matrisen):
  *  - «Mildt nok — men det har regnet for lite … Første ordentlige regnværet
- *    setter det i gang» over «Forholdene er modne nå 🍄 … soppen kommer nå»
- *    (16 608 kort): fuktindeksen sier fuktig, 14-døgnsregnet er under 15 mm.
+ *    setter det i gang» over «Forholdene er modne nå 🍄 … soppen kommer nå»,
+ *    med skuldrenes utgaver (23 768 kort): fuktindeksen sier fuktig,
+ *    14-døgnsregnet er under 15 mm.
  *  - «Alt stemmer — bortsett fra marka … Den trenger et skikkelig regn» over
- *    «Soppen er på vei — Det regnet nylig — gi det noen dager» (10 464 kort).
+ *    «Soppen er på vei — Det regnet nylig — gi det noen dager» (14 584 kort).
+ *  - 'litenRegn|påVei': «Mildt nok — men det har regnet for lite» over «Soppen
+ *    er på vei — Det regnet nylig» (3 200 kort). Bare uten fuktindeks
+ *    (OpenWeather) og med 12–13,7 mm på sju døgn: dommen leser «for lite»,
+ *    banneret «regnet nylig». Samme ordvalg som de to over avgjør den.
  */
 
 type Dom =
@@ -77,8 +84,8 @@ const DOMMER: Record<Exclude<Dom, 'utenom'>, string[]> = {
   ],
   sesongTidlig: ['Fuktig nok — men det er tidlig i sesongen', 'Fuktigt nog — men det är tidigt på säsongen'],
   sesongSent: ['Fuktig nok — men sesongen er på hell', 'Fuktigt nog — men säsongen är på upphällningen'],
-  forVarmt: ['For varmt for sopp i dag', 'För varmt för svamp i dag'],
-  forKaldt: ['For kaldt for sopp i dag', 'För kallt för svamp i dag']
+  forVarmt: ['For varmt for sopp akkurat nå', 'För varmt för svamp just nu'],
+  forKaldt: ['For kaldt for sopp akkurat nå', 'För kallt för svamp just nu']
 };
 
 const UTENOM_TITLER = new Set(
@@ -118,7 +125,7 @@ function bannerFor(f: FlushAssessment): Banner {
  *
  * Hvert par har en grunn. Det som IKKE står her, er enten forenlig («Soppforhold
  * i dag» påstår ingenting; «For varmt» over «Tørt» sier nei to ganger), eller en
- * av de to spenningene i regndimensjonen øverst i filen.
+ * av de tre spenningene i regndimensjonen øverst i filen.
  */
 const FORBUDTE_PAR: Array<[Dom, Banner[], string]> = [
   [
@@ -170,17 +177,22 @@ for (const [dom, bannere, grunn] of FORBUDTE_PAR) {
 }
 
 const SISTE_DAG = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
-const TEMPERATURER = [...Array.from({ length: 36 }, (_, i) => i - 5), 2.5, 20.5];
+const TEMPERATURER = [...Array.from({ length: 36 }, (_, i) => i - 5), 2.5, 22.5];
 const FUKTINDEKSER: Array<number | null> = [null, 0.3, 0.55, 0.8];
 const LUFTFUKTIGHETER = [50, 70, 85];
-/** [3 d, 7 d, 14 d] — tørke, lite, akkurat over porten, gammelt regn, vått, og OpenWeather (uten 14 d). */
+/**
+ * [3 d, 7 d, 14 d] — tørke, lite, akkurat over porten, gammelt regn, vått, og to
+ * OpenWeather-rader (uten 14 d). [5, 13, null] er den eneste raden som når den
+ * tredje regnspenningen: uten fuktindeks og med 12–13,7 mm på sju døgn.
+ */
 const REGN: Array<[number, number, number | null]> = [
   [0, 1, 4],
   [2, 6, 12],
   [4, 8, 16],
   [1, 5, 25],
   [10, 22.5, 45],
-  [5, 14, null]
+  [5, 14, null],
+  [5, 13, null]
 ];
 const PROGNOSER: Record<'tørr' | 'våt', number[]> = {
   tørr: [0, 0, 0, 0, 0, 0],
@@ -281,17 +293,17 @@ function kjorManed(month: number, locale: 'nb' | 'sv'): Utfall {
               if (banner === 'tørt' && (dom === 'perfekt' || dom === 'sesongTidlig' || dom === 'sesongSent')) {
                 brudd.push(`${hvor()}: «${today.title}» over «${flush.message}»`);
               }
-              // Ordene om temperaturen følger bannerets bånd, 3–20 °C — skrevet ut
+              // Ordene om temperaturen følger bannerets bånd, 3–22 °C — skrevet ut
               // her, ikke lånt fra koden som testes.
-              const t = temperatureC > 20 ? 'warm' : temperatureC >= 3 ? 'mild' : 'cold';
+              const t = temperatureC > 22 ? 'warm' : temperatureC >= 3 ? 'mild' : 'cold';
               if ((banner === 'modent' || banner === 'modentTidlig' || banner === 'modentSent' || banner === 'påVei') && t !== 'mild') {
-                brudd.push(`${hvor()}: «${flush.title}» utenfor 3–20 °C`);
+                brudd.push(`${hvor()}: «${flush.title}» utenfor 3–22 °C`);
               }
               if (banner === 'fuktigVarmt' && t !== 'warm') brudd.push(`${hvor()}: «${flush.title}» uten at det er varmt`);
               if (banner === 'fuktigKaldt' && t !== 'cold') brudd.push(`${hvor()}: «${flush.title}» uten at det er kaldt`);
               if (dom === 'forVarmt' && t !== 'warm') brudd.push(`${hvor()}: «${today.title}» uten at det er varmt`);
               if (dom === 'forKaldt' && t !== 'cold') brudd.push(`${hvor()}: «${today.title}» uten at det er kaldt`);
-              if (dom === 'perfekt' && t !== 'mild') brudd.push(`${hvor()}: feiret utenfor 3–20 °C`);
+              if (dom === 'perfekt' && t !== 'mild') brudd.push(`${hvor()}: feiret utenfor 3–22 °C`);
             }
           }
         }
@@ -339,10 +351,12 @@ describe('dommen og banneret motsier aldri hverandre — uttømmende, gjennom ru
         totalt += antall;
       }
     }
-    // 12 × 7 × 38 × 4 × 6 × 3 × 2 × 2.
-    expect(totalt).toBe(12 * 7 * 38 * 4 * 6 * 3 * 2 * 2);
+    // 12 × 7 × 38 × 4 × 7 × 3 × 2 × 2.
+    expect(totalt).toBe(12 * 7 * 38 * 4 * 7 * 3 * 2 * 2);
     const forekommer = (dom: Dom, banner: Banner) => (alle.get(`${dom}|${banner}`) ?? 0) > 0;
-    // Saken som ble meldt: 21 °C i høysesong er nå «for varmt» over «fuktig, men varmt».
+    // Over 22 °C, der scoren ikke gir temperaturpoeng, står «for varmt» over
+    // «fuktig, men varmt». (Saken som ble meldt, 21 °C i høysesong, feires nå:
+    // båndet slutter der scoren gjør.)
     expect(forekommer('forVarmt', 'fuktigVarmt')).toBe(true);
     expect(forekommer('forKaldt', 'fuktigKaldt')).toBe(true);
     expect(forekommer('forKaldt', 'frost')).toBe(true);
@@ -354,5 +368,9 @@ describe('dommen og banneret motsier aldri hverandre — uttømmende, gjennom ru
     expect(forekommer('sesongSent', 'modentSent')).toBe(true);
     expect(forekommer('tørrMark', 'tørt')).toBe(true);
     expect(forekommer('utenom', 'utenom')).toBe(true);
+    // De tre regnspenningene i headeren finnes — også den som bare kommer uten fuktindeks.
+    expect(forekommer('litenRegn', 'modent')).toBe(true);
+    expect(forekommer('tørrMark', 'påVei')).toBe(true);
+    expect(forekommer('litenRegn', 'påVei')).toBe(true);
   }, 120_000);
 });

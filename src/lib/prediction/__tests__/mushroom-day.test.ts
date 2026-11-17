@@ -391,9 +391,10 @@ describe('seasonShoulder', () => {
 });
 
 describe('isMildForFlush', () => {
-  it('er bannerets bånd, 3–20 °C med begge ender', () => {
-    expect([2.9, 3, 12, 20, 20.1, 21, Number.NaN].map(isMildForFlush)).toEqual([
+  it('er bannerets bånd, 3–22 °C med begge ender', () => {
+    expect([2.9, 3, 12, 20.5, 22, 22.1, 23, Number.NaN].map(isMildForFlush)).toEqual([
       false,
+      true,
       true,
       true,
       true,
@@ -404,15 +405,35 @@ describe('isMildForFlush', () => {
   });
 
   it('flushTemperature sier hvilken side av båndet', () => {
-    expect([-5, 2, 2.9, 3, 20, 20.1, 30].map(flushTemperature)).toEqual([
+    expect([-5, 2, 2.9, 3, 21, 22, 22.1, 30].map(flushTemperature)).toEqual([
       'cold',
       'cold',
       'cold',
+      'mild',
       'mild',
       'mild',
       'warm',
       'warm'
     ]);
+  });
+
+  it('den varme kanten er scorens egen: «for varmt» bare der scoren ikke gir temperaturpoeng', () => {
+    // Med kanten på 20 kalte dommen 20,5–22 °C for varmt, mens scoren ga 10 av
+    // 20 temperaturpoeng der. Januar, ingen regn og 0 % luftfuktighet: da ER
+    // tallet temperaturleddet alene.
+    for (let tiendedeler = -50; tiendedeler <= 300; tiendedeler++) {
+      const t = tiendedeler / 10;
+      const temperaturpoeng = assessMushroomDay(
+        { temperatureC: t, humidityPct: 0, rain3dMm: 0, rain7dMm: 0, rain14dMm: 0 },
+        1
+      ).score;
+      if (temperaturpoeng > 0) expect(flushTemperature(t), `${t} °C`).toBe('mild');
+      if (flushTemperature(t) === 'warm') expect(temperaturpoeng, `${t} °C`).toBe(0);
+    }
+    // Kanten selv: 22 °C gir poeng og er mildt, 22,1 °C gir ingen og er varmt.
+    expect(assessMushroomDay({ temperatureC: 22, humidityPct: 0, rain3dMm: 0, rain7dMm: 0, rain14dMm: 0 }, 1).score).toBe(10);
+    expect(flushTemperature(22)).toBe('mild');
+    expect(flushTemperature(22.1)).toBe('warm');
   });
 });
 
@@ -432,8 +453,13 @@ describe('isWetForFlush', () => {
 /**
  * 20. august, 21 °C, 85 %, fuktindeks 0,649, 45 mm på 14 dager: score 90 og
  * «🍄 Perfekt soppdag i dag!» — rett over «Tørt — soppen venter på regn — Lite
- * fukt og ingen regn i sikte». Scoren gir temperaturpoeng opp til 22 °C, men
- * banneret kaller forholdene modne bare til 20.
+ * fukt og ingen regn i sikte». Scoren ga temperaturpoeng opp til 22 °C, men
+ * banneret kalte forholdene modne bare til 20.
+ *
+ * Første rettelse la 20 inn i optimal-porten, og da ble samme dag «For varmt
+ * for sopp i dag». I Sverige, der temperaturen er SMHIs siste timesmåling,
+ * vekslet en fuktig augustdag mellom «Perfekt» og «For varmt» gjennom dagen.
+ * Nå slutter båndet der scoren slutter å gi temperaturpoeng: 22 °C.
  */
 describe('temperaturbåndet i optimal-porten og i dommen', () => {
   const MELDT: ExplanationWeather = {
@@ -445,12 +471,27 @@ describe('temperaturbåndet i optimal-porten og i dommen', () => {
     soilMoistureIndex: 0.649
   };
 
-  it('20. august, 21 °C: samme tall, men ikke feiret — dommen sier at det er for varmt', () => {
+  it('20. august, 21 °C: feiret — scoren gir temperaturpoeng her, og båndet gjør det samme', () => {
     for (const locale of ['nb', 'sv'] as const) {
       const d = assessMushroomDay(MELDT, 8, locale, 20);
       expect(d.score, locale).toBe(90);
+      expect(d.optimal, locale).toBe(true);
+      expect(d.title, locale).toBe(locale === 'nb' ? '🍄 Perfekt soppdag i dag!' : '🍄 Perfekt svampdag i dag!');
+    }
+  });
+
+  it('22 °C feires fortsatt; over 22 °C er det for varmt akkurat nå', () => {
+    expect(assessMushroomDay({ ...MELDT, temperatureC: 22 }, 8, 'nb', 20)).toMatchObject({
+      score: 90,
+      optimal: true,
+      title: '🍄 Perfekt soppdag i dag!'
+    });
+    // 22,5 °C: ingen temperaturpoeng, 35 + 30 + 0 + 15 = 80.
+    for (const locale of ['nb', 'sv'] as const) {
+      const d = assessMushroomDay({ ...MELDT, temperatureC: 22.5 }, 8, locale, 20);
+      expect(d.score, locale).toBe(80);
       expect(d.optimal, locale).toBe(false);
-      expect(d.title, locale).toBe(locale === 'nb' ? 'For varmt for sopp i dag' : 'För varmt för svamp i dag');
+      expect(d.title, locale).toBe(locale === 'nb' ? 'For varmt for sopp akkurat nå' : 'För varmt för svamp just nu');
       expect(d.message, locale).toBe(
         locale === 'nb'
           ? 'Soppen trives best i mildt vær, og akkurat nå er det for varmt.'
@@ -459,51 +500,39 @@ describe('temperaturbåndet i optimal-porten og i dommen', () => {
     }
   });
 
-  it('20 °C feires fortsatt; fra 20,5 °C er det for varmt', () => {
-    expect(assessMushroomDay({ ...MELDT, temperatureC: 20 }, 8, 'nb', 20)).toMatchObject({
-      score: 90,
-      optimal: true,
-      title: '🍄 Perfekt soppdag i dag!'
-    });
-    expect(assessMushroomDay({ ...MELDT, temperatureC: 20.5 }, 8, 'nb', 20).optimal).toBe(false);
-    expect(assessMushroomDay({ ...MELDT, temperatureC: 22 }, 8, 'nb', 20).optimal).toBe(false);
-  });
-
-  it('kaldt: «For kaldt for sopp i dag», ikke «Alt stemmer» eller den intetsigende', () => {
+  it('kaldt: «For kaldt for sopp akkurat nå», ikke «Alt stemmer» eller den intetsigende', () => {
     // 1 °C en oktobermorgen, fuktig og vått: 35 + 30 + 0 + 15 = 80.
     const kaldt = { ...MELDT, temperatureC: 1 };
-    expect(assessMushroomDay(kaldt, 10, 'nb', 10)).toMatchObject({ score: 80, title: 'For kaldt for sopp i dag' });
-    expect(assessMushroomDay(kaldt, 10, 'sv', 10).title).toBe('För kallt för svamp i dag');
+    expect(assessMushroomDay(kaldt, 10, 'nb', 10)).toMatchObject({ score: 80, title: 'For kaldt for sopp akkurat nå' });
+    expect(assessMushroomDay(kaldt, 10, 'sv', 10).title).toBe('För kallt för svamp just nu');
     // Tørr mark: «Alt stemmer — Vær og sesong er på plass» sto før over «For kaldt akkurat nå».
-    expect(assessMushroomDay({ ...kaldt, soilMoistureIndex: 0.3 }, 10, 'nb', 10).title).toBe('For kaldt for sopp i dag');
+    expect(assessMushroomDay({ ...kaldt, soilMoistureIndex: 0.3 }, 10, 'nb', 10).title).toBe(
+      'For kaldt for sopp akkurat nå'
+    );
     // 2,5 °C er under båndet, selv om frostporten i banneret (2 °C) er passert.
-    expect(assessMushroomDay({ ...MELDT, temperatureC: 2.5 }, 10, 'nb', 10).title).toBe('For kaldt for sopp i dag');
+    expect(assessMushroomDay({ ...MELDT, temperatureC: 2.5 }, 10, 'nb', 10).title).toBe('For kaldt for sopp akkurat nå');
   });
 
   it('varmt og tørr mark: ikke «Alt stemmer — Vær og sesong er på plass»', () => {
     const d = assessMushroomDay({ ...MELDT, temperatureC: 25, soilMoistureIndex: 0.3 }, 9, 'nb', 15);
     expect(d.score).toBe(80);
-    expect(d.title).toBe('For varmt for sopp i dag');
+    expect(d.title).toBe('For varmt for sopp akkurat nå');
   });
 
-  it('varmt og lite regn: ikke «Mildt nok — Temperatur og sesong stemmer»', () => {
-    const d = assessMushroomDay(
-      { temperatureC: 21, humidityPct: 85, rain3dMm: 2, rain7dMm: 6, rain14dMm: 12, soilMoistureIndex: 0.7 },
-      9,
-      'nb',
-      15
+  it('lite regn: «Mildt nok» står bare der scoren gir temperaturpoeng', () => {
+    const liteRegn = { humidityPct: 85, rain3dMm: 2, rain7dMm: 6, rain14dMm: 12, soilMoistureIndex: 0.7 };
+    // 21 °C er innenfor båndet: 35 + 10 + 10 + 15 = 70, og forklaringen om regnet står.
+    const varm = assessMushroomDay({ temperatureC: 21, ...liteRegn }, 9, 'nb', 15);
+    expect(varm.score).toBe(70);
+    expect(varm.title).toBe('Mildt nok — men det har regnet for lite');
+    // Over 22 °C faller temperaturleddet bort: 35 + 10 + 0 + 15 = 60, under
+    // forklaringsterskelen. «Mildt nok» kan altså ikke stå utenfor båndet.
+    const forVarm = assessMushroomDay({ temperatureC: 23, ...liteRegn }, 9, 'nb', 15);
+    expect(forVarm.score).toBe(60);
+    expect(forVarm.title).toBe('Soppforhold i dag');
+    expect(assessMushroomDay({ temperatureC: 14, ...liteRegn }, 9, 'nb', 15).title).toBe(
+      'Mildt nok — men det har regnet for lite'
     );
-    expect(d.score).toBe(70);
-    expect(d.title).toBe('For varmt for sopp i dag');
-    // Innenfor båndet står forklaringen om regnet som før.
-    expect(
-      assessMushroomDay(
-        { temperatureC: 14, humidityPct: 85, rain3dMm: 2, rain7dMm: 6, rain14dMm: 12, soilMoistureIndex: 0.7 },
-        9,
-        'nb',
-        15
-      ).title
-    ).toBe('Mildt nok — men det har regnet for lite');
   });
 
   it('under forklaringsterskelen står den vanlige dommen, også utenfor båndet', () => {
@@ -519,6 +548,11 @@ describe('temperaturbåndet i optimal-porten og i dommen', () => {
     const sv = tekster('sv');
     expect(new Set(nb.map((d) => d.title)).size).toBe(2);
     for (let i = 0; i < 2; i++) {
+      // Temperaturen kan være én timesmåling (SMHI): titlene sier «akkurat nå»
+      // / «just nu», aldri «i dag», som om varmen gjaldt hele dagen.
+      expect(nb[i].title).toMatch(/ akkurat nå$/);
+      expect(sv[i].title).toMatch(/ just nu$/);
+      expect(`${nb[i].title} ${sv[i].title}`).not.toMatch(/i dag/);
       expect(sv[i].title).not.toBe(nb[i].title);
       expect(`${sv[i].title} ${sv[i].message}`).not.toMatch(/[æøÆØ]/);
       expect(`${nb[i].title} ${nb[i].message}`).not.toMatch(/[äöÄÖ]/);
@@ -582,12 +616,19 @@ function gammelOptimal(w: ExplanationWeather, month: number, day?: number): bool
 }
 
 /** Bannerets bånd, skrevet ut her — ikke lånt fra koden som testes. */
-const I_BÅNDET = (t: number) => t >= 3 && t <= 20;
+const I_BÅNDET = (t: number) => t >= 3 && t <= 22;
 
-describe('scoren er urørt, og optimal skifter bare der temperaturbåndet utelukker dagen', () => {
+describe('scoren og optimal er urørt — temperaturbåndet slutter der scoren slutter å gi temperaturpoeng', () => {
   it('over alle tolv måneder, dager, −5 til 30 °C, fukt, regn og luftfuktighet', () => {
     let antall = 0;
+    // Avvikene samles i vanlig JS og sjekkes én gang til slutt, som i
+    // dom-banner-matrise.test.ts: to expect() per inngang (561 600 kall) tok
+    // nesten hele tiden og brukte 20 av 30 sekunder under last. Stedet
+    // skrives bare ut for et avvik.
+    const avvik: string[] = [];
     const vippet: Array<{ month: number; dag?: number; t: number }> = [];
+    // Dagene grensen på 20 °C tok feiringen fra, før kanten ble flyttet til 22.
+    const overTjue: Array<{ month: number; dag?: number; t: number; optimal: boolean }> = [];
     for (let month = 1; month <= 12; month++) {
       for (const dag of [undefined, 1, 10, 14, 15, 16, 17, 18, 28, 30]) {
         for (const temperatureC of [...Array.from({ length: 36 }, (_, i) => i - 5), 2.5, 20.5, 21.5]) {
@@ -603,11 +644,16 @@ describe('scoren er urørt, og optimal skifter bare der temperaturbåndet uteluk
                   soilMoistureIndex
                 };
                 const d = assessMushroomDay(w, month, 'nb', dag);
-                const hvor = `${dag}.${month} ${JSON.stringify(w)}`;
-                expect(d.score, hvor).toBe(gammelScore(w, month, dag));
+                const score = gammelScore(w, month, dag);
                 const før = gammelOptimal(w, month, dag);
-                expect(d.optimal, hvor).toBe(før && I_BÅNDET(temperatureC));
+                const ventetOptimal = før && I_BÅNDET(temperatureC);
+                if (d.score !== score || d.optimal !== ventetOptimal) {
+                  avvik.push(
+                    `${dag}.${month} ${JSON.stringify(w)}: score ${d.score} (ventet ${score}), optimal ${d.optimal} (ventet ${ventetOptimal})`
+                  );
+                }
                 if (før && !d.optimal) vippet.push({ month, dag, t: temperatureC });
+                if (før && temperatureC > 20) overTjue.push({ month, dag, t: temperatureC, optimal: d.optimal });
                 antall++;
               }
             }
@@ -615,16 +661,19 @@ describe('scoren er urørt, og optimal skifter bare der temperaturbåndet uteluk
         }
       }
     }
+    expect(avvik.slice(0, 5), `${avvik.length} avvik`).toEqual([]);
     expect(antall).toBe(12 * 10 * 39 * 3 * 5 * 4);
-    // Hver dag som mistet feiringen, ligger over 20 °C — og høyst 22, der
-    // scoren slutter å gi temperaturpoeng. Under båndet (3 °C) gir scoren
-    // ingen temperaturpoeng og kunne aldri nå 85, så der vipper ingenting.
-    expect(vippet.every((v) => v.t > 20 && v.t <= 22)).toBe(true);
-    expect(vippet.every((v) => v.month >= 8 && v.month <= 10)).toBe(true);
-    // 336 av 280 800 innganger (0,12 %): 20,5 / 21 / 21,5 / 22 °C × de 28
-    // dagene i august–oktober der sesongvekten gir 85 × 85 % luftfuktighet ×
-    // 45 mm × fuktig mark (0,55, 0,8 eller uten indeks).
-    expect(vippet.length).toBe(336);
+    // Ingen dag mister feiringen. Uten temperaturpoeng er taket 35 + 30 + 15 =
+    // 80, og scoren gir ingen utenfor 6–22 °C — som ligger innenfor båndet.
+    expect(vippet).toEqual([]);
+    // Med kanten på 20 °C mistet 336 av 280 800 innganger (0,12 %) feiringen:
+    // 20,5 / 21 / 21,5 / 22 °C × de 28 dagene i august–oktober der sesongvekten
+    // gir 85 × 85 % luftfuktighet × 45 mm × fuktig mark (0,55, 0,8 eller uten
+    // indeks). Nå feires alle 336, som før båndet kom inn i porten.
+    expect(overTjue.length).toBe(336);
+    expect(overTjue.every((v) => v.t > 20 && v.t <= 22)).toBe(true);
+    expect(overTjue.every((v) => v.month >= 8 && v.month <= 10)).toBe(true);
+    expect(overTjue.every((v) => v.optimal)).toBe(true);
   }, 30_000);
 });
 
@@ -699,11 +748,11 @@ describe('dommen sier når det er årstiden som holder tallet nede', () => {
     expect(d.title).toBe('Soppforhold i dag');
   });
 
-  it('sier ikke «Fuktig nok» over 20 °C, der banneret under ikke kaller forholdene modne', () => {
-    // 10. juli, 21 °C og 75 %: 45 mm på 14 dager, fuktindeks 0,649. Scoren gir
-    // temperaturpoeng opp til 22 °C, banneret slutter på 20 (isMildForFlush) og
-    // sa «Tørt — soppen venter på regn» rett under «Fuktig nok — men det er tidlig».
-    // Nå sier banneret «Fuktig, men varmt», og dommen navngir temperaturen.
+  it('sier «Fuktig nok» bare der banneret under også kaller forholdene modne — til og med 22 °C', () => {
+    // 10. juli, 21 °C og 75 %: 45 mm på 14 dager, fuktindeks 0,649. Med
+    // banneret sluttet på 20 sto «Tørt — soppen venter på regn» rett under
+    // «Fuktig nok — men det er tidlig». Scoren gir temperaturpoeng til 22 °C,
+    // og nå gjør banneret det samme: 21 °C er modent, og dommen sier «Fuktig nok».
     const VARMT: ExplanationWeather = {
       temperatureC: 21,
       humidityPct: 75,
@@ -714,22 +763,29 @@ describe('dommen sier når det er årstiden som holder tallet nede', () => {
     };
     for (const locale of ['nb', 'sv'] as const) {
       const d = assessMushroomDay(VARMT, 7, locale, 10);
-      // Tallet er det samme — bare ordene følger banneret.
       expect(d.score, locale).toBe(68);
       expect(d.optimal, locale).toBe(false);
-      expect(d.title, locale).toBe(locale === 'nb' ? 'For varmt for sopp i dag' : 'För varmt för svamp i dag');
+      expect(d.title, locale).toBe(
+        locale === 'nb' ? 'Fuktig nok — men det er tidlig i sesongen' : 'Fuktigt nog — men det är tidigt på säsongen'
+      );
     }
-    // 20 °C er innenfor båndet: banneret kaller det modent, og dommen sier «Fuktig nok».
-    expect(assessMushroomDay({ ...VARMT, temperatureC: 20 }, 7, 'nb', 10).title).toBe(
+    expect(assessMushroomDay({ ...VARMT, temperatureC: 22 }, 7, 'nb', 10).title).toBe(
       'Fuktig nok — men det er tidlig i sesongen'
     );
-    expect(assessMushroomDay({ ...VARMT, temperatureC: 20.5 }, 7, 'nb', 10).title).toBe('For varmt for sopp i dag');
+    // Over 22 °C gir scoren ingen temperaturpoeng. Med 85 % når tallet likevel
+    // forklaringsterskelen, og da navngir dommen varmen.
+    const fuktigLuft = { ...VARMT, humidityPct: 85 };
+    expect(assessMushroomDay({ ...fuktigLuft, temperatureC: 22.5 }, 7, 'nb', 10)).toMatchObject({
+      score: 65,
+      title: 'For varmt for sopp akkurat nå'
+    });
     // Samme regel sent i sesongen.
-    const nov = { ...VARMT, humidityPct: 85 };
-    expect(assessMushroomDay({ ...nov, temperatureC: 20 }, 11, 'nb', 10).title).toBe(
+    expect(assessMushroomDay({ ...fuktigLuft, temperatureC: 22 }, 11, 'nb', 10).title).toBe(
       'Fuktig nok — men sesongen er på hell'
     );
-    expect(assessMushroomDay(nov, 11, 'nb', 10).title).toBe('For varmt for sopp i dag');
+    expect(assessMushroomDay({ ...fuktigLuft, temperatureC: 22.5 }, 11, 'nb', 10).title).toBe(
+      'For varmt for sopp akkurat nå'
+    );
   });
 
   it('under forklaringsterskelen er den vanlige dommen dekkende, også i en skulder', () => {

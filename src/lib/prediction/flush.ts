@@ -323,9 +323,10 @@ export function assessFlush(
   // sesong som gjelder, ikke den generelle.
   const shoulder = speciesCurve == null ? seasonShoulder(month, input.dayOfMonth) : null;
 
-  // 3–20 °C. Båndet ligger i mushroom-day.ts, delt med dommen over banneret,
+  // 3–22 °C. Båndet ligger i mushroom-day.ts, delt med dommen over banneret,
   // som nå også krever det for å feire — så «🍄 Perfekt soppdag» aldri står
-  // over noe annet enn modne forhold.
+  // over noe annet enn modne forhold. Den varme kanten er scorens egen, ikke
+  // bannerets gamle 20 — se flushTemperature.
   const temperatur = flushTemperature(currentTempC);
   const mildNow = temperatur === 'mild';
   // Moisture now: prefer the soil-water index, else a rain-based proxy. Samme

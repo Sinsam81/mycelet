@@ -37,9 +37,10 @@ describe('erUtenomSesongFlush', () => {
   });
 
   it('«Fuktig, men varmt» og «Fuktig, men kaldt» er egne opplysninger og vises', () => {
-    const fuktigVarmt = assessFlush(flushInn(8, 21));
+    // Over 22 °C, der scoren ikke gir temperaturpoeng og båndet slutter.
+    const fuktigVarmt = assessFlush(flushInn(8, 23));
     expect(fuktigVarmt).toMatchObject({ status: 'dormant', reason: 'warm' });
-    const varmDom = assessMushroomDay({ ...vaer, temperatureC: 21 }, 8);
+    const varmDom = assessMushroomDay({ ...vaer, temperatureC: 23 }, 8);
     expect(varmDom.title).not.toBe(fuktigVarmt.title);
     expect(erUtenomSesongFlush(fuktigVarmt, varmDom.title)).toBe(false);
 

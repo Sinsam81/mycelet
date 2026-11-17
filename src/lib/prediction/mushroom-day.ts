@@ -164,18 +164,22 @@ export function seasonShoulder(month: number, dayOfMonth?: number): SeasonShould
   return null;
 }
 
-/** Temperaturbåndet (°C) der flush-banneret kaller forholdene modne. Verdiene banneret alltid har brukt. */
+/**
+ * Temperaturbåndet (°C) der flush-banneret kaller forholdene modne. Den kalde
+ * kanten er den banneret alltid har brukt; den varme er scorens egen —
+ * temperaturleddet i assessMushroomDay gir poeng til og med 22 °C.
+ */
 const FLUSH_MILD_MIN_C = 3;
-const FLUSH_MILD_MAX_C = 20;
+const FLUSH_MILD_MAX_C = 22;
 
-/** Hvor temperaturen ligger mot bannerets bånd (3–20 °C). */
+/** Hvor temperaturen ligger mot bannerets bånd (3–22 °C). */
 export type FlushTemperature = 'cold' | 'mild' | 'warm';
 
 /**
  * Temperaturen mot bannerets bånd, delt av dommen (her) og banneret (flush.ts).
  *
- * De to står rett over hverandre og har ikke samme temperaturskala: scoren gir
- * temperaturpoeng helt opp til 22 °C, banneret kaller forholdene modne bare
+ * De to står rett over hverandre og hadde ikke samme temperaturskala: scoren
+ * gir temperaturpoeng helt opp til 22 °C, banneret kalte forholdene modne bare
  * mellom 3 og 20. Mellom de to sto det:
  *
  *  - «🍄 Perfekt soppdag i dag!» rett over «Tørt — soppen venter på regn —
@@ -186,9 +190,19 @@ export type FlushTemperature = 'cold' | 'mild' | 'warm';
  *  - «Lite fukt» i banneret hver gang marka VAR fuktig, men temperaturen lå
  *    utenfor båndet — banneret hadde bare «Tørt» å falle tilbake på.
  *
- * Nå krever optimal-porten båndet (assessMushroomDay), dommen navngir
- * temperaturen utenfor det, og banneret sier «fuktig, men for varmt / for
- * kaldt» i stedet for «Tørt». Tallet er urørt: scoren regnes som før.
+ * Nå leser de to samme bånd: optimal-porten krever det (assessMushroomDay),
+ * dommen navngir temperaturen utenfor det, og banneret sier «fuktig, men for
+ * varmt / for kaldt» i stedet for «Tørt». Tallet er urørt: scoren regnes som før.
+ *
+ * Den varme kanten er 22, ikke bannerets gamle 20. Med 20 i porten mistet
+ * 20,5–22 °C feiringen, og i Sverige er temperaturen SMHIs siste timesmåling,
+ * ikke et døgnsnitt. Reprodusert gjennom rutas sammensetning: en fuktig
+ * augustdag var «🍄 Perfekt svampdag i dag!» kl. 07 (14 °C), «För varmt för
+ * svamp i dag» kl. 13–18 (20,5–22 °C) og «Perfekt» igjen kl. 21 — mens scoren,
+ * steinsoppens optimum (15–22 °C) og forklaringens «moderat» (5–22 °C) kalte
+ * den varmen grei. Nå er «for varmt» det scoren også sier: ingen
+ * temperaturpoeng. Den kalde kanten står på 3, selv om scoren ikke gir poeng
+ * under 6 °C: sene arter som piggsopp og traktkantarell tåler 0–2 °C.
  *
  * Ikke-endelige verdier (NaN) havner i 'cold' — ingen adapter leverer dem.
  */
@@ -266,6 +280,10 @@ interface DayCopy {
    * Utenfor bannerets temperaturbånd (flushTemperature). Sier bare at det er
    * for varmt eller for kaldt — ingenting om marka, som kan være både fuktig og
    * tørr her. Banneret under sier resten.
+   *
+   * «akkurat nå» / «just nu», ikke «i dag»: i Sverige (SMHI) og hos
+   * reserveleverandørene er temperaturen én timesmåling, ikke et døgnsnitt, og
+   * en varm ettermiddagstime kan være over før kvelden.
    */
   temperature: Record<Exclude<FlushTemperature, 'mild'>, VerdictText>;
   // Utenom sesongen: teksten ligger i src/lib/sesong/utenom-sesong-tekst.ts,
@@ -364,11 +382,11 @@ const COPY: Record<Locale, DayCopy> = {
     },
     temperature: {
       warm: {
-        title: 'For varmt for sopp i dag',
+        title: 'For varmt for sopp akkurat nå',
         message: 'Soppen trives best i mildt vær, og akkurat nå er det for varmt.'
       },
       cold: {
-        title: 'For kaldt for sopp i dag',
+        title: 'For kaldt for sopp akkurat nå',
         message: 'Soppen trives best i mildt vær, og akkurat nå er det for kaldt.'
       }
     }
@@ -424,11 +442,11 @@ const COPY: Record<Locale, DayCopy> = {
     },
     temperature: {
       warm: {
-        title: 'För varmt för svamp i dag',
+        title: 'För varmt för svamp just nu',
         message: 'Svampen trivs bäst i milt väder, och just nu är det för varmt.'
       },
       cold: {
-        title: 'För kallt för svamp i dag',
+        title: 'För kallt för svamp just nu',
         message: 'Svampen trivs bäst i milt väder, och just nu är det för kallt.'
       }
     }
@@ -517,15 +535,13 @@ export function assessMushroomDay(
     // NB: EXPLAIN_SCORE_MIN, ikke OPTIMAL_SCORE_MIN — se kommentaren ved dem.
     if (s >= EXPLAIN_SCORE_MIN) {
       // Utenfor bannerets temperaturbånd er det temperaturen som stopper dagen:
-      // optimal-porten krever båndet, og banneret under sier «for varmt» eller
-      // «for kaldt» (eller «Tørt» når marka også er tørr). Derfor FØRST — alle
-      // tekstene under påstår at været er på plass («Alt stemmer», «Vær og
-      // sesong er på plass», «Mildt nok», «Temperatur og sesong stemmer»), og
-      // «For lite regn» ville pekt på regn der banneret sier at marka har fukt
-      // nok. Målt før: 20. august, 21 °C, ga «🍄 Perfekt soppdag i dag!» over
-      // «Tørt — Lite fukt»; 10. juli, 21 °C, den intetsigende «ikke helt
-      // optimale» over det samme. Under frostgrensen (2 °C) kunne «Alt stemmer
-      // — Vær og sesong er på plass» stå over «For kaldt akkurat nå».
+      // scoren gir ingen temperaturpoeng der, og banneret under sier «for
+      // varmt» eller «for kaldt» (eller «Tørt» når marka også er tørr). Derfor
+      // FØRST — alle tekstene under påstår at været er på plass («Alt stemmer»,
+      // «Vær og sesong er på plass», «Mildt nok», «Temperatur og sesong
+      // stemmer»), og «For lite regn» ville pekt på regn der banneret sier at
+      // marka har fukt nok. Under frostgrensen (2 °C) kunne «Alt stemmer — Vær
+      // og sesong er på plass» stå over «For kaldt akkurat nå».
       if (input.temperature !== 'mild') return c.temperature[input.temperature];
       // I en skulder (seasonShoulder) er årstiden med i forklaringen: «Alt
       // stemmer — bortsett fra marka» er ikke sant når årstiden selv holder
@@ -569,13 +585,17 @@ export function assessMushroomDay(
   // Null or undefined (OpenWeather, forecast days) leaves the veto inert.
   const moistNow = weather.soilMoistureIndex == null || weather.soilMoistureIndex >= FLUSH_WET_MIN;
 
-  // Bannerets temperaturbånd er også en port. Fuktvetoet alene holdt ikke: over
-  // 20 °C kaller banneret aldri forholdene modne, mens scoren gir temperatur-
-  // poeng til 22 °C — «🍄 Perfekt soppdag i dag!» sto over «Tørt — soppen
-  // venter på regn» (20. august, 21 °C, score 90). Med båndet i porten er en
-  // feiret dag alltid en dag banneret kaller moden. Scoren er urørt; optimal
-  // skifter bare der båndet utelukker dagen, og under 6 °C gir scoren ingen
-  // temperaturpoeng og kan ikke nå 85 uansett — i praksis 20–22 °C.
+  // Bannerets temperaturbånd er også en port: en feiret dag er alltid en dag
+  // banneret kaller moden. Fuktvetoet alene holdt ikke da banneret sluttet på
+  // 20 °C og scoren ga temperaturpoeng til 22 — «🍄 Perfekt soppdag i dag!» sto
+  // over «Tørt — soppen venter på regn» (20. august, 21 °C, score 90).
+  //
+  // Nå slutter båndet der scoren slutter å gi temperaturpoeng (flushTemperature),
+  // og da utelukker porten ingen dag: uten temperaturpoeng er taket 35 + 30 + 15
+  // = 80, under 85, og scoren gir ingen under 6 °C eller over 22 °C. Optimal er
+  // nøyaktig den samme som før båndet kom inn i porten — mushroom-day.test.ts
+  // låser det. Porten står likevel, så regelen holder om båndet eller scorens
+  // trinn flyttes.
   const temperature = flushTemperature(t);
   const optimal =
     score >= OPTIMAL_SCORE_MIN && inSeasonWindow && rain >= OPTIMAL_RAIN_MIN_MM && moistNow && temperature === 'mild';
