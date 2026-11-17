@@ -100,7 +100,16 @@ begin
       update forum_posts set comments_count = greatest(comments_count - 1, 0) where id = old.post_id;
     end if;
   elsif tg_op = 'UPDATE' then
-    if coalesce(old.is_hidden, false) = false and coalesce(new.is_hidden, false) = true then
+    -- Flyttet til et annet innlegg (forfatteren kan endre post_id): tallet
+    -- følger kommentaren. Sjekkes før is_hidden.
+    if old.post_id is distinct from new.post_id then
+      if coalesce(old.is_hidden, false) = false then
+        update forum_posts set comments_count = greatest(comments_count - 1, 0) where id = old.post_id;
+      end if;
+      if coalesce(new.is_hidden, false) = false then
+        update forum_posts set comments_count = comments_count + 1 where id = new.post_id;
+      end if;
+    elsif coalesce(old.is_hidden, false) = false and coalesce(new.is_hidden, false) = true then
       update forum_posts set comments_count = greatest(comments_count - 1, 0) where id = new.post_id;
     elsif coalesce(old.is_hidden, false) = true and coalesce(new.is_hidden, false) = false then
       update forum_posts set comments_count = comments_count + 1 where id = new.post_id;

@@ -1,9 +1,52 @@
 import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
 import { PostgrestError } from '@supabase/postgrest-js';
+import Stripe from 'stripe';
 import { _createTestLogger } from '../index';
+import { MAX_STRING_LENGTH } from '../pii';
 
 interface CapturedLine {
   line: string;
+}
+
+type StripeSignatureError = Error & { type?: unknown; header?: unknown; payload?: unknown };
+
+/**
+ * The error the webhook route catches when a signature does not match, made
+ * by the installed stripe package exactly as the route meets it. The secret
+ * and the header are made up; any pair that does not match gives the same
+ * error, whatever the date.
+ */
+function stripeSignatureError(body: string): StripeSignatureError {
+  try {
+    new Stripe('sk_test_x').webhooks.constructEvent(body, 't=1,v1=00', 'whsec_x');
+  } catch (e) {
+    return e as StripeSignatureError;
+  }
+  throw new Error('constructEvent accepted a signature made up for the test');
+}
+
+/**
+ * Run `fn` and return the length of the longest string any regex was asked to
+ * search. Once RegExp.prototype.exec is patched, every replace/test/match goes
+ * through it (ECMAScript's RegExpExec), so nothing slips past. It throws past
+ * `limit`: a regression then fails here at once instead of spending seconds
+ * backtracking in EMAIL_REGEX.
+ */
+function longestRegexInput(limit: number, fn: () => void): number {
+  const original = RegExp.prototype.exec;
+  let longest = 0;
+  RegExp.prototype.exec = function (this: RegExp, input: string) {
+    const length = String(input).length;
+    longest = Math.max(longest, length);
+    if (length > limit) throw new Error(`a regex was handed ${length} characters`);
+    return original.call(this, input);
+  };
+  try {
+    fn();
+  } finally {
+    RegExp.prototype.exec = original;
+  }
+  return longest;
 }
 
 function makeWriter(): { writer: { write: (line: string) => void }; lines: CapturedLine[] } {
@@ -220,6 +263,31 @@ describe('Logger', () => {
           expect((f.err as Record<string, unknown>).code).toBe(401);
         });
 
+        it('keeps the raw body and the signature header of a Stripe signature error out of the line', () => {
+          // The webhook route logs what constructEvent throws, and the real
+          // error keeps the whole request body (`payload`) and the
+          // Stripe-Signature value (`header`) as own fields. A customer's
+          // name and address are in that body.
+          const body = JSON.stringify({
+            type: 'checkout.session.completed',
+            data: { object: { customer_details: { name: 'Kari Nordmann', address: { line1: 'Storgata 1' } } } }
+          });
+          const feil = stripeSignatureError(body);
+          // The fixture really carries what must not leak — or the test proves nothing.
+          expect(feil.payload).toBe(body);
+          expect(feil.header).toBe('t=1,v1=00');
+
+          const log = _createTestLogger({ level: 'error', writer: captured.writer });
+          log.error('stripe.webhook.failed', feil, { eventType: null });
+          const l = linje();
+          for (const lekkasje of ['Kari Nordmann', 'Storgata', 'customer_details', 't=1,v1=00', '"payload"', '"header"', '"raw"']) {
+            expect(l).not.toContain(lekkasje);
+          }
+          const err = felter().err as Record<string, unknown>;
+          expect(err.type).toBe('StripeSignatureVerificationError');
+          expect(err.message).toMatch(/^No signatures found matching the expected signature/);
+        });
+
         it('keeps the cause of a wrapped Error', () => {
           const log = _createTestLogger({ level: 'error', writer: captured.writer });
           const indre = Object.assign(new Error('socket hang up'), { code: 'ECONNRESET' });
@@ -259,5 +327,35 @@ describe('Logger', () => {
         });
       });
     }
+  });
+
+  describe('a body of any length', () => {
+    it('never hands a regex more than MAX_STRING_LENGTH characters — not even a 200 000-character webhook body', () => {
+      // EMAIL_REGEX backtracks quadratically on a long run without «@»: a
+      // 100 kB body held the event loop for 12 s, and anyone can post one to
+      // the webhook with a made-up signature. Measured by what the regexes
+      // are handed, not by a stopwatch, so the answer does not depend on how
+      // fast or busy the machine is.
+      const body = 'a'.repeat(200_000);
+      const feil = stripeSignatureError(body);
+      expect(feil.payload).toBe(body);
+
+      const log = _createTestLogger({ level: 'info', writer: captured.writer });
+      const longest = longestRegexInput(MAX_STRING_LENGTH, () => {
+        log.error('stripe.webhook.failed', feil);
+        log.info('webhook.body', { body });
+        log.info('webhook.prose', { body: 'a '.repeat(100_000) });
+      });
+      // The patch saw the regexes run (the prose is cut at the cap) …
+      expect(longest).toBeGreaterThan(0);
+      // … and none of them was handed more than the cap.
+      expect(longest).toBeLessThanOrEqual(MAX_STRING_LENGTH);
+
+      expect(captured.lines).toHaveLength(3);
+      expect(captured.lines[0].line).not.toContain('a'.repeat(100));
+      expect(captured.lines[1].line).not.toContain('a'.repeat(100));
+      expect(captured.lines[1].line).toContain('<truncated: 200000 chars>');
+      expect(captured.lines[2].line).toContain('<truncated: 200000 chars>');
+    });
   });
 });

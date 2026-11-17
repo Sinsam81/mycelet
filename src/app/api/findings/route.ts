@@ -143,7 +143,9 @@ export async function POST(request: NextRequest) {
         });
       }
       if (vakt.utfall === 'slettet') {
-        log.error('findings.zone_private_failed', { privatFeil: vakt.privatFeil, slettet: true });
+        // Slettingen er bekreftet (raden kom tilbake fra DELETE); id-en er med
+        // så linja kan følges opp mot databasen likevel.
+        log.error('findings.zone_private_failed', { findingId: data.id, privatFeil: vakt.privatFeil, slettet: true });
         return funnFeilSvar('zone_not_saved', 500);
       }
       if (vakt.utfall === 'sto_igjen') {

@@ -77,7 +77,7 @@ describe('migrasjon 076 — tellerne teller alle', () => {
 
   it('skriver bare tallet på innlegget raden hører til, med fullt tabellnavn', () => {
     const oppdateringer = [kommentarteller, liketeller].flatMap((d) => kropp(d).match(/update [^;]*;/g) ?? []);
-    expect(oppdateringer).toHaveLength(6);
+    expect(oppdateringer).toHaveLength(8);
     for (const setning of oppdateringer) {
       expect(setning).toMatch(
         /^update public\.forum_posts set (comments_count|likes_count) = [^;]* where id = (new|old)\.post_id;$/
@@ -101,6 +101,32 @@ describe('migrasjon 076 — tellerne teller alle', () => {
     expect(k).toContain(
       'elsif coalesce(old.is_hidden, false) = true and coalesce(new.is_hidden, false) = false then update public.forum_posts set comments_count = comments_count + 1 where id = new.post_id;'
     );
+  });
+
+  it('lar tallet følge en kommentar som flyttes til et annet innlegg — og ser etter flyttingen først', () => {
+    // UPDATE-policyen på comments (001, 058) har bare USING, så forfatteren
+    // kan endre post_id på sin egen kommentar. En definer-teller som bare så
+    // på is_hidden, lot hvem som helst flytte en kommentar til et annet
+    // innlegg og slette den der: −1 på et innlegg den aldri ble lagt til i.
+    // Gjentatt nuller det tallet; motsatt vei blåser det opp. Flyttegrenen må
+    // stå først, ellers justeres en kommentar som både flyttes og skjules
+    // bare på det nye innlegget.
+    expect(kropp(kommentarteller)).toContain(
+      "elsif tg_op = 'UPDATE' then if old.post_id is distinct from new.post_id then " +
+        'if coalesce(old.is_hidden, false) = false then update public.forum_posts set comments_count = greatest(comments_count - 1, 0) where id = old.post_id; end if; ' +
+        'if coalesce(new.is_hidden, false) = false then update public.forum_posts set comments_count = comments_count + 1 where id = new.post_id; end if; ' +
+        'elsif coalesce(old.is_hidden, false) = false and coalesce(new.is_hidden, false) = true then'
+    );
+  });
+
+  it('lar innloggede bare endre teksten i en kommentar — et ekstra lag, ikke vernet', () => {
+    // Appen endrer bare content. REVOKE først: en kolonnerettighet oppå en
+    // tabellrettighet endrer ingenting (som i 074). Vernet er flyttegrenen
+    // over: GRANT ALL-blokka i CLAUDE.md åpner kolonnene igjen.
+    expect(sql076).toContain(
+      'revoke update on public.comments from anon, authenticated; grant update (content) on public.comments to authenticated;'
+    );
+    expect(sql076.indexOf('grant update (content)')).toBeLessThan(sql076.indexOf('update public.forum_posts as p'));
   });
 
   it('trekker aldri fra uten et gulv på 0', () => {

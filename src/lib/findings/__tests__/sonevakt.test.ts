@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { PostgrestClient } from '@supabase/postgrest-js';
 import { sonerute042, sonerute075 } from '../sonerute';
 import { sikreSonefunn, sonevaktGjelder, type SonevaktKlient } from '../sonevakt';
 
@@ -7,10 +8,25 @@ import { sikreSonefunn, sonevaktGjelder, type SonevaktKlient } from '../sonevakt
  * aldri stående offentlig. Klienten er en mock; ingenting skrives noe sted.
  */
 
+type Feilsvar = { code?: string; message?: string; details?: string; hint?: string } | null;
+
 interface Oppsett {
-  privat?: { data: Record<string, unknown> | null; error: { code?: string; message?: string } | null } | 'kaster';
-  slett?: { data: unknown[] | null; error: { code?: string; message?: string } | null } | 'kaster';
+  /** 'kaster' kaster en TypeError; en Error kastes som den er. */
+  privat?: { data: Record<string, unknown> | null; error: Feilsvar } | 'kaster' | Error;
+  slett?: { data: unknown[] | null; error: Feilsvar } | 'kaster' | Error;
 }
+
+/**
+ * Slik svarer supabase-js når et kall feiler underveis (brudd, tidsavbrudd):
+ * den kaster ikke, men gir en feil med tom kode. Formen er den postgrest-js
+ * 2.105 lager — testene nederst lar den ekte klienten lage den selv.
+ */
+const FEILET_UNDERVEIS = {
+  message: 'TypeError: fetch failed',
+  details: 'TypeError: fetch failed\n\nCaused by: Error: read ECONNRESET (ECONNRESET)',
+  hint: '',
+  code: ''
+};
 
 function lagKlient(oppsett: Oppsett = {}) {
   const kall: { type: string; verdier?: unknown; filtre: [string, string][] }[] = [];
@@ -29,6 +45,7 @@ function lagKlient(oppsett: Oppsett = {}) {
             select: () => ({
               maybeSingle: async () => {
                 if (oppsett.privat === 'kaster') throw new TypeError('fetch failed');
+                if (oppsett.privat instanceof Error) throw oppsett.privat;
                 return (
                   oppsett.privat ?? {
                     data: { visibility: 'private', display_latitude: null, display_longitude: null },
@@ -50,6 +67,7 @@ function lagKlient(oppsett: Oppsett = {}) {
             },
             select: async () => {
               if (oppsett.slett === 'kaster') throw new TypeError('fetch failed');
+              if (oppsett.slett instanceof Error) throw oppsett.slett;
               return oppsett.slett ?? { data: [{ id: 'funn-1' }], error: null };
             }
           };
@@ -138,10 +156,48 @@ describe('sikreSonefunn', () => {
     }
   });
 
-  it('sletter også når privat-kallet kaster (nettverk)', async () => {
+  it('sletter også når privat-kallet kaster', async () => {
+    // supabase-js kaster ikke ved et brudd underveis — den svarer med en feil
+    // med tom kode (testene under). Dette dekker en klient som kaster likevel.
     const { klient } = lagKlient({ privat: 'kaster' });
     const utfall = await sikreSonefunn(klient, args(radMed(sonerute042(LAT, LNG, KM))));
     expect(utfall).toMatchObject({ utfall: 'slettet', privatFeil: 'TypeError' });
+  });
+
+  it('sletter når privat-kallet feilet underveis — feilen har tom kode, og det er fortsatt en feil', async () => {
+    const { klient, kall } = lagKlient({ privat: { data: null, error: FEILET_UNDERVEIS } });
+    const utfall = await sikreSonefunn(klient, args(radMed(sonerute042(LAT, LNG, KM))));
+    expect(utfall).toEqual({ utfall: 'slettet', grunn: 'gammelt_stempel', privatFeil: 'TypeError: fetch failed' });
+    expect(kall.map((k) => k.type)).toEqual(['update', 'delete']);
+  });
+
+  it('sletter når privat-kallet fikk et feilsvar uten kropp ({ message: "" })', async () => {
+    const { klient, kall } = lagKlient({ privat: { data: null, error: { message: '' } } });
+    const utfall = await sikreSonefunn(klient, args(radMed(sonerute042(LAT, LNG, KM))));
+    expect(utfall).toEqual({ utfall: 'slettet', grunn: 'gammelt_stempel', privatFeil: 'ukjent' });
+    expect(kall.map((k) => k.type)).toEqual(['update', 'delete']);
+  });
+
+  it('melder at raden sto igjen når slettingen feilet underveis — aldri «slettet»', async () => {
+    const { klient } = lagKlient({ privat: { data: null, error: null }, slett: { data: null, error: FEILET_UNDERVEIS } });
+    expect(await sikreSonefunn(klient, args(radMed(sonerute042(LAT, LNG, KM))))).toEqual({
+      utfall: 'sto_igjen',
+      grunn: 'gammelt_stempel',
+      privatFeil: 'ingen_rad',
+      slettFeil: 'TypeError: fetch failed'
+    });
+  });
+
+  it('teller også en kastet feil uten navn som en feil', async () => {
+    const navnlos = new Error('uten navn');
+    navnlos.name = '';
+    const { klient } = lagKlient({ privat: navnlos, slett: navnlos });
+    expect(await sikreSonefunn(klient, args(radMed(sonerute042(LAT, LNG, KM))))).toEqual({
+      utfall: 'sto_igjen',
+      grunn: 'gammelt_stempel',
+      privatFeil: 'kastet',
+      slettFeil: 'kastet'
+    });
   });
 
   it('melder at raden sto igjen når både privat og sletting feiler', async () => {
@@ -165,5 +221,64 @@ describe('sikreSonefunn', () => {
   it('melder at raden sto igjen når slettingen kaster', async () => {
     const { klient } = lagKlient({ privat: 'kaster', slett: 'kaster' });
     expect(await sikreSonefunn(klient, args(radMed(sonerute042(LAT, LNG, KM))))).toMatchObject({ utfall: 'sto_igjen' });
+  });
+});
+
+describe('sikreSonefunn med den ekte postgrest-klienten', () => {
+  // Mocken over sier hva vi tror klienten svarer. Her lager klienten svarene
+  // selv, så en ny versjon som endrer formen, felles her. Ingen nettverk:
+  // fetch er byttet ut, og adressen går ingen steder.
+  type Svar = () => Promise<Response>;
+
+  function ekteKlient(svar: { PATCH: Svar; DELETE: Svar }) {
+    const metoder: string[] = [];
+    const fetch = async (_url: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+      const metode = init?.method ?? 'GET';
+      metoder.push(metode);
+      if (metode !== 'PATCH' && metode !== 'DELETE') throw new Error(`uventet ${metode}`);
+      return svar[metode]();
+    };
+    const klient = new PostgrestClient('http://postgrest.invalid', { fetch }) as unknown as SonevaktKlient;
+    return { klient, metoder };
+  }
+
+  const brudd: Svar = async () => {
+    throw new TypeError('fetch failed', { cause: Object.assign(new Error('read ECONNRESET'), { code: 'ECONNRESET' }) });
+  };
+  const json =
+    (kropp: unknown, status = 200): Svar =>
+    async () =>
+      new Response(JSON.stringify(kropp), { status, headers: { 'Content-Type': 'application/json' } });
+  const tomtFeilsvar: Svar = async () => new Response('', { status: 502 });
+  const privatRad = json([{ visibility: 'private', display_latitude: null, display_longitude: null }]);
+  const slettetRad = json([{ id: 'funn-1' }]);
+  const gammelt = () => args(radMed(sonerute042(LAT, LNG, KM)));
+
+  it('gjør funnet privat når raden kommer tilbake privat — og sletter ingenting', async () => {
+    const { klient, metoder } = ekteKlient({ PATCH: privatRad, DELETE: slettetRad });
+    expect(await sikreSonefunn(klient, gammelt())).toEqual({ utfall: 'gjort_privat', grunn: 'gammelt_stempel' });
+    expect(metoder).toEqual(['PATCH']);
+  });
+
+  it('sletter når privat-kallet feiler underveis eller får et tomt feilsvar — aldri «gjort privat»', async () => {
+    for (const [PATCH, privatFeil] of [
+      [brudd, 'TypeError: fetch failed'],
+      [tomtFeilsvar, 'ukjent']
+    ] as const) {
+      const { klient, metoder } = ekteKlient({ PATCH, DELETE: slettetRad });
+      expect(await sikreSonefunn(klient, gammelt())).toEqual({ utfall: 'slettet', grunn: 'gammelt_stempel', privatFeil });
+      expect(metoder).toEqual(['PATCH', 'DELETE']);
+    }
+  });
+
+  it('melder at raden sto igjen når også slettingen feiler underveis', async () => {
+    const { klient, metoder } = ekteKlient({ PATCH: json([]), DELETE: brudd });
+    expect(await sikreSonefunn(klient, gammelt())).toEqual({
+      utfall: 'sto_igjen',
+      grunn: 'gammelt_stempel',
+      privatFeil: 'ingen_rad',
+      slettFeil: 'TypeError: fetch failed'
+    });
+    expect(metoder).toEqual(['PATCH', 'DELETE']);
   });
 });

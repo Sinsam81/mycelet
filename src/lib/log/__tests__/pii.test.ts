@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { maskEmail, redactPII } from '../pii';
+import { MAX_STRING_LENGTH, maskEmail, redactPII } from '../pii';
 
 describe('maskEmail', () => {
   it('masks the local part to first char + asterisks', () => {
@@ -75,6 +75,31 @@ describe('redactPII', () => {
     expect(typeof out.stack === 'string' || out.stack === undefined).toBe(true);
   });
 
+  it('keeps only the allowlisted own fields of an Error, never a body, a header or a request', () => {
+    // Library errors carry more than the caller sees: Stripe keeps the raw
+    // webhook body and the signature header, HTTP clients keep the request
+    // and the response. Only the fields that explain a failure come along.
+    const e = Object.assign(new Error('upstream failed'), {
+      code: 'E_UPSTREAM',
+      status: 502,
+      details: 'for ola@x.no',
+      payload: '{"name":"Kari Nordmann"}',
+      header: 't=1,v1=00',
+      request: { body: 'kropp' },
+      response: { data: 'svar' },
+      config: { url: 'https://example.com' },
+      raw: { message: 'raw' }
+    });
+    const out = redactPII(e) as Record<string, unknown>;
+    expect(out.code).toBe('E_UPSTREAM');
+    expect(out.status).toBe(502);
+    expect(out.details).toBe('for o***@x.no');
+    for (const key of ['payload', 'header', 'request', 'response', 'config', 'raw']) {
+      expect(out).not.toHaveProperty(key);
+    }
+    expect(JSON.stringify(out)).not.toContain('Kari Nordmann');
+  });
+
   it('handles cycles without infinite-looping', () => {
     const a: Record<string, unknown> = { name: 'a' };
     const b: Record<string, unknown> = { name: 'b', a };
@@ -142,5 +167,39 @@ describe('redactPII', () => {
     }) as Record<string, unknown>;
     expect(out.userId).toBe('8e23c7b6-6d4c-4357-a118-3f3554c41caf');
     expect(out.speciesId).toBe(7);
+  });
+});
+
+describe('redactPII on a long string', () => {
+  it('leaves a string at the cap alone, and cuts a longer one saying how long it was', () => {
+    const atCap = 'ord '.repeat(MAX_STRING_LENGTH / 4);
+    expect(redactPII(atCap)).toBe(atCap);
+
+    const longer = 'ord '.repeat(5_000);
+    expect(redactPII(longer)).toBe(`${atCap}…<truncated: 20000 chars>`);
+  });
+
+  it('still masks what it keeps', () => {
+    const text = `kari@y.se ${'x'.repeat(20_000)}`;
+    expect(redactPII(text)).toBe(`k***@y.se …<truncated: ${text.length} chars>`);
+  });
+
+  it('never cuts an address or a token in half — half of one is no longer recognised and would stand in clear', () => {
+    // The cut falls inside the domain of the address (EMAIL_REGEX needs the
+    // «.tld»), and inside the claims part of the JWT (the rule needs all
+    // three parts). Cut there, «ola.nordmann» and the start of the claims
+    // would be written as they are.
+    for (const [secret, into] of [
+      ['ola.nordmann@example.com', 16],
+      ['eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.c2lnbmF0dXJl', 26]
+    ] as const) {
+      const before = 'x '.repeat((MAX_STRING_LENGTH - into) / 2);
+      const text = `${before}${secret} ${'y'.repeat(20_000)}`;
+      expect(text.slice(MAX_STRING_LENGTH - into, MAX_STRING_LENGTH)).toBe(secret.slice(0, into));
+
+      const out = redactPII(text) as string;
+      expect(out).not.toContain(secret.slice(0, into));
+      expect(out).toBe(`${before}…<truncated: ${text.length} chars>`);
+    }
   });
 });

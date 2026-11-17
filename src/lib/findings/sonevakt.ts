@@ -79,6 +79,23 @@ function harTallfelter(rad: Partial<LagretSonefunn>): boolean {
 }
 
 /**
+ * Feilen som en kode som aldri er tom. supabase-js kaster ikke når et kall
+ * feiler underveis (brudd, tidsavbrudd): postgrest-js svarer med
+ * `error.code === ''` og årsaken i `message`, og et feilsvar uten JSON-kropp
+ * gir `{ message: '' }`. Med `??` ble begge en tom streng, og en tom streng
+ * telte som at kallet gikk — vakta svarte «gjort privat» mens raden sto
+ * offentlig.
+ */
+function feilkode(error: { code?: string; message?: string }): string {
+  return error.code || error.message || 'ukjent';
+}
+
+/** Det samme for en feil som faktisk ble kastet: aldri en tom streng. */
+function kastetKode(feil: unknown): string {
+  return (feil instanceof Error && feil.name) || 'kastet';
+}
+
+/**
  * Sjekk raden innsettingen ga tilbake, og gjør funnet privat (eller slett det)
  * når punktet ikke er 075 sitt. Kalles bare når sonevaktGjelder er sann.
  *
@@ -95,6 +112,8 @@ export async function sikreSonefunn(
   if (lesbar && stempletMed075(rad as LagretSonefunn)) return { utfall: 'stemmer' };
   const grunn = lesbar ? 'gammelt_stempel' : 'uleselig';
 
+  // Hvert steg regnes som gått bare når ingen feil er notert (null). Alt som
+  // noteres, er en ikke-tom streng — se feilkode.
   let privatFeil: string | null = null;
   try {
     const { data, error } = await klient
@@ -106,14 +125,14 @@ export async function sikreSonefunn(
       .maybeSingle();
     // Privat er bare bekreftet når raden kom tilbake privat OG uten punkt.
     // Ingen rad tilbake betyr at oppdateringen ikke traff.
-    if (error) privatFeil = error.code ?? error.message ?? 'ukjent';
+    if (error) privatFeil = feilkode(error);
     else if (!data) privatFeil = 'ingen_rad';
     else if (data.visibility !== 'private' || data.display_latitude != null || data.display_longitude != null)
       privatFeil = 'punkt_sto_igjen';
   } catch (feil) {
-    privatFeil = feil instanceof Error ? feil.name : 'kastet';
+    privatFeil = kastetKode(feil);
   }
-  if (!privatFeil) return { utfall: 'gjort_privat', grunn };
+  if (privatFeil === null) return { utfall: 'gjort_privat', grunn };
 
   let slettFeil: string | null = null;
   try {
@@ -125,11 +144,11 @@ export async function sikreSonefunn(
       .eq('id', args.id)
       .eq('user_id', args.userId)
       .select('id');
-    if (error) slettFeil = error.code ?? error.message ?? 'ukjent';
+    if (error) slettFeil = feilkode(error);
     else if (!data || data.length === 0) slettFeil = 'ingen_rad';
   } catch (feil) {
-    slettFeil = feil instanceof Error ? feil.name : 'kastet';
+    slettFeil = kastetKode(feil);
   }
-  if (!slettFeil) return { utfall: 'slettet', grunn, privatFeil };
+  if (slettFeil === null) return { utfall: 'slettet', grunn, privatFeil };
   return { utfall: 'sto_igjen', grunn, privatFeil, slettFeil };
 }

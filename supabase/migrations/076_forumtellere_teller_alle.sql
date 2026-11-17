@@ -46,15 +46,30 @@
 --  1. Begge funksjonene blir SECURITY DEFINER: de kjører som eieren
 --     (`postgres`), og RLS stopper ikke lenger tellingen. search_path er låst
 --     (public, med pg_temp sist), og tabellnavnene er skrevet fullt ut.
---     Hva en bruker får skrive, avgjøres som før av policyene på comments og
---     post_likes. Funksjonene gjør ikke annet enn å flytte ett tall på
---     innlegget raden hører til, og triggerfunksjoner kan ikke kalles direkte
---     — heller ikke gjennom API-et — så dette åpner ingen ny dør.
---  2. Kommentartelleren følger is_hidden som i 041: en skjult kommentar
---     telles ikke, skjules den −1, vises den igjen +1. Alt som trekker fra,
---     stopper på 0.
+--     Triggerfunksjoner kan ikke kalles direkte — heller ikke gjennom
+--     API-et. Men som eier skriver telleren på innlegg brukeren selv ikke får
+--     endre, så den må stemme for alt en bruker FÅR gjøre med sin egen rad.
+--     UPDATE-policyen på comments (001, 058) har bare USING
+--     (auth.uid() = user_id): forfatteren kan endre post_id på sin egen
+--     kommentar. En teller som bare så på is_hidden, lot da hvem som helst
+--     nulle tallet på et annet innlegg — flytt kommentaren dit og slett den,
+--     så trekkes den fra der — eller blåse det opp andre veien. Som invoker
+--     traff det fratrekket 0 rader; det er definer-telleren som ville åpnet
+--     den døra. Derfor følger telleren flyttingen (punkt 2).
+--  2. Kommentartelleren følger kommentaren: en skjult kommentar telles ikke,
+--     skjules den −1, vises den igjen +1 (som i 041), og flyttes den til et
+--     annet innlegg, −1 på det gamle om den var synlig og +1 på det nye om
+--     den er synlig. Flyttingen sjekkes først. Alt som trekker fra, stopper
+--     på 0.
 --  3. Begge triggerne opprettes på nytt — kommentartriggeren også på UPDATE.
---  4. Begge tallene regnes om fra radene i samme transaksjon. Bare innlegg der
+--  4. Innloggede får bare endre teksten (content) i en kommentar — det eneste
+--     appen endrer. Det er et ekstra lag, ikke vernet: GRANT-blokka i
+--     CLAUDE.md for gjenoppretting etter DROP SCHEMA (GRANT ALL ON ALL TABLES
+--     …) åpner kolonnene igjen uten et ord, og hovedboka ser ikke etter det.
+--     Vernet er punkt 2, som holder tallene riktige uansett hvem som får
+--     endre post_id. Lim inn fila på nytt etter en slik gjenoppretting for å
+--     få laget tilbake.
+--  5. Begge tallene regnes om fra radene i samme transaksjon. Bare innlegg der
 --     et tall faktisk er feil, røres.
 --
 -- MERK: hver telleroppdatering setter også forum_posts.updated_at (triggeren
@@ -64,18 +79,22 @@
 --
 -- 041 ETTER DENNE: 041 skriver den samme kommentarfunksjonen. Siden
 -- 16. november 2026 er også 041s utgave SECURITY DEFINER, så den gjør ikke
--- telleren blind igjen. 041 skal likevel ikke limes inn: denne fila gjør del
--- 2 og 3 av den, og del 1 kolliderer med 056 (se hovedboka). Når 076 er
--- kjørt, står raden 041 i hovedboka også som `true`. Blir raden 076 `false`
--- igjen senere, er en eldre utgave limt inn etterpå, eller tallene endret for
--- hånd: lim inn denne fila på nytt.
+-- telleren blind igjen, og fra 17. november har den den samme flyttegrenen.
+-- 041 skal likevel ikke limes inn: denne fila gjør del 2 og 3 av den, og del
+-- 1 kolliderer med 056 (se hovedboka). Når 076 er kjørt, står raden 041 i
+-- hovedboka også som `true`. Blir raden 076 `false` igjen senere, er en eldre
+-- utgave limt inn etterpå, eller tallene endret for hånd: lim inn denne fila
+-- på nytt.
 
 begin;
 
 -- ── 1: kommentartelleren ───────────────────────────────────────────────────
--- Samme regel som 041. Triggeren må reagere på tre ting: INSERT og DELETE av
--- en synlig kommentar, og UPDATE der is_hidden snur — ellers ville moderering
--- aldri justere tallet.
+-- Samme regel som 041. Triggeren må reagere på fire ting: INSERT og DELETE av
+-- en synlig kommentar, UPDATE der post_id endres, og UPDATE der is_hidden
+-- snur — ellers ville moderering aldri justere tallet. Flyttingen sjekkes
+-- først: en kommentar som både flyttes og skjules (eller vises igjen), skal
+-- trekkes fra der den sto og telles der den havner, ikke bare justeres på det
+-- nye innlegget.
 
 create or replace function public.update_post_comment_count()
 returns trigger
@@ -93,7 +112,16 @@ begin
       update public.forum_posts set comments_count = greatest(comments_count - 1, 0) where id = old.post_id;
     end if;
   elsif tg_op = 'UPDATE' then
-    if coalesce(old.is_hidden, false) = false and coalesce(new.is_hidden, false) = true then
+    -- Flyttet til et annet innlegg (forfatteren kan endre post_id): tallet
+    -- følger kommentaren. Sjekkes før is_hidden.
+    if old.post_id is distinct from new.post_id then
+      if coalesce(old.is_hidden, false) = false then
+        update public.forum_posts set comments_count = greatest(comments_count - 1, 0) where id = old.post_id;
+      end if;
+      if coalesce(new.is_hidden, false) = false then
+        update public.forum_posts set comments_count = comments_count + 1 where id = new.post_id;
+      end if;
+    elsif coalesce(old.is_hidden, false) = false and coalesce(new.is_hidden, false) = true then
       update public.forum_posts set comments_count = greatest(comments_count - 1, 0) where id = new.post_id;
     elsif coalesce(old.is_hidden, false) = true and coalesce(new.is_hidden, false) = false then
       update public.forum_posts set comments_count = comments_count + 1 where id = new.post_id;
@@ -104,7 +132,7 @@ end;
 $$;
 
 comment on function public.update_post_comment_count() is
-  'Holder forum_posts.comments_count lik antall synlige kommentarer. SECURITY DEFINER: kommentarer skrives som den innloggede brukeren, og RLS lar bare forfatteren oppdatere et innlegg — som invoker telte den bare forfatterens egne (migrasjon 076).';
+  'Holder forum_posts.comments_count lik antall synlige kommentarer, også når en kommentar skjules, vises igjen eller flyttes til et annet innlegg. SECURITY DEFINER: kommentarer skrives som den innloggede brukeren, og RLS lar bare forfatteren oppdatere et innlegg — som invoker telte den bare forfatterens egne (migrasjon 076).';
 
 -- ── 2: liketelleren ────────────────────────────────────────────────────────
 
@@ -141,7 +169,18 @@ create trigger post_likes_count_trigger
   after insert or delete on public.post_likes
   for each row execute function public.update_post_likes_count();
 
--- ── 4: regn om tallene som har drevet ──────────────────────────────────────
+-- ── 4: en kommentar kan bare endres i teksten ──────────────────────────────
+-- Tabellrettighetene gir anon og authenticated UPDATE på alle kolonner i
+-- comments, og UPDATE-policyen sjekker bare hvem som eier raden. Appen endrer
+-- aldri annet enn content (src/lib/hooks/useForum.ts); moderasjonen skriver
+-- is_hidden med tjenesterollen, som ikke røres her. REVOKE først: en
+-- kolonnerettighet oppå en tabellrettighet endrer ingenting (som i 074).
+-- Et ekstra lag — vernet for tallene er flyttegrenen i del 1.
+
+revoke update on public.comments from anon, authenticated;
+grant update (content) on public.comments to authenticated;
+
+-- ── 5: regn om tallene som har drevet ──────────────────────────────────────
 -- Synlige kommentarer etter samme regel som triggeren (is_hidden NULL teller
 -- som synlig), og alle likes. Innleggets egen skjuling spiller ingen rolle
 -- her, heller ikke i triggeren.
@@ -167,8 +206,10 @@ update public.forum_posts as p
 commit;
 
 -- ── Kontroll etter kjøring ─────────────────────────────────────────────────
--- Begge leser bare. Raden 076 i hovedbokas spørring
--- (docs/migrasjoner-a-kjore.md) svarer på begge i ett.
+-- Alle tre leser bare. Raden 076 i hovedbokas spørring
+-- (docs/migrasjoner-a-kjore.md) svarer på de to første i ett. Den tredje ser
+-- hovedboka ikke etter: kolonnerettighetene er et ekstra lag, ikke vernet
+-- (punkt 4 i filhodet).
 --
 -- 1) Skal gi to rader, begge med kjorer_som_eier = true og
 --    {"search_path=public, pg_temp"} i siste kolonne:
@@ -188,3 +229,9 @@ commit;
 --            where c.post_id = fp.id and coalesce(c.is_hidden, false) = false)
 --     or fp.likes_count is distinct from
 --          (select count(*) from public.post_likes as l where l.post_id = fp.id);
+--
+-- 3) Skal gi false og true: en innlogget kan ikke flytte en kommentar, men
+--    kan rette teksten i den.
+--
+-- select has_column_privilege('authenticated', 'public.comments', 'post_id', 'UPDATE') as kan_flytte_kommentar,
+--        has_column_privilege('authenticated', 'public.comments', 'content', 'UPDATE') as kan_rette_teksten;

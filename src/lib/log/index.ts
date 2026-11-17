@@ -33,6 +33,8 @@
  *   - All ctx and error payloads pass through `redactPII` before output.
  *   - Object keys matching password/secret/token/apikey/etc. → '<redacted>'
  *   - Email-shaped strings anywhere → 's***@domain.tld'
+ *   - Strings longer than MAX_STRING_LENGTH (4096) are cut before any of
+ *     this runs, never inside an address or a token (see pii.ts)
  *   - Internal IDs (UUIDs, numeric DB IDs) are NOT redacted — meaningless
  *     in isolation, useful for cross-referencing.
  */
@@ -230,7 +232,9 @@ export class Logger {
    * went through `String()` and the line said `[object Object]`:
    *
    *   • `Error` (also `PostgrestError`, which extends it) → `err` with
-   *     name, message, stack and its own fields such as code/details/hint.
+   *     name, message, stack, `cause` and the own fields pii.ts allows
+   *     (ERROR_FIELDS: code/details/hint and the like). Never the rest:
+   *     Stripe's signature error carries the raw webhook body.
    *   • A plain object that only carries error fields (message, code,
    *     details, hint…) → `err` with those fields, `name: 'NonError'`.
    *   • Any other plain object, with no third argument → treated as the

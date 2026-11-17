@@ -14,6 +14,8 @@ const { s } = vi.hoisted(() => ({
     /** Hvordan «triggeren» stempler: 075, den gamle, eller ingen punkt tilbake. */
     trigger: '075' as '075' | '042' | 'uten_punkt',
     privatFeiler: false,
+    /** Hvordan privat-kallet feiler: nektet (42501), eller brudd underveis — supabase-js gir da code ''. */
+    privatFeilform: 'nektet' as 'nektet' | 'underveis',
     slettFeiler: false,
     sprak: 'nb' as 'nb' | 'sv',
     kall: [] as { type: string; verdier?: unknown; filtre: [string, unknown][] }[],
@@ -73,7 +75,13 @@ vi.mock('@/lib/supabase/server', () => ({
           select: () => ({
             maybeSingle: async () =>
               s.privatFeiler
-                ? { data: null, error: { code: '42501', message: 'nektet' } }
+                ? {
+                    data: null,
+                    error:
+                      s.privatFeilform === 'underveis'
+                        ? { code: '', message: 'TypeError: fetch failed', details: '', hint: '' }
+                        : { code: '42501', message: 'nektet' }
+                  }
                 : { data: { visibility: 'private', display_latitude: null, display_longitude: null }, error: null }
           })
         };
@@ -128,6 +136,7 @@ const SONE = { visibility: 'approximate', isZoneFinding: true, zoneLabel: 'Skoge
 beforeEach(() => {
   s.trigger = '075';
   s.privatFeiler = false;
+  s.privatFeilform = 'nektet';
   s.slettFeiler = false;
   s.sprak = 'nb';
   s.kall = [];
@@ -212,7 +221,25 @@ describe('POST /api/findings — sonevakta', () => {
       ['id', 'funn-1'],
       ['user_id', 'bruker-1']
     ]);
+    expect(s.feil).toContainEqual([
+      'findings.zone_private_failed',
+      { findingId: 'funn-1', privatFeil: '42501', slettet: true }
+    ]);
     ingenKoordinaterILoggen();
+  });
+
+  it('svarer aldri «lagret som privat» når privat-kallet feilet underveis (feil med tom kode)', async () => {
+    s.trigger = '042';
+    s.privatFeiler = true;
+    s.privatFeilform = 'underveis';
+    const res = await lagre(SONE);
+    expect(res.status).toBe(500);
+    expect((await res.json()).code).toBe('zone_not_saved');
+    expect(s.kall.map((k) => k.type)).toEqual(['insert', 'update', 'delete']);
+    expect(s.feil).toContainEqual([
+      'findings.zone_private_failed',
+      { findingId: 'funn-1', privatFeil: 'TypeError: fetch failed', slettet: true }
+    ]);
   });
 
   it('svarer med feil — aldri suksess — når også slettingen feiler', async () => {
