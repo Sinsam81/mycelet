@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Mycelet — offline-kart</title>
+<title data-sv="Mycelet — offlinekarta">Mycelet — offline-kart</title>
 <meta name="robots" content="noindex">
 <meta name="theme-color" content="#1a3a24">
 <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
@@ -24,8 +24,10 @@
   2. Ingen serverdata. Siden er åpen for alle (i motsetning til /map, som er
      auth-gated), så den kan bare vise det som allerede ligger i brukerens egen
      nettleser.
-  3. Svensk tekst i data-sv på hvert element. offline-map.js bytter dem ut når
-     MYCELET_LOCALE-cookien sier sv.
+  3. Svensk tekst i data-sv på hvert element, også sidetittelen. offline-map.js
+     bytter dem ut når språket er svensk: MYCELET_LOCALE-cookien først, ellers
+     nettleserens språk — samme regel som serveren (getUserLocale i
+     src/i18n/locale.ts), så skallet snakker samme språk som appen.
 -->
 <style>
   :root { color-scheme: light; }

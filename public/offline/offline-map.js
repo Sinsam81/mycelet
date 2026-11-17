@@ -12,9 +12,10 @@
  *     utloggede — derfor ble den fjernet igjen i PR #102. Denne siden er åpen
  *     og henter ingenting fra serveren: alt den viser ligger allerede i
  *     brukerens egen nettleser (localStorage + Cache API).
- *   • next-intl lever i React-bunten og finnes ikke her. Språket leses av samme
- *     cookie, og teksten ligger i COPY under — samme løsning som den statiske
- *     landingssiden i public/landing/.
+ *   • next-intl lever i React-bunten og finnes ikke her. Teksten ligger i COPY
+ *     under — samme løsning som den statiske landingssiden i public/landing/ —
+ *     og språket velges etter samme regel som serveren bruker for resten av
+ *     appen: språkcookien først, ellers nettleserens språk (se readLocale).
  *
  * Funksjonene øverst er rene og testes fra
  * src/lib/utils/__tests__/offline-shell.test.ts. Én av testene sammenligner
@@ -242,9 +243,33 @@ const COPY = {
   }
 };
 
-export function readLocale(cookieString) {
+/**
+ * Språket skallet snakker. Samme regel som getUserLocale i src/i18n/locale.ts,
+ * så skallet svarer på samme språk som siden det står i stedet for:
+ *
+ *   1. MYCELET_LOCALE-cookien, når den sier nb eller sv. Den settes bare av
+ *      språkvelgeren (og av ?lang= på landingssiden), og et valg brukeren har
+ *      gjort, vinner. En annen verdi ignoreres, slik isLocale gjør.
+ *   2. Ellers svensk når svensk står blant nettleserens språk. Serveren leser
+ *      Accept-Language med /(^|[,\s])sv\b/i — svensk hvor som helst i lista —
+ *      og nettleseren bygger den headeren av navigator.languages. I iOS-appen
+ *      er det appens språkvalg som avgjør dem (se CFBundleLocalizations i
+ *      ios/App/App/Info.plist).
+ *   3. Ellers norsk.
+ *
+ * Steg 2 manglet før. De fleste svenske brukerne har aldri rørt språkvelgeren
+ * — appen er jo svensk for dem fra før — og skallet ble derfor norsk for dem.
+ * Siden skallet også vises når nettet bare er tregt (v6 i public/sw.js), skjedde
+ * det hver gang dekningen var dårlig, ikke bare uten nett.
+ *
+ * `languages` sendes inn i stedet for å leses fra navigator her, så regelen kan
+ * testes uten nettleser — og mot getUserLocale selv, i offline-shell.test.ts.
+ */
+export function readLocale(cookieString, languages) {
   const match = /(?:^|;\s*)MYCELET_LOCALE=([^;]+)/.exec(cookieString || '');
-  return match && match[1].trim() === 'sv' ? 'sv' : 'nb';
+  const fromCookie = match ? match[1].trim() : '';
+  if (fromCookie === 'sv' || fromCookie === 'nb') return fromCookie;
+  return (languages || []).some((tag) => /^sv\b/i.test(String(tag))) ? 'sv' : 'nb';
 }
 
 /**
@@ -395,7 +420,11 @@ function watchPosition(grid, elements, copy) {
 }
 
 async function init() {
-  const locale = readLocale(document.cookie);
+  // navigator.languages er lista Accept-Language bygges av. Mangler den, eller
+  // er den tom, har vi bare navigator.language å gå etter.
+  const languages =
+    navigator.languages && navigator.languages.length ? navigator.languages : [navigator.language];
+  const locale = readLocale(document.cookie, languages);
   const copy = COPY[locale];
   applyStaticCopy(locale);
 

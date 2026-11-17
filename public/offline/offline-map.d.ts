@@ -68,7 +68,15 @@ export function projectToGrid(
   lng: number
 ): { x: number; y: number; inside: boolean };
 export function parseAreas(raw: string | null | undefined): OfflineShellArea[];
-export function readLocale(cookieString: string | null | undefined): 'nb' | 'sv';
+/**
+ * Cookien først, ellers svensk når svensk står blant `languages`
+ * (navigator.languages, eller [navigator.language]) — samme regel som
+ * getUserLocale i src/i18n/locale.ts. Se readLocale i offline-map.js.
+ */
+export function readLocale(
+  cookieString: string | null | undefined,
+  languages?: readonly (string | null | undefined)[] | null
+): 'nb' | 'sv';
 export function shellReason(pathname: string, online: boolean): OfflineShellReason;
 export function shellIntro(
   locale: 'nb' | 'sv',

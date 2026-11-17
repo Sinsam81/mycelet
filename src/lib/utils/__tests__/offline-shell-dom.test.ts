@@ -17,25 +17,45 @@ import { WAIT_FOR_NETWORK_MESSAGE } from '../../../../public/offline/offline-map
 // mønsteret til en http-adresse (som for bilder i en nettleser), og den kan
 // ikke fs lese.
 const HTML = readFileSync(resolve(__dirname, '../../../../public/offline/index.html'), 'utf8');
-const SKALL = new DOMParser().parseFromString(HTML, 'text/html').querySelector('main')!.outerHTML;
+const DOKUMENT = new DOMParser().parseFromString(HTML, 'text/html');
+const SKALL = DOKUMENT.querySelector('main')!.outerHTML;
+const TITTEL = DOKUMENT.querySelector('title')!.outerHTML;
 
 const NB_INGEN_OMRAADER = 'Du har ingen lagrede kartområder';
 
 type Oppsett = {
   sti: string;
   paaNett: boolean;
-  sprak?: 'nb' | 'sv';
+  /** MYCELET_LOCALE-cookien. null: ingen cookie, slik de fleste svenske brukerne har det. */
+  sprak?: 'nb' | 'sv' | null;
+  /** navigator.languages. Standard er jsdoms egen. */
+  nettleserSprak?: readonly string[];
+  /** navigator.language. Standard er jsdoms egen. */
+  nettleserHovedsprak?: string;
   /** Fjern #offline-reason: en eldre, cachet side som det nye skriptet kjører mot. */
   eldreSide?: boolean;
 };
 
-async function startSkallet({ sti, paaNett, sprak = 'nb', eldreSide = false }: Oppsett) {
+async function startSkallet({
+  sti,
+  paaNett,
+  sprak = 'nb',
+  nettleserSprak = ['en-US', 'en'],
+  nettleserHovedsprak = 'en-US',
+  eldreSide = false
+}: Oppsett) {
+  document.head.innerHTML = TITTEL;
   document.body.innerHTML = SKALL;
   if (eldreSide) document.getElementById('offline-reason')!.remove();
 
   window.history.replaceState({}, '', sti);
-  document.cookie = `MYCELET_LOCALE=${sprak}`;
+  if (sprak) document.cookie = `MYCELET_LOCALE=${sprak}`;
   vi.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(paaNett);
+  // Alltid stubbet, også når testen ikke bryr seg om språket: testen som
+  // bytter ut hele navigator arver herfra, og jsdoms egne gettere godtar bare
+  // den ekte navigatoren.
+  vi.spyOn(window.navigator, 'languages', 'get').mockReturnValue(nettleserSprak);
+  vi.spyOn(window.navigator, 'language', 'get').mockReturnValue(nettleserHovedsprak);
   // Uten CacheStorage stopper skallet ved «nettleseren lagrer ikke kartfliser».
   // Med den kommer vi fram til lista over lagrede områder, som er tom her.
   vi.stubGlobal('caches', {});
@@ -59,6 +79,7 @@ afterEach(() => {
   document.cookie = 'MYCELET_LOCALE=; expires=Thu, 01 Jan 1970 00:00:00 GMT';
   window.localStorage.clear();
   window.history.replaceState({}, '', '/');
+  document.head.innerHTML = '';
   document.body.innerHTML = '';
 });
 
@@ -90,6 +111,62 @@ describe('offline-skallet i nettleseren', () => {
     expect(forklaring!.hidden).toBe(false);
     expect(forklaring!.textContent).toContain('Sidan du bad om kom inte fram');
     expect(document.documentElement.lang).toBe('sv');
+  });
+
+  it('er svensk for en svensk nettleser uten språkcookie, slik appen er', async () => {
+    // De fleste svenske brukerne har aldri rørt språkvelgeren: serveren leser
+    // Accept-Language, så appen er svensk for dem uten cookien. Skallet leste
+    // bare cookien, og sto derfor på norsk for dem — med «soppkontroll» i
+    // sikkerhetsboksen — hver gang nettet var tregt.
+    const { overskrift, forklaring, tomListe, knapp } = await startSkallet({
+      sti: '/map',
+      paaNett: true,
+      sprak: null,
+      nettleserSprak: ['sv-SE', 'sv', 'en']
+    });
+
+    // Ellers kunne en cookie fra en annen test ha gjort jobben.
+    expect(document.cookie).not.toContain('MYCELET_LOCALE');
+    expect(document.documentElement.lang).toBe('sv');
+    expect(document.title).toBe('Mycelet — offlinekarta');
+    expect(overskrift.textContent).toBe('Nätet svarar inte');
+    expect(forklaring!.textContent).toContain('Sidan du bad om kom inte fram');
+    expect(tomListe.textContent).toContain('Du har inga sparade kartområden');
+    expect(knapp.textContent).toBe('Försök ladda appen igen');
+    // Også teksten som står fast i HTML-en (data-sv), ikke bare den skriptet skriver.
+    const side = document.querySelector('main')!.textContent!;
+    expect(side).toContain('Ingen artsinformation utan nät');
+    expect(side).toContain('svampkonsulent');
+    expect(side).toContain('Sparade kartområden');
+    expect(side).not.toMatch(/soppkontroll|Lagrede kartområder|Ingen artsinformasjon/);
+  });
+
+  it('bruker navigator.language når nettleseren ikke har en språkliste', async () => {
+    const { overskrift } = await startSkallet({
+      sti: '/species/41',
+      paaNett: false,
+      sprak: null,
+      nettleserSprak: [],
+      nettleserHovedsprak: 'sv-SE'
+    });
+
+    expect(overskrift.textContent).toBe('Du är utan nät');
+    expect(document.documentElement.lang).toBe('sv');
+  });
+
+  it('lar språket brukeren har valgt i appen vinne over nettleserens', async () => {
+    const { overskrift, knapp } = await startSkallet({
+      sti: '/map',
+      paaNett: true,
+      sprak: 'nb',
+      nettleserSprak: ['sv-SE', 'sv']
+    });
+
+    expect(document.documentElement.lang).toBe('nb');
+    expect(document.title).toBe('Mycelet — offline-kart');
+    expect(overskrift.textContent).toBe('Nettet svarer ikke');
+    expect(knapp.textContent).toBe('Prøv å laste appen på nytt');
+    expect(document.querySelector('main')!.textContent).toContain('Ingen artsinformasjon uten nett');
   });
 
   it('lar forklaringen være skjult når brukeren åpnet offline-kartet selv', async () => {

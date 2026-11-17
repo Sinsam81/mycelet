@@ -82,8 +82,16 @@
   - Viser lagret område som flisrutenett + GPS-posisjonen din, teller ærlig
     hvor mange fliser som faktisk ligger der, og sier tydelig at
     artsinformasjon og forvekslingsvarsler IKKE finnes uten nett.
-  - Egen tekstkopi i `nb`/`sv` (next-intl finnes ikke utenfor React-bunten),
-    styrt av samme `MYCELET_LOCALE`-cookie.
+  - Egen tekstkopi i `nb`/`sv` (next-intl finnes ikke utenfor React-bunten).
+    Språket velges etter samme regel som `getUserLocale` i
+    `src/i18n/locale.ts`, så skallet snakker samme språk som siden det står i
+    stedet for: `MYCELET_LOCALE`-cookien først, ellers svensk når svensk står
+    blant nettleserens språk (`navigator.languages`, som Accept-Language bygges
+    av), ellers norsk. Cookien alene holdt ikke: bare språkvelgeren setter den,
+    og de fleste svenske brukerne har aldri trengt den, fordi appen er svensk
+    for dem via Accept-Language. De fikk derfor et norsk skall, også når nettet
+    bare var tregt. `offline-shell.test.ts` sammenligner regelen med
+    `getUserLocale` selv.
 
 ## Begrensninger i MVP
 - Kun nettleser-cache (ikke server-synk av offline-områder).

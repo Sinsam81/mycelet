@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { getUserLocale } from '@/i18n/locale';
 import {
   OSM_TILE_TEMPLATE,
   TERRAIN_TILE_TEMPLATE,
@@ -19,6 +20,32 @@ import {
 } from '../../../../public/offline/offline-map.js';
 
 const OSLO_BOUNDS = { south: 59.85, west: 10.6, north: 59.96, east: 10.9 };
+
+/**
+ * Forespørselen getUserLocale leser: språkcookien og Accept-Language. Brukes av
+ * testen som holder skallets språkregel i takt med serverens.
+ */
+const foresporsel = vi.hoisted(() => ({
+  cookie: undefined as string | undefined,
+  acceptLanguage: ''
+}));
+
+vi.mock('next/headers', () => ({
+  cookies: async () => ({
+    get: (navn: string) =>
+      navn === 'MYCELET_LOCALE' && foresporsel.cookie !== undefined ? { value: foresporsel.cookie } : undefined
+  }),
+  headers: async () => ({
+    get: (navn: string) => (navn.toLowerCase() === 'accept-language' ? foresporsel.acceptLanguage : null)
+  })
+}));
+
+/** Accept-Language slik nettleseren bygger den av navigator.languages: «sv-SE,sv;q=0.9,en;q=0.8». */
+function acceptLanguage(languages: readonly string[]): string {
+  return languages
+    .map((tag, i) => (i === 0 ? tag : `${tag};q=${Math.max(0.1, 1 - i / 10).toFixed(1)}`))
+    .join(',');
+}
 
 describe('offline-skallet (public/offline/offline-map.js)', () => {
   it('spør etter nøyaktig de flis-URL-ene lagringen la i cachen', () => {
@@ -99,13 +126,65 @@ describe('offline-skallet (public/offline/offline-map.js)', () => {
     expect(parseAreas(gyldig)).toHaveLength(1);
   });
 
-  it('leser språket av samme cookie som resten av appen', () => {
+  it('velger språk som serveren: cookien først, ellers nettleserens språk', () => {
+    // Språkvelgeren setter cookien, og et valg brukeren har gjort, vinner.
     expect(readLocale('MYCELET_LOCALE=sv')).toBe('sv');
     expect(readLocale('foo=1; MYCELET_LOCALE=sv; bar=2')).toBe('sv');
     expect(readLocale('MYCELET_LOCALE=nb')).toBe('nb');
     expect(readLocale('')).toBe('nb');
     // Ikke la et annet cookienavn som slutter likt lure oss.
     expect(readLocale('ANNET_LOCALE=sv')).toBe('nb');
+    expect(readLocale('MYCELET_LOCALE=nb', ['sv-SE'])).toBe('nb');
+    expect(readLocale('MYCELET_LOCALE=sv', ['nb-NO'])).toBe('sv');
+
+    // Uten cookie: nettleserens språk. Slik har de fleste svenske brukerne det —
+    // appen er svensk for dem fra før, så de har aldri trengt språkvelgeren.
+    // Skallet sto likevel på norsk for dem, også når nettet bare var tregt.
+    expect(readLocale('', ['sv-SE'])).toBe('sv');
+    expect(readLocale('', ['sv-SE', 'sv', 'en-US', 'en'])).toBe('sv');
+    expect(readLocale('', ['en-US', 'sv'])).toBe('sv');
+    expect(readLocale('ANNET_LOCALE=nb', ['sv-SE'])).toBe('sv');
+    expect(readLocale('', ['nb-NO'])).toBe('nb');
+    expect(readLocale('', ['en-US', 'en'])).toBe('nb');
+    // En ukjent cookieverdi ignoreres, slik isLocale gjør på serveren.
+    expect(readLocale('MYCELET_LOCALE=de', ['sv-SE'])).toBe('sv');
+    expect(readLocale('MYCELET_LOCALE=de', ['nb-NO'])).toBe('nb');
+    // navigator.language kan mangle, og eldre nettlesere har ikke lista.
+    expect(readLocale('', [undefined])).toBe('nb');
+    expect(readLocale('', [])).toBe('nb');
+    expect(readLocale('', null)).toBe('nb');
+  });
+
+  it('lander på samme språk som serveren for samme cookie og nettleser', async () => {
+    // Skallet står i stedet for en side serveren ville ha tegnet, og skal
+    // snakke samme språk som den. Derfor sammenlignes regelen med getUserLocale
+    // selv, ikke med en kopi av den: endres serverens regel, feiler denne
+    // testen til skallets regel er endret på samme måte.
+    const nettlesere: string[][] = [
+      ['sv-SE', 'sv', 'en-US', 'en'],
+      ['sv'],
+      ['en-US', 'en', 'sv'],
+      ['fi-FI', 'sv-FI'],
+      ['nb-NO', 'nb', 'en'],
+      ['nb-NO', 'sv-SE'],
+      ['nn-NO'],
+      ['da-DK', 'en'],
+      ['en-GB'],
+      []
+    ];
+
+    for (const cookie of [undefined, 'nb', 'sv', 'de']) {
+      for (const languages of nettlesere) {
+        foresporsel.cookie = cookie;
+        foresporsel.acceptLanguage = acceptLanguage(languages);
+        const cookieString = cookie === undefined ? '' : `MYCELET_LOCALE=${cookie}`;
+
+        expect(
+          readLocale(cookieString, languages),
+          `cookie ${cookie ?? '(ingen)'}, Accept-Language «${foresporsel.acceptLanguage}»`
+        ).toBe(await getUserLocale());
+      }
+    }
   });
 });
 
