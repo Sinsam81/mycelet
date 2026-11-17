@@ -12,7 +12,7 @@ import type { Kurvepunkt, SesongkurveTekster, SesongkurveVisning } from '@/lib/s
  * Ingen 'use client' og ingen hooks, så den rendres på serveren sammen med
  * resten av artssiden og legger ingenting til klientbunten.
  *
- * TRE VALG I TEGNINGEN:
+ * FIRE VALG I TEGNINGEN:
  *
  * - Ingen tall på y-aksen. Verdiene er normalisert til toppuka = 1, så bare
  *   formen betyr noe. Et tall der ville sett ut som en mengde.
@@ -21,6 +21,14 @@ import type { Kurvepunkt, SesongkurveTekster, SesongkurveVisning } from '@/lib/s
  * - Hele figuren er ett bilde for en skjermleser (role="img"), med et navn som
  *   sier toppen i ord. Setningen står også synlig inni figuren — den er inne i
  *   bildet nettopp for at den ikke skal leses opp to ganger.
+ * - Samme nøytrale grå for alle arter. Kurven er lik for matsopp og giftsopp,
+ *   så den kan ikke ha en farge som sier noe om spiselighet. Den var grønn,
+ *   med et mørkere grønt toppfelt — også på grønn fluesopp, rett under den
+ *   røde boksen. Kalenderen gir aldri farlige arter grønt, fordi grønt leses
+ *   som «klar til å plukkes» (YearTable.tsx); rødt ville gjort kurven til en
+ *   advarsel den ikke er. Linja og toppfeltet har minst 3:1 mot sidens
+ *   kremfarge, og toppfeltet minst 3:1 mot flaten ved siden av (låst i
+ *   testen, regnet ut av de faktiske Tailwind-fargene).
  */
 
 interface SesongKurveProps {
@@ -119,12 +127,12 @@ export function SesongKurve({ visning, manedsnavn, tekster }: SesongKurveProps) 
               />
             ) : null
           )}
-          <path d={flate(kurve)} className="fill-forest-200" />
+          <path d={flate(kurve)} className="fill-gray-200" />
           {/* Perioden med flest registrerte funn — den setningen over nevner. */}
-          {topp.length >= 2 ? <path d={flate(topp)} className="fill-forest-400" /> : null}
+          {topp.length >= 2 ? <path d={flate(topp)} className="fill-gray-500" /> : null}
           <path
             d={linje(kurve)}
-            className="fill-none stroke-forest-700"
+            className="fill-none stroke-gray-700"
             strokeWidth={1.5}
             strokeLinejoin="round"
             vectorEffect="non-scaling-stroke"

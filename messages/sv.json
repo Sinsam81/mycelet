@@ -1124,7 +1124,7 @@
     "fieldMarkStem": "Fot",
     "fieldMarkFlesh": "Kött",
     "fieldMarkSmell": "Lukt",
-    "metaDescription": "{name} ({latin}): säsong {season}. Växtplats, ätlighet och förväxlingsarter i Mycelets svampbibliotek.",
+    "metaDescriptionShort": "{name} ({latin}): säsong {season}.",
     "metaOtherLanguageName": "På norska: {name}.",
     "structuredDataDescription": "{name} ({latin}): säsong {season}. Växtplats, kännetecken och förväxlingsarter i Mycelets svampbibliotek.",
     "swedishNameLabel": "Svenskt namn",

@@ -121,11 +121,6 @@ describe('norsk brødtekst på den svenske siden', () => {
     // forvekslingstekstene.
     expect(kilde.match(/lang=\{norskProsa\}/g)).toHaveLength(7);
   });
-
-  it('bruker ikke norsk prosa som svensk metabeskrivelse', () => {
-    expect(kilde).toContain("ingress: locale === 'sv' ? null : art.description");
-    expect(kilde).toContain("t('metaDescription', { name: navn, latin: art.latin_name, season: sesong })");
-  });
 });
 
 describe('sesongkurven', () => {
@@ -229,6 +224,23 @@ describe('det siden forteller søkemotorene', () => {
     // Var description.slice(0, 155).
     expect(kilde).toContain('const beskrivelse = metabeskrivelse({');
     expect(kilde).not.toMatch(/\.slice\(0, 155\)/);
+  });
+
+  it('bygger metabeskrivelsen av den nøytrale setningen på begge språk, aldri av brødteksten', () => {
+    // Søketreffet og delingskortet siteres uten siden rundt, akkurat som de
+    // strukturerte dataene. Den norske beskrivelsen var ingressen fra basen, og
+    // 23 av 80 ingresser sier noe om matverdi («Trygg og god matsopp.»).
+    const meta = kilde.slice(kilde.indexOf('export async function generateMetadata'), kilde.indexOf('function formatSeasonMask'));
+    expect(meta.length).toBeGreaterThan(500);
+    expect(meta).toContain("grunnsetning: sesong ? t('structuredDataDescription', setning) : null");
+    expect(meta).toContain("kortGrunnsetning: sesong ? t('metaDescriptionShort', setning) : null");
+    // Ingen tekstkolonne fra basen: ingressen hentes ikke engang.
+    expect(meta).not.toMatch(/art\.(description|edibility_notes|toxin_info|symptoms)\b/);
+    expect(meta).not.toMatch(/\bingress\s*:/);
+    const kolonner = meta.match(/\.select\('([^']+)'\)/)?.[1].split(',') ?? [];
+    expect(kolonner).toContain('latin_name');
+    expect(kolonner).not.toContain('*');
+    expect(kolonner.filter((kolonne) => /description|notes|toxin|symptom/.test(kolonne))).toEqual([]);
   });
 
   it('nevner artens navn på det andre språket, når det er et annet navn', () => {

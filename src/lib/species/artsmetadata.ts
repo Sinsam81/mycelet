@@ -8,17 +8,20 @@
  * brødteksten, kuttet midt i et ord.
  *
  * ═══════════════════════════════════════════════════════════════════════════
- * ALDRI EN SPISELIGHETSPÅSTAND I STRUKTURERTE DATA
+ * ALDRI EN SPISELIGHETSPÅSTAND I SØKETREFF, DELINGSKORT ELLER STRUKTURERTE DATA
  * ═══════════════════════════════════════════════════════════════════════════
  *
- * JSON-LD leses av maskiner og gjengis uten siden rundt: uten sikkerhets-
- * boksen, uten forvekslingsartene, uten «få soppen vurdert av soppkontroll».
- * Et felt som sa «spiselig» der ville blitt sitert alene. Derfor:
+ * Metabeskrivelsen og JSON-LD leses av maskiner og gjengis uten siden rundt:
+ * uten sikkerhetsboksen, uten forvekslingsartene, uten «få soppen vurdert av
+ * soppkontroll». Et felt som sa «spiselig» der ville blitt sitert alene.
+ * Derfor:
  *
  *   - ingen spiselighet, ingen giftighet, ingen egenskap som kan leses slik;
- *   - `description` er IKKE brødteksten fra basen. 23 av 80 ingresser sier noe
- *     om matverdi («Trygg og god matsopp.»). Beskrivelsen her er den nøytrale
- *     setningen siden lager selv: navn, latinsk navn, sesongmåneder;
+ *   - beskrivelsen er ALDRI brødteksten fra basen. 23 av 80 ingresser sier noe
+ *     om matverdi («Trygg og god matsopp.»), og den norske metabeskrivelsen
+ *     var ingressen til november 2026. Begge bygges av den nøytrale setningen
+ *     siden lager selv: navn, latinsk navn, sesongmåneder. `metabeskrivelse`
+ *     tar derfor ikke imot brødtekst i det hele tatt;
  *   - bare det basen faktisk har: navn på de språkene vi har dem, eldre
  *     vitenskapelige navn (migrasjon 034), slekt og familie, bildet med
  *     fotograf og lisens.
@@ -33,53 +36,38 @@ import { buildPhotoCredit } from '@/lib/utils/photo-credit';
 export const META_MAKS = 155;
 
 /**
- * Teksten kuttet til `maks` tegn ved en ordgrense, med «…» når noe er kuttet.
- * Linjeskift og doble mellomrom blir ett mellomrom.
- */
-export function kortIngress(tekst: string | null | undefined, maks: number = META_MAKS): string {
-  const ren = typeof tekst === 'string' ? tekst.replace(/\s+/g, ' ').trim() : '';
-  if (ren.length <= maks || maks < 2) return ren.length <= maks ? ren : '';
-
-  const rom = maks - 1; // plass til «…»
-  const kutt = ren.slice(0, rom);
-  // Sto kuttet midt i et ord, gå tilbake til forrige ordgrense — men ikke så
-  // langt at et enkelt langt ord spiser hele setningen.
-  const midtIOrd = /\S/.test(ren.charAt(rom));
-  const sisteMellomrom = kutt.lastIndexOf(' ');
-  const stamme = midtIOrd && sisteMellomrom > rom * 0.5 ? kutt.slice(0, sisteMellomrom) : kutt;
-  return `${stamme.replace(/[\s,;:–—-]+$/, '')}…`;
-}
-
-/**
- * Metabeskrivelsen for en artsside.
+ * Metabeskrivelsen for en artsside: den nøytrale setningen, og artens navn på
+ * det andre språket når det får plass. Ingen av setningene kuttes.
  *
- *   `ingress`       brødtekst på sidens språk (norsk: basens beskrivelse).
- *                   Kuttes ved ordgrense så tillegget får plass.
- *   `grunnsetning`  den nøytrale setningen (navn, latin, sesong). Brukes når
- *                   det ikke finnes ingress på sidens språk. Kuttes aldri —
- *                   får ikke tillegget plass, står setningen alene.
- *   `tillegg`       artens navn på det andre språket («På svensk: Karljohan.»).
+ *   `grunnsetning`      den nøytrale setningen (navn, latin, sesong, og hva
+ *                       siden har). Den samme som i de strukturerte dataene.
+ *   `kortGrunnsetning`  det første leddet av den (navn, latin, sesong). Brukes
+ *                       når grunnsetningen ikke gir plass til tillegget: på
+ *                       norsk gjaldt det 36 av de 77 artene med et annet
+ *                       svensk navn (katalogen i november 2026).
+ *   `tillegg`           artens navn på det andre språket («På svensk:
+ *                       Karljohan.»). Språket velges av cookie, så søke-
+ *                       motorene får den norske siden — der er dette det
+ *                       eneste stedet beskrivelsen har det svenske navnet.
+ *                       Får det ikke plass bak noen av setningene, står den
+ *                       lange setningen alene.
  */
 export function metabeskrivelse(input: {
-  ingress?: string | null;
   grunnsetning?: string | null;
+  kortGrunnsetning?: string | null;
   tillegg?: string | null;
   maks?: number;
 }): string | undefined {
   const maks = input.maks ?? META_MAKS;
-  const tillegg = input.tillegg?.trim() || null;
-  const harIngress = typeof input.ingress === 'string' && input.ingress.trim() !== '';
-
-  if (harIngress) {
-    const ingress = kortIngress(input.ingress, tillegg ? maks - tillegg.length - 1 : maks);
-    if (ingress) return tillegg ? `${ingress} ${tillegg}` : ingress;
-  }
-
   const grunnsetning = input.grunnsetning?.trim() || null;
-  if (grunnsetning) {
-    return tillegg && grunnsetning.length + 1 + tillegg.length <= maks ? `${grunnsetning} ${tillegg}` : grunnsetning;
-  }
-  return tillegg ?? undefined;
+  const kortGrunnsetning = input.kortGrunnsetning?.trim() || null;
+  const tillegg = input.tillegg?.trim() || null;
+  const medTillegg = (setning: string | null) =>
+    setning && tillegg && setning.length + 1 + tillegg.length <= maks ? `${setning} ${tillegg}` : null;
+
+  return (
+    medTillegg(grunnsetning) ?? medTillegg(kortGrunnsetning) ?? grunnsetning ?? kortGrunnsetning ?? tillegg ?? undefined
+  );
 }
 
 /** Feltene JSON-LD-en bygges av. Alt er `unknown`: raden er ikke typet. */

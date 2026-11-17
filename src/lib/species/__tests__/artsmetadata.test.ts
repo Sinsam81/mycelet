@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { ORGANISASJON } from '@/lib/seo/organisasjon';
 import nb from '../../../../messages/nb.json';
 import sv from '../../../../messages/sv.json';
-import { META_MAKS, byggArtJsonLd, jsonLdTilScript, kortIngress, metabeskrivelse, type ArtJsonLdRad } from '../artsmetadata';
+import { META_MAKS, byggArtJsonLd, jsonLdTilScript, metabeskrivelse, type ArtJsonLdRad } from '../artsmetadata';
 
 /**
  * Radene er lest fra produksjon 16. november 2026 (bare lesing), med feltene
@@ -47,79 +47,59 @@ function jsonLd(overstyr: Partial<Parameters<typeof byggArtJsonLd>[0]> = {}) {
   });
 }
 
-describe('kortIngress', () => {
-  it('lar en kort tekst stå, og rydder linjeskift og doble mellomrom', () => {
-    expect(kortIngress('Gyllen-gul sopp  med falske skiver.\nMild lukt.')).toBe('Gyllen-gul sopp med falske skiver. Mild lukt.');
-    expect(kortIngress(null)).toBe('');
-    expect(kortIngress(undefined)).toBe('');
-    expect(kortIngress('   ')).toBe('');
-  });
-
-  it('kutter ved en ordgrense, ikke midt i et ord', () => {
-    // De første 155 tegnene ble kuttet rått: «…og kan forveksles med den dødel».
-    const lang =
-      'Krittøsterssopp er en hvit, vifteformet sopp som vokser på morken barved. Den ble lenge regnet som spiselig, men er knyttet til alvorlige forgiftninger i Japan og frarådes.';
-    expect(lang.length).toBeGreaterThan(META_MAKS);
-    const kort = kortIngress(lang);
-    expect(kort.length).toBeLessThanOrEqual(META_MAKS);
-    expect(kort.endsWith('…')).toBe(true);
-    // Det som står foran «…» er hele ord fra teksten.
-    const stamme = kort.slice(0, -1);
-    expect(lang.startsWith(stamme)).toBe(true);
-    expect(lang.charAt(stamme.length)).toMatch(/[\s,;:]/);
-  });
-
-  it('setter ikke «…» etter et komma eller en tankestrek', () => {
-    expect(kortIngress('En to tre, fire fem seks sju', 12)).toBe('En to tre…');
-    expect(kortIngress('En to tre – fire fem seks', 12)).toBe('En to tre…');
-  });
-
-  it('kutter inne i ordet når teksten er ett langt ord', () => {
-    const ord = 'a'.repeat(300);
-    expect(kortIngress(ord, 20)).toBe(`${'a'.repeat(19)}…`);
-  });
-
-  it('holder seg alltid innenfor lengden den får', () => {
-    const tekst = 'Stor rørsopp med tykk hvit-brun stilk og brun hatt. Hvit-til-gulgrønn rør-underside som ikke blåner ved trykk.';
-    for (let maks = 2; maks <= tekst.length + 2; maks++) {
-      expect(kortIngress(tekst, maks).length, String(maks)).toBeLessThanOrEqual(maks);
-    }
-  });
-});
-
 describe('metabeskrivelse', () => {
+  const STEINSOPP_LANG =
+    'Steinsopp (Boletus edulis): sesong juli – oktober. Voksested, kjennetegn og forvekslingsarter i Mycelets soppbibliotek.';
+  const STEINSOPP_KORT = 'Steinsopp (Boletus edulis): sesong juli – oktober.';
   const tillegg = 'På svensk: Karljohan.';
 
-  it('setter navnet på det andre språket etter ingressen', () => {
-    expect(metabeskrivelse({ ingress: 'Stor rørsopp med tykk stilk og brun hatt.', tillegg })).toBe(
-      'Stor rørsopp med tykk stilk og brun hatt. På svensk: Karljohan.'
+  it('setter navnet på det andre språket etter den nøytrale setningen', () => {
+    expect(metabeskrivelse({ grunnsetning: STEINSOPP_LANG, kortGrunnsetning: STEINSOPP_KORT, tillegg })).toBe(
+      `${STEINSOPP_LANG} ${tillegg}`
     );
+    expect(metabeskrivelse({ grunnsetning: STEINSOPP_LANG, kortGrunnsetning: STEINSOPP_KORT })).toBe(STEINSOPP_LANG);
   });
 
-  it('kutter ingressen, ikke navnet, når begge ikke får plass', () => {
-    const ingress = 'Stor rørsopp med tykk hvit-brun stilk og brun hatt. '.repeat(5);
-    const resultat = metabeskrivelse({ ingress, tillegg }) ?? '';
-    expect(resultat.length).toBeLessThanOrEqual(META_MAKS);
-    expect(resultat.endsWith(`… ${tillegg}`)).toBe(true);
+  it('bytter til den korte setningen når navnet ellers ikke får plass', () => {
+    // Uten den korte setningen falt «På svensk: …» bort for 36 av 77 arter på
+    // norsk — og den norske siden er den søkemotorene får.
+    const lang =
+      'Grønn fluesopp (Amanita phalloides): sesong august – oktober. Voksested, kjennetegn og forvekslingsarter i Mycelets soppbibliotek.';
+    const kort = 'Grønn fluesopp (Amanita phalloides): sesong august – oktober.';
+    const navn = 'På svensk: Lömsk flugsvamp.';
+    expect(lang.length + 1 + navn.length).toBeGreaterThan(META_MAKS);
+    expect(metabeskrivelse({ grunnsetning: lang, kortGrunnsetning: kort, tillegg: navn })).toBe(`${kort} ${navn}`);
   });
 
-  it('bruker grunnsetningen når det ikke finnes ingress på sidens språk', () => {
-    const grunnsetning = 'Karljohan (Boletus edulis): säsong juli – oktober. Växtplats, ätlighet och förväxlingsarter i Mycelets svampbibliotek.';
-    expect(metabeskrivelse({ ingress: null, grunnsetning, tillegg: 'På norska: Steinsopp.' })).toBe(
-      `${grunnsetning} På norska: Steinsopp.`
-    );
-    expect(metabeskrivelse({ ingress: '  ', grunnsetning })).toBe(grunnsetning);
-  });
-
-  it('kutter aldri grunnsetningen — får ikke navnet plass, står den alene', () => {
-    const lang = `${'Orangebrun giftspindling (Cortinarius orellanus): säsong augusti – oktober. '}Växtplats, ätlighet och förväxlingsarter i Mycelets svampbibliotek.`;
+  it('kutter aldri en setning — får ikke navnet plass bak noen av dem, står den lange alene', () => {
+    const lang =
+      'Orangebrun giftspindling (Cortinarius orellanus): säsong augusti – oktober. Växtplats, kännetecken och förväxlingsarter i Mycelets svampbibliotek.';
     expect(lang.length).toBeLessThanOrEqual(META_MAKS);
     expect(metabeskrivelse({ grunnsetning: lang, tillegg: 'På norska: Butt giftslørsopp.' })).toBe(lang);
+    expect(metabeskrivelse({ grunnsetning: 'En to tre fire.', kortGrunnsetning: 'En to.', tillegg: 'Langt navn.', maks: 12 })).toBe(
+      'En to tre fire.'
+    );
+  });
+
+  it('klarer seg med den korte setningen, og med navnet alene', () => {
+    expect(metabeskrivelse({ kortGrunnsetning: STEINSOPP_KORT, tillegg })).toBe(`${STEINSOPP_KORT} ${tillegg}`);
+    expect(metabeskrivelse({ tillegg })).toBe(tillegg);
   });
 
   it('gir undefined når det ikke er noe å si', () => {
     expect(metabeskrivelse({})).toBeUndefined();
-    expect(metabeskrivelse({ ingress: '', grunnsetning: ' ', tillegg: ' ' })).toBeUndefined();
+    expect(metabeskrivelse({ grunnsetning: ' ', kortGrunnsetning: '', tillegg: ' ' })).toBeUndefined();
+  });
+
+  it('tar ikke imot brødtekst fra basen', () => {
+    // Den norske beskrivelsen var ingressen, og 23 av 80 ingresser sier noe om
+    // matverdi. Parameteren er fjernet; typesjekken holder den ute.
+    const beskrivelse = metabeskrivelse({
+      grunnsetning: STEINSOPP_LANG,
+      // @ts-expect-error — `ingress` finnes ikke lenger, med vilje.
+      ingress: 'Trygg og god matsopp.'
+    });
+    expect(beskrivelse).toBe(STEINSOPP_LANG);
   });
 });
 
@@ -279,6 +259,16 @@ describe('tekstene i meldingskatalogen', () => {
       expect(setning).toContain('Grønn fluesopp (Amanita phalloides)');
       expect(setning).toContain('august – oktober');
       expect(setning).not.toMatch(/spiselig|ätlig|edib|giftig|matsopp|matsvamp|trygg|säker/i);
+    });
+
+    it(`${locale}: den korte setningen er starten på den lange, og nevner heller ikke spiselighet`, () => {
+      // Metabeskrivelsen bytter til den korte når den lange ikke gir plass til
+      // navnet på det andre språket. De to skal si det samme, bare kortere.
+      const verdier = { name: 'Grønn fluesopp', latin: 'Amanita phalloides', season: 'august – oktober' };
+      const kort = t('metaDescriptionShort', verdier);
+      expect(kort).toBe(`Grønn fluesopp (Amanita phalloides): ${locale === 'sv' ? 'säsong' : 'sesong'} august – oktober.`);
+      expect(t('structuredDataDescription', verdier).startsWith(`${kort} `)).toBe(true);
+      expect(kort).not.toMatch(/spiselig|ätlig|edib|giftig|matsopp|matsvamp|trygg|säker/i);
     });
 
     it(`${locale}: tillegget med det andre språkets navn er en hel setning`, () => {

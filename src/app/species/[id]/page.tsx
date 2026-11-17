@@ -44,8 +44,8 @@ interface SpeciesDetailPageProps {
  * Per-art metadata — uten den delte alle 80 artssidene rot-layoutens generiske
  * tittel, og Google kunne aldri rangere siden om pantermusserong på
  * «pantermusserong». Artsnavnene er søkeordene med faktisk volum i nisjen.
- * Lett, eget oppslag (id + navn + beskrivelse); sidens eget '*'-oppslag står
- * urørt.
+ * Lett, eget oppslag (navn, sesong og bilde — aldri brødteksten); sidens eget
+ * '*'-oppslag står urørt.
  */
 export async function generateMetadata({ params }: SpeciesDetailPageProps): Promise<Metadata> {
   const { id: idParam } = await params;
@@ -55,7 +55,7 @@ export async function generateMetadata({ params }: SpeciesDetailPageProps): Prom
   const supabase = createClient();
   const { data: art } = await supabase
     .from('mushroom_species')
-    .select('id,norwegian_name,swedish_name,latin_name,description,primary_image_url,edibility,season_start,season_end')
+    .select('id,norwegian_name,swedish_name,latin_name,primary_image_url,edibility,season_start,season_end')
     .eq('id', id)
     .single();
   if (!art) return {};
@@ -67,21 +67,20 @@ export async function generateMetadata({ params }: SpeciesDetailPageProps): Prom
     locale === 'sv'
       ? `${navn} (${art.latin_name}) — säsong, kännetecken och ätlighet`
       : `${navn} (${art.latin_name}) — sesong, kjennetegn og spiselighet`;
-  // `description` er norsk i basen. Den svenske siden hadde svensk tittel og de
-  // første 155 tegnene norsk prosa som beskrivelse — i søketreffet og i
-  // delingskortet. Svensk får derfor en setning bygget av det vi HAR på svensk:
-  // navn, latinsk navn og sesongmånedene. Norsk beholder ingressen fra basen
-  // (kuttet ved en ordgrense, ikke midt i et ord), og faller på samme setning
-  // bare hvis arten mangler beskrivelse.
+  // Beskrivelsen i søketreffet og delingskortet er den nøytrale setningen —
+  // navn, latinsk navn, sesongmånedene — på begge språk, og aldri ingressen
+  // fra basen. Den siteres uten siden rundt, akkurat som de strukturerte
+  // dataene, og 23 av 80 ingresser sier noe om matverdi («Trygg og god
+  // matsopp.»). Svensk hadde allerede setningen, fordi ingressen er norsk.
   const sesong = formatSeasonMask(baseSeasonMask(art), langeManedsnavn(locale), '');
-  const grunnsetning = sesong ? t('metaDescription', { name: navn, latin: art.latin_name, season: sesong }) : null;
+  const setning = { name: navn, latin: art.latin_name, season: sesong };
   // Navnet på det andre språket. Språket velges av cookie, så søkemotorene får
   // den norske siden — og «Karljohan» sto der bare som en liten flagglinje.
   const annetNavn = (locale === 'sv' ? art.norwegian_name : art.swedish_name)?.trim();
   const erAnnetNavn = Boolean(annetNavn) && annetNavn.toLowerCase() !== navn.toLowerCase();
   const beskrivelse = metabeskrivelse({
-    ingress: locale === 'sv' ? null : art.description,
-    grunnsetning,
+    grunnsetning: sesong ? t('structuredDataDescription', setning) : null,
+    kortGrunnsetning: sesong ? t('metaDescriptionShort', setning) : null,
     tillegg: erAnnetNavn ? t('metaOtherLanguageName', { name: annetNavn }) : null
   });
   const url = `https://www.mycelet.com/species/${id}`;
@@ -355,8 +354,8 @@ export default async function SpeciesDetailPage({ params }: SpeciesDetailPagePro
     url: `https://www.mycelet.com/species/${species.id}`,
     visningsnavn: displayName,
     rad: species,
-    // En egen setning, uten ordet «spiselighet»: metabeskrivelsen nevner det
-    // som et tema på siden, men her skal ikke ordet stå i det hele tatt.
+    // Den nøytrale setningen, uten ordet «spiselighet» — den samme som
+    // metabeskrivelsen i generateMetadata bygges av.
     beskrivelse: sesongTekst
       ? t('structuredDataDescription', { name: displayName, latin: species.latin_name, season: sesongTekst })
       : null,

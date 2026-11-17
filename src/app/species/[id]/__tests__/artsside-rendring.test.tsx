@@ -797,17 +797,28 @@ describe('norsk brødtekst for svenske lesere', () => {
 });
 
 describe('metadata', () => {
-  it('gir norsk ingress, og navnet på svensk når det er et annet', async () => {
+  it('gir den nøytrale setningen på norsk, aldri ingressen, og navnet på svensk når det er et annet', async () => {
     const kantarell = await generateMetadata({ params: Promise.resolve({ id: '1' }) });
     expect(kantarell.title).toBe('Kantarell (Cantharellus cibarius) — sesong, kjennetegn og spiselighet');
     // Samme navn på begge språk: ingenting å legge til.
-    expect(kantarell.description).toBe('Gyllen-gul sopp med falske skiver som går ned på stilken. Mild fruktaktig lukt.');
+    expect(kantarell.description).toBe(
+      'Kantarell (Cantharellus cibarius): sesong juni – oktober. Voksested, kjennetegn og forvekslingsarter i Mycelets soppbibliotek.'
+    );
+    expect(kantarell.openGraph?.description).toBe(kantarell.description);
     expect(kantarell.alternates?.canonical).toBe('https://www.mycelet.com/species/1');
 
+    // Den lange setningen og det svenske navnet er over 155 tegn til sammen.
+    // Da står den korte setningen, så navnet ikke faller bort.
     const fluesopp = await generateMetadata({ params: Promise.resolve({ id: '52' }) });
-    expect(String(fluesopp.description).endsWith('På svensk: Lömsk flugsvamp.')).toBe(true);
-    expect(String(fluesopp.description).length).toBeLessThanOrEqual(155);
-    expect(fluesopp.description).toContain('… På svensk');
+    expect(fluesopp.description).toBe('Grønn fluesopp (Amanita phalloides): sesong august – oktober. På svensk: Lömsk flugsvamp.');
+    expect(fluesopp.openGraph?.description).toBe(fluesopp.description);
+    expect(fluesopp.description).not.toContain('Olivengrønn');
+
+    // Piggsoppens notat sier «God matsopp» — det står på siden, aldri i søketreffet.
+    const piggsopp = await generateMetadata({ params: Promise.resolve({ id: '7' }) });
+    expect(piggsopp.description).toMatch(
+      /^Piggsopp \(Hydnum repandum\): sesong [a-z –]+\. Voksested, kjennetegn og forvekslingsarter i Mycelets soppbibliotek\. På svensk: Blek taggsvamp\.$/
+    );
   });
 
   it('bruker en bred utgave av bildet i delingskortet', async () => {

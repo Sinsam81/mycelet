@@ -1124,7 +1124,7 @@
     "fieldMarkStem": "Stilk",
     "fieldMarkFlesh": "Kjøtt",
     "fieldMarkSmell": "Lukt",
-    "metaDescription": "{name} ({latin}): sesong {season}. Voksested, spiselighet og forvekslingsarter i Mycelets soppbibliotek.",
+    "metaDescriptionShort": "{name} ({latin}): sesong {season}.",
     "metaOtherLanguageName": "På svensk: {name}.",
     "structuredDataDescription": "{name} ({latin}): sesong {season}. Voksested, kjennetegn og forvekslingsarter i Mycelets soppbibliotek.",
     "swedishNameLabel": "Svensk navn",
